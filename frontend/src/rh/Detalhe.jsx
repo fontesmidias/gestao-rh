@@ -20,6 +20,7 @@ export default function Detalhe({ id, aoVoltar }) {
   const [msg, setMsg] = useState(null)
   const [selecionados, setSelecionados] = useState(new Set())
   const [loteRejeitar, setLoteRejeitar] = useState(false)
+  const [pendDossie, setPendDossie] = useState(null)
 
   const recarregar = () => api.detalhe(id).then(setDados)
   useEffect(() => { recarregar() }, [id])
@@ -40,8 +41,6 @@ export default function Detalhe({ id, aoVoltar }) {
     setRejeitando(null); setObs('')
     await recarregar()
   }
-
-  const [pendDossie, setPendDossie] = useState(null)
 
   const gerarDossie = async (forcar = false) => {
     setMsg(null); setPendDossie(null)
