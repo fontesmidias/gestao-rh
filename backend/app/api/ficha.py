@@ -9,7 +9,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -89,11 +89,25 @@ class SecaoEndereco(BaseModel):
     uf: str | None = None
 
 
+def _validar_cpf(v):
+    from app.services.validacao import cpf_valido
+
+    if v is None or v == "":
+        return v
+    numeros = "".join(c for c in str(v) if c.isdigit())
+    if not cpf_valido(numeros):
+        raise ValueError("Este CPF não existe: os dígitos verificadores não conferem. "
+                         "Confira os números digitados.")
+    return numeros
+
+
 class SecaoDocumentos(BaseModel):
     rg_numero: str | None = None
     rg_orgao_emissor: str | None = None
     rg_data_expedicao: date | None = None
     cpf: str | None = None
+
+    _cpf_ok = field_validator("cpf")(_validar_cpf)
     pis_nis_pasep: str | None = None
     cnh_numero: str | None = None
     cnh_categoria: str | None = None
@@ -117,6 +131,8 @@ class DependenteIn(BaseModel):
     cpf: str
     parentesco: Parentesco
     deduz_irrf: bool = False
+
+    _cpf_ok = field_validator("cpf")(_validar_cpf)
 
 
 class ContatoEmergenciaIn(BaseModel):

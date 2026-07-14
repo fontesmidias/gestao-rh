@@ -223,3 +223,34 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   .slot-linha .btn-mini { width: 100%; }
   .otp input { width: 100%; }
 }
+
+/* ---------- Métricas do painel RH ---------- */
+.rh-metricas {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: .75rem;
+  margin-bottom: 1.1rem;
+}
+.rh-metrica {
+  background: rgba(255, 255, 255, .78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, .6);
+  border-radius: 14px;
+  padding: .85rem .6rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  box-shadow: 0 4px 18px rgba(43, 46, 74, .07);
+}
+.rh-metrica strong { font-size: 1.45rem; color: #2b2e4a; line-height: 1.1; }
+.rh-metrica span { font-size: .78rem; color: #6a7280; }
+.rh-metrica.destaque { border-color: #e9a63a; background: rgba(255, 246, 230, .85); }
+.rh-metrica.destaque strong { color: #b26a00; }
+@media (max-width: 800px) {
+  .rh-metricas { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 480px) {
+  .rh-metricas { grid-template-columns: repeat(2, 1fr); }
+}

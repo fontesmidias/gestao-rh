@@ -46,6 +46,35 @@ def listar_candidatos(db: Session = Depends(get_db)) -> list[dict]:
     return saida
 
 
+@router.get("/rh/metricas")
+def metricas(db: Session = Depends(get_db)) -> dict:
+    """Números do painel: funil de candidatos, fila de revisão e tempo médio."""
+    candidatos = db.scalars(select(Candidato)).all()
+    slots = db.scalars(select(SlotDocumento)).all()
+
+    por_status: dict[str, int] = {}
+    for c in candidatos:
+        por_status[c.status.value] = por_status.get(c.status.value, 0) + 1
+
+    aguardando_revisao = sum(1 for s in slots if s.status == StatusSlot.enviado)
+    rejeitados_abertos = sum(1 for s in slots if s.status == StatusSlot.rejeitado)
+
+    concluidos = [c for c in candidatos if c.dossie_gerado_em is not None]
+    tempo_medio_dias = None
+    if concluidos:
+        total = sum((c.dossie_gerado_em - c.criado_em).total_seconds() for c in concluidos)
+        tempo_medio_dias = round(total / len(concluidos) / 86400, 1)
+
+    return {
+        "total_candidatos": len(candidatos),
+        "por_status": por_status,
+        "documentos_aguardando_revisao": aguardando_revisao,
+        "documentos_rejeitados_em_aberto": rejeitados_abertos,
+        "dossies_gerados": len(concluidos),
+        "tempo_medio_dias_convite_ao_dossie": tempo_medio_dias,
+    }
+
+
 @router.get("/rh/candidatos/{candidato_id}")
 def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     cand = db.get(Candidato, candidato_id)

@@ -128,8 +128,38 @@ function RedefinirSenha({ token }) {
   )
 }
 
+const EM_ANDAMENTO = ['convidado', 'preenchendo', 'aguardando_assinatura', 'docs_pendentes']
+
+function Metricas({ dados }) {
+  if (!dados) return null
+  const andamento = EM_ANDAMENTO.reduce((n, s) => n + (dados.por_status[s] || 0), 0)
+  const cards = [
+    ['Candidatos', dados.total_candidatos, ''],
+    ['Em andamento', andamento, ''],
+    ['Docs p/ revisar', dados.documentos_aguardando_revisao,
+     dados.documentos_aguardando_revisao > 0 ? 'destaque' : ''],
+    ['Reenvios pendentes', dados.documentos_rejeitados_em_aberto,
+     dados.documentos_rejeitados_em_aberto > 0 ? 'destaque' : ''],
+    ['Dossiês gerados', dados.dossies_gerados, ''],
+    ['Tempo médio', dados.tempo_medio_dias_convite_ao_dossie == null
+      ? '—' : `${dados.tempo_medio_dias_convite_ao_dossie} dias`, ''],
+  ]
+  return (
+    <div className="rh-metricas">
+      {cards.map(([rotulo, valor, extra]) => (
+        <div className={`rh-metrica ${extra}`} key={rotulo}
+             title={rotulo === 'Tempo médio' ? 'Do convite até o dossiê pronto' : undefined}>
+          <strong>{valor}</strong>
+          <span>{rotulo}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Painel({ aoSair }) {
   const [candidatos, setCandidatos] = useState(null)
+  const [metricas, setMetricas] = useState(null)
   const [selecionado, setSelecionado] = useState(null)
   const [novo, setNovo] = useState(null) // form de novo candidato
   const [convite, setConvite] = useState(null)
@@ -137,9 +167,12 @@ function Painel({ aoSair }) {
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [config, setConfig] = useState(false)
 
-  const recarregar = () => api.candidatos().then(setCandidatos).catch((e) => {
-    if (e.status === 401) aoSair()
-  })
+  const recarregar = () => {
+    api.candidatos().then(setCandidatos).catch((e) => {
+      if (e.status === 401) aoSair()
+    })
+    api.metricas().then(setMetricas).catch(() => {})
+  }
   useEffect(() => { recarregar() }, [])
 
   if (config) return <Config aoVoltar={() => setConfig(false)} />
@@ -158,6 +191,8 @@ function Painel({ aoSair }) {
           <button className="btn-link" onClick={aoSair}>Sair</button>
         </div>
       </header>
+
+      <Metricas dados={metricas} />
 
       {novo && (
         <div className="rh-card">

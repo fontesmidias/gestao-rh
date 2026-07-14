@@ -29,6 +29,30 @@ const OPCOES = {
   parentesco: [['conjuge', 'Cônjuge/companheiro(a)'], ['filho', 'Filho(a)'], ['menor_guarda', 'Menor sob guarda']],
 }
 
+// Dígitos verificadores do CPF (algoritmo oficial da Receita).
+export function cpfValido(cpf) {
+  const n = (cpf || '').replace(/\D/g, '')
+  if (n.length !== 11 || /^(\d)\1{10}$/.test(n)) return false
+  for (const pos of [9, 10]) {
+    let soma = 0
+    for (let i = 0; i < pos; i++) soma += Number(n[i]) * ((pos + 1) - i)
+    if ((soma * 10) % 11 % 10 !== Number(n[pos])) return false
+  }
+  return true
+}
+
+const fmtCpf = (v) => (v || '')
+  .replace(/\D/g, '').slice(0, 11)
+  .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+  .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
+
+function AvisoCpf({ cpf }) {
+  const n = (cpf || '').replace(/\D/g, '')
+  if (n.length !== 11 || cpfValido(n)) return null
+  return <div className="alerta" style={{ marginTop: '.35rem', padding: '.5rem .75rem' }}>
+    Este CPF não existe — confira os números digitados.</div>
+}
+
 function Campo({ rotulo, dica, ajuda, children }) {
   const [aberta, setAberta] = useState(false)
   return (
@@ -285,8 +309,9 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           <Campo rotulo="Data de expedição"><input type="date" value={doc.rg_data_expedicao || ''}
             onChange={(e) => setSec('documentos', 'rg_data_expedicao', e.target.value)} /></Campo>
         </div>
-        <Campo rotulo="CPF"><input inputMode="numeric" maxLength={14} value={doc.cpf || ''}
-          onChange={(e) => setSec('documentos', 'cpf', e.target.value.replace(/\D/g, ''))} /></Campo>
+        <Campo rotulo="CPF"><input inputMode="numeric" maxLength={14} value={fmtCpf(doc.cpf)}
+          onChange={(e) => setSec('documentos', 'cpf', e.target.value.replace(/\D/g, ''))} />
+          <AvisoCpf cpf={doc.cpf} /></Campo>
         <Campo rotulo="PIS / NIS / PASEP"
                ajuda="Não sabe o número? Abra o app 'Carteira de Trabalho Digital', 'Meu INSS' ou 'Caixa Trabalhador' — o número aparece na tela inicial ou no seu perfil. São 11 números.">
           <input inputMode="numeric" value={doc.pis_nis_pasep || ''}
@@ -341,8 +366,9 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
             <div className="linha2">
               <Campo rotulo="Nascimento"><input type="date" value={dep.data_nascimento || ''}
                 onChange={(e) => atualizaDep(i, 'data_nascimento', e.target.value)} /></Campo>
-              <Campo rotulo="CPF"><input inputMode="numeric" value={dep.cpf || ''}
-                onChange={(e) => atualizaDep(i, 'cpf', e.target.value.replace(/\D/g, ''))} /></Campo>
+              <Campo rotulo="CPF"><input inputMode="numeric" maxLength={14} value={fmtCpf(dep.cpf)}
+                onChange={(e) => atualizaDep(i, 'cpf', e.target.value.replace(/\D/g, ''))} />
+                <AvisoCpf cpf={dep.cpf} /></Campo>
             </div>
             <Campo rotulo="Parentesco">
               <Select valor={dep.parentesco} opcoes={OPCOES.parentesco}

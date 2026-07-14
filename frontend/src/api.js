@@ -69,6 +69,7 @@ export const rh = {
     req('/rh/auth/redefinir-senha', { method: 'POST',
                                       body: JSON.stringify({ token, senha_nova }) }),
   candidatos: () => req('/rh/candidatos', { headers: authRH() }),
+  metricas: () => req('/rh/metricas', { headers: authRH() }),
   novoCandidato: (dados) =>
     req('/rh/candidatos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   reenviarLink: (id) =>
