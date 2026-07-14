@@ -32,3 +32,6 @@ docs/*.pdf
 docs/*.docx
 docs/*.xlsx
 *.pdf
+
+# venv e lock local do backend
+backend/.venv/
