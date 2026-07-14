@@ -347,6 +347,94 @@ def m365_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requ
     db.commit()
 
 
+# ---------- Google (OAuth + Gmail API) ----------
+
+from app.services import gmail
+
+
+def _state_serializer_gmail():
+    return URLSafeTimedSerializer(get_settings().secret_key, salt="gmail-oauth")
+
+
+def _redirect_uri_gmail(request: Request) -> str:
+    return f"{base_url_publica(request)}/api/rh/config/gmail/callback"
+
+
+class GmailIn(BaseModel):
+    client_id: str
+    client_secret: str | None = None  # None = manter
+
+
+@router.get("/rh/config/gmail")
+def ver_gmail(request: Request, db: Session = Depends(get_db),
+              _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    cfg = gmail.config_gmail(db)
+    return {
+        "client_id": cfg.get("gmail_client_id", ""),
+        "secret_definido": bool(cfg.get("gmail_client_secret")),
+        "conectado": bool(cfg.get("gmail_refresh_token")),
+        "conta": cfg.get("gmail_conta", ""),
+        "redirect_uri": _redirect_uri_gmail(request),
+    }
+
+
+@router.put("/rh/config/gmail")
+def salvar_gmail(payload: GmailIn, request: Request, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    valores = {"gmail_client_id": payload.client_id.strip()}
+    if payload.client_secret:
+        valores["gmail_client_secret"] = payload.client_secret.strip()
+    gravar_config(db, valores)
+    registrar(db, "gmail_config_alterada", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return ver_gmail(request, db, rh)
+
+
+@router.get("/rh/config/gmail/url-login")
+def gmail_url_login(request: Request, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """URL de autorização com state assinado — o front abre em popup."""
+    cfg = gmail.config_gmail(db)
+    if not cfg.get("gmail_client_id"):
+        raise HTTPException(status_code=422, detail="configure_client_id_primeiro")
+    state = _state_serializer_gmail().dumps({"rh": str(rh.id)})
+    return {"url": gmail.url_autorizacao(db, _redirect_uri_gmail(request), state)}
+
+
+@router.get("/rh/config/gmail/callback")
+def gmail_callback(request: Request, db: Session = Depends(get_db)):
+    """Retorno do login Google (sem bearer: valida o state assinado)."""
+    state = request.query_params.get("state", "")
+    try:
+        _state_serializer_gmail().loads(state, max_age=600)
+    except BadSignature:
+        return HTMLResponse("<h3>Sessão de conexão inválida ou expirada. Tente de novo.</h3>",
+                            status_code=400)
+    erro = request.query_params.get("error")
+    if erro:
+        return HTMLResponse(f"<h3>Google recusou: {erro}</h3>", status_code=400)
+    codigo = request.query_params.get("code", "")
+    try:
+        conta = gmail.trocar_codigo(db, codigo, _redirect_uri_gmail(request))
+    except Exception as exc:
+        return HTMLResponse(f"<h3>Falha ao concluir a conexão.</h3><p>{exc}</p>", status_code=400)
+    registrar(db, "gmail_conectado", ator="rh", detalhe={"conta": conta})
+    db.commit()
+    return HTMLResponse(
+        f"<div style='font-family:sans-serif;text-align:center;margin-top:20vh'>"
+        f"<h2>✅ Conta conectada: {conta}</h2>"
+        f"<p>Pode fechar esta janela e voltar ao painel.</p>"
+        f"<script>setTimeout(()=>window.close(),2500)</script></div>"
+    )
+
+
+@router.post("/rh/config/gmail/desconectar", status_code=204)
+def gmail_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> None:
+    gmail.desconectar(db)
+    registrar(db, "gmail_desconectado", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+
+
 # ---------- Auditoria ----------
 
 

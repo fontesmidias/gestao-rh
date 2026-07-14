@@ -115,6 +115,12 @@ export const rh = {
   salvarM365: (dados) =>
     req('/rh/config/m365', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   urlLoginM365: () => req('/rh/config/m365/url-login', { headers: authRH() }),
+  verGmail: () => req('/rh/config/gmail', { headers: authRH() }),
+  salvarGmail: (dados) =>
+    req('/rh/config/gmail', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  urlLoginGmail: () => req('/rh/config/gmail/url-login', { headers: authRH() }),
+  desconectarGmail: () =>
+    req('/rh/config/gmail/desconectar', { method: 'POST', headers: authRH() }),
   desconectarM365: () =>
     req('/rh/config/m365/desconectar', { method: 'POST', headers: authRH() }),
 }

@@ -18,6 +18,7 @@ export default function Config({ aoVoltar }) {
       <Senha />
       <Equipe />
       <M365 />
+      <Gmail />
       <Smtp />
       <Auditoria />
     </main>
@@ -311,6 +312,77 @@ function M365() {
   )
 }
 
+function Gmail() {
+  const [cfg, setCfg] = useState(null)
+  const [secret, setSecret] = useState('')
+  const [msg, setMsg] = useState(null)
+  const recarregar = () => api.verGmail().then(setCfg)
+  useEffect(() => { recarregar() }, [])
+  if (!cfg) return null
+  return (
+    <div className="rh-card">
+      <h3>Google / Gmail (alternativa ao Microsoft 365)</h3>
+      <p className="explica">Usado se o Microsoft 365 acima não estiver conectado. É o
+        "Fazer login com o Google" que o próprio Google recomenda no lugar de senhas de app.</p>
+      {cfg.conectado ? (
+        <>
+          <div className="sucesso">✅ Conectado como <strong>{cfg.conta}</strong> — os e-mails
+            do sistema saem por esta conta (via Gmail).</div>
+          <button className="btn-secundario" style={{ marginTop: '.75rem' }} onClick={async () => {
+            await api.desconectarGmail(); recarregar()
+          }}>Desconectar</button>
+        </>
+      ) : (
+        <>
+          <p className="explica">Configuração única em <strong>console.cloud.google.com</strong>:
+            crie um projeto → <em>APIs &amp; Services → Enable APIs</em> e habilite a
+            <em> Gmail API</em> → <em>OAuth consent screen</em> (tipo External; adicione seu
+            e-mail como test user, ou publique o app) → <em>Credentials → Create credentials →
+            OAuth client ID</em>, tipo <em>Web application</em>, com o redirect URI
+            <code> {cfg.redirect_uri}</code> (este endereço acompanha como você está acessando o
+            painel — o Google só aceita <strong>https://</strong> ou <strong>localhost</strong>;
+            por IP não funciona, use com domínio). Copie os valores para cá:</p>
+          <div className="linha2">
+            <input placeholder="Client ID (…apps.googleusercontent.com)" value={cfg.client_id}
+                   onChange={(e) => setCfg({ ...cfg, client_id: e.target.value })} />
+            <input placeholder={cfg.secret_definido ? 'Client secret (já definido)' : 'Client secret'}
+                   type="password" value={secret} onChange={(e) => setSecret(e.target.value)} />
+          </div>
+          <div className="navegacao">
+            <button className="btn-secundario" onClick={async () => {
+              setMsg(null)
+              try {
+                await api.salvarGmail({ client_id: cfg.client_id.trim(),
+                                        client_secret: secret.trim() || null })
+                setSecret('')
+                setMsg({ tipo: 'ok', texto: 'Dados do aplicativo salvos.' })
+                recarregar()
+              } catch (e) {
+                setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+              }
+            }}>Salvar</button>
+            <button className="btn-principal btn-mini" onClick={async () => {
+              setMsg(null)
+              try {
+                const { url } = await api.urlLoginGmail()
+                const popup = window.open(url, 'gmail', 'width=520,height=640')
+                const timer = setInterval(() => {
+                  if (popup && popup.closed) { clearInterval(timer); recarregar() }
+                }, 800)
+              } catch (e) {
+                setMsg({ tipo: 'erro', texto: e.detail === 'configure_client_id_primeiro'
+                  ? 'Salve primeiro o Client ID / Client secret do aplicativo.'
+                  : 'Não foi possível iniciar a conexão.' })
+              }
+            }}>Conectar com a conta Google</button>
+          </div>
+        </>
+      )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
 function Smtp() {
   const [cfg, setCfg] = useState(null)
   const [senha, setSenha] = useState('')
@@ -320,8 +392,9 @@ function Smtp() {
   if (!cfg) return null
   return (
     <div className="rh-card">
-      <h3>E-mail (SMTP) — alternativa ao Microsoft 365</h3>
-      <p className="explica">Usado apenas se o Microsoft 365 acima não estiver conectado.</p>
+      <h3>E-mail (SMTP) — último recurso</h3>
+      <p className="explica">Usado apenas se nem o Microsoft 365 nem o Google acima estiverem
+        conectados.</p>
       <p className="explica">Para <strong>Microsoft 365</strong>: servidor
         <code> smtp.office365.com</code>, porta <code>587</code>, usuário = seu e-mail completo.
         Importante: o administrador precisa habilitar o <em>"Authenticated SMTP"</em> para a
