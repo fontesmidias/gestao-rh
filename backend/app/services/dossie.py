@@ -3,7 +3,8 @@
 import io
 from datetime import datetime, timezone
 
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter, Transformation
+from pypdf._page import PageObject
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -41,6 +42,30 @@ ORDEM_DOCUMENTOS = (
 )
 
 
+# A4 em pontos (72 dpi)
+A4_LARGURA, A4_ALTURA = 595.276, 841.890
+
+
+def _adicionar_em_a4(writer: PdfWriter, pdf_bytes: bytes) -> None:
+    """Adiciona cada página redimensionada proporcionalmente e centrada em A4 retrato —
+    dossiê inteiro padronizado, independentemente do tamanho/orientação do original."""
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    for pagina in reader.pages:
+        largura = float(pagina.mediabox.width)
+        altura = float(pagina.mediabox.height)
+        if abs(largura - A4_LARGURA) < 2 and abs(altura - A4_ALTURA) < 2:
+            writer.add_page(pagina)
+            continue
+        escala = min(A4_LARGURA / largura, A4_ALTURA / altura)
+        dx = (A4_LARGURA - largura * escala) / 2
+        dy = (A4_ALTURA - altura * escala) / 2
+        base = PageObject.create_blank_page(width=A4_LARGURA, height=A4_ALTURA)
+        base.merge_transformed_page(
+            pagina, Transformation().scale(escala).translate(dx, dy)
+        )
+        writer.add_page(base)
+
+
 class DossieIncompleto(Exception):
     def __init__(self, pendencias: list[str]):
         self.pendencias = pendencias
@@ -73,7 +98,7 @@ def gerar_dossie(db: Session, candidato: Candidato) -> str:
 
     writer = PdfWriter()
     for doc in ORDEM_FICHAS:
-        writer.append(io.BytesIO(storage.ler(assinaturas[doc].pdf_key)))
+        _adicionar_em_a4(writer, storage.ler(assinaturas[doc].pdf_key))
 
     ordem = {tipo: i for i, tipo in enumerate(ORDEM_DOCUMENTOS)}
     aprovados = sorted(
@@ -81,7 +106,7 @@ def gerar_dossie(db: Session, candidato: Candidato) -> str:
         key=lambda s: (ordem.get(s.tipo, 99), s.criado_em),
     )
     for slot in aprovados:
-        writer.append(io.BytesIO(storage.ler(slot.arquivo_pdf_key)))
+        _adicionar_em_a4(writer, storage.ler(slot.arquivo_pdf_key))
 
     saida = io.BytesIO()
     writer.write(saida)

@@ -18,6 +18,8 @@ export default function Detalhe({ id, aoVoltar }) {
   const [motivo, setMotivo] = useState('ilegivel')
   const [obs, setObs] = useState('')
   const [msg, setMsg] = useState(null)
+  const [selecionados, setSelecionados] = useState(new Set())
+  const [loteRejeitar, setLoteRejeitar] = useState(false)
 
   const recarregar = () => api.detalhe(id).then(setDados)
   useEffect(() => { recarregar() }, [id])
@@ -77,6 +79,41 @@ export default function Detalhe({ id, aoVoltar }) {
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
+      {enviados.length > 0 && (
+        <div className="rh-card rh-lote">
+          <strong>Ações em massa:</strong>
+          <button className="btn-link" onClick={() =>
+            setSelecionados(new Set(enviados.map((s) => s.id)))}>
+            selecionar todos em análise ({enviados.length})</button>
+          <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar</button>
+          <span className="explica" style={{ margin: 0 }}>{selecionados.size} selecionado(s)</span>
+          <button className="btn-principal btn-mini" disabled={!selecionados.size}
+                  onClick={async () => {
+                    const r = await api.aprovarLote([...selecionados])
+                    setSelecionados(new Set()); setMsg({ tipo: 'ok',
+                      texto: `${r.aprovados} documento(s) aprovado(s).` })
+                    await recarregar()
+                  }}>Aprovar selecionados</button>
+          <button className="btn-rejeitar btn-mini" disabled={!selecionados.size}
+                  onClick={() => setLoteRejeitar(!loteRejeitar)}>Rejeitar selecionados</button>
+          {loteRejeitar && (
+            <div className="rejeicao" style={{ width: '100%' }}>
+              <select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+                {MOTIVOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+              </select>
+              <input placeholder="Observação (opcional)" value={obs}
+                     onChange={(e) => setObs(e.target.value)} />
+              <button className="btn-rejeitar btn-mini" onClick={async () => {
+                const r = await api.rejeitarLote([...selecionados], motivo, obs || null)
+                setSelecionados(new Set()); setLoteRejeitar(false); setObs('')
+                setMsg({ tipo: 'ok', texto: `${r.rejeitados} documento(s) rejeitado(s) — o candidato recebeu um único e-mail com a lista.` })
+                await recarregar()
+              }}>Confirmar rejeição em massa</button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rh-revisao">
         <div className="rh-lista-slots">
           {dados.slots.map((s) => {
@@ -84,6 +121,15 @@ export default function Detalhe({ id, aoVoltar }) {
             return (
               <div className={`slot ${s.status} ${visualizando === s.id ? 'ativo' : ''}`} key={s.id}>
                 <div className="slot-linha">
+                  {s.status === 'enviado' && (
+                    <input type="checkbox" className="check-slot"
+                           checked={selecionados.has(s.id)}
+                           onChange={(e) => {
+                             const novo = new Set(selecionados)
+                             e.target.checked ? novo.add(s.id) : novo.delete(s.id)
+                             setSelecionados(novo)
+                           }} />
+                  )}
                   <div className="slot-nome">
                     <strong>{info.nome}</strong>{!s.obrigatorio && <em> (opcional)</em>}
                     <div className="slot-status">{s.status}

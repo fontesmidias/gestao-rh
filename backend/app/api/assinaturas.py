@@ -110,18 +110,32 @@ def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
         assinatura.otp_tentativas = 0
     db.commit()
 
+    from app.services.email import html_moderno
+
     docs = "\n".join(f"  - {NOMES_DOC[d]}" for d in pendentes)
+    docs_html = "".join(f"<li>{NOMES_DOC[d]}</li>" for d in pendentes)
+    ttl = get_settings().otp_ttl_minutes
     enviar_email(
         candidato.email,
         "Green House — Código de assinatura dos documentos admissionais",
         f"Prezado(a) {candidato.nome_completo},\n\n"
         f"Seu código de assinatura eletrônica é: {codigo}\n\n"
-        f"Ele é válido por {get_settings().otp_ttl_minutes} minutos e assina, de uma só vez, "
-        f"os seguintes documentos:\n{docs}\n\n"
-        "Digite o código na tela de assinatura para concluir. Caso não localize esta "
-        "mensagem, verifique a caixa de spam ou lixo eletrônico.\n\n"
+        f"Ele é válido por {ttl} minutos e assina, de uma só vez, os seguintes documentos:\n"
+        f"{docs}\n\nDigite o código na tela de assinatura para concluir. Caso não localize "
+        "esta mensagem, verifique a caixa de spam ou lixo eletrônico.\n\n"
         "Se você não solicitou este código, desconsidere esta mensagem.\n\n"
         "Atenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Seu código de assinatura",
+            [
+                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                f"Use o código abaixo na tela de assinatura. Ele é válido por "
+                f"<strong>{ttl} minutos</strong> e assina, de uma só vez, os documentos:"
+                f"<ul style='margin:8px 0 0 18px;color:#3a4152'>{docs_html}</ul>",
+                "Se você não solicitou este código, desconsidere esta mensagem.",
+            ],
+            destaque=codigo,
+        ),
     )
 
 
@@ -183,6 +197,9 @@ def assinar_todos(
         candidato.status = StatusCandidato.docs_pendentes
     db.commit()
 
+    from app.services.email import html_moderno
+
+    docs_html = "".join(f"<li>{NOMES_DOC[d]}</li>" for d, _ in pendentes)
     enviar_email(
         candidato.email,
         "Green House — Seus documentos assinados (vias do colaborador)",
@@ -193,6 +210,18 @@ def assinar_todos(
         + "\n\nPróximo passo obrigatório: envie a sua documentação pelo mesmo link da "
         "admissão. Sua contratação somente será efetivada após o envio completo.\n\n"
         "Atenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Documentos assinados ✓",
+            [
+                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                "Confirmamos a assinatura eletrônica dos seus documentos admissionais. "
+                "As vias assinadas seguem <strong>anexas a esta mensagem</strong> para sua guarda:"
+                f"<ul style='margin:8px 0 0 18px;color:#3a4152'>{docs_html}</ul>",
+                "<strong>Próximo passo obrigatório:</strong> envie a sua documentação pelo "
+                "mesmo link da admissão. Sua contratação somente será efetivada após o "
+                "envio completo.",
+            ],
+        ),
         anexos=anexos,
     )
     return {"assinados": assinados}

@@ -76,6 +76,12 @@ export const rh = {
     req(`/rh/slots/${slotId}/rejeitar`,
         { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo, observacao }) }),
   dispensar: (slotId) => req(`/rh/slots/${slotId}/dispensar`, { method: 'POST', headers: authRH() }),
+  aprovarLote: (slotIds) =>
+    req('/rh/slots/lote/aprovar', { method: 'POST', headers: authRH(),
+                                    body: JSON.stringify({ slot_ids: slotIds }) }),
+  rejeitarLote: (slotIds, motivo, observacao) =>
+    req('/rh/slots/lote/rejeitar', { method: 'POST', headers: authRH(),
+      body: JSON.stringify({ slot_ids: slotIds, motivo, observacao }) }),
   gerarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { method: 'POST', headers: authRH() }),
   baixarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { headers: authRH() }),
   // Configurações

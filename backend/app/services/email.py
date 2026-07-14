@@ -59,6 +59,48 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
         return False
 
 
+def html_moderno(titulo: str, paragrafos: list[str], destaque: str | None = None,
+                 botao_texto: str | None = None, botao_url: str | None = None,
+                 rodape: str = "RH — Green House") -> str:
+    """Template HTML padrão dos e-mails: card branco arredondado sobre fundo suave,
+    faixa de gradiente, código em caixa de destaque e botão de ação."""
+    corpo = "".join(
+        f'<p style="margin:0 0 14px;color:#3a4152;font-size:15px;line-height:1.6">{p}</p>'
+        for p in paragrafos
+    )
+    bloco_destaque = (
+        f'<div style="text-align:center;margin:26px 0">'
+        f'<span style="display:inline-block;background:#f2f8ea;border:2px dashed #8cc63f;'
+        f'border-radius:14px;padding:16px 34px;font-size:32px;letter-spacing:10px;'
+        f'font-weight:700;color:#2b2e4a;font-family:Consolas,monospace">{destaque}</span></div>'
+        if destaque else ""
+    )
+    bloco_botao = (
+        f'<div style="text-align:center;margin:28px 0 10px">'
+        f'<a href="{botao_url}" style="background:linear-gradient(135deg,#8cc63f,#4f9d3a);'
+        f'color:#fff;text-decoration:none;padding:15px 36px;border-radius:12px;'
+        f'font-weight:700;font-size:16px;display:inline-block;'
+        f'box-shadow:0 4px 14px rgba(79,157,58,.35)">{botao_texto}</a></div>'
+        if botao_texto and botao_url else ""
+    )
+    return f"""
+    <div style="background:#eef3ea;padding:32px 12px;font-family:'Segoe UI',system-ui,Roboto,sans-serif">
+      <div style="max-width:560px;margin:auto;background:#ffffff;border-radius:18px;
+                  overflow:hidden;box-shadow:0 8px 30px rgba(43,46,74,.12)">
+        <div style="height:6px;background:linear-gradient(90deg,#8cc63f,#4f9d3a,#2b2e4a)"></div>
+        <div style="padding:30px 34px 26px">
+          <p style="margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:2px;
+                    color:#8cc63f;text-transform:uppercase">🌱 Green House</p>
+          <h2 style="margin:0 0 18px;color:#2b2e4a;font-size:21px">{titulo}</h2>
+          {corpo}{bloco_destaque}{bloco_botao}
+        </div>
+        <div style="background:#f7faf4;padding:14px 34px;color:#8a93a3;font-size:12px">
+          {rodape} · mensagem automática do Portal de Admissão
+        </div>
+      </div>
+    </div>"""
+
+
 def email_convite(nome: str, link: str) -> tuple[str, str, str]:
     """(assunto, texto, html) do convite de admissão com o link mágico."""
     primeiro_nome = nome.split()[0].title() if nome.strip() else "candidato(a)"
@@ -74,21 +116,17 @@ def email_convite(nome: str, link: str) -> tuple[str, str, str]:
         "completa, o RH não pode efetivar seu registro.\n\n"
         "Qualquer dúvida, fale com o RH.\n"
     )
-    html = f"""
-    <div style="font-family:system-ui,Segoe UI,Roboto,sans-serif;max-width:560px;margin:auto;
-                padding:24px;color:#1f2430">
-      <h2 style="color:#2b2e4a">🌱 Bem-vindo(a) à Green House!</h2>
-      <p>Olá, <strong>{primeiro_nome}</strong>!</p>
-      <p>Para concluir sua admissão, toque no botão abaixo. <strong>Não precisa de senha.</strong></p>
-      <p style="text-align:center;margin:32px 0">
-        <a href="{link}" style="background:#8cc63f;color:#fff;text-decoration:none;
-           padding:14px 28px;border-radius:8px;font-weight:bold">Começar minha admissão</a>
-      </p>
-      <p><strong>Comece agora:</strong> sua contratação só é efetivada depois do envio
-         completo dos dados, assinaturas e documentos. Tudo fica salvo se precisar
-         interromper — mas <strong>conclua o quanto antes</strong>.</p>
-      <p style="color:#667">Se o botão não funcionar, copie este endereço:<br>
-         <a href="{link}">{link}</a></p>
-    </div>
-    """
+    html = html_moderno(
+        f"Bem-vindo(a), {primeiro_nome}!",
+        [
+            "Para concluir a sua admissão, toque no botão abaixo. "
+            "<strong>Não precisa de senha.</strong>",
+            "<strong>Comece agora:</strong> sua contratação só é efetivada depois do envio "
+            "completo dos dados, assinaturas e documentos. Tudo fica salvo se precisar "
+            "interromper — mas <strong>conclua o quanto antes</strong>.",
+            f'Se o botão não funcionar, copie este endereço: <a href="{link}">{link}</a>',
+        ],
+        botao_texto="Começar minha admissão",
+        botao_url=link,
+    )
     return assunto, texto, html

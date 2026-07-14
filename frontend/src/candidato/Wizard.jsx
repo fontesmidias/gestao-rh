@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
 
@@ -99,7 +99,19 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       : [{ nome_completo: '', parentesco: '', telefone_celular: '' }],
   })
   const [salvando, setSalvando] = useState(false)
+  const [salvo, setSalvo] = useState(true)
   const [pendencias, setPendencias] = useState(null)
+  const primeiraRender = useRef(true)
+
+  // Autosave contínuo: 900ms após a última digitação, a seção atual é gravada.
+  useEffect(() => {
+    if (primeiraRender.current) { primeiraRender.current = false; return }
+    setSalvo(false)
+    const timer = setTimeout(async () => {
+      try { await salvarEtapa(); setSalvo(true) } catch { /* revalida no avançar */ }
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [dados])
 
   const setSec = (sec, campo, valor) =>
     setDados((d) => ({ ...d, [sec]: { ...d[sec], [campo]: valor } }))
@@ -163,7 +175,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       <div className="progresso">
         <div className="progresso-barra" style={{ width: `${((etapa + 1) / 6) * 100}%` }} />
       </div>
-      <p className="etapa-num">Parte 1 de 4 — Seus dados · passo {etapa + 1} de 6 · salvo automaticamente ✓</p>
+      <p className="etapa-num">Parte 1 de 4 — Seus dados · passo {etapa + 1} de 6 ·{' '}
+        {salvo ? 'salvo ✓' : 'salvando…'}</p>
       <h2>{TITULOS[etapa]}</h2>
       {etapa === 5 && (
         <p className="explica">Este é o último passo dos seus dados. Ao confirmar,
