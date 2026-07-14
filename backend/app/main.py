@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.api.auth_rh import router as auth_rh_router
 from app.api.candidatos import router as candidatos_router
+from app.api.documentos import router as documentos_router
 from app.api.ficha import router as ficha_router
 from app.api.health import router as health_router
 from app.core.bootstrap import criar_admin_inicial
@@ -25,3 +26,4 @@ app.include_router(health_router, prefix="/api")
 app.include_router(auth_rh_router, prefix="/api")
 app.include_router(candidatos_router, prefix="/api")
 app.include_router(ficha_router, prefix="/api")
+app.include_router(documentos_router, prefix="/api")
