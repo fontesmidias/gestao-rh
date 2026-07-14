@@ -1,0 +1,127 @@
+# ============================================================================
+# Portal de Admissão Green House — STACK COMPLETA PARA PORTAINER (arquivo único)
+#
+# Usa as imagens prontas publicadas pelo CI no GitHub Container Registry —
+# nada de build: cole este arquivo no Portainer (Stacks → Add stack) e defina
+# as variáveis de ambiente na própria tela do Portainer (ou cole o conteúdo
+# do seu .env em "Environment variables → Advanced mode").
+#
+# Como o repositório é PRIVADO, faça login no registry na VPS uma única vez:
+#   docker login ghcr.io -u SEU_USUARIO_GITHUB -p SEU_TOKEN_PAT
+#   (token clássico com escopo read:packages)
+#
+# Acesso: http://SEU_IP:${FRONTEND_PORT}  — ⚠️ sem HTTPS: use para validação.
+# Com domínio, prefira deploy/docker-compose.traefik.yml (TLS automático).
+# ============================================================================
+
+services:
+  api:
+    image: ghcr.io/fontesmidias/admissao-api:latest
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY}
+      BASE_URL: ${BASE_URL}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+      MINIO_SECURE: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      RH_ADMIN_EMAIL: ${RH_ADMIN_EMAIL}
+      RH_ADMIN_PASSWORD: ${RH_ADMIN_PASSWORD}
+      RH_SESSION_TTL_HOURS: ${RH_SESSION_TTL_HOURS:-12}
+      MAGIC_LINK_TTL_HOURS: ${MAGIC_LINK_TTL_HOURS:-72}
+      OTP_TTL_MINUTES: ${OTP_TTL_MINUTES:-10}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+    depends_on:
+      - db
+      - redis
+      - minio
+    networks: [internal]
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/fontesmidias/admissao-api:latest
+    entrypoint: ["rq"]
+    command: ["worker", "--url", "redis://redis:6379/0", "default"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      BASE_URL: ${BASE_URL}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+    depends_on:
+      - redis
+      - minio
+    networks: [internal]
+    restart: unless-stopped
+
+  expurgo:
+    image: ghcr.io/fontesmidias/admissao-api:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do python -m app.workers.expurgo; sleep 86400; done"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+    depends_on:
+      - db
+      - minio
+    networks: [internal]
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/fontesmidias/admissao-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-8090}:80"
+    depends_on:
+      - api
+    networks: [internal]
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks: [internal]
+    restart: unless-stopped
+
+networks:
+  internal:
+
+volumes:
+  postgres-data:
+  minio-data:

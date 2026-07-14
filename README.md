@@ -15,6 +15,15 @@ Python/FastAPI · React/Vite · PostgreSQL · MinIO · Redis · SMTP · Docker C
 
 ## Como rodar
 
+### Portainer (recomendado na VPS) — arquivo único, sem build
+1. Na VPS: `docker login ghcr.io -u SEU_USUARIO -p SEU_TOKEN` (PAT com `read:packages`).
+2. Portainer → Stacks → Add stack → cole [deploy/portainer-stack.yml](deploy/portainer-stack.yml).
+3. Defina as variáveis de ambiente na tela do Portainer (modo avançado aceita colar o `.env`).
+As imagens (`ghcr.io/fontesmidias/admissao-api|frontend`) são publicadas automaticamente
+pelo CI a cada push na `main` e a cada tag `v*`.
+
+### Docker Compose (a partir do código-fonte)
+
 ```bash
 cp .env.example .env   # edite: senhas, SMTP, RH_ADMIN_*, FRONTEND_PORT
 # Local / VPS sem domínio (sem HTTPS — apenas validação):

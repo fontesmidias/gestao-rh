@@ -1,4 +1,13 @@
-# Serviços comuns às três stacks. Use sempre combinado com uma das variantes:
+# ============================================================================
+# ATENÇÃO: este arquivo NÃO roda sozinho — é a BASE (serviços comuns) do padrão
+# oficial de composição do Docker Compose. Combine-o SEMPRE com uma variante
+# (ip/traefik/certbot), que completa portas e TLS. Requer o código-fonte
+# (build a partir de ./backend e ./frontend) e o .env na raiz.
+#
+# 👉 Para subir como STACK no Portainer (sem código-fonte, com imagens prontas
+#    do GHCR), use o arquivo único: deploy/portainer-stack.yml
+# ============================================================================
+# Uso a partir da raiz do repositório:
 #   docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml up -d
 #   docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.traefik.yml up -d
 #   docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.certbot.yml up -d
