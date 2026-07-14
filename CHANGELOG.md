@@ -2,6 +2,32 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · versionamento semântico.
 
+## [1.1.0] — 2026-07-14
+
+Primeira versão em produção (VPS via Portainer) + melhorias da v1.1.
+
+### Adicionado
+- Validação de CPF com dígito verificador (algoritmo da Receita) no backend e no
+  formulário (aviso imediato + máscara), para titular e dependentes.
+- Dashboard de métricas no painel do RH: candidatos, em andamento, documentos
+  aguardando revisão, reenvios pendentes, dossiês gerados e tempo médio até o dossiê.
+- "Esqueci minha senha" na tela de login: link por e-mail válido por 30 minutos e de
+  uso único.
+- Gestão da equipe do RH pelo painel: criar usuários (com e-mail de boas-vindas),
+  editar, redefinir senha e ativar/desativar (com proteções contra auto-bloqueio).
+- Envio de e-mail com "Fazer login com o Google" (OAuth + Gmail API), além do
+  Microsoft 365; prioridade M365 → Google → SMTP.
+- Teste de SMTP com diagnóstico dirigido (mostra a resposta exata do servidor e o
+  passo de correção para os casos comuns do Microsoft 365).
+
+### Corrigido
+- Página em branco ao abrir um candidato no painel (hook condicional no React).
+- Aprovar/rejeitar em massa não funcionavam (ordem de rotas no FastAPI); erros das
+  ações em massa agora sempre aparecem na tela.
+- Links gerados (link mágico, reset, e-mails, callback OAuth) agora derivam do endereço
+  público da própria requisição — funcionam em localhost, IP:porta e domínio sem
+  configurar BASE_URL; nginx preserva a porta.
+
 ## [1.0.0-rc.1] — 2026-07-14
 
 Primeira versão candidata do Portal de Admissão.
@@ -28,4 +54,5 @@ Primeira versão candidata do Portal de Admissão.
 - Deploy: compose base+variantes (ip / traefik / certbot), stack única para Portainer com
   imagens do GHCR publicadas por CI (GitHub Actions).
 
+[1.1.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.1.0
 [1.0.0-rc.1]: https://github.com/fontesmidias/admissao/releases/tag/v1.0.0-rc.1
