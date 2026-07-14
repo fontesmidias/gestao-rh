@@ -133,10 +133,12 @@ function Acompanhamento({ token, estado }) {
              contato com as orientações do seu primeiro dia.</p></>
       ) : (
         <><h1>📥 Recebemos seu envio!</h1>
-          <p><strong>O que acontece agora:</strong> o RH confere cada documento. Se algum
-             precisar ser reenviado, você receberá um e-mail explicando o motivo e este link
-             reabrirá automaticamente apenas para aquele documento. Quando tudo for aprovado,
-             você será avisado(a) por aqui e por e-mail.</p>
+          <p><strong>O que acontece agora:</strong> o RH confere cada documento e você será
+             informado(a) <strong>por e-mail</strong> em qualquer caso. Se algum documento
+             precisar ser reenviado, o e-mail explicará o motivo — basta acessar novamente
+             o seu link de admissão (o mesmo desta página) e reenviar apenas o documento
+             indicado. Quando tudo for aprovado, o e-mail confirmará a conclusão da sua
+             documentação.</p>
           {check && <p className="progresso-txt">
             {check.progresso.ok} de {check.progresso.total} documentos conferidos/recebidos.</p>}</>
       )}
