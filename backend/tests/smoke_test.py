@@ -92,6 +92,28 @@ r = c.post(f"/api/c/{token}/ficha/declaracao")
 assert r.status_code == 200, r.text
 assert r.json()["status"] == "aguardando_assinatura"
 
+# 7b) assinatura das 3 fichas: preview -> código por e-mail -> assinar (OTP)
+import app.api.assinaturas as mod_ass
+
+codigos = {}
+_orig = mod_ass.enviar_email
+mod_ass.enviar_email = lambda dest, assunto, corpo, html=None: codigos.__setitem__(
+    "ultimo", corpo.split("assinatura é: ")[1][:6]) or True
+
+for doc in ("ficha_cadastro", "ficha_emergencia", "termo_vt"):
+    r = c.get(f"/api/c/{token}/fichas/{doc}/preview")
+    assert r.status_code == 200 and r.content[:4] == b"%PDF", doc
+    assert c.post(f"/api/c/{token}/fichas/{doc}/solicitar-codigo").status_code == 204
+    r = c.post(f"/api/c/{token}/fichas/{doc}/assinar", json={"codigo": "000000"})
+    assert r.status_code == 422, r.text  # código errado é recusado
+    r = c.post(f"/api/c/{token}/fichas/{doc}/assinar", json={"codigo": codigos["ultimo"]})
+    assert r.status_code == 200 and len(r.json()["hash_sha256"]) == 64, r.text
+    assert c.post(f"/api/c/{token}/fichas/{doc}/solicitar-codigo").status_code == 409
+
+mod_ass.enviar_email = _orig
+fichas = c.get(f"/api/c/{token}/fichas").json()["fichas"]
+assert all(f["assinado"] for f in fichas)
+
 # 8) checklist: regras condicionais (homem 18-45 -> reservista; casado -> certidão;
 #    dependente 3 anos -> nascimento + vacina; VT com cartão -> cartao_vt; sem PCD -> sem laudo)
 check = c.get(f"/api/c/{token}/documentos").json()

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.assinaturas import router as assinaturas_router
 from app.api.auth_rh import router as auth_rh_router
 from app.api.candidatos import router as candidatos_router
 from app.api.documentos import router as documentos_router
@@ -11,8 +12,12 @@ from app.core.db import Base, SessionLocal, engine
 
 settings = get_settings()
 
-# Provisório até o módulo de migrações (Alembic) entrar.
-Base.metadata.create_all(bind=engine)
+# Schema é responsabilidade do Alembic (docker-entrypoint roda `alembic upgrade head`).
+# Em desenvolvimento local sem migrations aplicadas: ALEMBIC_AUTO_CREATE=1 usa create_all.
+import os
+
+if os.getenv("ALEMBIC_AUTO_CREATE") == "1":
+    Base.metadata.create_all(bind=engine)
 with SessionLocal() as _db:
     criar_admin_inicial(_db)
 
@@ -27,3 +32,4 @@ app.include_router(auth_rh_router, prefix="/api")
 app.include_router(candidatos_router, prefix="/api")
 app.include_router(ficha_router, prefix="/api")
 app.include_router(documentos_router, prefix="/api")
+app.include_router(assinaturas_router, prefix="/api")

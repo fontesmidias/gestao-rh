@@ -15,6 +15,7 @@ dependencies = [
     { name = "alembic" },
     { name = "email-validator" },
     { name = "fastapi" },
+    { name = "fpdf2" },
     { name = "img2pdf" },
     { name = "itsdangerous" },
     { name = "minio" },
@@ -43,6 +44,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "email-validator", specifier = ">=2.2" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "fpdf2", specifier = ">=2.7" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "img2pdf", specifier = ">=0.5" },
     { name = "itsdangerous", specifier = ">=2.2" },
@@ -417,6 +419,15 @@ wheels = [
 ]
 
 [[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
+]
+
+[[package]]
 name = "dnspython"
 version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -500,6 +511,20 @@ woff = [
     { name = "brotli", marker = "platform_python_implementation == 'CPython'" },
     { name = "brotlicffi", marker = "platform_python_implementation != 'CPython'" },
     { name = "zopfli" },
+]
+
+[[package]]
+name = "fpdf2"
+version = "2.8.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "fonttools" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/27/f2/72feae0b2827ed38013e4307b14f95bf0b3d124adfef4d38a7d57533f7be/fpdf2-2.8.7.tar.gz", hash = "sha256:7060ccee5a9c7ab0a271fb765a36a23639f83ef8996c34e3d46af0a17ede57f9", size = 362351, upload-time = "2026-02-28T05:39:16.456Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/0a/cf50ecffa1e3747ed9380a3adfc829259f1f86b3fdbd9e505af789003141/fpdf2-2.8.7-py3-none-any.whl", hash = "sha256:d391fc508a3ce02fc43a577c830cda4fe6f37646f2d143d489839940932fbc19", size = 327056, upload-time = "2026-02-28T05:39:14.619Z" },
 ]
 
 [[package]]
