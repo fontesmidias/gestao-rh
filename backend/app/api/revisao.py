@@ -16,6 +16,7 @@ from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import MotivoRejeicao, SlotDocumento, StatusSlot
 from app.models.usuario_rh import UsuarioRH
 from app.services import storage
+from app.services.auditoria import registrar
 from app.services.dossie import DossieIncompleto, gerar_dossie
 from app.services.email import enviar_email
 
@@ -109,6 +110,8 @@ def aprovar(slot_id: uuid.UUID, db: Session = Depends(get_db),
     slot.status = StatusSlot.aprovado
     slot.revisado_em = datetime.now(timezone.utc)
     slot.revisado_por = rh.id
+    registrar(db, "documento_aprovado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=slot.candidato_id, detalhe={"tipo": slot.tipo.value})
     db.commit()
     return {"status": slot.status}
 
@@ -141,6 +144,9 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_
     # Reabre o checklist para o candidato corrigir.
     if candidato.status == StatusCandidato.envio_concluido:
         candidato.status = StatusCandidato.docs_pendentes
+    registrar(db, "documento_rejeitado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=slot.candidato_id,
+              detalhe={"tipo": slot.tipo.value, "motivo": payload.motivo.value})
     db.commit()
 
     enviar_email(
@@ -180,6 +186,7 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, db: Session = Depends(get_db)
     except DossieIncompleto as exc:
         raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
     cand.status = StatusCandidato.aprovado
+    registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id)
     db.commit()
 
     settings = get_settings()

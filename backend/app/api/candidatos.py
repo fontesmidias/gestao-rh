@@ -8,6 +8,7 @@ from app.api.auth_rh import requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.usuario_rh import UsuarioRH
+from app.services.auditoria import registrar
 from app.services.email import email_convite, enviar_email
 from app.services.magic_link import emitir_link, resolver_token
 
@@ -51,6 +52,7 @@ def criar_candidato(
     db.add(candidato)
     db.flush()
     link = emitir_link(db, candidato)
+    registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
     assunto, texto, html = email_convite(candidato.nome_completo, link)
     enviado = enviar_email(candidato.email, assunto, texto, html)
@@ -70,6 +72,7 @@ def reenviar_link(
     if candidato is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
     link = emitir_link(db, candidato)
+    registrar(db, "link_reenviado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
     assunto, texto, html = email_convite(candidato.nome_completo, link)
     enviado = enviar_email(candidato.email, assunto, texto, html)

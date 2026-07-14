@@ -75,4 +75,16 @@ export const rh = {
   dispensar: (slotId) => req(`/rh/slots/${slotId}/dispensar`, { method: 'POST', headers: authRH() }),
   gerarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { method: 'POST', headers: authRH() }),
   baixarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { headers: authRH() }),
+  // Configurações
+  meuPerfil: () => req('/rh/me', { headers: authRH() }),
+  salvarPerfil: (dados) =>
+    req('/rh/me', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  trocarSenha: (senha_atual, senha_nova) =>
+    req('/rh/me/senha', { method: 'PUT', headers: authRH(),
+                          body: JSON.stringify({ senha_atual, senha_nova }) }),
+  verSmtp: () => req('/rh/config/smtp', { headers: authRH() }),
+  salvarSmtp: (dados) =>
+    req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarSmtp: () => req('/rh/config/smtp/testar', { method: 'POST', headers: authRH() }),
+  auditoria: () => req('/rh/auditoria', { headers: authRH() }),
 }

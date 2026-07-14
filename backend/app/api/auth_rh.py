@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import criar_token_sessao, validar_token_sessao, verificar_senha
+from app.services.auditoria import registrar
 from app.models.usuario_rh import UsuarioRH
 
 router = APIRouter(tags=["auth-rh"])
@@ -29,8 +30,12 @@ class LoginOut(BaseModel):
 def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
     usuario = db.scalar(select(UsuarioRH).where(UsuarioRH.email == payload.email.lower()))
     if usuario is None or not usuario.ativo or not verificar_senha(payload.senha, usuario.senha_hash):
+        registrar(db, "login_falhou", ator="rh", ator_detalhe=payload.email)
+        db.commit()
         # Mensagem única: não revelar se o e-mail existe.
         raise HTTPException(status_code=401, detail="credenciais_invalidas")
+    registrar(db, "login_ok", ator="rh", ator_detalhe=usuario.email)
+    db.commit()
     return LoginOut(token=criar_token_sessao(str(usuario.id)), nome=usuario.nome)
 
 

@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.models.assinatura import Assinatura, DocumentoAssinavel
 from app.models.candidato import Candidato, StatusCandidato
 from app.services import storage
+from app.services.auditoria import registrar
 from app.services.email import enviar_email
 from app.services.fichas import GERADORES
 from app.services.magic_link import resolver_token
@@ -155,6 +156,8 @@ def assinar(
     if todas == set(DocumentoAssinavel) and candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
 
+    registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,
+              detalhe={"documento": documento.value, "hash": assinatura.hash_sha256})
     db.commit()
     return {
         "documento": documento,

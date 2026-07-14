@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import Detalhe from './Detalhe.jsx'
+import Config from './Config.jsx'
 
 const STATUS_CHIP = {
   convidado: ['Convidado', '#8896b3'],
@@ -49,12 +50,16 @@ function Painel({ aoSair }) {
   const [selecionado, setSelecionado] = useState(null)
   const [novo, setNovo] = useState(null) // form de novo candidato
   const [convite, setConvite] = useState(null)
+  const [erroConvite, setErroConvite] = useState(null)
+  const [enviandoConvite, setEnviandoConvite] = useState(false)
+  const [config, setConfig] = useState(false)
 
   const recarregar = () => api.candidatos().then(setCandidatos).catch((e) => {
     if (e.status === 401) aoSair()
   })
   useEffect(() => { recarregar() }, [])
 
+  if (config) return <Config aoVoltar={() => setConfig(false)} />
   if (selecionado) return (
     <Detalhe id={selecionado} aoVoltar={() => { setSelecionado(null); recarregar() }} />
   )
@@ -66,6 +71,7 @@ function Painel({ aoSair }) {
         <div>
           <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>
           <button className="btn-secundario" onClick={() => setNovo({})}>+ Novo candidato</button>
+          <button className="btn-secundario" onClick={() => setConfig(true)}>⚙️ Configurações</button>
           <button className="btn-link" onClick={aoSair}>Sair</button>
         </div>
       </header>
@@ -84,12 +90,24 @@ function Painel({ aoSair }) {
           <div className="navegacao">
             <button className="btn-secundario" onClick={() => { setNovo(null); setConvite(null) }}>
               Cancelar</button>
-            <button className="btn-principal" onClick={async () => {
-              const r = await api.novoCandidato(novo)
-              setConvite(r)
-              recarregar()
-            }}>Convidar e enviar link</button>
+            <button className="btn-principal" disabled={enviandoConvite} onClick={async () => {
+              setErroConvite(null); setConvite(null)
+              if (!novo.nome_completo || !novo.email || !novo.celular_whatsapp) {
+                setErroConvite('Preencha nome, e-mail e celular.'); return
+              }
+              setEnviandoConvite(true)
+              try {
+                const r = await api.novoCandidato(novo)
+                setConvite(r)
+                recarregar()
+              } catch (e) {
+                setErroConvite(e.status === 422
+                  ? 'E-mail inválido — confira o endereço digitado.'
+                  : `Não foi possível criar o convite (${e.detail || e.message}).`)
+              } finally { setEnviandoConvite(false) }
+            }}>{enviandoConvite ? 'Criando…' : 'Convidar e enviar link'}</button>
           </div>
+          {erroConvite && <div className="alerta">{erroConvite}</div>}
           {convite && (
             <div className="sucesso">
               Link mágico criado{convite.email_enviado ? ' e enviado por e-mail ✓' : ''}.

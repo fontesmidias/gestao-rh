@@ -9,7 +9,9 @@ from app.core.db import Base
 # Importa todos os models para que o autogenerate enxergue o metadata completo.
 import app.models.assinatura  # noqa: F401
 import app.models.candidato  # noqa: F401
+import app.models.configuracao  # noqa: F401
 import app.models.documento  # noqa: F401
+import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
 import app.models.usuario_rh  # noqa: F401
 

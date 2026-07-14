@@ -12,6 +12,7 @@ from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import SlotDocumento, StatusSlot
 from app.services import storage
+from app.services.auditoria import registrar
 from app.services.email import enviar_email
 from app.services.magic_link import resolver_token
 from app.services.normalizacao import ArquivoInvalido, normalizar_para_pdf
@@ -89,6 +90,8 @@ def enviar_arquivo(
     slot.motivo_rejeicao = None
     slot.motivo_rejeicao_obs = None
     slot.enviado_em = datetime.now(timezone.utc)
+    registrar(db, "documento_enviado", ator="candidato", candidato_id=candidato.id,
+              detalhe={"tipo": slot.tipo.value, "paginas": paginas})
     if candidato.status in (StatusCandidato.aguardando_assinatura, StatusCandidato.preenchendo):
         candidato.status = StatusCandidato.docs_pendentes
     db.commit()
@@ -109,6 +112,7 @@ def concluir_envio(token: str, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=422, detail={"faltando": faltando})
 
     candidato.status = StatusCandidato.envio_concluido
+    registrar(db, "envio_concluido", ator="candidato", candidato_id=candidato.id)
     db.commit()
 
     settings = get_settings()

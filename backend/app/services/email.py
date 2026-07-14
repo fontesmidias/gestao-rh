@@ -5,19 +5,26 @@ import logging
 import smtplib
 from email.message import EmailMessage
 
-from app.core.config import get_settings
+from app.core.db import SessionLocal
 
 log = logging.getLogger(__name__)
 
 
-def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None) -> bool:
-    settings = get_settings()
-    if not settings.smtp_host:
+def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
+                 levantar_erro: bool = False) -> bool:
+    from app.services.config_dinamica import smtp_config
+
+    with SessionLocal() as db:
+        cfg = smtp_config(db)
+
+    if not cfg["host"] or "seuprovedor" in cfg["host"]:
         log.warning("SMTP não configurado; e-mail para %s não enviado.", destinatario)
+        if levantar_erro:
+            raise RuntimeError("smtp_nao_configurado")
         return False
 
     msg = EmailMessage()
-    msg["From"] = settings.smtp_from
+    msg["From"] = cfg["from_"]
     msg["To"] = destinatario
     msg["Subject"] = assunto
     msg.set_content(corpo_texto)
@@ -25,14 +32,17 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
         msg.add_alternative(corpo_html, subtype="html")
 
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
+        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as smtp:
             smtp.starttls()
-            if settings.smtp_user:
-                smtp.login(settings.smtp_user, settings.smtp_password)
+            if cfg["user"]:
+                smtp.login(cfg["user"], cfg["password"])
             smtp.send_message(msg)
+        log.info("E-mail enviado para %s: %s", destinatario, assunto)
         return True
     except Exception:
         log.exception("Falha ao enviar e-mail para %s", destinatario)
+        if levantar_erro:
+            raise
         return False
 
 
