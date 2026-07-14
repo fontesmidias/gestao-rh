@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "rh@greenhousedf.com.br"
 
+    # Admin inicial do RH: criado no primeiro start se não existir nenhum usuário.
+    rh_admin_email: str = ""
+    rh_admin_password: str = ""
+    rh_session_ttl_hours: int = 12
+
     magic_link_ttl_hours: int = 72
     otp_ttl_minutes: int = 10
     retention_days: int = 90

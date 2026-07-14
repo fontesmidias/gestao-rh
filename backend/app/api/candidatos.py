@@ -4,8 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from app.api.auth_rh import requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
+from app.models.usuario_rh import UsuarioRH
 from app.services.magic_link import emitir_link, resolver_token
 
 router = APIRouter(tags=["candidatos"])
@@ -32,11 +34,15 @@ class ConviteOut(BaseModel):
     link_magico: str
 
 
-# --- RH (TODO: proteger com autenticação do RH no módulo seguinte) ---
+# --- RH (protegido) ---
 
 
 @router.post("/rh/candidatos", response_model=ConviteOut, status_code=201)
-def criar_candidato(payload: NovoCandidato, db: Session = Depends(get_db)) -> ConviteOut:
+def criar_candidato(
+    payload: NovoCandidato,
+    db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(requer_rh),
+) -> ConviteOut:
     """Cadastra o candidato aprovado e emite o link mágico (envio por e-mail no módulo SMTP)."""
     candidato = Candidato(**payload.model_dump())
     db.add(candidato)
