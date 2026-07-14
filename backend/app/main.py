@@ -50,8 +50,13 @@ async def log_422(request: Request, exc: RequestValidationError):
         if chave in corpo:
             corpo = "<contém credencial — mascarado>"
             break
-    telemetria.warning("422 path=%s erros=%s corpo=%r", request.url.path, exc.errors(), corpo)
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    erros = [
+        {"loc": [str(p) for p in e.get("loc", [])], "msg": e.get("msg", ""),
+         "type": e.get("type", "")}
+        for e in exc.errors()
+    ]
+    telemetria.warning("422 path=%s erros=%s corpo=%r", request.url.path, erros, corpo)
+    return JSONResponse(status_code=422, content={"detail": erros})
 
 
 @app.middleware("http")

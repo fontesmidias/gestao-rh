@@ -1,9 +1,12 @@
 const BASE = '/api'
 
 async function req(caminho, opcoes = {}) {
+  // headers extraído antes do spread: senão opcoes.headers sobrescreveria o
+  // Content-Type e a API receberia o JSON sem interpretação (bug histórico).
+  const { headers, ...resto } = opcoes
   const r = await fetch(`${BASE}${caminho}`, {
-    headers: { 'Content-Type': 'application/json', ...(opcoes.headers || {}) },
-    ...opcoes,
+    ...resto,
+    headers: { 'Content-Type': 'application/json', ...(headers || {}) },
   })
   if (!r.ok) {
     let detail
