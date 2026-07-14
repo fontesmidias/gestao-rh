@@ -31,9 +31,9 @@ export const candidato = {
   declarar: (t) => req(`/c/${t}/ficha/declaracao`, { method: 'POST' }),
   fichas: (t) => req(`/c/${t}/fichas`),
   previewUrl: (t, doc) => `${BASE}/c/${t}/fichas/${doc}/preview`,
-  solicitarCodigo: (t, doc) => req(`/c/${t}/fichas/${doc}/solicitar-codigo`, { method: 'POST' }),
-  assinar: (t, doc, codigo) =>
-    req(`/c/${t}/fichas/${doc}/assinar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
+  solicitarCodigoUnico: (t) => req(`/c/${t}/fichas/solicitar-codigo`, { method: 'POST' }),
+  assinarTodos: (t, codigo) =>
+    req(`/c/${t}/fichas/assinar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
   documentos: (t) => req(`/c/${t}/documentos`),
   enviarArquivo: async (t, slotId, arquivo) => {
     const fd = new FormData()

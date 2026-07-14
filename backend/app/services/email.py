@@ -11,14 +11,16 @@ log = logging.getLogger(__name__)
 
 
 def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
-                 levantar_erro: bool = False) -> bool:
+                 levantar_erro: bool = False,
+                 anexos: list[tuple[str, bytes]] | None = None) -> bool:
+    """anexos: lista de (nome_do_arquivo.pdf, bytes)."""
     from app.services.config_dinamica import smtp_config
     from app.services.m365 import config_m365, enviar_via_graph
 
     # Microsoft 365 conectado tem prioridade sobre SMTP.
     with SessionLocal() as db:
         if config_m365(db).get("m365_refresh_token"):
-            ok = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html)
+            ok = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
             if ok:
                 return True
             if levantar_erro:
@@ -39,6 +41,8 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
     msg.set_content(corpo_texto)
     if corpo_html:
         msg.add_alternative(corpo_html, subtype="html")
+    for nome, dados in (anexos or []):
+        msg.add_attachment(dados, maintype="application", subtype="pdf", filename=nome)
 
     try:
         with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as smtp:

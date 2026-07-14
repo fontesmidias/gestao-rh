@@ -89,7 +89,8 @@ def _access_token(db: Session) -> str | None:
 
 
 def enviar_via_graph(db: Session, destinatario: str, assunto: str,
-                     corpo_texto: str, corpo_html: str | None = None) -> bool:
+                     corpo_texto: str, corpo_html: str | None = None,
+                     anexos: list[tuple[str, bytes]] | None = None) -> bool:
     token = _access_token(db)
     if token is None:
         return False
@@ -99,6 +100,12 @@ def enviar_via_graph(db: Session, destinatario: str, assunto: str,
             "body": {"contentType": "HTML" if corpo_html else "Text",
                      "content": corpo_html or corpo_texto},
             "toRecipients": [{"emailAddress": {"address": destinatario}}],
+            "attachments": [
+                {"@odata.type": "#microsoft.graph.fileAttachment",
+                 "name": nome, "contentType": "application/pdf",
+                 "contentBytes": base64.b64encode(dados).decode()}
+                for nome, dados in (anexos or [])
+            ],
         },
         "saveToSentItems": True,
     }

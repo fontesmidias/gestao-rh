@@ -66,11 +66,136 @@ def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/c/{token}/fichas/{documento}/preview")
 def preview(token: str, documento: DocumentoAssinavel, db: Session = Depends(get_db)) -> Response:
-    """PDF gerado com os dados atuais, ainda sem valor de assinatura."""
+    """PDF do documento: a via assinada, se existir; senão, prévia com os dados atuais."""
     candidato = _candidato_do_token(token, db)
-    pdf = GERADORES[documento.value](db, candidato)
+    assinatura = db.scalar(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
+            Assinatura.assinado_em.isnot(None),
+        )
+    )
+    if assinatura is not None and assinatura.pdf_key:
+        pdf = storage.ler(assinatura.pdf_key)
+    else:
+        pdf = GERADORES[documento.value](db, candidato)
     db.commit()
     return Response(content=pdf, media_type="application/pdf")
+
+
+NOMES_DOC = {
+    DocumentoAssinavel.ficha_cadastro: "Ficha Cadastral do Colaborador",
+    DocumentoAssinavel.ficha_emergencia: "Ficha de Emergência do Colaborador",
+    DocumentoAssinavel.termo_vt: "Termo de Opção pelo Vale-Transporte",
+}
+
+
+@router.post("/c/{token}/fichas/solicitar-codigo", status_code=204)
+def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
+    """Um único código para assinar todos os documentos pendentes de uma vez."""
+    candidato = _candidato_do_token(token, db)
+    pendentes = [
+        d for d in DocumentoAssinavel
+        if _registro(db, candidato, d).assinado_em is None
+    ]
+    if not pendentes:
+        raise HTTPException(status_code=409, detail="todos_ja_assinados")
+
+    codigo = f"{secrets.randbelow(1_000_000):06d}"
+    otp_hash = hashlib.sha256(codigo.encode()).hexdigest()
+    expira = datetime.now(timezone.utc) + timedelta(minutes=get_settings().otp_ttl_minutes)
+    for doc in pendentes:
+        assinatura = _registro(db, candidato, doc)
+        assinatura.otp_hash = otp_hash
+        assinatura.otp_expira_em = expira
+        assinatura.otp_tentativas = 0
+    db.commit()
+
+    docs = "\n".join(f"  - {NOMES_DOC[d]}" for d in pendentes)
+    enviar_email(
+        candidato.email,
+        "Green House — Código de assinatura dos documentos admissionais",
+        f"Prezado(a) {candidato.nome_completo},\n\n"
+        f"Seu código de assinatura eletrônica é: {codigo}\n\n"
+        f"Ele é válido por {get_settings().otp_ttl_minutes} minutos e assina, de uma só vez, "
+        f"os seguintes documentos:\n{docs}\n\n"
+        "Digite o código na tela de assinatura para concluir. Caso não localize esta "
+        "mensagem, verifique a caixa de spam ou lixo eletrônico.\n\n"
+        "Se você não solicitou este código, desconsidere esta mensagem.\n\n"
+        "Atenciosamente,\nRH — Green House\n",
+    )
+
+
+class AssinarTodosIn(BaseModel):
+    codigo: str
+
+
+@router.post("/c/{token}/fichas/assinar")
+def assinar_todos(
+    token: str,
+    payload: AssinarTodosIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Valida o código único e assina todos os documentos pendentes."""
+    candidato = _candidato_do_token(token, db)
+    pendentes = [
+        (d, _registro(db, candidato, d)) for d in DocumentoAssinavel
+        if _registro(db, candidato, d).assinado_em is None
+    ]
+    if not pendentes:
+        raise HTTPException(status_code=409, detail="todos_ja_assinados")
+
+    ref = pendentes[0][1]
+    if ref.otp_hash is None or ref.otp_expira_em is None:
+        raise HTTPException(status_code=409, detail="codigo_nao_solicitado")
+    if ref.otp_expira_em < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="codigo_expirado")
+    if ref.otp_tentativas >= MAX_TENTATIVAS_OTP:
+        raise HTTPException(status_code=429, detail="tentativas_excedidas")
+    if hashlib.sha256(payload.codigo.encode()).hexdigest() != ref.otp_hash:
+        for _, a in pendentes:
+            a.otp_tentativas += 1
+        db.commit()
+        raise HTTPException(status_code=422, detail="codigo_incorreto")
+
+    agora = datetime.now(timezone.utc)
+    anexos: list[tuple[str, bytes]] = []
+    assinados = []
+    for doc, assinatura in pendentes:
+        pdf_sem_bloco = GERADORES[doc.value](db, candidato)
+        assinatura.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
+        assinatura.assinado_em = agora
+        assinatura.ip = request.client.host if request.client else None
+        assinatura.user_agent = request.headers.get("user-agent", "")[:400]
+        assinatura.otp_hash = None
+        assinatura.otp_expira_em = None
+        pdf_assinado = GERADORES[doc.value](db, candidato, assinatura)
+        key = f"candidatos/{candidato.id}/fichas/{doc.value}.pdf"
+        storage.salvar(key, pdf_assinado, "application/pdf")
+        assinatura.pdf_key = key
+        anexos.append((f"{doc.value}.pdf", pdf_assinado))
+        assinados.append({"documento": doc, "assinado_em": agora,
+                          "hash_sha256": assinatura.hash_sha256})
+        registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,
+                  detalhe={"documento": doc.value, "hash": assinatura.hash_sha256})
+
+    if candidato.status == StatusCandidato.aguardando_assinatura:
+        candidato.status = StatusCandidato.docs_pendentes
+    db.commit()
+
+    enviar_email(
+        candidato.email,
+        "Green House — Seus documentos assinados (vias do colaborador)",
+        f"Prezado(a) {candidato.nome_completo},\n\n"
+        "Confirmamos a assinatura eletrônica dos seus documentos admissionais, que seguem "
+        "anexos a esta mensagem para sua guarda:\n"
+        + "\n".join(f"  - {NOMES_DOC[d]}" for d, _ in pendentes)
+        + "\n\nPróximo passo obrigatório: envie a sua documentação pelo mesmo link da "
+        "admissão. Sua contratação somente será efetivada após o envio completo.\n\n"
+        "Atenciosamente,\nRH — Green House\n",
+        anexos=anexos,
+    )
+    return {"assinados": assinados}
 
 
 @router.post("/c/{token}/fichas/{documento}/solicitar-codigo", status_code=204)

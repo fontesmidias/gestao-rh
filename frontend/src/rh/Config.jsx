@@ -201,6 +201,8 @@ function Smtp() {
         <button className="btn-principal btn-mini" disabled={testando} onClick={async () => {
           setMsg(null); setTestando(true)
           try {
+            const salvo = await api.salvarSmtp({ ...cfg, smtp_password: senha || null })
+            setCfg(salvo); setSenha('')
             const r = await api.testarSmtp()
             setMsg({ tipo: 'ok', texto: `E-mail de teste enviado para ${r.enviado_para} — confira a caixa de entrada.` })
           } catch (e) {
