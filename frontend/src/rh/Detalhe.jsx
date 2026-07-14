@@ -102,10 +102,15 @@ export default function Detalhe({ id, aoVoltar }) {
           <span className="explica" style={{ margin: 0 }}>{selecionados.size} selecionado(s)</span>
           <button className="btn-principal btn-mini" disabled={!selecionados.size}
                   onClick={async () => {
-                    const r = await api.aprovarLote([...selecionados])
-                    setSelecionados(new Set()); setMsg({ tipo: 'ok',
-                      texto: `${r.aprovados} documento(s) aprovado(s).` })
-                    await recarregar()
+                    try {
+                      const r = await api.aprovarLote([...selecionados])
+                      setSelecionados(new Set()); setMsg({ tipo: 'ok',
+                        texto: `${r.aprovados} documento(s) aprovado(s).` })
+                      await recarregar()
+                    } catch (e) {
+                      setMsg({ tipo: 'erro',
+                        texto: `Não foi possível aprovar em massa (${e.detail || e.message}).` })
+                    }
                   }}>Aprovar selecionados</button>
           <button className="btn-rejeitar btn-mini" disabled={!selecionados.size}
                   onClick={() => setLoteRejeitar(!loteRejeitar)}>Rejeitar selecionados</button>
@@ -117,10 +122,15 @@ export default function Detalhe({ id, aoVoltar }) {
               <input placeholder="Observação (opcional)" value={obs}
                      onChange={(e) => setObs(e.target.value)} />
               <button className="btn-rejeitar btn-mini" onClick={async () => {
-                const r = await api.rejeitarLote([...selecionados], motivo, obs || null)
-                setSelecionados(new Set()); setLoteRejeitar(false); setObs('')
-                setMsg({ tipo: 'ok', texto: `${r.rejeitados} documento(s) rejeitado(s) — o candidato recebeu um único e-mail com a lista.` })
-                await recarregar()
+                try {
+                  const r = await api.rejeitarLote([...selecionados], motivo, obs || null)
+                  setSelecionados(new Set()); setLoteRejeitar(false); setObs('')
+                  setMsg({ tipo: 'ok', texto: `${r.rejeitados} documento(s) rejeitado(s) — o candidato recebeu um único e-mail com a lista.` })
+                  await recarregar()
+                } catch (e) {
+                  setMsg({ tipo: 'erro',
+                    texto: `Não foi possível rejeitar em massa (${e.detail || e.message}).` })
+                }
               }}>Confirmar rejeição em massa</button>
             </div>
           )}

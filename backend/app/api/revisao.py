@@ -94,6 +94,94 @@ def _ascii(texto: str) -> str:
     return sem_acento.replace(" ", "-")
 
 
+# As rotas de lote precisam vir ANTES das rotas /rh/slots/{slot_id}/...:
+# o FastAPI casa na ordem de declaração e "lote" seria capturado pelo
+# path param {slot_id}, falhando a validação de UUID com 422.
+
+
+class LoteAprovarIn(BaseModel):
+    slot_ids: list[uuid.UUID]
+
+
+@router.post("/rh/slots/lote/aprovar")
+def aprovar_lote(payload: LoteAprovarIn, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    aprovados = 0
+    for slot_id in payload.slot_ids:
+        slot = db.get(SlotDocumento, slot_id)
+        if slot is None or slot.status != StatusSlot.enviado:
+            continue
+        slot.status = StatusSlot.aprovado
+        slot.revisado_em = datetime.now(timezone.utc)
+        slot.revisado_por = rh.id
+        registrar(db, "documento_aprovado", ator="rh", ator_detalhe=rh.email,
+                  candidato_id=slot.candidato_id, detalhe={"tipo": slot.tipo.value, "lote": True})
+        aprovados += 1
+    db.commit()
+    return {"aprovados": aprovados}
+
+
+class LoteRejeitarIn(BaseModel):
+    slot_ids: list[uuid.UUID]
+    motivo: MotivoRejeicao
+    observacao: str | None = None
+
+
+@router.post("/rh/slots/lote/rejeitar")
+def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Rejeita vários documentos; o candidato recebe UM e-mail listando tudo."""
+    rejeitados_por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
+    for slot_id in payload.slot_ids:
+        slot = db.get(SlotDocumento, slot_id)
+        if slot is None or slot.status != StatusSlot.enviado:
+            continue
+        slot.status = StatusSlot.rejeitado
+        slot.motivo_rejeicao = payload.motivo
+        slot.motivo_rejeicao_obs = payload.observacao
+        slot.revisado_em = datetime.now(timezone.utc)
+        slot.revisado_por = rh.id
+        registrar(db, "documento_rejeitado", ator="rh", ator_detalhe=rh.email,
+                  candidato_id=slot.candidato_id,
+                  detalhe={"tipo": slot.tipo.value, "motivo": payload.motivo.value, "lote": True})
+        rejeitados_por_candidato.setdefault(slot.candidato_id, []).append(slot)
+
+    total = 0
+    for candidato_id, slots in rejeitados_por_candidato.items():
+        candidato = db.get(Candidato, candidato_id)
+        if candidato.status == StatusCandidato.envio_concluido:
+            candidato.status = StatusCandidato.docs_pendentes
+        total += len(slots)
+        lista = "\n".join(f"  - {s.tipo.value.replace('_', ' ')}" for s in slots)
+        enviar_email(
+            candidato.email,
+            "Green House — documentos precisam ser reenviados",
+            f"Prezado(a) {candidato.nome_completo},\n\n"
+            f"Os documentos abaixo precisam ser enviados novamente "
+            f"({_MOTIVO_LEGIVEL[payload.motivo]}"
+            + (f" — {payload.observacao}" if payload.observacao else "") + "):\n"
+            f"{lista}\n\n"
+            "Acesse o mesmo link da sua admissão e reenvie-os HOJE. Sua contratação fica "
+            "parada até esse reenvio.\n\nAtenciosamente,\nRH — Green House\n",
+            html_moderno(
+                "Documentos precisam ser reenviados",
+                [
+                    f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                    f"Os documentos abaixo precisam ser enviados novamente "
+                    f"(<strong>{_MOTIVO_LEGIVEL[payload.motivo]}</strong>"
+                    + (f" — {payload.observacao}" if payload.observacao else "") + "):"
+                    + "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
+                    + "".join(f"<li>{s.tipo.value.replace('_', ' ')}</li>" for s in slots)
+                    + "</ul>",
+                    "Acesse o mesmo link da sua admissão e <strong>reenvie-os HOJE</strong>. "
+                    "Sua contratação fica parada até esse reenvio.",
+                ],
+            ),
+        )
+    db.commit()
+    return {"rejeitados": total}
+
+
 def _slot_para_revisar(slot_id: uuid.UUID, db: Session) -> SlotDocumento:
     slot = db.get(SlotDocumento, slot_id)
     if slot is None:
@@ -186,92 +274,6 @@ def dispensar(slot_id: uuid.UUID, db: Session = Depends(get_db),
     slot.revisado_por = rh.id
     db.commit()
     return {"status": slot.status}
-
-
-# ---------- Ações em lote ----------
-
-
-class LoteAprovarIn(BaseModel):
-    slot_ids: list[uuid.UUID]
-
-
-@router.post("/rh/slots/lote/aprovar")
-def aprovar_lote(payload: LoteAprovarIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
-    aprovados = 0
-    for slot_id in payload.slot_ids:
-        slot = db.get(SlotDocumento, slot_id)
-        if slot is None or slot.status != StatusSlot.enviado:
-            continue
-        slot.status = StatusSlot.aprovado
-        slot.revisado_em = datetime.now(timezone.utc)
-        slot.revisado_por = rh.id
-        registrar(db, "documento_aprovado", ator="rh", ator_detalhe=rh.email,
-                  candidato_id=slot.candidato_id, detalhe={"tipo": slot.tipo.value, "lote": True})
-        aprovados += 1
-    db.commit()
-    return {"aprovados": aprovados}
-
-
-class LoteRejeitarIn(BaseModel):
-    slot_ids: list[uuid.UUID]
-    motivo: MotivoRejeicao
-    observacao: str | None = None
-
-
-@router.post("/rh/slots/lote/rejeitar")
-def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
-    """Rejeita vários documentos; o candidato recebe UM e-mail listando tudo."""
-    rejeitados_por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
-    for slot_id in payload.slot_ids:
-        slot = db.get(SlotDocumento, slot_id)
-        if slot is None or slot.status != StatusSlot.enviado:
-            continue
-        slot.status = StatusSlot.rejeitado
-        slot.motivo_rejeicao = payload.motivo
-        slot.motivo_rejeicao_obs = payload.observacao
-        slot.revisado_em = datetime.now(timezone.utc)
-        slot.revisado_por = rh.id
-        registrar(db, "documento_rejeitado", ator="rh", ator_detalhe=rh.email,
-                  candidato_id=slot.candidato_id,
-                  detalhe={"tipo": slot.tipo.value, "motivo": payload.motivo.value, "lote": True})
-        rejeitados_por_candidato.setdefault(slot.candidato_id, []).append(slot)
-
-    total = 0
-    for candidato_id, slots in rejeitados_por_candidato.items():
-        candidato = db.get(Candidato, candidato_id)
-        if candidato.status == StatusCandidato.envio_concluido:
-            candidato.status = StatusCandidato.docs_pendentes
-        total += len(slots)
-        lista = "\n".join(f"  - {s.tipo.value.replace('_', ' ')}" for s in slots)
-        enviar_email(
-            candidato.email,
-            "Green House — documentos precisam ser reenviados",
-            f"Prezado(a) {candidato.nome_completo},\n\n"
-            f"Os documentos abaixo precisam ser enviados novamente "
-            f"({_MOTIVO_LEGIVEL[payload.motivo]}"
-            + (f" — {payload.observacao}" if payload.observacao else "") + "):\n"
-            f"{lista}\n\n"
-            "Acesse o mesmo link da sua admissão e reenvie-os HOJE. Sua contratação fica "
-            "parada até esse reenvio.\n\nAtenciosamente,\nRH — Green House\n",
-            html_moderno(
-                "Documentos precisam ser reenviados",
-                [
-                    f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                    f"Os documentos abaixo precisam ser enviados novamente "
-                    f"(<strong>{_MOTIVO_LEGIVEL[payload.motivo]}</strong>"
-                    + (f" — {payload.observacao}" if payload.observacao else "") + "):"
-                    + "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
-                    + "".join(f"<li>{s.tipo.value.replace('_', ' ')}</li>" for s in slots)
-                    + "</ul>",
-                    "Acesse o mesmo link da sua admissão e <strong>reenvie-os HOJE</strong>. "
-                    "Sua contratação fica parada até esse reenvio.",
-                ],
-            ),
-        )
-    db.commit()
-    return {"rejeitados": total}
 
 
 @router.post("/rh/candidatos/{candidato_id}/dossie")
