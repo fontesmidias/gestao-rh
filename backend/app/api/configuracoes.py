@@ -235,12 +235,27 @@ def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh
     except RuntimeError:
         raise HTTPException(status_code=422, detail="smtp_nao_configurado")
     except smtplib.SMTPAuthenticationError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail="autenticacao_recusada: verifique usuário/senha. No Microsoft 365, o "
-                   "'SMTP AUTH' precisa estar habilitado para a caixa (Exchange admin) e, com "
-                   "MFA, use uma senha de aplicativo.",
-        ) from exc
+        servidor = exc.smtp_error.decode(errors="replace") if isinstance(exc.smtp_error, bytes) \
+            else str(exc.smtp_error)
+        dica = ("O servidor recusou a autenticação. Resposta exata dele: "
+                f"[{exc.smtp_code}] {servidor} — ")
+        if "SmtpClientAuthentication is disabled for the Tenant" in servidor:
+            dica += ("o SMTP autenticado está DESLIGADO PARA A ORGANIZAÇÃO inteira: o admin "
+                     "precisa habilitar em admin.exchange.microsoft.com → Configurações → "
+                     "Fluxo de emails → 'Desativar o protocolo SMTP AUTH' (desmarcar), ou "
+                     "habilitar só para a caixa e aguardar até 1h.")
+        elif "SmtpClientAuthentication is disabled for the Mailbox" in servidor:
+            dica += ("o SMTP autenticado está desligado PARA ESTA CAIXA: Exchange admin → "
+                     "caixa de correio → Email apps → marcar 'SMTP autenticado' "
+                     "(propaga em até 1h).")
+        elif "basic authentication is disabled" in servidor.lower():
+            dica += ("a autenticação básica está bloqueada no tenant (Security defaults). "
+                     "Alternativas: senha de aplicativo com MFA, ou conectar via OAuth "
+                     "quando houver domínio com HTTPS.")
+        else:
+            dica += ("confira usuário/senha. Com MFA ativado, a senha normal NÃO funciona — "
+                     "use uma senha de aplicativo (mysignins.microsoft.com/security-info).")
+        raise HTTPException(status_code=422, detail=dica) from exc
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"falha_no_envio: {exc}") from exc
     registrar(db, "smtp_teste_ok", ator="rh", ator_detalhe=rh.email)
