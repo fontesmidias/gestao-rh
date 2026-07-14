@@ -103,12 +103,27 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
   const [pendencias, setPendencias] = useState(null)
   const primeiraRender = useRef(true)
 
+  const [erroSalvar, setErroSalvar] = useState(null)
+
   // Autosave contínuo: 900ms após a última digitação, a seção atual é gravada.
   useEffect(() => {
     if (primeiraRender.current) { primeiraRender.current = false; return }
     setSalvo(false)
     const timer = setTimeout(async () => {
-      try { await salvarEtapa(); setSalvo(true) } catch { /* revalida no avançar */ }
+      try {
+        await salvarEtapa()
+        setSalvo(true)
+        setErroSalvar(null)
+      } catch (e) {
+        // Erro NUNCA fica mudo: mostra o campo e o motivo.
+        let detalhe = 'verifique sua conexão.'
+        if (Array.isArray(e.detail)) {
+          detalhe = e.detail
+            .map((d) => `${(PENDENCIAS[`x.${d.loc?.slice(-1)[0]}`] || [null, d.loc?.slice(-1)[0]])[1]}: ${d.msg}`)
+            .join('; ')
+        } else if (typeof e.detail === 'string') detalhe = e.detail
+        setErroSalvar(`Não foi possível salvar automaticamente — ${detalhe}`)
+      }
     }, 900)
     return () => clearTimeout(timer)
   }, [dados])
@@ -136,7 +151,16 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
   }
 
   const proxima = async () => {
-    await salvarEtapa()
+    try {
+      await salvarEtapa()
+      setErroSalvar(null)
+    } catch (e) {
+      setErroSalvar('Alguns campos não puderam ser salvos — confira os valores digitados '
+        + (Array.isArray(e.detail)
+           ? `(${e.detail.map((d) => d.loc?.slice(-1)[0]).join(', ')})` : '')
+        + ' e tente novamente.')
+      return
+    }
     if (etapa < 5) { setEtapa(etapa + 1); window.scrollTo(0, 0); return }
     try {
       await api.declarar(token)
@@ -144,6 +168,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       aoConcluir()
     } catch (e) {
       if (e.status === 422) setPendencias(e.detail.pendencias)
+      else setErroSalvar('Não foi possível concluir. Verifique sua conexão e tente novamente.')
     }
   }
 
@@ -392,6 +417,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           ...d, contatos: [...d.contatos, { nome_completo: '', parentesco: '', telefone_celular: '' }],
         }))}>+ Adicionar contato</button>
       </>}
+
+      {erroSalvar && <div className="alerta">{erroSalvar}</div>}
 
       {pendencias && (
         <div className="alerta">

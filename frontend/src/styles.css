@@ -80,23 +80,40 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
 .linha2 { display: grid; grid-template-columns: 2fr 1fr; gap: .75rem; }
 .linha3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; }
 
+/* ===== Sistema único de botões (candidato e RH) =====
+   Todos compartilham altura, raio, fonte e peso; só a cor muda por papel. */
+.btn-principal, .btn-secundario, .btn-rejeitar {
+  min-height: var(--toque); padding: .7rem 1.3rem;
+  border-radius: 10px; font-weight: 700; font-size: var(--fs-apoio);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  gap: .4rem; transition: filter .15s, transform .05s; letter-spacing: .01em;
+}
+.btn-principal:hover, .btn-secundario:hover, .btn-rejeitar:hover { filter: brightness(1.05); }
+.btn-principal:active, .btn-secundario:active, .btn-rejeitar:active { transform: scale(.98); }
+
 .btn-principal {
-  background: var(--verde); color: #fff; border: 0; border-radius: 10px; font-weight: 700;
-  font-size: var(--fs-corpo); min-height: var(--toque);
-  padding: .85rem 1.4rem; cursor: pointer; width: 100%; margin-top: .5rem;
+  background: linear-gradient(135deg, var(--verde), var(--verde-escuro));
+  color: #fff; border: 0; width: 100%; margin-top: .5rem;
+  box-shadow: 0 3px 10px rgba(79, 157, 58, .3);
 }
-.btn-principal:disabled { background: #c5d6ae; cursor: not-allowed; }
+.btn-principal:disabled { background: #c5d6ae; box-shadow: none; cursor: not-allowed; }
+
 .btn-secundario {
-  background: #fff; color: var(--azul); border: 1.5px solid var(--azul); border-radius: 10px;
-  font-weight: 600; padding: .7rem 1.2rem; cursor: pointer;
+  background: rgba(255, 255, 255, .85); color: var(--azul);
+  border: 1.5px solid var(--azul);
 }
-.btn-mini { width: auto; padding: .5rem .9rem; font-size: .9rem; margin-top: 0; }
+
+.btn-rejeitar { background: var(--erro); color: #fff; border: 0; }
+.btn-rejeitar:disabled { background: #e5b0ae; cursor: not-allowed; }
+
+.btn-mini { min-height: 40px; width: auto; padding: .45rem 1rem; margin-top: 0;
+            font-size: .875rem; }
+
 .btn-link { background: none; border: 0; color: var(--verde-escuro); cursor: pointer;
-            text-decoration: underline; font-size: .9rem; padding: .3rem; }
+            text-decoration: underline; font-size: var(--fs-apoio); padding: .3rem;
+            min-height: 0; }
 .btn-remover { background: none; border: 0; color: var(--erro); cursor: pointer;
-               font-size: .85rem; text-decoration: underline; }
-.btn-rejeitar { background: var(--erro); color: #fff; border: 0; border-radius: 10px;
-                font-weight: 600; padding: .5rem .9rem; cursor: pointer; }
+               font-size: var(--fs-apoio); text-decoration: underline; }
 .btn-ajuda {
   background: var(--azul); color: #fff; border: 0; border-radius: 50%; width: 30px; height: 30px;
   font-weight: 700; cursor: pointer; flex-shrink: 0;

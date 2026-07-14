@@ -72,9 +72,10 @@ class DossieIncompleto(Exception):
         super().__init__(", ".join(pendencias))
 
 
-def gerar_dossie(db: Session, candidato: Candidato) -> str:
+def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = False) -> str:
     """Monta e grava o PDF único; devolve a key no MinIO. Exige fichas assinadas e
-    todos os slots obrigatórios aprovados (ou dispensados)."""
+    todos os slots obrigatórios aprovados (ou dispensados) — salvo se o RH optar
+    por gerar parcial (ignorar_pendencias=True), incluindo só o que existe."""
     assinaturas = {
         a.documento: a
         for a in db.scalars(
@@ -93,12 +94,13 @@ def gerar_dossie(db: Session, candidato: Candidato) -> str:
         for s in slots
         if s.obrigatorio and s.status not in (StatusSlot.aprovado, StatusSlot.dispensado)
     ]
-    if pendencias:
+    if pendencias and not ignorar_pendencias:
         raise DossieIncompleto(pendencias)
 
     writer = PdfWriter()
     for doc in ORDEM_FICHAS:
-        _adicionar_em_a4(writer, storage.ler(assinaturas[doc].pdf_key))
+        if doc in assinaturas:
+            _adicionar_em_a4(writer, storage.ler(assinaturas[doc].pdf_key))
 
     ordem = {tipo: i for i, tipo in enumerate(ORDEM_DOCUMENTOS)}
     aprovados = sorted(

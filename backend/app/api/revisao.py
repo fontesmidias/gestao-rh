@@ -275,16 +275,22 @@ def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
 
 
 @router.post("/rh/candidatos/{candidato_id}/dossie")
-def gerar_dossie_endpoint(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def gerar_dossie_endpoint(candidato_id: uuid.UUID, forcar: bool = False,
+                          db: Session = Depends(get_db)) -> dict:
+    """forcar=true gera o dossiê parcial mesmo com pendências (decisão do RH,
+    registrada em auditoria); o status só vira 'aprovado' quando completo."""
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
     try:
-        gerar_dossie(db, cand)
+        gerar_dossie(db, cand, ignorar_pendencias=forcar)
+        completo = True
     except DossieIncompleto as exc:
         raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
-    cand.status = StatusCandidato.aprovado
-    registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id)
+    if completo and not forcar:
+        cand.status = StatusCandidato.aprovado
+    registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id,
+              detalhe={"parcial": forcar})
     db.commit()
 
     settings = get_settings()

@@ -41,15 +41,18 @@ export default function Detalhe({ id, aoVoltar }) {
     await recarregar()
   }
 
-  const gerarDossie = async () => {
-    setMsg(null)
+  const [pendDossie, setPendDossie] = useState(null)
+
+  const gerarDossie = async (forcar = false) => {
+    setMsg(null); setPendDossie(null)
     try {
-      await api.gerarDossie(id)
-      setMsg({ tipo: 'ok', texto: 'Dossiê gerado! O candidato foi marcado como aprovado.' })
+      await api.gerarDossie(id, forcar)
+      setMsg({ tipo: 'ok', texto: forcar
+        ? 'Dossiê PARCIAL gerado (há pendências — o candidato não foi marcado como aprovado).'
+        : 'Dossiê gerado! O candidato foi marcado como aprovado.' })
       await recarregar()
     } catch (e) {
-      const pend = e.detail?.pendencias || []
-      setMsg({ tipo: 'erro', texto: `Ainda não dá para gerar o dossiê. Pendências: ${pend.join(', ')}` })
+      setPendDossie(e.detail?.pendencias || [])
     }
   }
 
@@ -67,7 +70,7 @@ export default function Detalhe({ id, aoVoltar }) {
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>{dados.nome_completo}</h1>
         <div>
-          <button className="btn-secundario" onClick={gerarDossie}>Gerar dossiê</button>
+          <button className="btn-secundario" onClick={() => gerarDossie(false)}>Gerar dossiê</button>
           {dados.dossie_gerado_em && (
             <button className="btn-principal" onClick={baixarDossie}>⬇ Baixar dossiê</button>
           )}
@@ -78,6 +81,17 @@ export default function Detalhe({ id, aoVoltar }) {
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      {pendDossie && (
+        <div className="alerta">
+          <strong>O dossiê ainda tem pendências:</strong> {pendDossie.join(', ')}.
+          <div style={{ marginTop: '.6rem' }}>
+            <button className="btn-secundario btn-mini" onClick={() => gerarDossie(true)}>
+              Gerar assim mesmo (dossiê parcial)</button>
+            <button className="btn-link" onClick={() => setPendDossie(null)}>cancelar</button>
+          </div>
+        </div>
+      )}
 
       {enviados.length > 0 && (
         <div className="rh-card rh-lote">

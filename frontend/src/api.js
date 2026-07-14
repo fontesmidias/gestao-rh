@@ -82,7 +82,9 @@ export const rh = {
   rejeitarLote: (slotIds, motivo, observacao) =>
     req('/rh/slots/lote/rejeitar', { method: 'POST', headers: authRH(),
       body: JSON.stringify({ slot_ids: slotIds, motivo, observacao }) }),
-  gerarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { method: 'POST', headers: authRH() }),
+  gerarDossie: (id, forcar = false) =>
+    req(`/rh/candidatos/${id}/dossie${forcar ? '?forcar=true' : ''}`,
+        { method: 'POST', headers: authRH() }),
   baixarDossie: (id) => req(`/rh/candidatos/${id}/dossie`, { headers: authRH() }),
   // Configurações
   meuPerfil: () => req('/rh/me', { headers: authRH() }),
