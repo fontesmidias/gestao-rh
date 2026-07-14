@@ -134,17 +134,59 @@ assert "cert_nascimento_dep" in tipos and "cartao_vacina_dep" in tipos
 assert "laudo_pcd" not in tipos and "declaracao_escolar_dep" not in tipos
 
 # 9) upload: imagem vira PDF no MinIO; arquivo ruim é recusado com código
+from datetime import date, timedelta
+
+from PIL import ImageDraw
+
+
+def _foto_nitida() -> bytes:
+    """Foto de documento simulada: texto preto sobre branco (bordas nítidas
+    passam na validação de nitidez, ao contrário de uma imagem lisa)."""
+    im = Image.new("RGB", (900, 1200), "white")
+    dr = ImageDraw.Draw(im)
+    for i in range(28):
+        dr.text((40, 30 + i * 40), f"REGISTRO GERAL 1234567 SSP-DF LINHA {i}", fill="black")
+    b = io.BytesIO(); im.save(b, "JPEG")
+    return b.getvalue()
+
+
+def _pdf_texto(texto: str) -> bytes:
+    from fpdf import FPDF
+    p = FPDF(); p.add_page(); p.set_font("helvetica", size=12)
+    p.multi_cell(0, 8, texto)
+    return bytes(p.output())
+
+
 slot_rg = next(s for s in check["slots"] if s["tipo"] == "rg")
-img = Image.new("RGB", (900, 1200), "white")
-buf = io.BytesIO(); img.save(buf, "JPEG")
 r = c.post(f"/api/c/{token}/documentos/{slot_rg['id']}/arquivo",
-           files={"arquivo": ("rg.jpg", buf.getvalue(), "image/jpeg")})
+           files={"arquivo": ("rg.jpg", _foto_nitida(), "image/jpeg")})
 assert r.status_code == 200, r.text
 assert r.json()["status"] == "enviado" and r.json()["paginas"] == 1
 
 r = c.post(f"/api/c/{token}/documentos/{slot_rg['id']}/arquivo",
            files={"arquivo": ("x.txt", b"oi", "text/plain")})
 assert r.status_code == 422 and r.json()["detail"] == "formato_nao_suportado"
+
+# 9b) foto borrada/ilegível é recusada na hora
+b = io.BytesIO(); Image.new("RGB", (900, 1200), "gray").save(b, "JPEG")
+r = c.post(f"/api/c/{token}/documentos/{slot_rg['id']}/arquivo",
+           files={"arquivo": ("borrada.jpg", b.getvalue(), "image/jpeg")})
+assert r.status_code == 422 and r.json()["detail"] == "imagem_borrada", r.text
+
+# 9c) comprovante de residência com mais de 90 dias é recusado; recente passa
+slot_comp = next(s for s in check["slots"] if s["tipo"] == "comp_endereco")
+antiga = (date.today() - timedelta(days=200)).strftime("%d/%m/%Y")
+r = c.post(f"/api/c/{token}/documentos/{slot_comp['id']}/arquivo",
+           files={"arquivo": ("conta.pdf",
+                              _pdf_texto(f"CEB Conta de luz\nVencimento: {antiga}"),
+                              "application/pdf")})
+assert r.status_code == 422 and r.json()["detail"] == "comprovante_antigo", r.text
+recente = (date.today() - timedelta(days=10)).strftime("%d/%m/%Y")
+r = c.post(f"/api/c/{token}/documentos/{slot_comp['id']}/arquivo",
+           files={"arquivo": ("conta.pdf",
+                              _pdf_texto(f"CEB Conta de luz\nVencimento: {recente}"),
+                              "application/pdf")})
+assert r.status_code == 200, r.text
 
 # 10) concluir envio antes da hora -> 422 com a lista do que falta
 r = c.post(f"/api/c/{token}/concluir-envio")
@@ -154,17 +196,15 @@ assert r.status_code == 422 and len(r.json()["detail"]["faltando"]) > 0
 check = c.get(f"/api/c/{token}/documentos").json()
 for s in check["slots"]:
     if s["obrigatorio"] and s["status"] == "pendente":
-        b = io.BytesIO(); Image.new("RGB", (900, 1200), "white").save(b, "JPEG")
         rr = c.post(f"/api/c/{token}/documentos/{s['id']}/arquivo",
-                    files={"arquivo": (f"{s['tipo']}.jpg", b.getvalue(), "image/jpeg")})
+                    files={"arquivo": (f"{s['tipo']}.jpg", _foto_nitida(), "image/jpeg")})
         assert rr.status_code == 200, rr.text
 r = c.post(f"/api/c/{token}/concluir-envio")
 assert r.status_code == 200 and r.json()["status"] == "envio_concluido"
 
 # 12) checklist congelado: novo upload é recusado
-b = io.BytesIO(); Image.new("RGB", (900, 1200), "white").save(b, "JPEG")
 r = c.post(f"/api/c/{token}/documentos/{slot_rg['id']}/arquivo",
-           files={"arquivo": ("rg2.jpg", b.getvalue(), "image/jpeg")})
+           files={"arquivo": ("rg2.jpg", _foto_nitida(), "image/jpeg")})
 assert r.status_code == 409
 
 # 13) RH revisa: rejeita o RG (candidato reabre), candidato reenvia, RH aprova tudo
@@ -176,9 +216,8 @@ assert r.status_code == 200 and r.json()["status"] == "rejeitado"
 estado = c.get(f"/api/c/{token}").json()
 assert estado["status"] == "docs_pendentes"  # checklist reabriu para correção
 
-b = io.BytesIO(); Image.new("RGB", (900, 1200), "white").save(b, "JPEG")
 r = c.post(f"/api/c/{token}/documentos/{slot_rg_rh['id']}/arquivo",
-           files={"arquivo": ("rg-novo.jpg", b.getvalue(), "image/jpeg")})
+           files={"arquivo": ("rg-novo.jpg", _foto_nitida(), "image/jpeg")})
 assert r.status_code == 200 and r.json()["status"] == "enviado"
 assert c.post(f"/api/c/{token}/concluir-envio").status_code == 200
 

@@ -87,4 +87,6 @@ export const CODIGOS_ERRO_UPLOAD = {
   imagem_pequena_demais: 'A imagem ficou muito pequena. Aproxime a câmera e tente de novo.',
   pdf_corrompido: 'Esse PDF parece danificado. Gere o arquivo novamente.',
   conversao_word_falhou: 'Não conseguimos converter esse documento. Tente salvá-lo como PDF.',
+  imagem_borrada: 'A foto ficou tremida ou sem foco e não dá para ler. Apoie o celular, aproxime com boa luz e tire de novo.',
+  comprovante_antigo: 'Este comprovante tem mais de 90 dias. Envie uma conta recente (luz, água, telefone ou internet) do último mês.',
 }

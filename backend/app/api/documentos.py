@@ -10,12 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.config import base_url_publica, get_settings
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
-from app.models.documento import SlotDocumento, StatusSlot
+from app.models.documento import SlotDocumento, StatusSlot, TipoDocumento
 from app.services import storage
 from app.services.auditoria import registrar
 from app.services.email import enviar_email
 from app.services.magic_link import resolver_token
-from app.services.normalizacao import ArquivoInvalido, normalizar_para_pdf
+from app.services.normalizacao import (ArquivoInvalido, normalizar_para_pdf,
+                                       validar_comprovante_recente)
 from app.services.slots import sincronizar_slots
 
 router = APIRouter(tags=["documentos"])
@@ -74,6 +75,8 @@ def enviar_arquivo(
     dados = arquivo.file.read()
     try:
         pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
+        if slot.tipo == TipoDocumento.comp_endereco:
+            validar_comprovante_recente(arquivo.filename or "arquivo", dados, pdf)
     except ArquivoInvalido as exc:
         # Feedback imediato ao candidato: o front traduz o código em linguagem simples.
         raise HTTPException(status_code=422, detail=exc.codigo) from exc

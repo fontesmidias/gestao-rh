@@ -1,9 +1,10 @@
 FROM python:3.12-slim
 
-# weasyprint (geração das fichas em PDF) e libreoffice (conversão Word->PDF)
+# weasyprint (fichas em PDF), libreoffice (Word->PDF) e tesseract em português
+# (OCR da data do comprovante de residência)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 libcairo2 \
-    libreoffice-writer --no-install-recommends \
+    libreoffice-writer tesseract-ocr tesseract-ocr-por --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
