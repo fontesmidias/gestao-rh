@@ -125,6 +125,102 @@ def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh
     return {"enviado_para": rh.email}
 
 
+# ---------- Microsoft 365 (OAuth + Graph) ----------
+
+from fastapi import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from itsdangerous import BadSignature, URLSafeTimedSerializer
+
+from app.core.config import get_settings
+from app.services import m365
+from app.services.config_dinamica import gravar_config
+
+
+def _state_serializer():
+    return URLSafeTimedSerializer(get_settings().secret_key, salt="m365-oauth")
+
+
+def _redirect_uri() -> str:
+    return f"{get_settings().base_url}/api/rh/config/m365/callback"
+
+
+class M365In(BaseModel):
+    client_id: str
+    tenant_id: str
+    client_secret: str | None = None  # None = manter
+
+
+@router.get("/rh/config/m365")
+def ver_m365(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    cfg = m365.config_m365(db)
+    return {
+        "client_id": cfg.get("m365_client_id", ""),
+        "tenant_id": cfg.get("m365_tenant_id", ""),
+        "secret_definido": bool(cfg.get("m365_client_secret")),
+        "conectado": bool(cfg.get("m365_refresh_token")),
+        "conta": cfg.get("m365_conta", ""),
+        "redirect_uri": _redirect_uri(),
+    }
+
+
+@router.put("/rh/config/m365")
+def salvar_m365(payload: M365In, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    valores = {"m365_client_id": payload.client_id.strip(),
+               "m365_tenant_id": payload.tenant_id.strip()}
+    if payload.client_secret:
+        valores["m365_client_secret"] = payload.client_secret.strip()
+    gravar_config(db, valores)
+    registrar(db, "m365_config_alterada", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return ver_m365(db, rh)
+
+
+@router.get("/rh/config/m365/url-login")
+def m365_url_login(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """URL de autorização com state assinado — o front abre em popup."""
+    cfg = m365.config_m365(db)
+    if not cfg.get("m365_client_id"):
+        raise HTTPException(status_code=422, detail="configure_client_id_primeiro")
+    state = _state_serializer().dumps({"rh": str(rh.id)})
+    return {"url": m365.url_autorizacao(db, _redirect_uri(), state)}
+
+
+@router.get("/rh/config/m365/callback")
+def m365_callback(request: Request, db: Session = Depends(get_db)):
+    """Retorno do login Microsoft (sem bearer: valida o state assinado)."""
+    state = request.query_params.get("state", "")
+    try:
+        _state_serializer().loads(state, max_age=600)
+    except BadSignature:
+        return HTMLResponse("<h3>Sessão de conexão inválida ou expirada. Tente de novo.</h3>",
+                            status_code=400)
+    erro = request.query_params.get("error")
+    if erro:
+        desc = request.query_params.get("error_description", "")
+        return HTMLResponse(f"<h3>Microsoft recusou: {erro}</h3><p>{desc}</p>", status_code=400)
+    codigo = request.query_params.get("code", "")
+    try:
+        conta = m365.trocar_codigo(db, codigo, _redirect_uri())
+    except Exception as exc:
+        return HTMLResponse(f"<h3>Falha ao concluir a conexão.</h3><p>{exc}</p>", status_code=400)
+    registrar(db, "m365_conectado", ator="rh", detalhe={"conta": conta})
+    db.commit()
+    return HTMLResponse(
+        f"<div style='font-family:sans-serif;text-align:center;margin-top:20vh'>"
+        f"<h2>✅ Conta conectada: {conta}</h2>"
+        f"<p>Pode fechar esta janela e voltar ao painel.</p>"
+        f"<script>setTimeout(()=>window.close(),2500)</script></div>"
+    )
+
+
+@router.post("/rh/config/m365/desconectar", status_code=204)
+def m365_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> None:
+    m365.desconectar(db)
+    registrar(db, "m365_desconectado", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+
+
 # ---------- Auditoria ----------
 
 

@@ -87,4 +87,10 @@ export const rh = {
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarSmtp: () => req('/rh/config/smtp/testar', { method: 'POST', headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
+  verM365: () => req('/rh/config/m365', { headers: authRH() }),
+  salvarM365: (dados) =>
+    req('/rh/config/m365', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  urlLoginM365: () => req('/rh/config/m365/url-login', { headers: authRH() }),
+  desconectarM365: () =>
+    req('/rh/config/m365/desconectar', { method: 'POST', headers: authRH() }),
 }

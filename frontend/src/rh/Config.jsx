@@ -16,6 +16,7 @@ export default function Config({ aoVoltar }) {
       </header>
       <Perfil />
       <Senha />
+      <M365 />
       <Smtp />
       <Auditoria />
     </main>
@@ -40,12 +41,16 @@ function Perfil() {
       <button className="btn-secundario" onClick={async () => {
         setMsg(null)
         try {
-          const r = await api.salvarPerfil(dados)
+          const r = await api.salvarPerfil({ nome: dados.nome.trim(), email: dados.email.trim() })
           localStorage.setItem('rh_nome', r.nome)
           setMsg({ tipo: 'ok', texto: 'Perfil atualizado. Use o novo e-mail no próximo login.' })
         } catch (e) {
-          setMsg({ tipo: 'erro', texto: e.detail === 'email_ja_utilizado'
-            ? 'Este e-mail já é usado por outro usuário.' : 'Não foi possível salvar.' })
+          let texto = 'Não foi possível salvar.'
+          if (e.detail === 'email_ja_utilizado') texto = 'Este e-mail já é usado por outro usuário.'
+          else if (Array.isArray(e.detail)) {
+            texto = 'Confira: ' + e.detail.map((d) => `${d.loc?.slice(-1)[0]}: ${d.msg}`).join('; ')
+          }
+          setMsg({ tipo: 'erro', texto })
         }
       }}>Salvar perfil</button>
       <Msg msg={msg} />
@@ -82,6 +87,73 @@ function Senha() {
   )
 }
 
+function M365() {
+  const [cfg, setCfg] = useState(null)
+  const [secret, setSecret] = useState('')
+  const [msg, setMsg] = useState(null)
+  const recarregar = () => api.verM365().then(setCfg)
+  useEffect(() => { recarregar() }, [])
+  if (!cfg) return null
+  return (
+    <div className="rh-card">
+      <h3>Microsoft 365 (recomendado)</h3>
+      {cfg.conectado ? (
+        <>
+          <div className="sucesso">✅ Conectado como <strong>{cfg.conta}</strong> — os e-mails
+            do sistema saem por esta conta (via Microsoft Graph).</div>
+          <button className="btn-secundario" style={{ marginTop: '.75rem' }} onClick={async () => {
+            await api.desconectarM365(); recarregar()
+          }}>Desconectar</button>
+        </>
+      ) : (
+        <>
+          <p className="explica">Conecte a conta do Office com um clique. Antes, o administrador
+            registra um aplicativo (uma única vez) em <strong>entra.microsoft.com</strong> →
+            <em> Identity → App registrations → New registration</em>:
+            plataforma <em>Web</em>, redirect URI <code>{cfg.redirect_uri}</code>;
+            em <em>API permissions</em> adicione <code>Mail.Send</code> e <code>User.Read</code>
+            (delegadas); em <em>Certificates &amp; secrets</em> crie um segredo.
+            Copie os valores para cá:</p>
+          <div className="linha3">
+            <input placeholder="Application (client) ID" value={cfg.client_id}
+                   onChange={(e) => setCfg({ ...cfg, client_id: e.target.value })} />
+            <input placeholder="Directory (tenant) ID" value={cfg.tenant_id}
+                   onChange={(e) => setCfg({ ...cfg, tenant_id: e.target.value })} />
+            <input placeholder={cfg.secret_definido ? 'Segredo (já definido)' : 'Client secret'}
+                   type="password" value={secret} onChange={(e) => setSecret(e.target.value)} />
+          </div>
+          <div className="navegacao">
+            <button className="btn-secundario" onClick={async () => {
+              setMsg(null)
+              await api.salvarM365({ client_id: cfg.client_id.trim(),
+                                     tenant_id: cfg.tenant_id.trim(),
+                                     client_secret: secret.trim() || null })
+              setSecret('')
+              setMsg({ tipo: 'ok', texto: 'Dados do aplicativo salvos.' })
+              recarregar()
+            }}>Salvar</button>
+            <button className="btn-principal btn-mini" onClick={async () => {
+              setMsg(null)
+              try {
+                const { url } = await api.urlLoginM365()
+                const popup = window.open(url, 'm365', 'width=520,height=640')
+                const timer = setInterval(() => {
+                  if (popup && popup.closed) { clearInterval(timer); recarregar() }
+                }, 800)
+              } catch (e) {
+                setMsg({ tipo: 'erro', texto: e.detail === 'configure_client_id_primeiro'
+                  ? 'Salve primeiro o Client ID / Tenant / Segredo do aplicativo.'
+                  : 'Não foi possível iniciar a conexão.' })
+              }
+            }}>Conectar com a conta Microsoft</button>
+          </div>
+        </>
+      )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
 function Smtp() {
   const [cfg, setCfg] = useState(null)
   const [senha, setSenha] = useState('')
@@ -91,7 +163,8 @@ function Smtp() {
   if (!cfg) return null
   return (
     <div className="rh-card">
-      <h3>E-mail (SMTP)</h3>
+      <h3>E-mail (SMTP) — alternativa ao Microsoft 365</h3>
+      <p className="explica">Usado apenas se o Microsoft 365 acima não estiver conectado.</p>
       <p className="explica">Para <strong>Microsoft 365</strong>: servidor
         <code> smtp.office365.com</code>, porta <code>587</code>, usuário = seu e-mail completo.
         Importante: o administrador precisa habilitar o <em>"Authenticated SMTP"</em> para a

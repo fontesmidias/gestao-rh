@@ -2,6 +2,8 @@ import logging
 import time
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.api.assinaturas import router as assinaturas_router
 from app.api.configuracoes import router as configuracoes_router
@@ -37,6 +39,19 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def log_422(request: Request, exc: RequestValidationError):
+    """Auditoria de erros de validação: registra o corpo exato que foi recusado
+    (senhas mascaradas) para nunca mais debugar um 422 às cegas."""
+    corpo = (await request.body())[:2000].decode("utf-8", "replace")
+    for chave in ("senha", "password"):
+        if chave in corpo:
+            corpo = "<contém credencial — mascarado>"
+            break
+    telemetria.warning("422 path=%s erros=%s corpo=%r", request.url.path, exc.errors(), corpo)
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 @app.middleware("http")
