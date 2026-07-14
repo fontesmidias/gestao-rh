@@ -39,6 +39,19 @@ class Settings(BaseSettings):
     retention_days: int = 90
 
 
+def base_url_publica(request) -> str:
+    """URL pública derivada da própria requisição (Host/X-Forwarded-*), para que
+    links gerados (link mágico, reset de senha, callback OAuth) funcionem em
+    qualquer forma de acesso — localhost, IP:porta, domínio ou subdomínio — sem
+    depender do BASE_URL do .env (que fica só como último recurso)."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not host:
+        return get_settings().base_url
+    host = host.split(",")[0].strip()
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+    return f"{proto.split(',')[0].strip()}://{host}"
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

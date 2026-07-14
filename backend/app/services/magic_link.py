@@ -13,8 +13,10 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def emitir_link(db: Session, candidato: Candidato) -> str:
-    """Gera um token de acesso e retorna a URL completa a ser enviada ao candidato."""
+def emitir_link(db: Session, candidato: Candidato, base_url: str | None = None) -> str:
+    """Gera um token de acesso e retorna a URL completa a ser enviada ao candidato.
+    base_url deve vir da requisição (core.config.base_url_publica); sem ela, cai
+    no BASE_URL do .env."""
     settings = get_settings()
     token = secrets.token_urlsafe(32)
     acesso = AcessoMagico(
@@ -24,7 +26,7 @@ def emitir_link(db: Session, candidato: Candidato) -> str:
     )
     db.add(acesso)
     db.flush()
-    return f"{settings.base_url}/c/{token}"
+    return f"{base_url or settings.base_url}/c/{token}"
 
 
 def resolver_token(db: Session, token: str) -> Candidato | None:

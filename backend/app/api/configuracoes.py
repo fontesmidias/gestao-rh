@@ -3,12 +3,13 @@
 import smtplib
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
+from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.core.security import hash_senha, verificar_senha
 from app.models.usuario_rh import UsuarioRH
@@ -96,7 +97,7 @@ def listar_usuarios(db: Session = Depends(get_db),
 
 
 @router.post("/rh/usuarios", status_code=201)
-def criar_usuario(payload: UsuarioNovoIn, db: Session = Depends(get_db),
+def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
     nome = payload.nome.strip()
     if not nome:
@@ -113,13 +114,14 @@ def criar_usuario(payload: UsuarioNovoIn, db: Session = Depends(get_db),
     db.commit()
 
     email_enviado = True
+    base = base_url_publica(request)
     try:
         enviar_email(
             email,
             "🌱 Green House — seu acesso ao Portal de Admissão",
             f"Olá, {nome.split()[0].title()}!\n\n"
             f"{rh.nome} criou um acesso para você no painel do RH do Portal de Admissão.\n"
-            f"Acesse {get_settings().base_url}/rh com o e-mail {email} e a senha "
+            f"Acesse {base}/rh com o e-mail {email} e a senha "
             "que ela(e) vai lhe informar.\n\n"
             "IMPORTANTE: troque a senha no primeiro acesso, em Configurações → Senha.\n",
             html_moderno(
@@ -128,8 +130,8 @@ def criar_usuario(payload: UsuarioNovoIn, db: Session = Depends(get_db),
                     f"Olá, <strong>{nome.split()[0].title()}</strong>!",
                     f"<strong>{rh.nome}</strong> criou um acesso para você no painel do RH "
                     "do Portal de Admissão da Green House.",
-                    f"Entre em <a href='{get_settings().base_url}/rh'>"
-                    f"{get_settings().base_url}/rh</a> com o e-mail <strong>{email}</strong> "
+                    f"Entre em <a href='{base}/rh'>"
+                    f"{base}/rh</a> com o e-mail <strong>{email}</strong> "
                     "e a senha que quem criou o acesso vai lhe informar.",
                     "<strong>Troque a senha no primeiro acesso</strong>, em "
                     "Configurações → Senha.",
@@ -248,7 +250,6 @@ def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh
 
 # ---------- Microsoft 365 (OAuth + Graph) ----------
 
-from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
@@ -261,8 +262,10 @@ def _state_serializer():
     return URLSafeTimedSerializer(get_settings().secret_key, salt="m365-oauth")
 
 
-def _redirect_uri() -> str:
-    return f"{get_settings().base_url}/api/rh/config/m365/callback"
+def _redirect_uri(request: Request) -> str:
+    """Derivado da requisição: em localhost mostra localhost, na VPS mostra
+    IP:porta ou domínio — e o texto de instrução do painel acompanha."""
+    return f"{base_url_publica(request)}/api/rh/config/m365/callback"
 
 
 class M365In(BaseModel):
@@ -272,7 +275,8 @@ class M365In(BaseModel):
 
 
 @router.get("/rh/config/m365")
-def ver_m365(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_m365(request: Request, db: Session = Depends(get_db),
+             _rh: UsuarioRH = Depends(requer_rh)) -> dict:
     cfg = m365.config_m365(db)
     return {
         "client_id": cfg.get("m365_client_id", ""),
@@ -280,12 +284,12 @@ def ver_m365(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh))
         "secret_definido": bool(cfg.get("m365_client_secret")),
         "conectado": bool(cfg.get("m365_refresh_token")),
         "conta": cfg.get("m365_conta", ""),
-        "redirect_uri": _redirect_uri(),
+        "redirect_uri": _redirect_uri(request),
     }
 
 
 @router.put("/rh/config/m365")
-def salvar_m365(payload: M365In, db: Session = Depends(get_db),
+def salvar_m365(payload: M365In, request: Request, db: Session = Depends(get_db),
                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
     valores = {"m365_client_id": payload.client_id.strip(),
                "m365_tenant_id": payload.tenant_id.strip()}
@@ -294,17 +298,18 @@ def salvar_m365(payload: M365In, db: Session = Depends(get_db),
     gravar_config(db, valores)
     registrar(db, "m365_config_alterada", ator="rh", ator_detalhe=rh.email)
     db.commit()
-    return ver_m365(db, rh)
+    return ver_m365(request, db, rh)
 
 
 @router.get("/rh/config/m365/url-login")
-def m365_url_login(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def m365_url_login(request: Request, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """URL de autorização com state assinado — o front abre em popup."""
     cfg = m365.config_m365(db)
     if not cfg.get("m365_client_id"):
         raise HTTPException(status_code=422, detail="configure_client_id_primeiro")
     state = _state_serializer().dumps({"rh": str(rh.id)})
-    return {"url": m365.url_autorizacao(db, _redirect_uri(), state)}
+    return {"url": m365.url_autorizacao(db, _redirect_uri(request), state)}
 
 
 @router.get("/rh/config/m365/callback")
@@ -322,7 +327,7 @@ def m365_callback(request: Request, db: Session = Depends(get_db)):
         return HTMLResponse(f"<h3>Microsoft recusou: {erro}</h3><p>{desc}</p>", status_code=400)
     codigo = request.query_params.get("code", "")
     try:
-        conta = m365.trocar_codigo(db, codigo, _redirect_uri())
+        conta = m365.trocar_codigo(db, codigo, _redirect_uri(request))
     except Exception as exc:
         return HTMLResponse(f"<h3>Falha ao concluir a conexão.</h3><p>{exc}</p>", status_code=400)
     registrar(db, "m365_conectado", ator="rh", detalhe={"conta": conta})

@@ -4,13 +4,13 @@ import unicodedata
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
-from app.core.config import get_settings
+from app.core.config import base_url_publica, get_settings
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import MotivoRejeicao, SlotDocumento, StatusSlot
@@ -277,7 +277,7 @@ def dispensar(slot_id: uuid.UUID, db: Session = Depends(get_db),
 
 
 @router.post("/rh/candidatos/{candidato_id}/dossie")
-def gerar_dossie_endpoint(candidato_id: uuid.UUID, forcar: bool = False,
+def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: bool = False,
                           db: Session = Depends(get_db)) -> dict:
     """forcar=true gera o dossiê parcial mesmo com pendências (decisão do RH,
     registrada em auditoria); o status só vira 'aprovado' quando completo."""
@@ -300,7 +300,7 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, forcar: bool = False,
         settings.smtp_from,
         f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
         f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
-        f"Baixe no painel: {settings.base_url}/rh\n",
+        f"Baixe no painel: {base_url_publica(request)}/rh\n",
     )
     return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
 

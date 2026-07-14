@@ -265,7 +265,9 @@ function M365() {
           <p className="explica">Conecte a conta do Office com um clique. Antes, o administrador
             registra um aplicativo (uma única vez) em <strong>entra.microsoft.com</strong> →
             <em> Identity → App registrations → New registration</em>:
-            plataforma <em>Web</em>, redirect URI <code>{cfg.redirect_uri}</code>;
+            plataforma <em>Web</em>, redirect URI <code>{cfg.redirect_uri}</code> (este
+            endereço acompanha automaticamente como você está acessando o painel — se
+            usar ora IP, ora domínio, registre os dois no aplicativo);
             em <em>API permissions</em> adicione <code>Mail.Send</code> e <code>User.Read</code>
             (delegadas); em <em>Certificates &amp; secrets</em> crie um segredo.
             Copie os valores para cá:</p>

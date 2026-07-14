@@ -17,6 +17,8 @@ const STATUS_CHIP = {
 
 export default function RHApp() {
   const [logado, setLogado] = useState(api.logado())
+  const tokenReset = new URLSearchParams(window.location.search).get('redefinir')
+  if (tokenReset) return <RedefinirSenha token={tokenReset} />
   if (!logado) return <Login aoEntrar={() => setLogado(true)} />
   return <Painel aoSair={() => { api.sair(); setLogado(false) }} />
 }
@@ -25,11 +27,44 @@ function Login({ aoEntrar }) {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState(null)
+  const [esqueci, setEsqueci] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [enviado, setEnviado] = useState(false)
   const entrar = async (e) => {
     e.preventDefault()
     try { await api.login(email, senha); aoEntrar() }
     catch { setErro('E-mail ou senha incorretos.') }
   }
+  if (esqueci) return (
+    <main className="cartao rh-login">
+      <h1>🔐 Esqueci minha senha</h1>
+      {enviado ? (
+        <>
+          <div className="sucesso">Se este e-mail tiver acesso ao painel, enviamos um link de
+            redefinição — ele vale por <strong>30 minutos</strong>. Confira também a caixa de
+            spam.</div>
+          <button className="btn-link" onClick={() => { setEsqueci(false); setEnviado(false) }}>
+            ← voltar ao login</button>
+        </>
+      ) : (
+        <form onSubmit={async (e) => {
+          e.preventDefault()
+          setEnviando(true)
+          try { await api.esqueciSenha(email.trim()) } catch { /* resposta é sempre a mesma */ }
+          setEnviando(false); setEnviado(true)
+        }}>
+          <p className="explica">Informe o e-mail que você usa para entrar no painel. Enviaremos
+            um link para criar uma nova senha.</p>
+          <label className="campo"><span className="rotulo">E-mail</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <button className="btn-principal" type="submit" disabled={enviando || !email}>
+            {enviando ? 'Enviando…' : 'Enviar link de redefinição'}</button>
+          <button className="btn-link" type="button" onClick={() => setEsqueci(false)}>
+            ← voltar ao login</button>
+        </form>
+      )}
+    </main>
+  )
   return (
     <main className="cartao rh-login">
       <h1>🌱 Painel do RH</h1>
@@ -40,6 +75,54 @@ function Login({ aoEntrar }) {
           <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
         {erro && <div className="alerta">{erro}</div>}
         <button className="btn-principal" type="submit">Entrar</button>
+        <button className="btn-link" type="button" onClick={() => setEsqueci(true)}>
+          Esqueci minha senha</button>
+      </form>
+    </main>
+  )
+}
+
+function RedefinirSenha({ token }) {
+  const [senha, setSenha] = useState('')
+  const [confirma, setConfirma] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  const [ok, setOk] = useState(false)
+  const voltar = () => { window.location.href = '/rh' }
+  if (ok) return (
+    <main className="cartao rh-login">
+      <h1>✅ Senha redefinida</h1>
+      <div className="sucesso">Sua nova senha já vale. Entre no painel com ela.</div>
+      <button className="btn-principal" onClick={voltar}>Ir para o login</button>
+    </main>
+  )
+  return (
+    <main className="cartao rh-login">
+      <h1>🔐 Criar nova senha</h1>
+      <form onSubmit={async (e) => {
+        e.preventDefault()
+        setMsg(null)
+        if (senha !== confirma) { setMsg('As duas senhas não são iguais.'); return }
+        setSalvando(true)
+        try {
+          await api.redefinirSenha(token, senha)
+          setOk(true)
+        } catch (er) {
+          setMsg(er.detail === 'link_invalido_ou_expirado'
+            ? 'Este link expirou ou já foi usado. Volte ao login e peça um novo em "Esqueci minha senha".'
+            : er.detail === 'senha_curta_minimo_8'
+              ? 'A senha precisa ter no mínimo 8 caracteres.'
+              : `Não foi possível redefinir (${er.detail || er.message}).`)
+        } finally { setSalvando(false) }
+      }}>
+        <label className="campo"><span className="rotulo">Nova senha (mín. 8 caracteres)</span>
+          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
+        <label className="campo"><span className="rotulo">Repita a nova senha</span>
+          <input type="password" value={confirma} onChange={(e) => setConfirma(e.target.value)} /></label>
+        {msg && <div className="alerta">{msg}</div>}
+        <button className="btn-principal" type="submit" disabled={salvando || senha.length < 8}>
+          {salvando ? 'Salvando…' : 'Salvar nova senha'}</button>
+        <button className="btn-link" type="button" onClick={voltar}>← voltar ao login</button>
       </form>
     </main>
   )

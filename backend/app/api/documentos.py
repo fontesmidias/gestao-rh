@@ -3,11 +3,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import base_url_publica, get_settings
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import SlotDocumento, StatusSlot
@@ -99,7 +99,7 @@ def enviar_arquivo(
 
 
 @router.post("/c/{token}/concluir-envio")
-def concluir_envio(token: str, db: Session = Depends(get_db)) -> dict:
+def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
     """Botão 'CONCLUÍ MEU ENVIO': congela o checklist e notifica o RH."""
     candidato = _candidato_do_token(token, db)
     slots = sincronizar_slots(db, candidato)
@@ -120,6 +120,6 @@ def concluir_envio(token: str, db: Session = Depends(get_db)) -> dict:
         settings.smtp_from,
         f"📥 Documentação completa: {candidato.nome_completo}",
         f"O candidato {candidato.nome_completo} concluiu o envio da documentação.\n"
-        f"Acesse o painel do RH para revisar: {settings.base_url}/rh\n",
+        f"Acesse o painel do RH para revisar: {base_url_publica(request)}/rh\n",
     )
     return {"status": candidato.status}

@@ -30,3 +30,22 @@ def validar_token_sessao(token: str) -> str | None:
     except (BadSignature, SignatureExpired):
         return None
     return data.get("sub")
+
+
+def _serializer_reset() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().secret_key, salt="reset-senha-rh")
+
+
+def criar_token_reset(usuario_id: str, senha_hash: str) -> str:
+    """Token de redefinição stateless: carrega um fragmento do hash atual da
+    senha — quando a senha muda, o hash muda e o token deixa de valer, o que
+    o torna de uso único sem precisar de estado no banco."""
+    return _serializer_reset().dumps({"sub": usuario_id, "h": senha_hash[-16:]})
+
+
+def validar_token_reset(token: str, max_age_s: int = 1800) -> dict | None:
+    """Devolve {'sub': id, 'h': fragmento} ou None se inválido/expirado (30 min)."""
+    try:
+        return _serializer_reset().loads(token, max_age=max_age_s)
+    except (BadSignature, SignatureExpired):
+        return None

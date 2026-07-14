@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
+from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.usuario_rh import UsuarioRH
@@ -52,6 +53,7 @@ class ConviteOut(BaseModel):
 @router.post("/rh/candidatos", response_model=ConviteOut, status_code=201)
 def criar_candidato(
     payload: NovoCandidato,
+    request: Request,
     db: Session = Depends(get_db),
     _rh: UsuarioRH = Depends(requer_rh),
 ) -> ConviteOut:
@@ -60,7 +62,7 @@ def criar_candidato(
     candidato = Candidato(**payload.model_dump())
     db.add(candidato)
     db.flush()
-    link = emitir_link(db, candidato)
+    link = emitir_link(db, candidato, base_url_publica(request))
     registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
     assunto, texto, html = email_convite(candidato.nome_completo, link)
@@ -73,6 +75,7 @@ def criar_candidato(
 @router.post("/rh/candidatos/{candidato_id}/reenviar-link", response_model=ConviteOut)
 def reenviar_link(
     candidato_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     _rh: UsuarioRH = Depends(requer_rh),
 ) -> ConviteOut:
@@ -80,7 +83,7 @@ def reenviar_link(
     candidato = db.get(Candidato, candidato_id)
     if candidato is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
-    link = emitir_link(db, candidato)
+    link = emitir_link(db, candidato, base_url_publica(request))
     registrar(db, "link_reenviado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
     assunto, texto, html = email_convite(candidato.nome_completo, link)
