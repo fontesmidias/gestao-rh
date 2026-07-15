@@ -420,6 +420,11 @@ input:focus, select:focus, textarea:focus {
   .acoes-candidato .btn-mini { margin-bottom: .3rem; }
 }
 
+/* ---------- Leitor de RG (OCR) ---------- */
+.leitor-rg { border: 2px dashed var(--verde); border-radius: var(--raio-input);
+             padding: 1rem; margin-bottom: 1.2rem; background: var(--verde-suave); }
+.leitor-rg .btn-secundario { width: 100%; }
+
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
