@@ -175,6 +175,23 @@ def sugestoes_do_cpf_doc(texto: str) -> dict:
     return sug
 
 
+_RE_CEP_ROTULADO = re.compile(r"CEP\D{0,3}(\d{5})[-.\s]?(\d{3})\b", re.IGNORECASE)
+_RE_CEP_HIFEN = re.compile(r"\b(\d{5})-(\d{3})\b")
+
+
+def sugestoes_do_comprovante(texto: str) -> dict:
+    """Comprovante de endereço: o CEP basta — o front busca o resto do
+    endereço (rua, bairro, cidade) a partir dele, como já faz na digitação.
+    Contas têm números demais (código de barras, nº do cliente), então só
+    aceitamos CEP rotulado ('CEP 70000-000') ou no formato com hífen."""
+    for regex in (_RE_CEP_ROTULADO, _RE_CEP_HIFEN):
+        for a, b in regex.findall(texto):
+            cep = a + b
+            if cep != "00000000":
+                return {"cep": cep}
+    return {}
+
+
 def sugestoes_por_slot(tipo_slot: str, texto: str) -> tuple[dict, str | None]:
     """Dispatcher por tipo de slot do checklist. Devolve (sugestões, tipo
     detectado no texto). No slot do RG aceita e lê também uma CNH — comum de
@@ -189,6 +206,8 @@ def sugestoes_por_slot(tipo_slot: str, texto: str) -> tuple[dict, str | None]:
         return sugestoes_do_cpf_doc(texto), detectado
     if tipo_slot == "titulo_eleitor_doc":
         return sugestoes_do_titulo(texto), detectado
+    if tipo_slot == "comp_endereco":
+        return sugestoes_do_comprovante(texto), detectado
     return {}, detectado
 
 

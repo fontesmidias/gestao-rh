@@ -4,6 +4,7 @@ import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import logo from '../assets/logo.png'
+import InputSenha from '../InputSenha.jsx'
 
 const STATUS_CHIP = {
   convidado: ['Convidado', '#8896b3'],
@@ -75,7 +76,7 @@ function Login({ aoEntrar }) {
         <label className="campo"><span className="rotulo">E-mail</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
         <label className="campo"><span className="rotulo">Senha</span>
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
+          <InputSenha value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
         {erro && <div className="alerta">{erro}</div>}
         <button className="btn-principal" type="submit">Entrar</button>
         <button className="btn-link" type="button" onClick={() => setEsqueci(true)}>
@@ -119,9 +120,9 @@ function RedefinirSenha({ token }) {
         } finally { setSalvando(false) }
       }}>
         <label className="campo"><span className="rotulo">Nova senha (mín. 8 caracteres)</span>
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
+          <InputSenha value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
         <label className="campo"><span className="rotulo">Repita a nova senha</span>
-          <input type="password" value={confirma} onChange={(e) => setConfirma(e.target.value)} /></label>
+          <InputSenha value={confirma} onChange={(e) => setConfirma(e.target.value)} /></label>
         {msg && <div className="alerta">{msg}</div>}
         <button className="btn-principal" type="submit" disabled={salvando || senha.length < 8}>
           {salvando ? 'Salvando…' : 'Salvar nova senha'}</button>

@@ -68,6 +68,17 @@ const FRASES = [
   'A luz estava boa, a foto ficou ótima — agora é só um instante.',
   'Processando com a calma de quem sabe exatamente o que faz.',
   'Sorria: a burocracia está ficando para trás, quadro a quadro.',
+  // Conjunto 5 (auto-captura + leitores nas etapas, 2026-07-15)
+  'Menos digitação, mais vida. É para isso que estamos aqui.',
+  'O documento certo, no lugar certo, na hora certa. Quase lá.',
+  'Encaixando as peças — este quebra-cabeça a gente monta junto.',
+  'Trabalhando nos bastidores para o seu palco ficar impecável.',
+  'Cada campo preenchido sozinho é um pequeno presente nosso.',
+  'A tecnologia boa é a que ninguém percebe. Um instante e pronto.',
+  'Afinando os instrumentos — a orquestra já vai tocar.',
+  'Seu endereço, seus dados, seu ritmo. Nós só facilitamos.',
+  'Um passo de cada vez — e olha que os passos aqui são rápidos.',
+  'Terminando com esmero o que começou com um simples toque.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

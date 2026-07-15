@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
+import InputSenha from '../InputSenha.jsx'
 
 function Msg({ msg }) {
   if (!msg) return null
@@ -71,9 +72,9 @@ function Senha() {
       <h3>Trocar senha</h3>
       <div className="linha2">
         <label className="campo"><span className="rotulo">Senha atual</span>
-          <input type="password" value={atual} onChange={(e) => setAtual(e.target.value)} /></label>
+          <InputSenha value={atual} onChange={(e) => setAtual(e.target.value)} /></label>
         <label className="campo"><span className="rotulo">Nova senha (mín. 8 caracteres)</span>
-          <input type="password" value={nova} onChange={(e) => setNova(e.target.value)} /></label>
+          <InputSenha value={nova} onChange={(e) => setNova(e.target.value)} /></label>
       </div>
       <button className="btn-secundario" disabled={!atual || nova.length < 8} onClick={async () => {
         setMsg(null)
@@ -279,7 +280,7 @@ function Equipe() {
                 )}
                 {senhaDe === u.id && (
                   <div className="rejeicao">
-                    <input type="password" placeholder="Nova senha (mín. 8 caracteres)"
+                    <InputSenha placeholder="Nova senha (mín. 8 caracteres)"
                            value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
                     <button className="btn-principal btn-mini" disabled={novaSenha.length < 8}
                             onClick={async () => {
@@ -308,7 +309,7 @@ function Equipe() {
                    onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
             <input placeholder="E-mail (será o login)" type="email" value={novo.email}
                    onChange={(e) => setNovo({ ...novo, email: e.target.value })} />
-            <input placeholder="Senha inicial (mín. 8)" type="password" value={novo.senha}
+            <InputSenha placeholder="Senha inicial (mín. 8)" value={novo.senha}
                    onChange={(e) => setNovo({ ...novo, senha: e.target.value })} />
           </div>
           <div className="navegacao">
@@ -375,8 +376,8 @@ function M365() {
                    onChange={(e) => setCfg({ ...cfg, client_id: e.target.value })} />
             <input placeholder="Directory (tenant) ID" value={cfg.tenant_id}
                    onChange={(e) => setCfg({ ...cfg, tenant_id: e.target.value })} />
-            <input placeholder={cfg.secret_definido ? 'Segredo (já definido)' : 'Client secret'}
-                   type="password" value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <InputSenha placeholder={cfg.secret_definido ? 'Segredo (já definido)' : 'Client secret'}
+                    value={secret} onChange={(e) => setSecret(e.target.value)} />
           </div>
           <div className="navegacao">
             <button className="btn-secundario" onClick={async () => {
@@ -443,8 +444,8 @@ function Gmail() {
           <div className="linha2">
             <input placeholder="Client ID (…apps.googleusercontent.com)" value={cfg.client_id}
                    onChange={(e) => setCfg({ ...cfg, client_id: e.target.value })} />
-            <input placeholder={cfg.secret_definido ? 'Client secret (já definido)' : 'Client secret'}
-                   type="password" value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <InputSenha placeholder={cfg.secret_definido ? 'Client secret (já definido)' : 'Client secret'}
+                    value={secret} onChange={(e) => setSecret(e.target.value)} />
           </div>
           <div className="navegacao">
             <button className="btn-secundario" onClick={async () => {
@@ -512,7 +513,7 @@ function Smtp() {
                  onChange={(e) => setCfg({ ...cfg, smtp_user: e.target.value })} /></label>
         <label className="campo">
           <span className="rotulo">Senha {cfg.senha_definida && '(já definida — preencha só para trocar)'}</span>
-          <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
+          <InputSenha value={senha} onChange={(e) => setSenha(e.target.value)} /></label>
       </div>
       <label className="campo"><span className="rotulo">Remetente (De:)</span>
         <input value={cfg.smtp_from || ''}

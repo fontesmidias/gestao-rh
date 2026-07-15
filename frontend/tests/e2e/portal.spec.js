@@ -15,11 +15,11 @@ test('home carrega com logo e caminhos de entrada', async ({ page }) => {
 test('login do RH: senha errada avisa, senha certa abre o painel', async ({ page }) => {
   await page.goto('/rh')
   await page.getByLabel('E-mail').fill(RH_EMAIL)
-  await page.getByLabel('Senha').fill('senha-completamente-errada')
+  await page.getByLabel(/^Senha/).fill('senha-completamente-errada')
   await page.getByRole('button', { name: 'Entrar' }).click()
   await expect(page.getByText('E-mail ou senha incorretos.')).toBeVisible()
 
-  await page.getByLabel('Senha').fill(RH_SENHA)
+  await page.getByLabel(/^Senha/).fill(RH_SENHA)
   await page.getByRole('button', { name: 'Entrar' }).click()
   await expect(page.getByRole('heading', { name: /Admissões/ })).toBeVisible()
   // métricas do dashboard aparecem
@@ -100,9 +100,7 @@ test('câmera guiada: moldura, dicas em tempo real e saída para arquivo', async
   await page.goto(link_magico)
   await page.getByRole('button', { name: 'Li e concordo em continuar' }).click()
 
-  // vai para a etapa de documentos (etapa 3 do wizard), onde mora o leitor
-  await page.getByRole('button', { name: 'Continuar →' }).click()
-  await page.getByRole('button', { name: 'Continuar →' }).click()
+  // o leitor de RG/CNH agora está logo na etapa 1 (dados pessoais)
   const abrir = page.getByRole('button', { name: /Fotografar meu RG ou CNH/ })
   await expect(abrir).toBeVisible()
   await abrir.click()
@@ -122,4 +120,8 @@ test('câmera guiada: moldura, dicas em tempo real e saída para arquivo', async
   await overlay.getByRole('button', { name: /Fechar/ }).click()
   await expect(overlay).toHaveCount(0)
   await expect(abrir).toBeVisible()
+
+  // na etapa de endereço, o leitor de comprovante também está à mão
+  await page.getByRole('button', { name: 'Continuar →' }).click()
+  await expect(page.getByRole('button', { name: /Fotografar minha conta/ })).toBeVisible()
 })

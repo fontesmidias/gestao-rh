@@ -171,6 +171,64 @@ function LeitorRG({ token, dados, setDados, salvar }) {
   )
 }
 
+// Foto do cabeçalho da conta (luz, água, internet…) na etapa de endereço:
+// a foto já vale como envio do comprovante no checklist, e o CEP lido
+// dispara a mesma busca de endereço da digitação manual.
+function LeitorComprovante({ token, aoCep }) {
+  const [camera, setCamera] = useState(false)
+  const [lendo, setLendo] = useState(false)
+  const [resultado, setResultado] = useState(null) // 'cep' | 'so-envio'
+  const [erro, setErro] = useState(null)
+
+  const processar = async (arquivo) => {
+    setCamera(false)
+    if (!arquivo) return
+    setErro(null); setResultado(null); setLendo(true)
+    try {
+      const check = await api.documentos(token)
+      const slot = check.slots.find((s) => s.tipo === 'comp_endereco')
+      if (!slot) throw new Error('sem_slot')
+      const r = await api.enviarArquivo(token, slot.id, arquivo)
+      const cep = r.sugestoes?.cep
+      if (cep) await aoCep(cep)
+      setResultado(cep ? 'cep' : 'so-envio')
+    } catch (err) {
+      setErro(CODIGOS_ERRO_UPLOAD?.[err.detail]
+        || 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.')
+    } finally { setLendo(false) }
+  }
+
+  return (
+    <div className="leitor-rg">
+      {camera && (
+        <CapturaDocumento formato="cabecalho" titulo="Fotografar comprovante de endereço"
+                          aoCapturar={processar} aoArquivo={processar}
+                          aoFechar={() => setCamera(false)} />
+      )}
+      <button type="button" className="btn-secundario" disabled={lendo}
+              onClick={() => setCamera(true)}>
+        📷 {lendo ? 'Lendo o comprovante…' : 'Fotografar minha conta (luz, água…) e preencher o endereço'}
+      </button>
+      <p className="explica" style={{ margin: '.4rem 0 0' }}>Aponte para o <strong>cabeçalho</strong> da
+        conta — a parte de cima, onde aparecem o nome e o endereço. A foto já vale como envio do
+        comprovante na etapa de documentos. Prefere digitar? Siga nos campos abaixo.</p>
+      {lendo && <Espera texto="Lendo o comprovante…" />}
+      {erro && <div className="alerta">{erro}</div>}
+      {resultado === 'cep' && (
+        <div className="sucesso">
+          <strong>Encontramos o CEP e preenchemos o endereço.</strong> Confira rua, número e
+          complemento — a responsabilidade pelas informações é sua. Ajuste o que for preciso.
+          <br /><small>Seu comprovante também já ficou registrado como enviado ✓.</small>
+        </div>
+      )}
+      {resultado === 'so-envio' && (
+        <div className="alerta">Recebemos a foto (o comprovante já conta como enviado ✓), mas não
+          conseguimos ler o CEP com segurança. Preencha os campos normalmente.</div>
+      )}
+    </div>
+  )
+}
+
 function Campo({ rotulo, dica, ajuda, children }) {
   const [aberta, setAberta] = useState(false)
   return (
@@ -320,8 +378,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
   const p = dados.pessoais, en = dados.endereco, doc = dados.documentos
   const tb = dados.trabalho_banco, ve = dados.vt_emergencia
 
-  const busca_cep = async () => {
-    const cep = (en.cep || '').replace(/\D/g, '')
+  const buscaCepValor = async (valor) => {
+    const cep = (valor || '').replace(/\D/g, '')
     if (cep.length !== 8) return
     try {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`).then((x) => x.json())
@@ -334,6 +392,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       } }))
     } catch { /* offline: segue manual */ }
   }
+  const busca_cep = () => buscaCepValor(en.cep)
 
   const TITULOS = ['Sobre você', 'Seu endereço', 'Seus documentos', 'Trabalho e banco',
                    'Dependentes', 'Vale-transporte e emergência']
@@ -352,6 +411,10 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       )}
 
       {etapa === 0 && <>
+        <LeitorRG token={token} dados={dados} setDados={setDados} salvar={async (novos) => {
+          await api.salvarSecao(token, 'pessoais', novos.pessoais)
+          await api.salvarSecao(token, 'documentos', novos.documentos)
+        }} />
         <Campo rotulo="Nome completo"><input value={p.nome_completo || ''}
           onChange={(e) => setSec('pessoais', 'nome_completo', e.target.value)} /></Campo>
         <Campo rotulo="Nome social (se tiver)"
@@ -414,6 +477,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       </>}
 
       {etapa === 1 && <>
+        <LeitorComprovante token={token} aoCep={buscaCepValor} />
         <Campo rotulo="CEP" dica="informe o CEP exato da sua quadra/rua">
           <input value={en.cep || ''} onBlur={busca_cep} inputMode="numeric" maxLength={9}
                  onChange={(e) => setSec('endereco', 'cep', e.target.value.replace(/\D/g, ''))} /></Campo>

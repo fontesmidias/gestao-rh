@@ -465,6 +465,12 @@ input:focus, select:focus, textarea:focus {
   padding: .5rem 1.1rem; font-size: .95rem;
 }
 .captura-dica.ok { background: rgba(22, 100, 56, .92); }
+.captura-contagem {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 4rem; font-weight: 800; color: #fff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .6);
+  animation: surgir .3s ease-out;
+}
 .captura-sem-camera { padding: 2rem; text-align: center; font-size: 1.05rem; }
 .captura-acoes {
   display: flex; flex-direction: column; gap: .6rem;
@@ -472,6 +478,16 @@ input:focus, select:focus, textarea:focus {
 }
 .captura-disparo { font-size: 1.1rem; }
 .captura-legenda { text-align: center; color: #a9bfb0; font-size: .85rem; margin: 0 0 .9rem; }
+
+/* ---------- Campo de senha com olhinho ---------- */
+.campo-senha { position: relative; display: block; }
+.campo-senha input { width: 100%; padding-right: 2.9rem; }
+.btn-olho {
+  position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; cursor: pointer;
+  font-size: 1.05rem; padding: .35rem; line-height: 1; opacity: .75;
+}
+.btn-olho:hover { opacity: 1; }
 
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {

@@ -1,75 +1,118 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 // Câmera guiada: moldura no formato do documento + dicas em tempo real de
-// luz e foco. Filosofia: a câmera é um ATALHO — o botão de enviar um arquivo
-// que a pessoa já tem no aparelho está sempre visível, e qualquer falha da
-// câmera (sem permissão, sem câmera, navegador antigo, http) cai de pé nele.
+// enquadramento, luz e foco — tudo medido DENTRO da moldura, não na cena
+// inteira (senão "tudo certo" continuaria aparecendo com o documento fora do
+// quadro). Quando o quadro fica bom e estável, fotografa sozinha (3, 2, 1).
+// Filosofia: a câmera é um ATALHO — o botão de enviar um arquivo que a pessoa
+// já tem no aparelho está sempre visível, e qualquer falha da câmera
+// (sem permissão, sem câmera, navegador antigo, http) cai de pé nele.
 
 const FORMATOS = {
   // razao = largura/altura da moldura; dica = como posicionar.
-  cartao:  { razao: 85.6 / 54, dica: 'Encaixe o documento deitado dentro da moldura' },
-  rg_aberto: { razao: 96 / 130, dica: 'RG aberto, em pé, dentro da moldura (frente e verso juntos)' },
-  a4:      { razao: 210 / 297, dica: 'Encaixe a folha em pé dentro da moldura' },
-  retrato: { razao: 3 / 4,     dica: 'Centralize o rosto na moldura, fundo claro' },
+  cartao:    { razao: 85.6 / 54, dica: 'Encaixe o documento deitado dentro da moldura' },
+  a4:        { razao: 210 / 297, dica: 'Encaixe a folha em pé dentro da moldura' },
+  cabecalho: { razao: 2.1,       dica: 'Enquadre o CABEÇALHO da conta — a parte de cima, onde aparecem o nome e o endereço' },
+  retrato:   { razao: 3 / 4,     dica: 'Centralize o rosto na moldura, fundo claro' },
 }
 
-// Limiares calibrados para o canvas de análise de 120px (valores empíricos:
-// nitidez usa a mesma ideia do backend — variância do Laplaciano).
-const LUZ_MIN = 60      // abaixo: ambiente escuro
-const LUZ_MAX = 232     // acima: estourado / reflexo forte
-const FOCO_MIN = 25     // abaixo: imagem borrada / câmera procurando foco
-const QUADROS_BONS_PARA_OK = 3   // ~1s estável antes de liberar o disparo
+// Limiares calibrados para o canvas de análise de 160px. Nitidez usa a mesma
+// ideia do backend (variância do Laplaciano), medida só dentro da moldura.
+const LUZ_MIN = 60        // média abaixo: ambiente escuro
+const LUZ_MAX = 232       // média acima: estourado / reflexo forte
+const FOCO_MIN = 25       // variância do Laplaciano abaixo: borrado
+const ESTRUTURA_MIN = 18  // desvio-padrão mínimo dentro da moldura (documento tem texto)
+const CONTRASTE_MIN = 9   // diferença mínima dentro/fora (documento destacado do fundo)
+// Auto-captura: quadros bons consecutivos (analisados a cada ~350ms).
+const QUADROS_PRONTO = 2      // libera o botão
+const QUADROS_CAPTURA = 8     // dispara sozinho (~2,8s de quadro estável)
 
-function analisarFrame(video, canvas) {
-  const w = 120
-  const h = Math.max(1, Math.round((w * video.videoHeight) / (video.videoWidth || 1))) || 90
+function medirFrame(video, canvas, palcoEl, molduraEl) {
+  const w = 160
+  const h = Math.max(1, Math.round((w * video.videoHeight) / (video.videoWidth || 1)))
   canvas.width = w
   canvas.height = h
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   ctx.drawImage(video, 0, 0, w, h)
   const { data } = ctx.getImageData(0, 0, w, h)
   const cinza = new Float32Array(w * h)
-  let soma = 0
   for (let i = 0; i < w * h; i++) {
-    const g = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]
-    cinza[i] = g
-    soma += g
+    cinza[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]
   }
-  const luz = soma / (w * h)
-  let s1 = 0
-  let s2 = 0
-  let n = 0
+
+  // Mapeia a moldura (px de tela) para o frame: o vídeo usa object-fit: cover,
+  // então há escala + corte centralizado a compensar.
+  const palco = palcoEl.getBoundingClientRect()
+  const mold = molduraEl.getBoundingClientRect()
+  const escala = Math.max(palco.width / video.videoWidth, palco.height / video.videoHeight)
+  const offX = (video.videoWidth * escala - palco.width) / 2
+  const offY = (video.videoHeight * escala - palco.height) / 2
+  const k = w / video.videoWidth
+  const paraFrame = (xTela, yTela) => [
+    Math.round(((xTela - palco.left + offX) / escala) * k),
+    Math.round(((yTela - palco.top + offY) / escala) * k),
+  ]
+  let [x0, y0] = paraFrame(mold.left, mold.top)
+  let [x1, y1] = paraFrame(mold.right, mold.bottom)
+  x0 = Math.max(1, x0); y0 = Math.max(1, y0)
+  x1 = Math.min(w - 2, x1); y1 = Math.min(h - 2, y1)
+  if (x1 - x0 < 8 || y1 - y0 < 8) return null   // moldura ainda sem medida útil
+
+  // Estatísticas dentro e fora da moldura + foco (Laplaciano) dentro.
+  let sD = 0, s2D = 0, nD = 0, sF = 0, s2F = 0, nF = 0, lap = 0, lap2 = 0, nL = 0
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const i = y * w + x
-      const v = 4 * cinza[i] - cinza[i - 1] - cinza[i + 1] - cinza[i - w] - cinza[i + w]
-      s1 += v
-      s2 += v * v
-      n++
+      const g = cinza[i]
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        sD += g; s2D += g * g; nD++
+        const v = 4 * g - cinza[i - 1] - cinza[i + 1] - cinza[i - w] - cinza[i + w]
+        lap += v; lap2 += v * v; nL++
+      } else {
+        sF += g; s2F += g * g; nF++
+      }
     }
   }
-  const media = s1 / n
-  const foco = s2 / n - media * media
-  return { luz, foco }
+  const mD = sD / nD
+  const mF = nF ? sF / nF : mD
+  const stdD = Math.sqrt(Math.max(0, s2D / nD - mD * mD))
+  const stdF = nF ? Math.sqrt(Math.max(0, s2F / nF - mF * mF)) : 0
+  const mLap = lap / nL
+  return {
+    luz: mD,
+    foco: lap2 / nL - mLap * mLap,
+    estrutura: stdD,
+    contraste: Math.abs(mD - mF),
+    stdFora: stdF,
+  }
 }
 
-function dicaDoMomento({ luz, foco }) {
-  if (luz < LUZ_MIN) return { ok: false, icone: '🌑', texto: 'Está escuro — procure um lugar mais iluminado.' }
-  if (luz > LUZ_MAX) return { ok: false, icone: '✨', texto: 'Luz demais ou reflexo — incline um pouco o documento.' }
-  if (foco < FOCO_MIN) return { ok: false, icone: '🌫️', texto: 'Imagem tremida — apoie o celular e aguarde o foco.' }
-  return { ok: true, icone: '✅', texto: 'Ótimo! Pode fotografar.' }
+function dicaDoMomento(m) {
+  if (m.luz < LUZ_MIN) return { ok: false, icone: '🌑', texto: 'Está escuro — procure um lugar mais iluminado.' }
+  if (m.luz > LUZ_MAX) return { ok: false, icone: '✨', texto: 'Luz demais ou reflexo — incline um pouco o documento.' }
+  // Documento presente na moldura: precisa ter estrutura (texto) e se
+  // destacar do que está fora — na dúvida, pede o enquadramento.
+  if (m.estrutura < ESTRUTURA_MIN || (m.contraste < CONTRASTE_MIN && m.estrutura < m.stdFora + 6)) {
+    return { ok: false, icone: '📐', texto: 'Encaixe o documento dentro da moldura.' }
+  }
+  if (m.foco < FOCO_MIN) return { ok: false, icone: '🌫️', texto: 'Imagem tremida — apoie o celular e aguarde o foco.' }
+  return { ok: true, icone: '✅', texto: 'Ótimo! Segure firme…' }
 }
 
 export default function CapturaDocumento({ formato = 'cartao', titulo, aoCapturar, aoArquivo, aoFechar }) {
   const videoRef = useRef(null)
   const analiseRef = useRef(null)
+  const palcoRef = useRef(null)
+  const molduraRef = useRef(null)
   const streamRef = useRef(null)
   const bonsRef = useRef(0)
+  const disparadoRef = useRef(false)
   const inputRef = useRef(null)
   const [estado, setEstado] = useState('abrindo')  // abrindo | ativa | sem-camera
   const [motivoSemCamera, setMotivoSemCamera] = useState(null)
   const [dica, setDica] = useState(null)
   const [pronto, setPronto] = useState(false)
+  const [contagem, setContagem] = useState(null)   // 3, 2, 1 antes do clique automático
   const [teimoso, setTeimoso] = useState(false)    // libera "fotografar assim mesmo"
   const f = FORMATOS[formato] || FORMATOS.cartao
 
@@ -77,6 +120,21 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
   }, [])
+
+  const fotografar = useCallback(() => {
+    const v = videoRef.current
+    if (!v || !v.videoWidth || disparadoRef.current) return
+    disparadoRef.current = true
+    const c = document.createElement('canvas')
+    c.width = v.videoWidth
+    c.height = v.videoHeight
+    c.getContext('2d').drawImage(v, 0, 0)
+    c.toBlob((blob) => {
+      if (!blob) { disparadoRef.current = false; return }
+      fecharStream()
+      aoCapturar(new File([blob], 'documento.jpg', { type: 'image/jpeg' }))
+    }, 'image/jpeg', 0.92)
+  }, [aoCapturar, fecharStream])
 
   useEffect(() => {
     let vivo = true
@@ -117,36 +175,29 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     if (estado !== 'ativa') return undefined
     const t = setInterval(() => {
       const v = videoRef.current
-      if (!v || v.readyState < 2 || !v.videoWidth) return
+      if (!v || v.readyState < 2 || !v.videoWidth || !molduraRef.current) return
       try {
-        const medidas = analisarFrame(v, analiseRef.current)
-        const d = dicaDoMomento(medidas)
+        const m = medirFrame(v, analiseRef.current, palcoRef.current, molduraRef.current)
+        if (!m) return
+        const d = dicaDoMomento(m)
         setDica(d)
         bonsRef.current = d.ok ? bonsRef.current + 1 : 0
-        setPronto(bonsRef.current >= QUADROS_BONS_PARA_OK)
+        const bons = bonsRef.current
+        setPronto(bons >= QUADROS_PRONTO)
+        // Contagem regressiva rumo ao clique automático; qualquer quadro ruim zera.
+        if (bons >= QUADROS_CAPTURA) { setContagem(null); fotografar() }
+        else if (bons >= QUADROS_PRONTO) {
+          setContagem(Math.max(1, Math.ceil((QUADROS_CAPTURA - bons) / 2)))
+        } else setContagem(null)
       } catch {
         // Frame indisponível (troca de aba, câmera fechando): tenta no próximo.
       }
     }, 350)
-    // Depois de 6s sem quadro perfeito, deixa fotografar mesmo assim: câmera
+    // Depois de 8s sem quadro perfeito, deixa fotografar mesmo assim: câmera
     // fraca não pode ser beco sem saída — o servidor ainda confere a nitidez.
-    const escape = setTimeout(() => setTeimoso(true), 6000)
+    const escape = setTimeout(() => setTeimoso(true), 8000)
     return () => { clearInterval(t); clearTimeout(escape) }
-  }, [estado])
-
-  const fotografar = () => {
-    const v = videoRef.current
-    if (!v || !v.videoWidth) return
-    const c = document.createElement('canvas')
-    c.width = v.videoWidth
-    c.height = v.videoHeight
-    c.getContext('2d').drawImage(v, 0, 0)
-    c.toBlob((blob) => {
-      if (!blob) return
-      fecharStream()
-      aoCapturar(new File([blob], 'documento.jpg', { type: 'image/jpeg' }))
-    }, 'image/jpeg', 0.92)
-  }
+  }, [estado, fotografar])
 
   const escolherArquivo = (e) => {
     const arq = e.target.files[0]
@@ -173,15 +224,18 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
       </div>
 
       {estado !== 'sem-camera' ? (
-        <div className="captura-palco">
+        <div className="captura-palco" ref={palcoRef}>
           <video ref={videoRef} playsInline muted autoPlay className="captura-video" />
           <canvas ref={analiseRef} hidden />
-          <div className="captura-moldura" style={molduraStyle} data-ok={pronto || undefined}>
+          <div className="captura-moldura" ref={molduraRef} style={molduraStyle}
+               data-ok={pronto || undefined}>
             <i /><i /><i /><i />
+            {contagem != null && <span className="captura-contagem">{contagem}</span>}
           </div>
           <div className={`captura-dica ${dica?.ok ? 'ok' : ''}`} aria-live="polite">
             {estado === 'abrindo' ? '📷 Abrindo a câmera…'
-              : dica ? `${dica.icone} ${dica.texto}` : `📐 ${f.dica}`}
+              : dica ? `${dica.icone} ${dica.texto}${dica.ok && contagem != null ? ` ${contagem}` : ''}`
+              : `📐 ${f.dica}`}
           </div>
         </div>
       ) : (
@@ -194,7 +248,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
         {estado === 'ativa' && (
           <button type="button" className="btn-principal captura-disparo"
                   disabled={!pronto && !teimoso} onClick={fotografar}>
-            {pronto ? '📸 Fotografar' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
+            {pronto ? '📸 Fotografar agora' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
           </button>
         )}
         <button type="button" className="btn-secundario"
@@ -202,7 +256,9 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
           📁 Já tenho o arquivo — enviar do aparelho
         </button>
       </div>
-      {estado === 'ativa' && <p className="captura-legenda">{f.dica}</p>}
+      {estado === 'ativa' && (
+        <p className="captura-legenda">{f.dica}. Quando tudo estiver bom, a foto sai sozinha.</p>
+      )}
     </div>
   )
 }
