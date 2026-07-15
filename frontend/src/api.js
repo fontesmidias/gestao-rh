@@ -109,6 +109,14 @@ export const rh = {
   rejeitarLote: (slotIds, motivo, observacao) =>
     req('/rh/slots/lote/rejeitar', { method: 'POST', headers: authRH(),
       body: JSON.stringify({ slot_ids: slotIds, motivo, observacao }) }),
+  postos: () => req('/rh/postos', { headers: authRH() }),
+  criarPosto: (dados) =>
+    req('/rh/postos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarPosto: (id, dados) =>
+    req(`/rh/postos/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  definirPosto: (candidatoId, dados) =>
+    req(`/rh/candidatos/${candidatoId}/posto`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   gerarDossie: (id, forcar = false) =>
     req(`/rh/candidatos/${id}/dossie${forcar ? '?forcar=true' : ''}`,
         { method: 'POST', headers: authRH() }),

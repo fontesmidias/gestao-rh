@@ -10,9 +10,18 @@ from app.core.db import Base
 
 
 class DocumentoAssinavel(str, enum.Enum):
+    # Fichas da admissão (todo candidato)
     ficha_cadastro = "ficha_cadastro"
     ficha_emergencia = "ficha_emergencia"
     termo_vt = "termo_vt"
+    # Documentos por posto de serviço (gerados quando o RH marca o posto)
+    oficio_cartao_cidadao = "oficio_cartao_cidadao"
+    informacoes_trabalhador = "informacoes_trabalhador"
+
+
+# Fichas exigidas de TODO candidato; os demais só existem se o RH os gerar.
+FICHAS_BASE = (DocumentoAssinavel.ficha_cadastro, DocumentoAssinavel.ficha_emergencia,
+               DocumentoAssinavel.termo_vt)
 
 
 class Assinatura(Base):
