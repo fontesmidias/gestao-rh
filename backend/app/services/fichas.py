@@ -6,6 +6,7 @@ com a trilha de evidências (Lei 14.063/2020).
 """
 
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 _TZ_BRASILIA = timezone(timedelta(hours=-3))
 
@@ -228,6 +229,8 @@ def _declaracao(pdf: _FichaPDF, titulo: str, texto: str, candidato: Candidato):
 def _dump_pessoais(pdf: _FichaPDF, candidato: Candidato, p: DadosPessoais | None):
     pdf.secao("1. DADOS PESSOAIS")
     pdf.campo("Nome completo", candidato.nome_completo)
+    if p and p.nome_social:
+        pdf.campo("Nome social", p.nome_social)
     if p:
         pdf.campo("Data de nascimento", p.data_nascimento)
         pdf.campo("Sexo", p.sexo)
@@ -464,23 +467,42 @@ EMPRESA_CNPJ = "12.531.678/0001-80"
 EMPRESA_RODAPE = ("SCIA Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará), "
                   "Brasília, DF, CEP: 71.250-015\n"
                   "+55 61 3346-8812 | www.greenhousedf.com.br")
+# Assinantes-padrão; podem ser trocados pelo painel (Configurações → Assinantes).
 EMPRESA_ASSINANTES = (("Leandro de Sá", "CEO", "026.030.441-76"),
                       ("Láysa Beatriz", "Assistente de RH", "113.900.916-86"))
 NAVY = (23, 26, 60)
+LOGO = str(Path(__file__).resolve().parent.parent / "assets" / "logo.png")
+
+
+def assinantes_config(db: Session) -> list[tuple[str, str, str]]:
+    """Assinantes dos documentos oficiais: config do painel ou o padrão."""
+    from app.services.config_dinamica import ler_config
+    cfg = ler_config(db, ("doc_ass1_nome", "doc_ass1_cargo", "doc_ass1_cpf",
+                          "doc_ass2_nome", "doc_ass2_cargo", "doc_ass2_cpf"))
+    saida = []
+    for i, padrao in enumerate(EMPRESA_ASSINANTES, start=1):
+        nome = cfg.get(f"doc_ass{i}_nome", "")
+        saida.append((nome or padrao[0],
+                      cfg.get(f"doc_ass{i}_cargo", "") or padrao[1],
+                      cfg.get(f"doc_ass{i}_cpf", "") or padrao[2]))
+    return saida
 
 
 class _OficioPDF(_FichaPDF):
-    """Papel timbrado dos documentos oficiais: selo GREENHOUSE no topo direito
+    """Papel timbrado dos documentos oficiais: logo Green House no topo direito
     e rodapé institucional com filete verde."""
 
     def header(self):
-        self.set_fill_color(*NAVY)
-        self.rect(150, 0, 60, 24, style="F")
-        self.set_xy(152, 8)
-        self.set_font("helvetica", "B", 13)
-        self.set_text_color(255, 255, 255)
-        self.cell(56, 8, "GREENHOUSE", align="C")
-        self.set_text_color(30, 30, 30)
+        try:
+            self.image(LOGO, x=145, y=8, w=52)
+        except Exception:
+            self.set_fill_color(*NAVY)
+            self.rect(150, 0, 60, 24, style="F")
+            self.set_xy(152, 8)
+            self.set_font("helvetica", "B", 13)
+            self.set_text_color(255, 255, 255)
+            self.cell(56, 8, "GREENHOUSE", align="C")
+            self.set_text_color(30, 30, 30)
         self.set_y(32)
 
     def footer(self):
@@ -498,7 +520,7 @@ class _OficioPDF(_FichaPDF):
         self.multi_cell(0, 5.6, texto)
         self.ln(2.5)
 
-    def assinantes_empresa(self):
+    def assinantes_empresa(self, assinantes=EMPRESA_ASSINANTES):
         self.ln(4)
         self.set_font("helvetica", "", 10.5)
         self.cell(0, 6, "Atenciosamente,", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -508,7 +530,7 @@ class _OficioPDF(_FichaPDF):
         self.ln(1)
         y = self.get_y()
         self.set_font("helvetica", "", 10)
-        for i, (nome, cargo, cpf) in enumerate(EMPRESA_ASSINANTES):
+        for i, (nome, cargo, cpf) in enumerate(assinantes):
             x = 20 + i * 90
             self.set_xy(x, y)
             self.multi_cell(80, 5.4, f"{nome}\n{cargo}\nCPF: {cpf}", align="C")
@@ -576,8 +598,10 @@ def gerar_oficio_cartao_cidadao(db: Session, candidato: Candidato,
     pdf.set_font("helvetica", "", 9.5)
     situacao = ("Assinado eletronicamente\n(Lei nº 14.063/2020 - ver manifesto)"
                 if assinatura and assinatura.assinado_em else "")
+    p = db.get(DadosPessoais, candidato.id)
+    nome_social = f"\n(NOME SOCIAL: {p.nome_social.upper()})" if p and p.nome_social else ""
     y = pdf.get_y()
-    pdf.multi_cell(70, 6, f"{candidato.nome_completo}"
+    pdf.multi_cell(70, 6, f"{candidato.nome_completo}{nome_social}"
                           + (f"\nCPF: {d.cpf}" if d and d.cpf else ""), border=1)
     alto = max(pdf.get_y() - y, 12)
     pdf.set_xy(80, y)
@@ -589,7 +613,7 @@ def gerar_oficio_cartao_cidadao(db: Session, candidato: Candidato,
 
     pdf.paragrafo(f"3. Por fim, a GREEN HOUSE reafirma o seu compromisso perante este "
                   "Contratante, bem como votos de estima e consideração.")
-    pdf.assinantes_empresa()
+    pdf.assinantes_empresa(assinantes_config(db))
 
     if assinatura:
         pdf.bloco_assinatura(assinatura, candidato.nome_completo)
@@ -652,7 +676,7 @@ def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
                   "seguinte canal: terceirizados@infraero.gov.br")
     pdf.set_font("helvetica", "", 10.5)
     pdf.cell(0, 6, _data_extenso(quando), new_x="LMARGIN", new_y="NEXT")
-    pdf.assinantes_empresa()
+    pdf.assinantes_empresa(assinantes_config(db))
     pdf.ln(2)
     pdf.set_font("helvetica", "", 10.5)
     pdf.cell(0, 6, f"Trabalhador ciente em: {quando.strftime('%d/%m/%Y')}",

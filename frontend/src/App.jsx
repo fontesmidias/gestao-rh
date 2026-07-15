@@ -3,11 +3,13 @@ import CandidatoApp from './candidato/CandidatoApp.jsx'
 import RHApp from './rh/RHApp.jsx'
 import Verificar from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
+import logo from './assets/logo.png'
 
 function Home() {
   return (
     <main className="welcome">
-      <h1>🌱 Portal de Admissão — Green House</h1>
+      <img src={logo} alt="Green House" className="logo-img" />
+      <h1>Portal de Admissão</h1>
       <p>Candidato: use o link que você recebeu por e-mail ou WhatsApp.</p>
       <p><Link to="/entrar">Perdeu o link? Continue com o seu CPF →</Link></p>
       <p><Link to="/rh">Acesso do RH →</Link></p>

@@ -275,6 +275,10 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       {etapa === 0 && <>
         <Campo rotulo="Nome completo"><input value={p.nome_completo || ''}
           onChange={(e) => setSec('pessoais', 'nome_completo', e.target.value)} /></Campo>
+        <Campo rotulo="Nome social (se tiver)"
+               ajuda="Preencha apenas se você deseja ser chamado(a) por um nome diferente do que está no seu registro civil (Decreto 8.727/2016). Ele aparecerá nos seus documentos junto ao nome civil. Se não for o seu caso, deixe em branco.">
+          <input value={p.nome_social || ''}
+                 onChange={(e) => setSec('pessoais', 'nome_social', e.target.value)} /></Campo>
         <Campo rotulo="Data de nascimento" dica="só números: dia, mês e ano"><InputData valor={p.data_nascimento || ''}
           onChange={(v) => setSec('pessoais', 'data_nascimento', v)} /></Campo>
         <Campo rotulo="Sexo (conforme registro civil)">

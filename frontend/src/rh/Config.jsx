@@ -18,6 +18,7 @@ export default function Config({ aoVoltar }) {
       <Senha />
       <Equipe />
       <Postos />
+      <Assinantes />
       <M365 />
       <Gmail />
       <Smtp />
@@ -85,6 +86,46 @@ function Senha() {
             ? 'A senha atual está incorreta.' : 'Não foi possível trocar a senha.' })
         }
       }}>Trocar senha</button>
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+function Assinantes() {
+  const [dados, setDados] = useState(null)
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { api.verAssinantes().then(setDados) }, [])
+  if (!dados) return null
+  const campo = (chave, rotulo) => (
+    <label className="campo"><span className="rotulo">{rotulo}</span>
+      <input value={dados[chave] || ''}
+             onChange={(e) => setDados({ ...dados, [chave]: e.target.value })} /></label>
+  )
+  return (
+    <div className="rh-card">
+      <h3>Assinantes dos documentos oficiais</h3>
+      <p className="explica">Representantes da empresa que constam nos ofícios e documentos
+        de posto de serviço (nome, cargo e CPF). A alteração vale para documentos gerados
+        daqui em diante — vias já assinadas não mudam.</p>
+      <div className="linha3">
+        {campo('ass1_nome', 'Assinante 1 — nome')}
+        {campo('ass1_cargo', 'Cargo')}
+        {campo('ass1_cpf', 'CPF')}
+      </div>
+      <div className="linha3">
+        {campo('ass2_nome', 'Assinante 2 — nome')}
+        {campo('ass2_cargo', 'Cargo')}
+        {campo('ass2_cpf', 'CPF')}
+      </div>
+      <button className="btn-secundario" onClick={async () => {
+        setMsg(null)
+        try {
+          const r = await api.salvarAssinantes(dados)
+          setDados(r); setMsg({ tipo: 'ok', texto: 'Assinantes atualizados.' })
+        } catch (e) {
+          setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+        }
+      }}>Salvar assinantes</button>
       <Msg msg={msg} />
     </div>
   )

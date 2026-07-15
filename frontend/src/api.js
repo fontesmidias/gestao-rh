@@ -133,6 +133,9 @@ export const rh = {
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarSmtp: () => req('/rh/config/smtp/testar', { method: 'POST', headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
+  verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
+  salvarAssinantes: (dados) =>
+    req('/rh/config/assinantes', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   usuarios: () => req('/rh/usuarios', { headers: authRH() }),
   criarUsuario: (dados) =>
     req('/rh/usuarios', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
