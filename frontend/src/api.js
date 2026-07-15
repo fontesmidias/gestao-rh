@@ -25,6 +25,16 @@ async function req(caminho, opcoes = {}) {
 // Verificação pública de assinatura (QR code do manifesto) — sem autenticação.
 export const verificarAssinatura = (id) => req(`/verificar/${id}`)
 
+// Portal único de retorno do candidato (CPF + perguntas de verificação).
+export const entrada = {
+  iniciar: (cpf) =>
+    req('/entrar/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
+  responder: (desafio, respostas) =>
+    req('/entrar/responder', { method: 'POST', body: JSON.stringify({ desafio, respostas }) }),
+  linkEmail: (cpf) =>
+    req('/entrar/link-email', { method: 'POST', body: JSON.stringify({ cpf }) }),
+}
+
 export const candidato = {
   sessao: (t) => req(`/c/${t}`),
   aceiteLgpd: (t) => req(`/c/${t}/aceite-lgpd`, { method: 'POST' }),
