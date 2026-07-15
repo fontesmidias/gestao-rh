@@ -35,6 +35,17 @@ const FRASES = [
   'O seu tempo é valioso; estamos usando o mínimo possível dele.',
   'Tudo caminhando: suave como deve ser o primeiro dia de trabalho.',
   'Preparando o terreno para o seu próximo capítulo profissional.',
+  // Conjunto 2 (atualização do OCR, 2026-07-15)
+  'Lendo com atenção — como quem recebe uma carta escrita à mão.',
+  'A elegância está nos detalhes; os detalhes estão quase prontos.',
+  'Cada dado no seu lugar, como livros numa boa estante.',
+  'Um processo bem feito é discreto: você só percebe o resultado.',
+  'Semeando agora, colhendo em instantes. Jardinagem digital.',
+  'Seus documentos passam por aqui como hóspedes de um bom hotel.',
+  'O silêncio que você ouve é o som de tudo dando certo.',
+  'Alinhando os últimos pontos — alfaiataria também é software.',
+  'Boas notícias viajam rápido. As suas estão quase chegando.',
+  'Enquanto o relógio dá uma volta curta, nós damos várias.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

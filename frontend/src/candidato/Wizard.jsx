@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
+import { CODIGOS_ERRO_UPLOAD } from '../tooltips.js'
+import Espera from '../Espera.jsx'
 
 // Descrições idênticas às do formulário original da Green House.
 const GENERO_DESCRICOES = [
@@ -90,6 +92,82 @@ function InputData({ valor, onChange }) {
              value={texto} onChange={aoDigitar} />
       {erro && <div className="alerta" style={{ marginTop: '.35rem', padding: '.5rem .75rem' }}>{erro}</div>}
     </>
+  )
+}
+
+// Nome amigável de cada campo que o OCR pode sugerir.
+const NOMES_SUGESTAO = {
+  rg_numero: 'RG — número', rg_orgao_emissor: 'Órgão emissor',
+  rg_data_expedicao: 'Data de expedição', cpf: 'CPF',
+  data_nascimento: 'Data de nascimento', nome_mae: 'Nome da mãe',
+  nome_pai: 'Nome do pai',
+}
+
+// Foto do RG → OCR sugere o preenchimento. A foto já vale como envio do
+// documento no checklist (mata duas etapas de uma vez).
+function LeitorRG({ token, dados, setDados, salvar }) {
+  const inputRef = useRef(null)
+  const [lendo, setLendo] = useState(false)
+  const [resultado, setResultado] = useState(null) // {aplicados: [...]} | {vazio: true}
+  const [erro, setErro] = useState(null)
+
+  const aoEscolher = async (e) => {
+    const arquivo = e.target.files[0]
+    e.target.value = ''
+    if (!arquivo) return
+    setErro(null); setResultado(null); setLendo(true)
+    try {
+      const check = await api.documentos(token)
+      const slotRg = check.slots.find((s) => s.tipo === 'rg')
+      const r = await api.enviarArquivo(token, slotRg.id, arquivo)
+      const sug = r.sugestoes || {}
+      const aplicados = []
+      const novos = JSON.parse(JSON.stringify(dados))
+      const alvo = { rg_numero: 'documentos', rg_orgao_emissor: 'documentos',
+                     rg_data_expedicao: 'documentos', cpf: 'documentos',
+                     data_nascimento: 'pessoais', nome_mae: 'pessoais', nome_pai: 'pessoais' }
+      for (const [campo, valor] of Object.entries(sug)) {
+        const sec = alvo[campo]
+        if (sec && !novos[sec][campo]) {   // nunca sobrescreve o que já foi digitado
+          novos[sec][campo] = valor
+          aplicados.push(NOMES_SUGESTAO[campo] || campo)
+        }
+      }
+      if (aplicados.length) {
+        setDados(novos)
+        await salvar(novos)
+      }
+      setResultado(aplicados.length ? { aplicados } : { vazio: true })
+    } catch (err) {
+      setErro(CODIGOS_ERRO_UPLOAD?.[err.detail]
+        || 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.')
+    } finally { setLendo(false) }
+  }
+
+  return (
+    <div className="leitor-rg">
+      <input ref={inputRef} type="file" hidden accept="image/*,.pdf" onChange={aoEscolher} />
+      <button type="button" className="btn-secundario" disabled={lendo}
+              onClick={() => inputRef.current.click()}>
+        📷 {lendo ? 'Lendo o seu RG…' : 'Fotografar meu RG e preencher automaticamente'}
+      </button>
+      <p className="explica" style={{ margin: '.4rem 0 0' }}>Opcional: a foto já vale como
+        envio do RG na etapa de documentos, e nós sugerimos o preenchimento dos campos.</p>
+      {lendo && <Espera texto="Lendo o documento e preparando as sugestões…" />}
+      {erro && <div className="alerta">{erro}</div>}
+      {resultado?.vazio && (
+        <div className="alerta">Recebemos a foto (o RG já conta como enviado ✓), mas não
+          conseguimos ler os dados com segurança. Preencha os campos normalmente.</div>
+      )}
+      {resultado?.aplicados && (
+        <div className="sucesso">
+          <strong>Preenchemos automaticamente:</strong> {resultado.aplicados.join(', ')}.
+          <br /><strong>Confira cada um antes de continuar</strong> — a leitura é uma ajuda,
+          mas a responsabilidade pelas informações enviadas é sua. Corrija o que for preciso.
+          <br /><small>Sua foto do RG também já ficou registrada como enviada ✓.</small>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -352,6 +430,11 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       </>}
 
       {etapa === 2 && <>
+        <LeitorRG token={token} dados={dados} setDados={setDados} salvar={async (novos) => {
+          // Persiste as duas seções tocadas pelas sugestões (autosave é por etapa).
+          await api.salvarSecao(token, 'documentos', novos.documentos)
+          await api.salvarSecao(token, 'pessoais', novos.pessoais)
+        }} />
         <Campo rotulo="RG — número" dica="a CNH não substitui o RG">
           <input value={doc.rg_numero || ''}
                  onChange={(e) => setSec('documentos', 'rg_numero', e.target.value)} /></Campo>

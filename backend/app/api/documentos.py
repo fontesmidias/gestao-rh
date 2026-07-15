@@ -73,10 +73,23 @@ def enviar_arquivo(
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
 
     dados = arquivo.file.read()
+    sugestoes: dict = {}
     try:
         pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
         if slot.tipo == TipoDocumento.comp_endereco:
             validar_comprovante_recente(arquivo.filename or "arquivo", dados, pdf)
+        if slot.tipo == TipoDocumento.cpf_doc:
+            _conferir_cpf_do_documento(db, candidato, arquivo.filename or "arquivo",
+                                       dados, pdf)
+        if slot.tipo == TipoDocumento.rg:
+            # OCR do RG: SUGESTÕES para o formulário (o candidato confere e confirma).
+            from app.services.normalizacao import _texto_do_envio
+            from app.services.ocr_rg import sugestoes_do_rg
+            from pathlib import Path as _P
+            texto = _texto_do_envio(_P((arquivo.filename or "a.jpg").lower()).suffix,
+                                    dados, pdf)
+            if texto:
+                sugestoes = sugestoes_do_rg(texto)
     except ArquivoInvalido as exc:
         # Feedback imediato ao candidato: o front traduz o código em linguagem simples.
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
@@ -98,7 +111,30 @@ def enviar_arquivo(
     if candidato.status in (StatusCandidato.aguardando_assinatura, StatusCandidato.preenchendo):
         candidato.status = StatusCandidato.docs_pendentes
     db.commit()
-    return _slot_out(slot)
+    saida = _slot_out(slot)
+    if sugestoes:
+        saida["sugestoes"] = sugestoes
+    return saida
+
+
+def _conferir_cpf_do_documento(db: Session, candidato: Candidato,
+                               nome_arquivo: str, dados: bytes, pdf: bytes) -> None:
+    """Se o documento de CPF traz um número legível e ele NÃO bate com o CPF da
+    ficha, recusa na hora (documento de outra pessoa ou digitação errada).
+    Sem leitura ou sem CPF na ficha, não bloqueia — o RH decide na revisão."""
+    from pathlib import Path as _P
+
+    from app.models.ficha import DocumentosIdentificacao
+    from app.services.normalizacao import _texto_do_envio
+    from app.services.ocr_rg import cpfs_no_texto
+
+    doc = db.get(DocumentosIdentificacao, candidato.id)
+    if doc is None or not doc.cpf:
+        return
+    texto = _texto_do_envio(_P(nome_arquivo.lower()).suffix, dados, pdf)
+    achados = cpfs_no_texto(texto or "")
+    if achados and doc.cpf not in achados:
+        raise ArquivoInvalido("cpf_divergente")
 
 
 @router.post("/c/{token}/concluir-envio")
