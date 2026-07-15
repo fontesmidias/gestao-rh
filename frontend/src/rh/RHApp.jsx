@@ -206,12 +206,15 @@ function Painel({ aoSair }) {
       {novo && (
         <div className="rh-card">
           <h3>Convidar candidato</h3>
+          <p className="explica">Só o nome é obrigatório. Sem e-mail? Sem problema:
+            o link aparece aqui para você copiar e mandar pelo WhatsApp — o candidato
+            completa e-mail e celular na própria ficha.</p>
           <div className="linha3">
             <input placeholder="Nome completo"
                    onChange={(e) => setNovo({ ...novo, nome_completo: e.target.value })} />
-            <input placeholder="E-mail" type="email"
+            <input placeholder="E-mail (opcional)" type="email"
                    onChange={(e) => setNovo({ ...novo, email: e.target.value })} />
-            <input placeholder="Celular/WhatsApp"
+            <input placeholder="Celular/WhatsApp (opcional)"
                    onChange={(e) => setNovo({ ...novo, celular_whatsapp: e.target.value })} />
           </div>
           <div className="navegacao">
@@ -219,15 +222,15 @@ function Painel({ aoSair }) {
               Cancelar</button>
             <button className="btn-principal" disabled={enviandoConvite} onClick={async () => {
               setErroConvite(null); setConvite(null)
-              if (!novo.nome_completo || !novo.email || !novo.celular_whatsapp) {
-                setErroConvite('Preencha nome, e-mail e celular.'); return
+              if (!novo.nome_completo?.trim()) {
+                setErroConvite('Informe pelo menos o nome do candidato.'); return
               }
               setEnviandoConvite(true)
               try {
                 const r = await api.novoCandidato({
                   nome_completo: novo.nome_completo.trim(),
-                  email: novo.email.trim(),
-                  celular_whatsapp: novo.celular_whatsapp.trim(),
+                  email: (novo.email || '').trim() || null,
+                  celular_whatsapp: (novo.celular_whatsapp || '').trim() || null,
                 })
                 setConvite(r)
                 recarregar()
@@ -246,11 +249,16 @@ function Painel({ aoSair }) {
           {convite && (
             <div className="sucesso">
               Link mágico criado{convite.email_enviado ? ' e enviado por e-mail ✓' : ''}.
-              {!convite.email_enviado && <> E-mail não configurado — envie manualmente
-                (WhatsApp):</>}
+              {!convite.email_enviado && (convite.candidato?.email
+                ? <> O e-mail não saiu — envie o link manualmente (WhatsApp):</>
+                : <> Candidato sem e-mail — copie o link e mande pelo WhatsApp:</>)}
               <code className="link-copiar">{convite.link_magico}</code>
-              <button className="btn-link" onClick={() =>
-                navigator.clipboard.writeText(convite.link_magico)}>copiar</button>
+              <button className="btn-secundario btn-mini" onClick={(e) => {
+                navigator.clipboard.writeText(convite.link_magico)
+                const btn = e.currentTarget
+                btn.textContent = '✓ Copiado!'
+                setTimeout(() => { btn.textContent = '📋 Copiar link' }, 2000)
+              }}>📋 Copiar link</button>
             </div>
           )}
         </div>
@@ -269,7 +277,8 @@ function Painel({ aoSair }) {
               const [rotulo, cor] = STATUS_CHIP[c.status] || [c.status, '#888']
               return (
                 <tr key={c.id}>
-                  <td><strong>{c.nome_completo}</strong><br /><small>{c.email}</small></td>
+                  <td><strong>{c.nome_completo}</strong><br />
+                    <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></td>
                   <td><span className="chip" style={{ background: cor }}>{rotulo}</span></td>
                   <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
                   <td>{new Date(c.criado_em).toLocaleDateString('pt-BR')}</td>
@@ -292,7 +301,8 @@ function Painel({ aoSair }) {
                               const btn = e.currentTarget
                               const r = await api.reenviarLink(c.id)
                               const original = btn.textContent
-                              btn.textContent = r.email_enviado ? '✓ Enviado!' : '⚠ E-mail falhou'
+                              btn.textContent = r.email_enviado ? '✓ Enviado!'
+                                : (c.email ? '⚠ E-mail falhou' : '⚠ Sem e-mail')
                               setTimeout(() => { btn.textContent = original }, 2500)
                             }}>✉️ Reenviar</button>
                   </td>

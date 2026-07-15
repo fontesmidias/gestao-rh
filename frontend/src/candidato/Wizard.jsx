@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
-import { CODIGOS_ERRO_UPLOAD } from '../tooltips.js'
+import { CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import Espera from '../Espera.jsx'
 
 // Descrições idênticas às do formulário original da Green House.
@@ -95,20 +95,13 @@ function InputData({ valor, onChange }) {
   )
 }
 
-// Nome amigável de cada campo que o OCR pode sugerir.
-const NOMES_SUGESTAO = {
-  rg_numero: 'RG — número', rg_orgao_emissor: 'Órgão emissor',
-  rg_data_expedicao: 'Data de expedição', cpf: 'CPF',
-  data_nascimento: 'Data de nascimento', nome_mae: 'Nome da mãe',
-  nome_pai: 'Nome do pai',
-}
-
-// Foto do RG → OCR sugere o preenchimento. A foto já vale como envio do
-// documento no checklist (mata duas etapas de uma vez).
+// Foto do RG OU da CNH → OCR sugere o preenchimento. É uma escolha, não uma
+// obrigação: quem preferir digita tudo normalmente. A foto já vale como envio
+// do documento no checklist (mata duas etapas de uma vez).
 function LeitorRG({ token, dados, setDados, salvar }) {
   const inputRef = useRef(null)
   const [lendo, setLendo] = useState(false)
-  const [resultado, setResultado] = useState(null) // {aplicados: [...]} | {vazio: true}
+  const [resultado, setResultado] = useState(null) // {aplicados, cnh} | {vazio, cnh}
   const [erro, setErro] = useState(null)
 
   const aoEscolher = async (e) => {
@@ -117,17 +110,14 @@ function LeitorRG({ token, dados, setDados, salvar }) {
     if (!arquivo) return
     setErro(null); setResultado(null); setLendo(true)
     try {
-      const check = await api.documentos(token)
-      const slotRg = check.slots.find((s) => s.tipo === 'rg')
-      const r = await api.enviarArquivo(token, slotRg.id, arquivo)
+      // O backend detecta se é RG ou CNH e guarda no slot certo do checklist.
+      const r = await api.enviarIdentidade(token, arquivo)
       const sug = r.sugestoes || {}
+      const cnh = r.documento_detectado === 'cnh'
       const aplicados = []
       const novos = JSON.parse(JSON.stringify(dados))
-      const alvo = { rg_numero: 'documentos', rg_orgao_emissor: 'documentos',
-                     rg_data_expedicao: 'documentos', cpf: 'documentos',
-                     data_nascimento: 'pessoais', nome_mae: 'pessoais', nome_pai: 'pessoais' }
       for (const [campo, valor] of Object.entries(sug)) {
-        const sec = alvo[campo]
+        const sec = SECAO_SUGESTAO[campo]
         if (sec && !novos[sec][campo]) {   // nunca sobrescreve o que já foi digitado
           novos[sec][campo] = valor
           aplicados.push(NOMES_SUGESTAO[campo] || campo)
@@ -137,7 +127,7 @@ function LeitorRG({ token, dados, setDados, salvar }) {
         setDados(novos)
         await salvar(novos)
       }
-      setResultado(aplicados.length ? { aplicados } : { vazio: true })
+      setResultado(aplicados.length ? { aplicados, cnh } : { vazio: true, cnh })
     } catch (err) {
       setErro(CODIGOS_ERRO_UPLOAD?.[err.detail]
         || 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.')
@@ -149,23 +139,29 @@ function LeitorRG({ token, dados, setDados, salvar }) {
       <input ref={inputRef} type="file" hidden accept="image/*,.pdf" onChange={aoEscolher} />
       <button type="button" className="btn-secundario" disabled={lendo}
               onClick={() => inputRef.current.click()}>
-        📷 {lendo ? 'Lendo o seu RG…' : 'Fotografar meu RG e preencher automaticamente'}
+        📷 {lendo ? 'Lendo o seu documento…' : 'Fotografar meu RG ou CNH e preencher automaticamente'}
       </button>
-      <p className="explica" style={{ margin: '.4rem 0 0' }}>Opcional: a foto já vale como
-        envio do RG na etapa de documentos, e nós sugerimos o preenchimento dos campos.</p>
+      <p className="explica" style={{ margin: '.4rem 0 0' }}>Você escolhe: mande a foto e
+        nós sugerimos o preenchimento (ela já vale como envio do documento na etapa 3),
+        ou simplesmente digite os campos abaixo — dá tudo certo dos dois jeitos.</p>
       {lendo && <Espera texto="Lendo o documento e preparando as sugestões…" />}
       {erro && <div className="alerta">{erro}</div>}
       {resultado?.vazio && (
-        <div className="alerta">Recebemos a foto (o RG já conta como enviado ✓), mas não
-          conseguimos ler os dados com segurança. Preencha os campos normalmente.</div>
+        <div className="alerta">Recebemos a foto (o documento já conta como enviado ✓),
+          mas não conseguimos ler os dados com segurança. Preencha os campos normalmente.</div>
       )}
       {resultado?.aplicados && (
         <div className="sucesso">
           <strong>Preenchemos automaticamente:</strong> {resultado.aplicados.join(', ')}.
           <br /><strong>Confira cada um antes de continuar</strong> — a leitura é uma ajuda,
           mas a responsabilidade pelas informações enviadas é sua. Corrija o que for preciso.
-          <br /><small>Sua foto do RG também já ficou registrada como enviada ✓.</small>
+          <br /><small>Sua foto também já ficou registrada como enviada ✓.</small>
         </div>
+      )}
+      {resultado?.cnh && (
+        <div className="alerta">Percebemos que a foto é de uma <strong>CNH</strong> —
+          registramos como habilitação. Para a admissão o RG também é necessário:
+          envie a foto dele na etapa de documentos, quando puder.</div>
       )}
     </div>
   )
@@ -191,6 +187,7 @@ function Campo({ rotulo, dica, ajuda, children }) {
 // Mapeia os códigos de pendência da API para linguagem humana + etapa do wizard.
 const PENDENCIAS = {
   aceite_lgpd: [0, 'Aceite do aviso de privacidade'],
+  'pessoais.email': [0, 'E-mail (o código de assinatura chega por ele)'],
   'pessoais.data_nascimento': [0, 'Data de nascimento'], 'pessoais.sexo': [0, 'Sexo'],
   'pessoais.identidade_genero': [0, 'Identidade de gênero'], 'pessoais.cor_raca': [0, 'Cor/raça'],
   'pessoais.nacionalidade': [0, 'Nacionalidade'],

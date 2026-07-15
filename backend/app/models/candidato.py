@@ -45,8 +45,11 @@ class Candidato(Base):
         Enum(StatusCandidato, name="status_candidato"), default=StatusCandidato.convidado
     )
     nome_completo: Mapped[str] = mapped_column(String(200))
-    email: Mapped[str] = mapped_column(String(200), index=True)
-    celular_whatsapp: Mapped[str] = mapped_column(String(20))
+    # E-mail e celular são opcionais no convite (o RH pode só copiar o link e
+    # mandar por WhatsApp); o candidato completa na ficha — e o e-mail passa a
+    # ser exigido lá, porque o código de assinatura chega por ele.
+    email: Mapped[str | None] = mapped_column(String(200), index=True, nullable=True)
+    celular_whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
     aceite_lgpd_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     declaracao_veracidade_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     dossie_pdf_key: Mapped[str | None] = mapped_column(String(300))

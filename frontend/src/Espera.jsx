@@ -46,6 +46,17 @@ const FRASES = [
   'Alinhando os últimos pontos — alfaiataria também é software.',
   'Boas notícias viajam rápido. As suas estão quase chegando.',
   'Enquanto o relógio dá uma volta curta, nós damos várias.',
+  // Conjunto 3 (atualização RG/CNH + convite sem e-mail, 2026-07-15)
+  'Toda grande jornada tem uma pequena pausa. Esta é a sua.',
+  'Conferindo letra por letra — respeito também se demonstra assim.',
+  'O melhor atalho ainda é fazer certo da primeira vez. Já já.',
+  'Suas informações chegaram bem e estão sendo bem recebidas.',
+  'Um bom café passa em quatro minutos; nós somos mais rápidos.',
+  'Preparando cada detalhe como quem arruma a casa para visita querida.',
+  'A pressa é inimiga da vírgula no lugar certo. Um instante.',
+  'Aqui dentro, mil engrenagens giram para você não precisar girar nenhuma.',
+  'Cuidando dos seus dados como se fossem nossos — porque é assim que se faz.',
+  'O próximo passo já está sendo preparado. Você vai gostar dele.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

@@ -79,6 +79,26 @@ export const DICAS = {
   },
 }
 
+// Nome amigável de cada campo da ficha que o OCR pode sugerir.
+export const NOMES_SUGESTAO = {
+  rg_numero: 'RG — número', rg_orgao_emissor: 'Órgão emissor',
+  rg_data_expedicao: 'Data de expedição', cpf: 'CPF',
+  data_nascimento: 'Data de nascimento', nome_mae: 'Nome da mãe',
+  nome_pai: 'Nome do pai', cnh_numero: 'CNH — número',
+  cnh_categoria: 'CNH — categoria', titulo_eleitor_numero: 'Título de Eleitor — número',
+  titulo_eleitor_zona: 'Título — zona', titulo_eleitor_secao: 'Título — seção',
+}
+
+// Em qual seção da ficha mora cada campo sugerido pelo OCR.
+export const SECAO_SUGESTAO = {
+  rg_numero: 'documentos', rg_orgao_emissor: 'documentos',
+  rg_data_expedicao: 'documentos', cpf: 'documentos',
+  cnh_numero: 'documentos', cnh_categoria: 'documentos',
+  titulo_eleitor_numero: 'documentos', titulo_eleitor_zona: 'documentos',
+  titulo_eleitor_secao: 'documentos',
+  data_nascimento: 'pessoais', nome_mae: 'pessoais', nome_pai: 'pessoais',
+}
+
 export const CODIGOS_ERRO_UPLOAD = {
   arquivo_vazio: 'O arquivo veio vazio. Tente selecionar novamente.',
   arquivo_grande_demais: 'O arquivo é muito grande (máx. 50 MB). Tente uma foto com menos resolução.',

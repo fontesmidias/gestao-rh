@@ -74,6 +74,7 @@ def enviar_arquivo(
 
     dados = arquivo.file.read()
     sugestoes: dict = {}
+    detectado: str | None = None
     try:
         pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
         if slot.tipo == TipoDocumento.comp_endereco:
@@ -81,25 +82,43 @@ def enviar_arquivo(
         if slot.tipo == TipoDocumento.cpf_doc:
             _conferir_cpf_do_documento(db, candidato, arquivo.filename or "arquivo",
                                        dados, pdf)
-        if slot.tipo == TipoDocumento.rg:
-            # OCR do RG: SUGESTÕES para o formulário (o candidato confere e confirma).
-            from app.services.normalizacao import _texto_do_envio
-            from app.services.ocr_rg import sugestoes_do_rg
-            from pathlib import Path as _P
-            texto = _texto_do_envio(_P((arquivo.filename or "a.jpg").lower()).suffix,
-                                    dados, pdf)
-            if texto:
-                sugestoes = sugestoes_do_rg(texto)
+        # OCR de qualquer documento com dados de ficha: SUGESTÕES ao candidato
+        # (o front pergunta se ele quer usar — nada é aplicado sem consentimento).
+        texto = _texto(arquivo.filename, dados, pdf)
+        if texto:
+            from app.services.ocr_rg import sugestoes_por_slot
+            sugestoes, detectado = sugestoes_por_slot(slot.tipo.value, texto)
     except ArquivoInvalido as exc:
         # Feedback imediato ao candidato: o front traduz o código em linguagem simples.
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
 
+    _gravar_no_slot(db, candidato, slot, arquivo.filename, arquivo.content_type,
+                    dados, pdf, paginas)
+    db.commit()
+    saida = _slot_out(slot)
+    if sugestoes:
+        saida["sugestoes"] = sugestoes
+    if detectado:
+        saida["documento_detectado"] = detectado
+    return saida
+
+
+def _texto(nome_arquivo: str | None, dados: bytes, pdf: bytes) -> str | None:
+    from pathlib import Path as _P
+
+    from app.services.normalizacao import _texto_do_envio
+    return _texto_do_envio(_P((nome_arquivo or "a.jpg").lower()).suffix, dados, pdf)
+
+
+def _gravar_no_slot(db: Session, candidato: Candidato, slot: SlotDocumento,
+                    nome_arquivo: str | None, content_type: str | None,
+                    dados: bytes, pdf: bytes, paginas: int) -> None:
     base = f"candidatos/{candidato.id}/slots/{slot.id}"
-    storage.salvar(f"{base}/original/{arquivo.filename}", dados,
-                   arquivo.content_type or "application/octet-stream")
+    storage.salvar(f"{base}/original/{nome_arquivo}", dados,
+                   content_type or "application/octet-stream")
     storage.salvar(f"{base}/documento.pdf", pdf, "application/pdf")
 
-    slot.arquivo_original_key = f"{base}/original/{arquivo.filename}"
+    slot.arquivo_original_key = f"{base}/original/{nome_arquivo}"
     slot.arquivo_pdf_key = f"{base}/documento.pdf"
     slot.paginas = paginas
     slot.status = StatusSlot.enviado
@@ -110,10 +129,44 @@ def enviar_arquivo(
               detalhe={"tipo": slot.tipo.value, "paginas": paginas})
     if candidato.status in (StatusCandidato.aguardando_assinatura, StatusCandidato.preenchendo):
         candidato.status = StatusCandidato.docs_pendentes
+
+
+@router.post("/c/{token}/documentos/identidade")
+def enviar_identidade(token: str, arquivo: UploadFile,
+                      db: Session = Depends(get_db)) -> dict:
+    """Foto do RG OU da CNH (o candidato escolhe — muita gente só tem a CNH à
+    mão): detecta qual dos dois é, guarda no slot certo do checklist e devolve
+    as sugestões de preenchimento para o candidato conferir."""
+    from app.services.ocr_rg import (detectar_tipo, sugestoes_da_cnh,
+                                     sugestoes_do_rg)
+
+    candidato = _candidato_do_token(token, db)
+    if candidato.status == StatusCandidato.envio_concluido:
+        raise HTTPException(status_code=409, detail="envio_ja_concluido")
+
+    dados = arquivo.file.read()
+    try:
+        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
+    except ArquivoInvalido as exc:
+        raise HTTPException(status_code=422, detail=exc.codigo) from exc
+
+    texto = _texto(arquivo.filename, dados, pdf) or ""
+    detectado = detectar_tipo(texto)
+    e_cnh = detectado == "cnh"
+
+    slots = {s.tipo: s for s in sincronizar_slots(db, candidato)}
+    slot = slots.get(TipoDocumento.habilitacao_prof if e_cnh else TipoDocumento.rg) \
+        or slots.get(TipoDocumento.rg)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+
+    sugestoes = sugestoes_da_cnh(texto) if e_cnh else sugestoes_do_rg(texto)
+    _gravar_no_slot(db, candidato, slot, arquivo.filename, arquivo.content_type,
+                    dados, pdf, paginas)
     db.commit()
     saida = _slot_out(slot)
-    if sugestoes:
-        saida["sugestoes"] = sugestoes
+    saida["sugestoes"] = sugestoes
+    saida["documento_detectado"] = detectado
     return saida
 
 

@@ -1,9 +1,11 @@
-"""Leitura (OCR) do RG para SUGERIR o preenchimento do formulário.
+"""Leitura (OCR) de documentos para SUGERIR o preenchimento do formulário.
 
 Princípios (decisão de projeto, 2026-07-15):
 - O OCR sugere; o candidato confere e CONFIRMA — a responsabilidade é dele.
 - Falhou a leitura? Nada quebra: devolve menos sugestões (ou nenhuma).
 - Nunca sobrescreve o que o candidato já digitou (o front só preenche vazios).
+- Muita gente manda a CNH no lugar do RG: os padrões reconhecem os dois e o
+  sistema avisa (sem brigar) quando o documento não é o esperado.
 """
 
 import logging
@@ -99,6 +101,95 @@ def sugestoes_do_rg(texto: str) -> dict:
             sug["nome_mae"] = nomes[0].title()
 
     return sug
+
+
+_RE_CNH_REGISTRO = re.compile(r"REGISTRO\D{0,20}(\d{9,11})")
+_RE_CNH_CAT = re.compile(r"CAT\.?\s*(?:HAB\.?)?\s*:?\s*([A-E]{1,2}|ACC)\b")
+_RE_TITULO = re.compile(r"\b(\d{4})\s?(\d{4})\s?(\d{4})\b")
+_RE_ZONA = re.compile(r"ZONA\s*:?\s*(\d{1,4})")
+_RE_SECAO = re.compile(r"SE[ÇC][ÃA]O\s*:?\s*(\d{1,4})")
+
+
+def detectar_tipo(texto: str) -> str | None:
+    """Palpite do tipo de documento a partir do texto lido ('cnh', 'rg',
+    'titulo', 'cpf' ou None). Serve para avisar — nunca para bloquear."""
+    up = texto.upper()
+    if "HABILITA" in up and ("CARTEIRA NACIONAL" in up or "MOTORISTA" in up
+                             or "PERMISSÃO" in up or _RE_CNH_CAT.search(up)):
+        return "cnh"
+    if "TÍTULO" in up and "ELEITOR" in up or ("TITULO" in up and "ELEITOR" in up):
+        return "titulo"
+    if "REGISTRO GERAL" in up or "CARTEIRA DE IDENTIDADE" in up or "IDENTIDADE" in up:
+        return "rg"
+    if "CADASTRO DE PESSOAS" in up or "SITUAÇÃO CADASTRAL" in up or "SITUACAO CADASTRAL" in up:
+        return "cpf"
+    return None
+
+
+def sugestoes_da_cnh(texto: str) -> dict:
+    """A CNH traz quase tudo que o RG traz (CPF, nascimento, filiação, doc de
+    identidade com órgão emissor) mais o registro e a categoria."""
+    sug = sugestoes_do_rg(texto)
+    # O nº de registro da CNH pode confundir com o RG — na dúvida, não sugere RG.
+    sug.pop("rg_numero", None)
+    up = texto.upper()
+    m = _RE_CNH_REGISTRO.search(up)
+    if m and m.group(1) != re.sub(r"\D", "", sug.get("cpf", "")):
+        sug["cnh_numero"] = m.group(1)
+    m = _RE_CNH_CAT.search(up)
+    if m:
+        sug["cnh_categoria"] = m.group(1)
+    return sug
+
+
+def sugestoes_do_titulo(texto: str) -> dict:
+    """Título de eleitor (físico ou e-Título): número, zona e seção."""
+    sug: dict = {}
+    up = texto.upper()
+    for a, b, c in _RE_TITULO.findall(up):
+        numero = a + b + c
+        if not cpf_valido(numero[:11]):  # evita pescar um CPF por engano
+            sug["titulo_eleitor_numero"] = numero
+            break
+    m = _RE_ZONA.search(up)
+    if m:
+        sug["titulo_eleitor_zona"] = m.group(1)
+    m = _RE_SECAO.search(up)
+    if m:
+        sug["titulo_eleitor_secao"] = m.group(1)
+    return sug
+
+
+def sugestoes_do_cpf_doc(texto: str) -> dict:
+    """Cartão CPF ou comprovante de situação cadastral: CPF e nascimento."""
+    sug: dict = {}
+    achados = cpfs_no_texto(texto)
+    if achados:
+        sug["cpf"] = achados[0]
+    hoje = date.today()
+    datas = [d for d in _datas(texto) if date(1930, 1, 1) <= d <= hoje]
+    if datas:
+        nascimento = min(datas)
+        if nascimento <= date(hoje.year - 14, hoje.month, hoje.day):
+            sug["data_nascimento"] = nascimento.isoformat()
+    return sug
+
+
+def sugestoes_por_slot(tipo_slot: str, texto: str) -> tuple[dict, str | None]:
+    """Dispatcher por tipo de slot do checklist. Devolve (sugestões, tipo
+    detectado no texto). No slot do RG aceita e lê também uma CNH — comum de
+    acontecer — e o front avisa que o RG mesmo continua pendente."""
+    detectado = detectar_tipo(texto)
+    if tipo_slot == "rg":
+        return (sugestoes_da_cnh(texto) if detectado == "cnh"
+                else sugestoes_do_rg(texto)), detectado
+    if tipo_slot == "habilitacao_prof":
+        return (sugestoes_da_cnh(texto) if detectado in (None, "cnh") else {}), detectado
+    if tipo_slot == "cpf_doc":
+        return sugestoes_do_cpf_doc(texto), detectado
+    if tipo_slot == "titulo_eleitor_doc":
+        return sugestoes_do_titulo(texto), detectado
+    return {}, detectado
 
 
 def cpfs_no_texto(texto: str) -> list[str]:
