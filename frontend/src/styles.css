@@ -425,6 +425,54 @@ input:focus, select:focus, textarea:focus {
              padding: 1rem; margin-bottom: 1.2rem; background: var(--verde-suave); }
 .leitor-rg .btn-secundario { width: 100%; }
 
+/* ---------- Câmera guiada (moldura + dicas em tempo real) ---------- */
+.captura-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: #0c120e;
+  display: flex; flex-direction: column;
+  color: #f2f7f3;
+}
+.captura-topo {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .8rem 1rem; font-size: 1rem;
+}
+.captura-fechar { color: #f2f7f3; font-size: 1rem; }
+.captura-palco {
+  position: relative; flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.captura-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.captura-moldura {
+  position: relative; z-index: 2; border-radius: 14px;
+  /* escurece tudo fora da moldura */
+  box-shadow: 0 0 0 200vmax rgba(6, 10, 8, .62);
+  border: 2px solid rgba(255, 255, 255, .85);
+  transition: border-color .25s;
+}
+.captura-moldura[data-ok] { border-color: var(--verde); }
+.captura-moldura i {
+  position: absolute; width: 26px; height: 26px;
+  border: 4px solid var(--verde); border-radius: 4px;
+}
+.captura-moldura i:nth-child(1) { top: -4px; left: -4px; border-right: 0; border-bottom: 0; }
+.captura-moldura i:nth-child(2) { top: -4px; right: -4px; border-left: 0; border-bottom: 0; }
+.captura-moldura i:nth-child(3) { bottom: -4px; left: -4px; border-right: 0; border-top: 0; }
+.captura-moldura i:nth-child(4) { bottom: -4px; right: -4px; border-left: 0; border-top: 0; }
+.captura-dica {
+  position: absolute; z-index: 3; bottom: 1rem; left: 50%; transform: translateX(-50%);
+  max-width: 92%; text-align: center;
+  background: rgba(12, 18, 14, .85); border-radius: 999px;
+  padding: .5rem 1.1rem; font-size: .95rem;
+}
+.captura-dica.ok { background: rgba(22, 100, 56, .92); }
+.captura-sem-camera { padding: 2rem; text-align: center; font-size: 1.05rem; }
+.captura-acoes {
+  display: flex; flex-direction: column; gap: .6rem;
+  padding: 1rem 1rem .5rem;
+}
+.captura-disparo { font-size: 1.1rem; }
+.captura-legenda { text-align: center; color: #a9bfb0; font-size: .85rem; margin: 0 0 .9rem; }
+
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

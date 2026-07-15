@@ -3,6 +3,7 @@ import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
 import { CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import Espera from '../Espera.jsx'
+import CapturaDocumento from './Camera.jsx'
 
 // Descrições idênticas às do formulário original da Green House.
 const GENERO_DESCRICOES = [
@@ -99,14 +100,13 @@ function InputData({ valor, onChange }) {
 // obrigação: quem preferir digita tudo normalmente. A foto já vale como envio
 // do documento no checklist (mata duas etapas de uma vez).
 function LeitorRG({ token, dados, setDados, salvar }) {
-  const inputRef = useRef(null)
+  const [camera, setCamera] = useState(false)
   const [lendo, setLendo] = useState(false)
   const [resultado, setResultado] = useState(null) // {aplicados, cnh} | {vazio, cnh}
   const [erro, setErro] = useState(null)
 
-  const aoEscolher = async (e) => {
-    const arquivo = e.target.files[0]
-    e.target.value = ''
+  const processar = async (arquivo) => {
+    setCamera(false)
     if (!arquivo) return
     setErro(null); setResultado(null); setLendo(true)
     try {
@@ -136,9 +136,13 @@ function LeitorRG({ token, dados, setDados, salvar }) {
 
   return (
     <div className="leitor-rg">
-      <input ref={inputRef} type="file" hidden accept="image/*,.pdf" onChange={aoEscolher} />
+      {camera && (
+        <CapturaDocumento formato="cartao" titulo="Fotografar RG ou CNH"
+                          aoCapturar={processar} aoArquivo={processar}
+                          aoFechar={() => setCamera(false)} />
+      )}
       <button type="button" className="btn-secundario" disabled={lendo}
-              onClick={() => inputRef.current.click()}>
+              onClick={() => setCamera(true)}>
         📷 {lendo ? 'Lendo o seu documento…' : 'Fotografar meu RG ou CNH e preencher automaticamente'}
       </button>
       <p className="explica" style={{ margin: '.4rem 0 0' }}>Você escolhe: mande a foto e

@@ -48,19 +48,24 @@ test('verificador público: ID inexistente alerta possível adulteração', asyn
   await expect(page.getByText(/adulterado/)).toBeVisible()
 })
 
-test('jornada do candidato: convite → LGPD → máscara de datas do wizard', async ({ page, request }) => {
-  // RH cria o convite pela API (o link mágico volta na resposta)
+async function criarConvite(request, dados) {
   const login = await request.post('/api/rh/auth/login',
     { data: { email: RH_EMAIL, senha: RH_SENHA } })
   expect(login.ok()).toBeTruthy()
   const { token } = await login.json()
   const convite = await request.post('/api/rh/candidatos', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { nome_completo: 'E2e Playwright da Silva',
-            email: `e2e-${Date.now()}@example.com`, celular_whatsapp: '61911112222' },
+    headers: { Authorization: `Bearer ${token}` }, data: dados,
   })
   expect(convite.status()).toBe(201)
-  const { link_magico } = await convite.json()
+  return convite.json()
+}
+
+test('jornada do candidato: convite → LGPD → máscara de datas do wizard', async ({ page, request }) => {
+  // RH cria o convite pela API (o link mágico volta na resposta)
+  const { link_magico } = await criarConvite(request, {
+    nome_completo: 'E2e Playwright da Silva',
+    email: `e2e-${Date.now()}@example.com`, celular_whatsapp: '61911112222',
+  })
 
   await page.goto(link_magico)
   await expect(page.getByText(/Sua admissão na Green House/)).toBeVisible()
@@ -75,4 +80,46 @@ test('jornada do candidato: convite → LGPD → máscara de datas do wizard', a
   await data.pressSequentially('15031990')
   await expect(data).toHaveValue('15/03/1990')
   await expect(page.getByText(/Essa data não existe/)).toHaveCount(0)
+})
+
+test('convite só com nome: link sai mesmo sem e-mail', async ({ request }) => {
+  const convite = await criarConvite(request, { nome_completo: 'E2e Sem Email' })
+  expect(convite.candidato.email).toBeNull()
+  expect(convite.email_enviado).toBe(false)
+  expect(convite.link_magico).toContain('/c/')
+})
+
+test('câmera guiada: moldura, dicas em tempo real e saída para arquivo', async ({ page, request }) => {
+  const { link_magico } = await criarConvite(request, {
+    nome_completo: 'E2e Camera da Silva',
+    email: `e2e-cam-${Date.now()}@example.com`, celular_whatsapp: '61933334444',
+  })
+  // marca o tour de boas-vindas como já visto — senão o overlay do driver.js
+  // cobre a tela e intercepta os cliques
+  await page.addInitScript(() => localStorage.setItem('tour_visto', '1'))
+  await page.goto(link_magico)
+  await page.getByRole('button', { name: 'Li e concordo em continuar' }).click()
+
+  // vai para a etapa de documentos (etapa 3 do wizard), onde mora o leitor
+  await page.getByRole('button', { name: 'Continuar →' }).click()
+  await page.getByRole('button', { name: 'Continuar →' }).click()
+  const abrir = page.getByRole('button', { name: /Fotografar meu RG ou CNH/ })
+  await expect(abrir).toBeVisible()
+  await abrir.click()
+
+  // overlay abre com a câmera falsa do Chromium: moldura + dica ao vivo
+  const overlay = page.getByRole('dialog', { name: /Fotografar RG ou CNH/ })
+  await expect(overlay).toBeVisible()
+  await expect(overlay.locator('.captura-moldura')).toBeVisible()
+  await expect(overlay.locator('.captura-dica')).toBeVisible({ timeout: 5000 })
+  // o caminho do arquivo próprio está sempre à mão
+  await expect(overlay.getByRole('button', { name: /Já tenho o arquivo/ })).toBeVisible()
+  // o disparo existe (habilita quando o quadro está bom, ou vira
+  // "fotografar assim mesmo" depois do tempo de escape)
+  await expect(overlay.getByRole('button', { name: /Fotografar|Ajustando/ })).toBeVisible()
+
+  // fechar devolve à etapa sem efeito colateral
+  await overlay.getByRole('button', { name: /Fechar/ }).click()
+  await expect(overlay).toHaveCount(0)
+  await expect(abrir).toBeVisible()
 })

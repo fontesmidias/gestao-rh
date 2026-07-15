@@ -3,6 +3,21 @@ import { candidato as api } from '../api.js'
 import { DICAS, CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import Espera from '../Espera.jsx'
 import { Cartao } from './CandidatoApp.jsx'
+import CapturaDocumento from './Camera.jsx'
+
+// Formato da moldura da câmera guiada por tipo de documento.
+const FORMATO_DOC = {
+  rg: 'cartao', cpf_doc: 'cartao', habilitacao_prof: 'cartao',
+  titulo_eleitor_doc: 'cartao', reservista: 'cartao', cartao_vt: 'cartao',
+  foto_3x4: 'retrato',
+  comp_endereco: 'a4', comp_escolaridade: 'a4', diplomas: 'a4',
+  laudo_pcd: 'a4', cert_casamento: 'a4', cert_nascimento_dep: 'a4',
+  cartao_vacina_dep: 'a4', declaracao_escolar_dep: 'a4',
+}
+// Documentos que nascem digitais (PDF baixado de app/site): fotografar não
+// faz sentido — o botão vai direto ao seletor de arquivo.
+const DOCS_DIGITAIS = ['ctps_digital', 'pis_comprovante',
+                       'nada_consta_eleitoral', 'nada_consta_criminal']
 
 const STATUS = {
   pendente: { icone: '⬜', texto: 'Falta enviar' },
@@ -78,6 +93,7 @@ export default function Checklist({ token, aoConcluir }) {
   const [erros, setErros] = useState({})
   const [sugestoes, setSugestoes] = useState(null) // {slotId, dados}
   const [avisos, setAvisos] = useState({})
+  const [camera, setCamera] = useState(null) // {slotId, formato, titulo}
   const inputRef = useRef(null)
   const slotAtual = useRef(null)
 
@@ -86,9 +102,17 @@ export default function Checklist({ token, aoConcluir }) {
 
   if (!check) return <Cartao><p>Carregando…</p></Cartao>
 
-  const escolher = (slotId) => {
-    slotAtual.current = slotId
-    inputRef.current.click()
+  const escolher = (slot) => {
+    slotAtual.current = slot.id
+    if (DOCS_DIGITAIS.includes(slot.tipo)) {
+      inputRef.current.click()   // PDF de app/site: direto ao arquivo
+      return
+    }
+    setCamera({
+      slotId: slot.id,
+      formato: FORMATO_DOC[slot.tipo] || 'a4',
+      titulo: (DICAS[slot.tipo] || {}).nome || 'Fotografar documento',
+    })
   }
 
   // Validação preventiva: recusa na hora, sem gastar a internet do candidato
@@ -104,11 +128,15 @@ export default function Checklist({ token, aoConcluir }) {
     return null
   }
 
-  const aoSelecionar = async (e) => {
+  const aoSelecionar = (e) => {
     const arquivo = e.target.files[0]
     e.target.value = ''
     if (!arquivo) return
-    const slotId = slotAtual.current
+    enviar(slotAtual.current, arquivo)
+  }
+
+  const enviar = async (slotId, arquivo) => {
+    setCamera(null)
     setErros((x) => ({ ...x, [slotId]: null }))
     const erroLocal = validarAntesDeEnviar(arquivo)
     if (erroLocal) {
@@ -154,6 +182,12 @@ export default function Checklist({ token, aoConcluir }) {
   return (
     <Cartao>
       <input ref={inputRef} type="file" hidden accept="image/*,.pdf,.doc,.docx" onChange={aoSelecionar} />
+      {camera && (
+        <CapturaDocumento formato={camera.formato} titulo={camera.titulo}
+                          aoCapturar={(arq) => enviar(camera.slotId, arq)}
+                          aoArquivo={(arq) => enviar(camera.slotId, arq)}
+                          aoFechar={() => setCamera(null)} />
+      )}
       <div className="progresso">
         <div className="progresso-barra"
              style={{ width: `${(check.progresso.ok / Math.max(check.progresso.total, 1)) * 100}%` }} />
@@ -186,7 +220,7 @@ export default function Checklist({ token, aoConcluir }) {
                       onClick={() => setDicaAberta(dicaAberta === s.id ? null : s.id)}>?</button>
               {['pendente', 'rejeitado', 'enviado'].includes(s.status) && (
                 <button className="btn-principal btn-mini" disabled={enviando === s.id}
-                        onClick={() => escolher(s.id)}>
+                        onClick={() => escolher(s)}>
                   {enviando === s.id ? 'Enviando…' : s.status === 'pendente' ? 'Enviar' : 'Reenviar'}
                 </button>
               )}

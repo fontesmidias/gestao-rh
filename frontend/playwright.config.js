@@ -9,5 +9,11 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:8090',
     screenshot: 'only-on-failure',
+    // Câmera falsa do Chromium (vídeo sintético) + permissão concedida:
+    // testa a câmera guiada sem hardware — inclusive no CI.
+    permissions: ['camera'],
+    launchOptions: {
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    },
   },
 })

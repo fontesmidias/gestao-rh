@@ -57,6 +57,17 @@ const FRASES = [
   'Aqui dentro, mil engrenagens giram para você não precisar girar nenhuma.',
   'Cuidando dos seus dados como se fossem nossos — porque é assim que se faz.',
   'O próximo passo já está sendo preparado. Você vai gostar dele.',
+  // Conjunto 4 (atualização da câmera guiada, 2026-07-15)
+  'Foco, luz e enquadramento: o trio que a gente confere por você.',
+  'Uma boa foto vale por mil digitações. Estamos cuidando dela.',
+  'Ajustando as lentes do processo — tudo em ótima definição.',
+  'Cada clique seu economiza um formulário inteiro. Bela troca.',
+  'Revelando a sua foto — sem quarto escuro, sem espera de uma semana.',
+  'Enquadramento perfeito é meio caminho; o resto é conosco.',
+  'Guardando tudo no lugar certo, como quem organiza um álbum de família.',
+  'A luz estava boa, a foto ficou ótima — agora é só um instante.',
+  'Processando com a calma de quem sabe exatamente o que faz.',
+  'Sorria: a burocracia está ficando para trás, quadro a quadro.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]
