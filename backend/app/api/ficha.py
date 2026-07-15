@@ -67,6 +67,7 @@ def _upsert(db: Session, model, candidato_id: uuid.UUID, dados: BaseModel):
 
 class SecaoPessoais(BaseModel):
     nome_completo: str | None = None
+    nome_social: str | None = None
     email: EmailStr | None = None
     celular_whatsapp: str | None = None
     data_nascimento: date | None = None

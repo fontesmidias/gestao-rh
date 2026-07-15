@@ -3,6 +3,7 @@ import { rh as api } from '../api.js'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
+import logo from '../assets/logo.png'
 
 const STATUS_CHIP = {
   convidado: ['Convidado', '#8896b3'],
@@ -68,7 +69,8 @@ function Login({ aoEntrar }) {
   )
   return (
     <main className="cartao rh-login">
-      <h1>🌱 Painel do RH</h1>
+      <img src={logo} alt="Green House" className="logo-img" />
+      <h1>Painel do RH</h1>
       <form onSubmit={entrar}>
         <label className="campo"><span className="rotulo">E-mail</span>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
@@ -189,7 +191,7 @@ function Painel({ aoSair }) {
   return (
     <main className="rh-painel">
       <header className="rh-topo">
-        <h1>🌱 Admissões</h1>
+        <h1><img src={logo} alt="" className="logo-topo" /> Admissões</h1>
         <div>
           <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>
           <button className="btn-secundario" onClick={() => setNovo({})}>+ Novo candidato</button>

@@ -186,6 +186,43 @@ def redefinir_senha_usuario(usuario_id: uuid.UUID, payload: UsuarioSenhaIn,
     db.commit()
 
 
+# ---------- Assinantes dos documentos oficiais ----------
+
+
+class AssinantesIn(BaseModel):
+    ass1_nome: str
+    ass1_cargo: str
+    ass1_cpf: str
+    ass2_nome: str
+    ass2_cargo: str
+    ass2_cpf: str
+
+
+@router.get("/rh/config/assinantes")
+def ver_assinantes(db: Session = Depends(get_db),
+                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.fichas import assinantes_config
+    a1, a2 = assinantes_config(db)
+    return {"ass1_nome": a1[0], "ass1_cargo": a1[1], "ass1_cpf": a1[2],
+            "ass2_nome": a2[0], "ass2_cargo": a2[1], "ass2_cpf": a2[2]}
+
+
+@router.put("/rh/config/assinantes")
+def salvar_assinantes(payload: AssinantesIn, db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    gravar_config(db, {
+        "doc_ass1_nome": payload.ass1_nome.strip(),
+        "doc_ass1_cargo": payload.ass1_cargo.strip(),
+        "doc_ass1_cpf": payload.ass1_cpf.strip(),
+        "doc_ass2_nome": payload.ass2_nome.strip(),
+        "doc_ass2_cargo": payload.ass2_cargo.strip(),
+        "doc_ass2_cpf": payload.ass2_cpf.strip(),
+    })
+    registrar(db, "assinantes_alterados", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return ver_assinantes(db, rh)
+
+
 # ---------- SMTP ----------
 
 

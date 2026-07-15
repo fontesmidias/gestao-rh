@@ -6,6 +6,7 @@ import { candidato as api } from '../api.js'
 import Wizard from './Wizard.jsx'
 import Assinatura from './Assinatura.jsx'
 import Checklist from './Checklist.jsx'
+import logo from '../assets/logo.png'
 
 export default function CandidatoApp() {
   const { token } = useParams()
@@ -60,7 +61,7 @@ export default function CandidatoApp() {
   return (
     <div className="candidato">
       <header className="topo">
-        <span className="logo">🌱 Green House</span>
+        <img src={logo} alt="Green House" className="logo-topo" />
         <button className="btn-ajuda" title="Rever explicação" onClick={() => tour.drive()}>?</button>
       </header>
 

@@ -346,6 +346,10 @@ input:focus, select:focus, textarea:focus {
 @keyframes pular { 0%, 60%, 100% { transform: none; opacity: .55; }
                    30% { transform: translateY(-6px); opacity: 1; } }
 
+/* ---------- Logo ---------- */
+.logo-img { height: 54px; display: block; margin: 0 auto 1rem; }
+.logo-topo { height: 30px; vertical-align: middle; }
+
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
