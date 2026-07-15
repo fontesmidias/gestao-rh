@@ -53,6 +53,46 @@ function AvisoCpf({ cpf }) {
     Este CPF não existe — confira os números digitados.</div>
 }
 
+// Campo de data digitada com máscara dd/mm/aaaa: muito mais fácil para quem não
+// domina o seletor de calendário do celular. Guarda ISO (aaaa-mm-dd) por baixo.
+function InputData({ valor, onChange }) {
+  const isoParaBr = (iso) => {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || ''
+    const [a, m, d] = iso.split('-')
+    return `${d}/${m}/${a}`
+  }
+  const [texto, setTexto] = useState(isoParaBr(valor))
+  const [erro, setErro] = useState(null)
+
+  const aoDigitar = (e) => {
+    const n = e.target.value.replace(/\D/g, '').slice(0, 8)
+    let fmt = n
+    if (n.length > 4) fmt = `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`
+    else if (n.length > 2) fmt = `${n.slice(0, 2)}/${n.slice(2)}`
+    setTexto(fmt)
+    setErro(null)
+    if (n.length === 8) {
+      const d = Number(n.slice(0, 2)), m = Number(n.slice(2, 4)), a = Number(n.slice(4))
+      const data = new Date(a, m - 1, d)
+      const valida = data.getFullYear() === a && data.getMonth() === m - 1 && data.getDate() === d
+      if (!valida || a < 1900 || a > new Date().getFullYear() + 1) {
+        setErro('Essa data não existe — confira o dia, o mês e o ano.')
+        return
+      }
+      onChange(`${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}`)
+    } else if (valor) {
+      onChange(null)
+    }
+  }
+  return (
+    <>
+      <input inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10}
+             value={texto} onChange={aoDigitar} />
+      {erro && <div className="alerta" style={{ marginTop: '.35rem', padding: '.5rem .75rem' }}>{erro}</div>}
+    </>
+  )
+}
+
 function Campo({ rotulo, dica, ajuda, children }) {
   const [aberta, setAberta] = useState(false)
   return (
@@ -235,8 +275,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       {etapa === 0 && <>
         <Campo rotulo="Nome completo"><input value={p.nome_completo || ''}
           onChange={(e) => setSec('pessoais', 'nome_completo', e.target.value)} /></Campo>
-        <Campo rotulo="Data de nascimento"><input type="date" value={p.data_nascimento || ''}
-          onChange={(e) => setSec('pessoais', 'data_nascimento', e.target.value)} /></Campo>
+        <Campo rotulo="Data de nascimento" dica="só números: dia, mês e ano"><InputData valor={p.data_nascimento || ''}
+          onChange={(v) => setSec('pessoais', 'data_nascimento', v)} /></Campo>
         <Campo rotulo="Sexo (conforme registro civil)">
           <Select valor={p.sexo} opcoes={OPCOES.sexo}
                   onChange={(v) => setSec('pessoais', 'sexo', v)} /></Campo>
@@ -306,8 +346,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
         <div className="linha2">
           <Campo rotulo="Órgão emissor" dica="ex.: SSP/DF"><input value={doc.rg_orgao_emissor || ''}
             onChange={(e) => setSec('documentos', 'rg_orgao_emissor', e.target.value)} /></Campo>
-          <Campo rotulo="Data de expedição"><input type="date" value={doc.rg_data_expedicao || ''}
-            onChange={(e) => setSec('documentos', 'rg_data_expedicao', e.target.value)} /></Campo>
+          <Campo rotulo="Data de expedição"><InputData valor={doc.rg_data_expedicao || ''}
+            onChange={(v) => setSec('documentos', 'rg_data_expedicao', v)} /></Campo>
         </div>
         <Campo rotulo="CPF"><input inputMode="numeric" maxLength={14} value={fmtCpf(doc.cpf)}
           onChange={(e) => setSec('documentos', 'cpf', e.target.value.replace(/\D/g, ''))} />
@@ -364,8 +404,8 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
             <Campo rotulo="Nome completo"><input value={dep.nome_completo || ''}
               onChange={(e) => atualizaDep(i, 'nome_completo', e.target.value)} /></Campo>
             <div className="linha2">
-              <Campo rotulo="Nascimento"><input type="date" value={dep.data_nascimento || ''}
-                onChange={(e) => atualizaDep(i, 'data_nascimento', e.target.value)} /></Campo>
+              <Campo rotulo="Nascimento"><InputData valor={dep.data_nascimento || ''}
+                onChange={(v) => atualizaDep(i, 'data_nascimento', v)} /></Campo>
               <Campo rotulo="CPF"><input inputMode="numeric" maxLength={14} value={fmtCpf(dep.cpf)}
                 onChange={(e) => atualizaDep(i, 'cpf', e.target.value.replace(/\D/g, ''))} />
                 <AvisoCpf cpf={dep.cpf} /></Campo>
