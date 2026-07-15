@@ -83,6 +83,14 @@ export const rh = {
                                       body: JSON.stringify({ token, senha_nova }) }),
   candidatos: () => req('/rh/candidatos', { headers: authRH() }),
   metricas: () => req('/rh/metricas', { headers: authRH() }),
+  colaboradores: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/colaboradores${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  exportarColaboradores: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/colaboradores/exportar${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
   novoCandidato: (dados) =>
     req('/rh/candidatos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   reenviarLink: (id) =>

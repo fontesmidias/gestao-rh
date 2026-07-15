@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
+import Colaboradores from './Colaboradores.jsx'
 
 const STATUS_CHIP = {
   convidado: ['Convidado', '#8896b3'],
@@ -166,6 +167,7 @@ function Painel({ aoSair }) {
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [config, setConfig] = useState(false)
+  const [colaboradores, setColaboradores] = useState(false)
 
   const recarregar = () => {
     api.candidatos().then(setCandidatos).catch((e) => {
@@ -176,6 +178,10 @@ function Painel({ aoSair }) {
   useEffect(() => { recarregar() }, [])
 
   if (config) return <Config aoVoltar={() => setConfig(false)} />
+  if (colaboradores) return (
+    <Colaboradores aoVoltar={() => { setColaboradores(false); recarregar() }}
+                   aoAbrir={(id) => { setColaboradores(false); setSelecionado(id) }} />
+  )
   if (selecionado) return (
     <Detalhe id={selecionado} aoVoltar={() => { setSelecionado(null); recarregar() }} />
   )
@@ -187,6 +193,7 @@ function Painel({ aoSair }) {
         <div>
           <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>
           <button className="btn-secundario" onClick={() => setNovo({})}>+ Novo candidato</button>
+          <button className="btn-secundario" onClick={() => setColaboradores(true)}>👥 Colaboradores</button>
           <button className="btn-secundario" onClick={() => setConfig(true)}>⚙️ Configurações</button>
           <button className="btn-link" onClick={aoSair}>Sair</button>
         </div>

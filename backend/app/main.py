@@ -10,6 +10,7 @@ from app.api.configuracoes import router as configuracoes_router
 from app.api.auth_rh import router as auth_rh_router
 from app.api.candidatos import router as candidatos_router
 from app.api.documentos import router as documentos_router
+from app.api.colaboradores import router as colaboradores_router
 from app.api.entrada import router as entrada_router
 from app.api.ficha import router as ficha_router
 from app.api.revisao import router as revisao_router
@@ -87,6 +88,7 @@ app.include_router(candidatos_router, prefix="/api")
 app.include_router(ficha_router, prefix="/api")
 app.include_router(documentos_router, prefix="/api")
 app.include_router(entrada_router, prefix="/api")
+app.include_router(colaboradores_router, prefix="/api")
 app.include_router(assinaturas_router, prefix="/api")
 app.include_router(revisao_router, prefix="/api")
 app.include_router(configuracoes_router, prefix="/api")
