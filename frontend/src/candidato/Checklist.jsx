@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
-import { DICAS, CODIGOS_ERRO_UPLOAD } from '../tooltips.js'
+import { DICAS, CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import Espera from '../Espera.jsx'
 import { Cartao } from './CandidatoApp.jsx'
 
@@ -20,11 +20,64 @@ const MOTIVOS = {
   outro: 'Houve um problema com o arquivo.',
 }
 
+// Documento lido por OCR trouxe dados da ficha? Perguntamos ANTES de usar —
+// consentimento explícito, e só campos ainda vazios são completados.
+function BannerSugestoes({ token, slotId, sugestoes, aoFechar }) {
+  const [aplicando, setAplicando] = useState(false)
+  const [feito, setFeito] = useState(null)
+  const nomes = Object.keys(sugestoes).map((c) => NOMES_SUGESTAO[c] || c)
+
+  const aplicar = async () => {
+    setAplicando(true)
+    try {
+      const ficha = await api.ficha(token)
+      const porSecao = {}
+      const aplicados = []
+      for (const [campo, valor] of Object.entries(sugestoes)) {
+        const sec = SECAO_SUGESTAO[campo]
+        if (sec && !(ficha[sec]?.[campo])) {   // nunca sobrescreve o que já existe
+          porSecao[sec] = { ...(porSecao[sec] || {}), [campo]: valor }
+          aplicados.push(NOMES_SUGESTAO[campo] || campo)
+        }
+      }
+      for (const [sec, dados] of Object.entries(porSecao)) {
+        await api.salvarSecao(token, sec, dados)
+      }
+      setFeito(aplicados.length
+        ? `Completamos: ${aplicados.join(', ')}. Confira na sua ficha — a responsabilidade pelas informações é sua.`
+        : 'Esses campos já estavam preenchidos na sua ficha — nada foi alterado.')
+    } catch {
+      setFeito('Não conseguimos aplicar agora. Sem problema: os campos podem ser preenchidos na ficha.')
+    } finally { setAplicando(false) }
+  }
+
+  return (
+    <div className="slot-dica" role="status">
+      {feito ? (
+        <>✓ {feito} <button className="btn-link" onClick={aoFechar}>fechar</button></>
+      ) : (
+        <>
+          👀 Lemos este documento e encontramos: <strong>{nomes.join(', ')}</strong>.
+          Quer que a gente complete os campos ainda vazios da sua ficha com esses dados?
+          Você confere tudo depois — nada é alterado sem a sua confirmação.
+          <div style={{ marginTop: '.5rem', display: 'flex', gap: '.5rem' }}>
+            <button className="btn-principal btn-mini" disabled={aplicando} onClick={aplicar}>
+              {aplicando ? 'Aplicando…' : 'Sim, completar minha ficha'}</button>
+            <button className="btn-secundario btn-mini" onClick={aoFechar}>Não, obrigado</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Checklist({ token, aoConcluir }) {
   const [check, setCheck] = useState(null)
   const [dicaAberta, setDicaAberta] = useState(null)
   const [enviando, setEnviando] = useState(null)
   const [erros, setErros] = useState({})
+  const [sugestoes, setSugestoes] = useState(null) // {slotId, dados}
+  const [avisos, setAvisos] = useState({})
   const inputRef = useRef(null)
   const slotAtual = useRef(null)
 
@@ -63,8 +116,20 @@ export default function Checklist({ token, aoConcluir }) {
       return
     }
     setEnviando(slotId)
+    setSugestoes((s) => (s?.slotId === slotId ? null : s))
+    setAvisos((a) => ({ ...a, [slotId]: null }))
     try {
-      await api.enviarArquivo(token, slotId, arquivo)
+      const r = await api.enviarArquivo(token, slotId, arquivo)
+      if (r.sugestoes && Object.keys(r.sugestoes).length) {
+        setSugestoes({ slotId, dados: r.sugestoes })
+      }
+      // Mandou a CNH no lugar do RG? Acontece muito — avisa com carinho, sem travar.
+      const slotTipo = check.slots.find((s) => s.id === slotId)?.tipo
+      if (slotTipo === 'rg' && r.documento_detectado === 'cnh') {
+        setAvisos((a) => ({ ...a, [slotId]:
+          'Essa foto parece ser de uma CNH. Para este item precisamos do RG mesmo '
+          + '(frente e verso) — a CNH pode ir no item "Habilitação profissional".' }))
+      }
       await recarregar()
     } catch (err) {
       setErros((x) => ({
@@ -129,6 +194,11 @@ export default function Checklist({ token, aoConcluir }) {
             {enviando === s.id && <Espera texto="Enviando e conferindo seu documento…" />}
             {dicaAberta === s.id && <div className="slot-dica">💡 {info.dica}</div>}
             {erros[s.id] && <div className="alerta">{erros[s.id]}</div>}
+            {avisos[s.id] && <div className="alerta">{avisos[s.id]}</div>}
+            {sugestoes?.slotId === s.id && (
+              <BannerSugestoes token={token} slotId={s.id} sugestoes={sugestoes.dados}
+                               aoFechar={() => setSugestoes(null)} />
+            )}
           </div>
         )
       })}

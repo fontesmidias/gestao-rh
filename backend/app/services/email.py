@@ -14,6 +14,11 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
                  levantar_erro: bool = False,
                  anexos: list[tuple[str, bytes]] | None = None) -> bool:
     """anexos: lista de (nome_do_arquivo.pdf, bytes)."""
+    if not destinatario:
+        # Candidato cadastrado sem e-mail (convite copiado para o WhatsApp):
+        # não há para onde enviar — quem chama trata email_enviado=False.
+        log.info("Sem destinatário para '%s'; e-mail não enviado.", assunto)
+        return False
     from app.services.config_dinamica import smtp_config
     from app.services.gmail import config_gmail, enviar_via_gmail
     from app.services.m365 import config_m365, enviar_via_graph

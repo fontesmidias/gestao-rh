@@ -60,6 +60,20 @@ export const candidato = {
     }
     return r.json()
   },
+  // Foto do RG OU da CNH: o backend detecta qual é, guarda no slot certo e
+  // devolve as sugestões de preenchimento.
+  enviarIdentidade: async (t, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await fetch(`${BASE}/c/${t}/documentos/identidade`, { method: 'POST', body: fd })
+    if (!r.ok) {
+      const { detail } = await r.json()
+      const erro = new Error(detail)
+      erro.detail = detail
+      throw erro
+    }
+    return r.json()
+  },
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
 }
 

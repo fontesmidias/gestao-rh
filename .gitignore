@@ -39,3 +39,13 @@ backend/.venv/
 # Playwright
 frontend/test-results/
 frontend/playwright-report/
+
+# Subpastas de docs tambem podem ter dados sensiveis (repo publico!)
+docs/**/*.docx
+docs/**/*.pdf
+docs/**/*.xlsx
+docs/prints-teste-disc/
+docs/green-house-logo*.png
+
+# Ferramentas locais BMAD
+_bmad/

@@ -155,7 +155,7 @@ class _FichaPDF(FPDF):
         self.secao("Assinante")
         self.campo("Nome", candidato.nome_completo)
         self.campo("CPF", cpf)
-        self.campo("E-mail verificado", candidato.email)
+        self.campo("E-mail verificado", candidato.email or "—")
 
         self.secao("Evidências do ato")
         self.campo("Data e hora (Brasília)", brasilia.strftime("%d/%m/%Y %H:%M:%S (UTC-3)"))
@@ -242,8 +242,8 @@ def _dump_pessoais(pdf: _FichaPDF, candidato: Candidato, p: DadosPessoais | None
         pdf.campo("Estado civil", p.estado_civil)
         pdf.campo("Escolaridade", p.escolaridade)
         pdf.campo("PCD", p.pcd)
-    pdf.campo("E-mail", candidato.email)
-    pdf.campo("Celular/WhatsApp", candidato.celular_whatsapp)
+    pdf.campo("E-mail", candidato.email or "-")
+    pdf.campo("Celular/WhatsApp", candidato.celular_whatsapp or "-")
 
 
 def gerar_ficha_cadastro(db: Session, candidato: Candidato,
@@ -363,8 +363,8 @@ def gerar_ficha_emergencia(db: Session, candidato: Candidato,
     if e:
         pdf.campo("Endereço residencial", e.logradouro_numero_complemento)
         pdf.campo("Cidade/UF — CEP", f"{e.cidade or '-'}/{e.uf or '-'} — {e.cep or '-'}")
-    pdf.campo("Celular / WhatsApp", candidato.celular_whatsapp)
-    pdf.campo("E-mail", candidato.email)
+    pdf.campo("Celular / WhatsApp", candidato.celular_whatsapp or "-")
+    pdf.campo("E-mail", candidato.email or "-")
 
     pdf.ln(2); pdf.secao("2. INFORMAÇÕES DE SAÚDE")
     if fe:

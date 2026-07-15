@@ -20,22 +20,27 @@ from pydantic import field_validator
 
 
 class NovoCandidato(BaseModel):
+    # Só o nome é obrigatório: sem e-mail, o RH copia o link e manda pelo
+    # WhatsApp; o candidato completa e-mail e celular na própria ficha.
     nome_completo: str
-    email: EmailStr
-    celular_whatsapp: str
+    email: EmailStr | None = None
+    celular_whatsapp: str | None = None
 
     @field_validator("nome_completo", "email", "celular_whatsapp", mode="before")
     @classmethod
     def _apara_espacos(cls, v):
-        # E-mails colados do WhatsApp costumam vir com espaço no fim.
-        return v.strip() if isinstance(v, str) else v
+        # E-mails colados do WhatsApp costumam vir com espaço no fim;
+        # campo deixado em branco no formulário chega como "".
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
 
 
 class CandidatoOut(BaseModel):
     id: uuid.UUID
     nome_completo: str
-    email: EmailStr
-    celular_whatsapp: str
+    email: EmailStr | None = None
+    celular_whatsapp: str | None = None
     status: StatusCandidato
 
     model_config = {"from_attributes": True}
@@ -65,8 +70,10 @@ def criar_candidato(
     link = emitir_link(db, candidato, base_url_publica(request))
     registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
-    assunto, texto, html = email_convite(candidato.nome_completo, link)
-    enviado = enviar_email(candidato.email, assunto, texto, html)
+    enviado = False
+    if candidato.email:
+        assunto, texto, html = email_convite(candidato.nome_completo, link)
+        enviado = enviar_email(candidato.email, assunto, texto, html)
     return ConviteOut(
         candidato=CandidatoOut.model_validate(candidato), link_magico=link, email_enviado=enviado
     )
@@ -91,7 +98,7 @@ def reenviar_link(
               ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
     enviado = False
-    if enviar_email_convite:
+    if enviar_email_convite and candidato.email:
         assunto, texto, html = email_convite(candidato.nome_completo, link)
         enviado = enviar_email(candidato.email, assunto, texto, html)
     return ConviteOut(

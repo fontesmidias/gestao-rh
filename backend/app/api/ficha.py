@@ -320,6 +320,11 @@ def declarar_veracidade(token: str, db: Session = Depends(get_db)) -> dict:
     if candidato.aceite_lgpd_em is None:
         pendencias.append("aceite_lgpd")
 
+    # E-mail é opcional no convite, mas indispensável daqui em diante: o código
+    # de assinatura eletrônica é enviado por ele.
+    if not candidato.email:
+        pendencias.append("pessoais.email")
+
     pessoais = db.get(DadosPessoais, candidato.id)
     for campo in _OBRIGATORIOS_PESSOAIS:
         if pessoais is None or getattr(pessoais, campo) is None:
