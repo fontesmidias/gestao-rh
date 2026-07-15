@@ -35,3 +35,7 @@ docs/*.xlsx
 
 # venv e lock local do backend
 backend/.venv/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/

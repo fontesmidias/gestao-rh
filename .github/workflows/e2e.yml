@@ -1,0 +1,78 @@
+name: testes-de-interface
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cria .env de teste
+        run: |
+          cat > .env <<'EOF'
+          ENVIRONMENT=ci
+          SECRET_KEY=segredo-apenas-para-ci
+          BASE_URL=http://localhost:8090
+          FRONTEND_PORT=8090
+          POSTGRES_USER=admissao
+          POSTGRES_PASSWORD=admissao-ci
+          POSTGRES_DB=admissao
+          DATABASE_URL=postgresql+psycopg://admissao:admissao-ci@db:5432/admissao
+          REDIS_URL=redis://redis:6379/0
+          MINIO_ROOT_USER=minio
+          MINIO_ROOT_PASSWORD=minio-ci-12345
+          MINIO_ENDPOINT=minio:9000
+          MINIO_ACCESS_KEY=minio
+          MINIO_SECRET_KEY=minio-ci-12345
+          MINIO_BUCKET=admissao
+          MINIO_SECURE=false
+          RH_ADMIN_EMAIL=rh@greenhousedf.com.br
+          RH_ADMIN_PASSWORD=senha-ci-12345678
+          EOF
+
+      - name: Sobe a stack completa
+        run: docker compose --env-file .env
+          -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml
+          up -d --build
+
+      - name: Aguarda a API responder
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8090/api/health > /dev/null 2>&1; then
+              echo "API no ar"; exit 0
+            fi
+            sleep 3
+          done
+          echo "API não subiu a tempo" >&2
+          docker compose --env-file .env \
+            -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml logs api
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instala Playwright
+        working-directory: frontend
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Roda os testes de interface
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:8090
+          RH_EMAIL: rh@greenhousedf.com.br
+          RH_SENHA: senha-ci-12345678
+        run: npx playwright test
+
+      - name: Logs da stack (em caso de falha)
+        if: failure()
+        run: docker compose --env-file .env
+          -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml
+          logs --tail 100
