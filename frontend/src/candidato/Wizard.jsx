@@ -279,6 +279,14 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
                ajuda="Preencha apenas se você deseja ser chamado(a) por um nome diferente do que está no seu registro civil (Decreto 8.727/2016). Ele aparecerá nos seus documentos junto ao nome civil. Se não for o seu caso, deixe em branco.">
           <input value={p.nome_social || ''}
                  onChange={(e) => setSec('pessoais', 'nome_social', e.target.value)} /></Campo>
+        <Campo rotulo="Nome completo da sua mãe"
+               ajuda="Como está nos seus documentos (certidão de nascimento ou RG).">
+          <input value={p.nome_mae || ''}
+                 onChange={(e) => setSec('pessoais', 'nome_mae', e.target.value)} /></Campo>
+        <Campo rotulo="Nome completo do seu pai"
+               ajuda="Se o pai não consta nos seus documentos (não declarado), deixe este campo em branco — sem problema algum.">
+          <input value={p.nome_pai || ''}
+                 onChange={(e) => setSec('pessoais', 'nome_pai', e.target.value)} /></Campo>
         <Campo rotulo="Data de nascimento" dica="só números: dia, mês e ano"><InputData valor={p.data_nascimento || ''}
           onChange={(v) => setSec('pessoais', 'data_nascimento', v)} /></Campo>
         <Campo rotulo="Sexo (conforme registro civil)">

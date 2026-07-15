@@ -76,18 +76,24 @@ def criar_candidato(
 def reenviar_link(
     candidato_id: uuid.UUID,
     request: Request,
+    enviar_email_convite: bool = True,
     db: Session = Depends(get_db),
     _rh: UsuarioRH = Depends(requer_rh),
 ) -> ConviteOut:
-    """Emite um novo link mágico (o anterior continua válido até expirar) e reenvia o convite."""
+    """Emite um novo link mágico (o anterior continua válido até expirar).
+    Com enviar_email_convite=false, só gera e devolve o link — para o RH copiar
+    e mandar por WhatsApp, sem duplicar e-mail para o candidato."""
     candidato = db.get(Candidato, candidato_id)
     if candidato is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
     link = emitir_link(db, candidato, base_url_publica(request))
-    registrar(db, "link_reenviado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
+    registrar(db, "link_reenviado" if enviar_email_convite else "link_copiado",
+              ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
     db.commit()
-    assunto, texto, html = email_convite(candidato.nome_completo, link)
-    enviado = enviar_email(candidato.email, assunto, texto, html)
+    enviado = False
+    if enviar_email_convite:
+        assunto, texto, html = email_convite(candidato.nome_completo, link)
+        enviado = enviar_email(candidato.email, assunto, texto, html)
     return ConviteOut(
         candidato=CandidatoOut.model_validate(candidato), link_magico=link, email_enviado=enviado
     )

@@ -84,6 +84,9 @@ def _perguntas_do_candidato(db: Session, candidato: Candidato) -> list[tuple[str
                      str(p.data_nascimento.day)))
         pool.append(("mes_nascimento", "Qual é o MÊS do seu nascimento? (só o número)",
                      str(p.data_nascimento.month)))
+    if p and p.nome_mae:
+        pool.append(("nome_mae", "Qual é o PRIMEIRO NOME da sua mãe?",
+                     p.nome_mae.split()[0]))
     if p and p.naturalidade_cidade:
         pool.append(("cidade_natal", "Em que cidade você nasceu?", p.naturalidade_cidade))
     if e and e.cidade:
@@ -99,6 +102,7 @@ def _perguntas_do_candidato(db: Session, candidato: Candidato) -> list[tuple[str
 
 # Enunciados genéricos para CPF inexistente (anti-enumeração): mesmas categorias.
 _POOL_GENERICO = [
+    ("nome_mae", "Qual é o PRIMEIRO NOME da sua mãe?"),
     ("dia_nascimento", "Qual é o DIA do seu nascimento? (só o número)"),
     ("mes_nascimento", "Qual é o MÊS do seu nascimento? (só o número)"),
     ("cidade_natal", "Em que cidade você nasceu?"),

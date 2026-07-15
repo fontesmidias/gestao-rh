@@ -95,6 +95,9 @@ export const rh = {
     req('/rh/candidatos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   reenviarLink: (id) =>
     req(`/rh/candidatos/${id}/reenviar-link`, { method: 'POST', headers: authRH() }),
+  gerarLink: (id) =>
+    req(`/rh/candidatos/${id}/reenviar-link?enviar_email_convite=false`,
+        { method: 'POST', headers: authRH() }),
   detalhe: (id) => req(`/rh/candidatos/${id}`, { headers: authRH() }),
   arquivoUrl: (slotId) => `${BASE}/rh/slots/${slotId}/arquivo`,
   arquivo: (slotId) => req(`/rh/slots/${slotId}/arquivo`, { headers: authRH() }),

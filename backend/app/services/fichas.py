@@ -232,6 +232,8 @@ def _dump_pessoais(pdf: _FichaPDF, candidato: Candidato, p: DadosPessoais | None
     if p and p.nome_social:
         pdf.campo("Nome social", p.nome_social)
     if p:
+        pdf.campo("Filiação (mãe)", p.nome_mae)
+        pdf.campo("Filiação (pai)", p.nome_pai or "Não declarado")
         pdf.campo("Data de nascimento", p.data_nascimento)
         pdf.campo("Sexo", p.sexo)
         pdf.campo("Identidade de gênero", p.identidade_genero)

@@ -4,6 +4,7 @@ import RHApp from './rh/RHApp.jsx'
 import Verificar from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
 import logo from './assets/logo.png'
+import BotaoTema from './Tema.jsx'
 
 function Home() {
   return (
@@ -19,6 +20,8 @@ function Home() {
 
 export default function App() {
   return (
+    <>
+    <BotaoTema />
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/c/:token/*" element={<CandidatoApp />} />
@@ -26,5 +29,6 @@ export default function App() {
       <Route path="/verificar/:id" element={<Verificar />} />
       <Route path="/entrar" element={<Entrar />} />
     </Routes>
+    </>
   )
 }

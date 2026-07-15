@@ -53,6 +53,7 @@ def _linha_completa(db: Session, c: Candidato) -> dict:
     if p:
         linha.update({
             "Nome social": _fmt(p.nome_social),
+            "Filiação (mãe)": _fmt(p.nome_mae), "Filiação (pai)": _fmt(p.nome_pai),
             "Data de nascimento": _fmt(p.data_nascimento), "Sexo": _fmt(p.sexo),
             "Identidade de gênero": _fmt(p.identidade_genero), "Cor/raça": _fmt(p.cor_raca),
             "Nacionalidade": _fmt(p.nacionalidade),
