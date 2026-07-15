@@ -131,7 +131,8 @@ class _FichaPDF(FPDF):
             f"página deste documento.",
         )
 
-    def pagina_manifesto(self, assinatura: Assinatura, candidato, cpf: str | None):
+    def pagina_manifesto(self, assinatura: Assinatura, candidato, cpf: str | None,
+                         base_url: str | None = None):
         """Última página do PDF assinado: todas as evidências da assinatura
         eletrônica simples (art. 4º, II, da Lei nº 14.063/2020)."""
         utc = assinatura.assinado_em
@@ -165,6 +166,28 @@ class _FichaPDF(FPDF):
                              "aposição da assinatura.")
         self.campo("Modalidade", "Assinatura eletrônica simples — art. 4º, I, da "
                                  "Lei nº 14.063/2020.")
+
+        if base_url:
+            url = f"{base_url}/verificar/{assinatura.id}"
+            self.secao("Verificação de autenticidade")
+            self.ln(2)
+            try:
+                import qrcode
+                qr = qrcode.make(url, box_size=6, border=2)
+                y_qr = self.get_y()
+                self.image(qr.get_image(), x=14, y=y_qr, w=34, h=34)
+                self.set_xy(54, y_qr + 4)
+                self.set_font("helvetica", "", 9)
+                self.multi_cell(
+                    140, 5,
+                    "Aponte a câmera do celular para o código ao lado, ou acesse o "
+                    "endereço abaixo, para confirmar a validade e a integridade desta "
+                    f"assinatura:\n{url}",
+                )
+                self.set_y(y_qr + 38)
+            except Exception:
+                self.set_font("helvetica", "", 9)
+                self.multi_cell(190, 5, f"Confirme a validade desta assinatura em: {url}")
 
         self.ln(4)
         self.set_font("helvetica", "I", 8)
@@ -219,7 +242,8 @@ def _dump_pessoais(pdf: _FichaPDF, candidato: Candidato, p: DadosPessoais | None
 
 
 def gerar_ficha_cadastro(db: Session, candidato: Candidato,
-                         assinatura: Assinatura | None = None) -> bytes:
+                         assinatura: Assinatura | None = None,
+                         base_url: str | None = None) -> bytes:
     p = db.get(DadosPessoais, candidato.id)
     e = db.get(Endereco, candidato.id)
     d = db.get(DocumentosIdentificacao, candidato.id)
@@ -303,12 +327,13 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
 
     if assinatura:
         pdf.bloco_assinatura(assinatura, candidato.nome_completo)
-        pdf.pagina_manifesto(assinatura, candidato, cpf)
+        pdf.pagina_manifesto(assinatura, candidato, cpf, base_url)
     return bytes(pdf.output())
 
 
 def gerar_ficha_emergencia(db: Session, candidato: Candidato,
-                           assinatura: Assinatura | None = None) -> bytes:
+                           assinatura: Assinatura | None = None,
+                           base_url: str | None = None) -> bytes:
     p = db.get(DadosPessoais, candidato.id)
     fe = db.get(FichaEmergencia, candidato.id)
     contatos = db.scalars(
@@ -368,12 +393,13 @@ def gerar_ficha_emergencia(db: Session, candidato: Candidato,
     )
     if assinatura:
         pdf.bloco_assinatura(assinatura, candidato.nome_completo)
-        pdf.pagina_manifesto(assinatura, candidato, cpf)
+        pdf.pagina_manifesto(assinatura, candidato, cpf, base_url)
     return bytes(pdf.output())
 
 
 def gerar_termo_vt(db: Session, candidato: Candidato,
-                   assinatura: Assinatura | None = None) -> bytes:
+                   assinatura: Assinatura | None = None,
+                   base_url: str | None = None) -> bytes:
     d = db.get(DocumentosIdentificacao, candidato.id)
     vt = db.get(ValeTransporte, candidato.id)
 
@@ -423,7 +449,7 @@ def gerar_termo_vt(db: Session, candidato: Candidato,
 
     if assinatura:
         pdf.bloco_assinatura(assinatura, candidato.nome_completo)
-        pdf.pagina_manifesto(assinatura, candidato, cpf)
+        pdf.pagina_manifesto(assinatura, candidato, cpf, base_url)
     return bytes(pdf.output())
 
 

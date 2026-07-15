@@ -2,6 +2,7 @@
 
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings, ip_do_cliente
+from app.core.config import base_url_publica, get_settings, ip_do_cliente
 from app.core.db import get_db
 from app.models.assinatura import Assinatura, DocumentoAssinavel
 from app.models.candidato import Candidato, StatusCandidato
@@ -87,6 +88,49 @@ NOMES_DOC = {
     DocumentoAssinavel.ficha_emergencia: "Ficha de Emergência do Colaborador",
     DocumentoAssinavel.termo_vt: "Termo de Opção pelo Vale-Transporte",
 }
+
+
+def _nome_mascarado(nome: str) -> str:
+    """LGPD (minimização): primeiro nome + iniciais dos demais. 'José T. S.'"""
+    partes = [p for p in nome.split() if p]
+    if not partes:
+        return "-"
+    return " ".join([partes[0].title()] + [f"{p[0].upper()}." for p in partes[1:]])
+
+
+def _cpf_mascarado(cpf: str | None) -> str:
+    n = "".join(c for c in (cpf or "") if c.isdigit())
+    if len(n) != 11:
+        return "-"
+    return f"***.{n[3:6]}.{n[6:9]}-**"
+
+
+@router.get("/verificar/{assinatura_id}")
+def verificar_assinatura(assinatura_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Verificação PÚBLICA de autenticidade (QR code do manifesto). Dados
+    minimizados: nome e CPF mascarados; nada de e-mail, IP ou dispositivo."""
+    assinatura = db.get(Assinatura, assinatura_id)
+    if assinatura is None or assinatura.assinado_em is None:
+        raise HTTPException(status_code=404, detail="assinatura_nao_encontrada")
+    candidato = db.get(Candidato, assinatura.candidato_id)
+
+    from app.models.ficha import DocumentosIdentificacao
+    doc_id = db.get(DocumentosIdentificacao, candidato.id)
+
+    registrar(db, "assinatura_verificada", ator="publico",
+              candidato_id=candidato.id, detalhe={"assinatura": str(assinatura.id)})
+    db.commit()
+    return {
+        "valida": True,
+        "documento": NOMES_DOC[assinatura.documento],
+        "assinante": _nome_mascarado(candidato.nome_completo),
+        "cpf": _cpf_mascarado(doc_id.cpf if doc_id else None),
+        "assinado_em": assinatura.assinado_em,
+        "hash_sha256": assinatura.hash_sha256,
+        "metodo": "Código de verificação de uso único enviado ao e-mail do titular "
+                  "(assinatura eletrônica simples — art. 4º, I, Lei nº 14.063/2020).",
+        "id": assinatura.id,
+    }
 
 
 @router.post("/c/{token}/fichas/solicitar-codigo", status_code=204)
@@ -183,7 +227,8 @@ def assinar_todos(
         assinatura.user_agent = request.headers.get("user-agent", "")[:400]
         assinatura.otp_hash = None
         assinatura.otp_expira_em = None
-        pdf_assinado = GERADORES[doc.value](db, candidato, assinatura)
+        pdf_assinado = GERADORES[doc.value](db, candidato, assinatura,
+                                            base_url_publica(request))
         key = f"candidatos/{candidato.id}/fichas/{doc.value}.pdf"
         storage.salvar(key, pdf_assinado, "application/pdf")
         assinatura.pdf_key = key
@@ -295,7 +340,8 @@ def assinar(
     assinatura.otp_hash = None
     assinatura.otp_expira_em = None
 
-    pdf_assinado = GERADORES[documento.value](db, candidato, assinatura)
+    pdf_assinado = GERADORES[documento.value](db, candidato, assinatura,
+                                              base_url_publica(request))
     key = f"candidatos/{candidato.id}/fichas/{documento.value}.pdf"
     storage.salvar(key, pdf_assinado, "application/pdf")
     assinatura.pdf_key = key

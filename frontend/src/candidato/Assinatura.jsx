@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
+import Espera from '../Espera.jsx'
 
 const NOMES = {
   ficha_cadastro: 'Ficha Cadastral do Colaborador',
@@ -116,6 +117,7 @@ export default function Assinatura({ token, email, aoConcluir }) {
           <button className="btn-principal" disabled={fase === 'enviando'} onClick={pedirCodigo}>
             {fase === 'enviando' ? '📨 Enviando o código para o seu e-mail…' : 'Assinar os documentos'}
           </button>
+          {fase === 'enviando' && <Espera texto="Preparando e enviando seu código…" />}
         </>
       )}
 
@@ -132,6 +134,7 @@ export default function Assinatura({ token, email, aoConcluir }) {
             <button className="btn-link" disabled={fase === 'assinando'} onClick={pedirCodigo}>
               Não recebeu? Reenviar código</button>
           </div>
+          {fase === 'assinando' && <Espera texto="Assinando os 3 documentos e gerando suas vias…" />}
         </div>
       )}
 

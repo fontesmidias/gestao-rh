@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import CandidatoApp from './candidato/CandidatoApp.jsx'
 import RHApp from './rh/RHApp.jsx'
+import Verificar from './Verificar.jsx'
 
 function Home() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/c/:token/*" element={<CandidatoApp />} />
       <Route path="/rh/*" element={<RHApp />} />
+      <Route path="/verificar/:id" element={<Verificar />} />
     </Routes>
   )
 }

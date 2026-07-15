@@ -83,6 +83,16 @@ Ao comprar domínio: subir stack Traefik ou Certbot com o mesmo `.env` + `DOMAIN
   CPF/RG enviados batem com os números digitados na ficha, identificar documento errado no
   slot (ex.: RG no lugar da CTPS), validar legibilidade dos dados essenciais. Testes de
   interface (Playwright) no CI. Tooltips com imagens de exemplo.
+- **v1.3 (novos pedidos, 2026-07-15)** — (a) Portal único `/entrar` com CPF + perguntas de
+  verificação (KBA) + fallback por e-mail, anti-enumeração, bloqueio progressivo;
+  (b) **Dash de colaboradores**: visão com filtros (status, posto, período) mostrando os
+  principais dados preenchidos, e **exportação Excel** linha a linha com TODAS as respostas
+  do formulário por colaborador; (c) **Documentos por posto de serviço** (INFRAERO
+  primeiro): fundação de documentos assináveis dinâmicos (migration enum → tabela),
+  templates com layout oficial preservado (modelos em
+  `docs/exemplos de templates de documentos especificos/` — 2 recebidos, 2 a receber),
+  geração ao marcar o posto no painel, envio por e-mail com instruções e assinatura na
+  plataforma com o mesmo fluxo de OTP + manifesto + QR.
 - **v2.0** — Migração dos formulários de seleção (situacional, comportamental) e do fluxo
   pós-Pandapé para dentro do sistema. Formulários de avaliação **fora da v1** (decisão do Bruno).
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { DICAS, CODIGOS_ERRO_UPLOAD } from '../tooltips.js'
+import Espera from '../Espera.jsx'
 import { Cartao } from './CandidatoApp.jsx'
 
 const STATUS = {
@@ -125,6 +126,7 @@ export default function Checklist({ token, aoConcluir }) {
                 </button>
               )}
             </div>
+            {enviando === s.id && <Espera texto="Enviando e conferindo seu documento…" />}
             {dicaAberta === s.id && <div className="slot-dica">💡 {info.dica}</div>}
             {erros[s.id] && <div className="alerta">{erros[s.id]}</div>}
           </div>

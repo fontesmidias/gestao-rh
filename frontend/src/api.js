@@ -22,6 +22,9 @@ async function req(caminho, opcoes = {}) {
 }
 
 // --- Candidato (token do link mágico) ---
+// Verificação pública de assinatura (QR code do manifesto) — sem autenticação.
+export const verificarAssinatura = (id) => req(`/verificar/${id}`)
+
 export const candidato = {
   sessao: (t) => req(`/c/${t}`),
   aceiteLgpd: (t) => req(`/c/${t}/aceite-lgpd`, { method: 'POST' }),
