@@ -273,15 +273,28 @@ function Painel({ aoSair }) {
                   <td><span className="chip" style={{ background: cor }}>{rotulo}</span></td>
                   <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
                   <td>{new Date(c.criado_em).toLocaleDateString('pt-BR')}</td>
-                  <td>
+                  <td className="acoes-candidato">
                     <button className="btn-secundario btn-mini"
                             onClick={() => setSelecionado(c.id)}>Abrir</button>
-                    <button className="btn-link" title="Gera novo link e reenvia o convite"
-                            onClick={async () => {
+                    <button className="btn-secundario btn-mini"
+                            title="Copia um link novo para você enviar pelo WhatsApp — NÃO envia e-mail"
+                            onClick={async (e) => {
+                              const btn = e.currentTarget
+                              const r = await api.gerarLink(c.id)
+                              await navigator.clipboard.writeText(r.link_magico)
+                              const original = btn.textContent
+                              btn.textContent = '✓ Copiado!'
+                              setTimeout(() => { btn.textContent = original }, 2000)
+                            }}>📋 Copiar link</button>
+                    <button className="btn-secundario btn-mini"
+                            title="Gera um link novo e reenvia o convite por e-mail"
+                            onClick={async (e) => {
+                              const btn = e.currentTarget
                               const r = await api.reenviarLink(c.id)
-                              navigator.clipboard.writeText(r.link_magico)
-                              alert(`Novo link gerado${r.email_enviado ? ' e enviado por e-mail' : ''} — copiado para a área de transferência.`)
-                            }}>reenviar link</button>
+                              const original = btn.textContent
+                              btn.textContent = r.email_enviado ? '✓ Enviado!' : '⚠ E-mail falhou'
+                              setTimeout(() => { btn.textContent = original }, 2500)
+                            }}>✉️ Reenviar</button>
                   </td>
                 </tr>
               )

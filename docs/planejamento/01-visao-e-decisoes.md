@@ -81,8 +81,16 @@ Ao comprar domínio: subir stack Traefik ou Certbot com o mesmo `.env` + `DOMAIN
   Google/Gmail OAuth, manifesto de assinatura no PDF.
 - **v1.3** — OCR estendido aos demais documentos (pedido do Bruno, 2026-07-14): conferir se o
   CPF/RG enviados batem com os números digitados na ficha, identificar documento errado no
-  slot (ex.: RG no lugar da CTPS), validar legibilidade dos dados essenciais. Testes de
-  interface (Playwright) no CI. Tooltips com imagens de exemplo.
+  slot (ex.: RG no lugar da CTPS), validar legibilidade dos dados essenciais. Tooltips com
+  imagens de exemplo. (Testes de interface Playwright: ✅ entregues.)
+- **v1.3 — OCR pré-preenchendo o formulário** (pedido do Bruno, 2026-07-15; desenho da mesa):
+  o candidato fotografa o RG ANTES (ou durante) o preenchimento e o OCR sugere número do RG,
+  órgão/data de expedição, filiação e nascimento nos respectivos campos. Princípios firmados:
+  (a) campo pré-preenchido fica marcado "sugerido pela leitura do documento — confira" até o
+  candidato confirmar; (b) aviso explícito de que a conferência é responsabilidade do
+  candidato — o algoritmo facilita, não substitui; (c) OCR nunca bloqueia: falhou a leitura,
+  o campo fica vazio como hoje; (d) avaliar a inversão da jornada (documentos → formulário)
+  como variante A/B após medir a taxa de acerto do OCR em fotos reais.
 - **v1.3 (novos pedidos, 2026-07-15)** — (a) Portal único `/entrar` com CPF + perguntas de
   verificação (KBA) + fallback por e-mail, anti-enumeração, bloqueio progressivo;
   (b) **Dash de colaboradores**: visão com filtros (status, posto, período) mostrando os

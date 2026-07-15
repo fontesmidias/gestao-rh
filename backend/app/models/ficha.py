@@ -81,6 +81,9 @@ class DadosPessoais(Base):
     )
     # Nome social (Decreto 8.727/2016): usado nos documentos junto ao nome civil.
     nome_social: Mapped[str | None] = mapped_column(String(200))
+    # Filiação: pai pode não constar do registro (não declarado) — nunca obrigar.
+    nome_mae: Mapped[str | None] = mapped_column(String(200))
+    nome_pai: Mapped[str | None] = mapped_column(String(200))
     data_nascimento: Mapped[date | None] = mapped_column(Date)
     sexo: Mapped[Sexo | None] = mapped_column(Enum(Sexo, name="sexo"))
     identidade_genero: Mapped[IdentidadeGenero | None] = mapped_column(
