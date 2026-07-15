@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import base_url_publica, get_settings, ip_do_cliente
 from app.core.db import get_db
-from app.models.assinatura import Assinatura, DocumentoAssinavel
+from app.models.assinatura import FICHAS_BASE, Assinatura, DocumentoAssinavel
 from app.models.candidato import Candidato, StatusCandidato
 from app.services import storage
 from app.services.auditoria import registrar
@@ -45,6 +45,18 @@ def _registro(db: Session, candidato: Candidato, documento: DocumentoAssinavel) 
     return assinatura
 
 
+def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel]:
+    """As 3 fichas (sempre) + documentos extras que o RH gerou para o candidato
+    (registros de Assinatura já criados — ex.: documentos do posto INFRAERO)."""
+    extras = db.scalars(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id,
+            Assinatura.documento.notin_(FICHAS_BASE),
+        )
+    ).all()
+    return list(FICHAS_BASE) + [a.documento for a in extras]
+
+
 @router.get("/c/{token}/fichas")
 def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
     candidato = _candidato_do_token(token, db)
@@ -57,10 +69,11 @@ def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
         "fichas": [
             {
                 "documento": doc,
+                "titulo": NOMES_DOC[doc],
                 "assinado": doc in por_doc and por_doc[doc].assinado_em is not None,
                 "assinado_em": por_doc[doc].assinado_em if doc in por_doc else None,
             }
-            for doc in DocumentoAssinavel
+            for doc in _docs_exigidos(db, candidato)
         ]
     }
 
@@ -87,6 +100,10 @@ NOMES_DOC = {
     DocumentoAssinavel.ficha_cadastro: "Ficha Cadastral do Colaborador",
     DocumentoAssinavel.ficha_emergencia: "Ficha de Emergência do Colaborador",
     DocumentoAssinavel.termo_vt: "Termo de Opção pelo Vale-Transporte",
+    DocumentoAssinavel.oficio_cartao_cidadao:
+        "Ofício INFRAERO — Cartão Cidadão e extrato do INSS",
+    DocumentoAssinavel.informacoes_trabalhador:
+        "Informações ao Trabalhador (INFRAERO)",
 }
 
 
@@ -138,7 +155,7 @@ def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
     """Um único código para assinar todos os documentos pendentes de uma vez."""
     candidato = _candidato_do_token(token, db)
     pendentes = [
-        d for d in DocumentoAssinavel
+        d for d in _docs_exigidos(db, candidato)
         if _registro(db, candidato, d).assinado_em is None
     ]
     if not pendentes:
@@ -197,7 +214,7 @@ def assinar_todos(
     """Valida o código único e assina todos os documentos pendentes."""
     candidato = _candidato_do_token(token, db)
     pendentes = [
-        (d, _registro(db, candidato, d)) for d in DocumentoAssinavel
+        (d, _registro(db, candidato, d)) for d in _docs_exigidos(db, candidato)
         if _registro(db, candidato, d).assinado_em is None
     ]
     if not pendentes:
@@ -353,7 +370,8 @@ def assinar(
         )
     ).all()
     todas = {a.documento for a in assinadas} | {documento}
-    if todas == set(DocumentoAssinavel) and candidato.status == StatusCandidato.aguardando_assinatura:
+    if todas >= set(_docs_exigidos(db, candidato)) \
+            and candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
 
     registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,

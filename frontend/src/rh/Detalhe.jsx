@@ -10,6 +10,49 @@ const MOTIVOS = [
   ['outro', 'Outro'],
 ]
 
+function PostoServico({ dados, setMsg, recarregar }) {
+  const [postos, setPostos] = useState(null)
+  const [postoId, setPostoId] = useState(dados.posto_servico_id || '')
+  const [cargo, setCargo] = useState(dados.cargo_funcao || '')
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => { api.postos().then(setPostos) }, [])
+  if (!postos) return null
+  const extras = (dados.assinaturas || []).filter((a) =>
+    !['ficha_cadastro', 'ficha_emergencia', 'termo_vt'].includes(a.documento))
+  return (
+    <div className="rh-card rh-lote">
+      <strong>Posto de serviço:</strong>
+      <select value={postoId} style={{ maxWidth: 220 }}
+              onChange={(e) => setPostoId(e.target.value)}>
+        <option value="">— sem posto —</option>
+        {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+      </select>
+      <input placeholder="Cargo/função (ex.: Office Boy)" value={cargo}
+             style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
+      <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+        setMsg(null); setSalvando(true)
+        try {
+          const r = await api.definirPosto(dados.id, {
+            posto_id: postoId || null, cargo_funcao: cargo.trim() || null,
+          })
+          setMsg({ tipo: 'ok', texto: r.docs_gerados.length
+            ? `Posto salvo. ${r.docs_gerados.length} documento(s) gerados e enviados para assinatura${r.email_enviado ? ' — o colaborador foi avisado por e-mail' : ' (e-mail não configurado: envie o link manualmente)'}.`
+            : 'Posto salvo.' })
+          await recarregar()
+        } catch (e) {
+          setMsg({ tipo: 'erro', texto: `Não foi possível salvar o posto (${e.detail || e.message}).` })
+        } finally { setSalvando(false) }
+      }}>{salvando ? 'Salvando…' : 'Salvar posto'}</button>
+      {extras.length > 0 && (
+        <span className="explica" style={{ margin: 0, width: '100%' }}>
+          Documentos do posto: {extras.map((a) =>
+            `${a.titulo} ${a.assinado_em ? '✓ assinado' : '⏳ aguardando assinatura'}`).join(' · ')}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function Detalhe({ id, aoVoltar }) {
   const [dados, setDados] = useState(null)
   const [visualizando, setVisualizando] = useState(null) // slot id
@@ -80,6 +123,8 @@ export default function Detalhe({ id, aoVoltar }) {
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
 
       {pendDossie && (
         <div className="alerta">

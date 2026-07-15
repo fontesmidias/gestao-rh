@@ -68,15 +68,15 @@ export default function Assinatura({ token, email, aoConcluir }) {
       <h2>✍️ Assinatura dos documentos admissionais</h2>
       <p className="explica">Seus dados foram registrados com sucesso. Agora,
         <strong> esta etapa é obrigatória e deve ser concluída em seguida</strong>: a sua
-        admissão somente prossegue após a assinatura dos três documentos abaixo. Depois dela,
+        admissão somente prossegue após a assinatura dos documentos abaixo. Depois dela,
         restarão duas partes: <strong>envio dos seus documentos</strong> (fotos) e a
         <strong> conferência pelo RH</strong>.</p>
 
       <div className="lista-fichas">
-        {fichas.map(({ documento, assinado }) => (
+        {fichas.map(({ documento, assinado, titulo }) => (
           <div className={`ficha-item ${assinado ? 'ok' : ''}`} key={documento}>
             <div>
-              <strong>{assinado ? '✅' : '📄'} {NOMES[documento]}</strong>
+              <strong>{assinado ? '✅' : '📄'} {titulo || NOMES[documento]}</strong>
               <a className="link-ver" href={api.previewUrl(token, documento)}
                  target="_blank" rel="noreferrer">
                 {assinado ? 'ver documento assinado' : 'conferir o documento antes de assinar'}
@@ -111,7 +111,7 @@ export default function Assinatura({ token, email, aoConcluir }) {
                 }}>Salvar e-mail</button>
               </div>
             )}
-            Com esse único código, os três documentos são assinados de uma só vez
+            Com esse único código, todos os documentos listados são assinados de uma só vez
             (assinatura eletrônica — Lei nº 14.063/2020).
           </div>
           <button className="btn-principal" disabled={fase === 'enviando'} onClick={pedirCodigo}>
@@ -134,7 +134,7 @@ export default function Assinatura({ token, email, aoConcluir }) {
             <button className="btn-link" disabled={fase === 'assinando'} onClick={pedirCodigo}>
               Não recebeu? Reenviar código</button>
           </div>
-          {fase === 'assinando' && <Espera texto="Assinando os 3 documentos e gerando suas vias…" />}
+          {fase === 'assinando' && <Espera texto="Assinando os documentos e gerando suas vias…" />}
         </div>
       )}
 

@@ -85,6 +85,10 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         .where(SlotDocumento.candidato_id == cand.id)
         .order_by(SlotDocumento.criado_em)
     ).all()
+    from app.api.assinaturas import NOMES_DOC
+    from app.models.assinatura import Assinatura
+    assinaturas = db.scalars(
+        select(Assinatura).where(Assinatura.candidato_id == cand.id)).all()
     return {
         "id": cand.id,
         "nome_completo": cand.nome_completo,
@@ -92,6 +96,13 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "celular_whatsapp": cand.celular_whatsapp,
         "status": cand.status,
         "dossie_gerado_em": cand.dossie_gerado_em,
+        "posto_servico_id": cand.posto_servico_id,
+        "cargo_funcao": cand.cargo_funcao,
+        "assinaturas": [
+            {"documento": a.documento, "titulo": NOMES_DOC[a.documento],
+             "assinado_em": a.assinado_em}
+            for a in assinaturas
+        ],
         "slots": [
             {
                 "id": s.id,

@@ -21,10 +21,26 @@ class StatusCandidato(str, enum.Enum):
     expurgado = "expurgado"
 
 
+class PostoServico(Base):
+    """Posto/contrato onde o colaborador será lotado (ex.: INFRAERO). Postos
+    podem exigir documentos adicionais assinados."""
+
+    __tablename__ = "posto_servico"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nome: Mapped[str] = mapped_column(String(200), unique=True)
+    contrato_ref: Mapped[str | None] = mapped_column(String(200))
+    exige_docs_infraero: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Candidato(Base):
     __tablename__ = "candidato"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("posto_servico.id"), nullable=True)
+    cargo_funcao: Mapped[str | None] = mapped_column(String(120))
     status: Mapped[StatusCandidato] = mapped_column(
         Enum(StatusCandidato, name="status_candidato"), default=StatusCandidato.convidado
     )

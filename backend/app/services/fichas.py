@@ -453,8 +453,230 @@ def gerar_termo_vt(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+# ============================================================
+# Documentos por posto de serviço (layout de ofício oficial)
+# ============================================================
+
+# Dados institucionais dos documentos oficiais (conferidos com os modelos).
+# TODO v1.4: editáveis pelo painel (config dinâmica).
+EMPRESA_RAZAO = "GREEN HOUSE SERVIÇOS DE LOCAÇÃO DE MÃO DE OBRA LTDA"
+EMPRESA_CNPJ = "12.531.678/0001-80"
+EMPRESA_RODAPE = ("SCIA Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará), "
+                  "Brasília, DF, CEP: 71.250-015\n"
+                  "+55 61 3346-8812 | www.greenhousedf.com.br")
+EMPRESA_ASSINANTES = (("Leandro de Sá", "CEO", "026.030.441-76"),
+                      ("Láysa Beatriz", "Assistente de RH", "113.900.916-86"))
+NAVY = (23, 26, 60)
+
+
+class _OficioPDF(_FichaPDF):
+    """Papel timbrado dos documentos oficiais: selo GREENHOUSE no topo direito
+    e rodapé institucional com filete verde."""
+
+    def header(self):
+        self.set_fill_color(*NAVY)
+        self.rect(150, 0, 60, 24, style="F")
+        self.set_xy(152, 8)
+        self.set_font("helvetica", "B", 13)
+        self.set_text_color(255, 255, 255)
+        self.cell(56, 8, "GREENHOUSE", align="C")
+        self.set_text_color(30, 30, 30)
+        self.set_y(32)
+
+    def footer(self):
+        self.set_y(-24)
+        self.set_draw_color(*VERDE)
+        self.set_line_width(0.6)
+        self.line(60, self.get_y(), 200, self.get_y())
+        self.set_font("helvetica", "", 7.5)
+        self.set_text_color(90, 100, 92)
+        self.multi_cell(120, 3.6, EMPRESA_RODAPE)
+        self.set_text_color(30, 30, 30)
+
+    def paragrafo(self, texto: str, negrito_inicio: str | None = None):
+        self.set_font("helvetica", "", 10.5)
+        self.multi_cell(0, 5.6, texto)
+        self.ln(2.5)
+
+    def assinantes_empresa(self):
+        self.ln(4)
+        self.set_font("helvetica", "", 10.5)
+        self.cell(0, 6, "Atenciosamente,", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.ln(2)
+        self.set_font("helvetica", "B", 10.5)
+        self.cell(0, 6, f"{EMPRESA_RAZAO}.", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.ln(1)
+        y = self.get_y()
+        self.set_font("helvetica", "", 10)
+        for i, (nome, cargo, cpf) in enumerate(EMPRESA_ASSINANTES):
+            x = 20 + i * 90
+            self.set_xy(x, y)
+            self.multi_cell(80, 5.4, f"{nome}\n{cargo}\nCPF: {cpf}", align="C")
+        self.set_y(y + 20)
+
+
+def _dados_posto(db: Session, candidato: Candidato) -> tuple[str, str]:
+    """(contrato_ref, cargo_funcao) do candidato — '-' quando não definidos."""
+    from app.models.candidato import PostoServico
+    posto = db.get(PostoServico, candidato.posto_servico_id) \
+        if candidato.posto_servico_id else None
+    contrato = (posto.contrato_ref if posto and posto.contrato_ref else "-")
+    return contrato, candidato.cargo_funcao or "-"
+
+
+_MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+             "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+
+def _data_extenso(d) -> str:
+    return f"Brasília, DF, {d.day:02d} de {_MESES_PT[d.month - 1]} de {d.year}."
+
+
+def gerar_oficio_cartao_cidadao(db: Session, candidato: Candidato,
+                                assinatura: Assinatura | None = None,
+                                base_url: str | None = None) -> bytes:
+    contrato, cargo = _dados_posto(db, candidato)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
+              else date.today())
+
+    pdf = _OficioPDF("Ofício - Cartão Cidadão")
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.cell(0, 6, _data_extenso(quando), align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    pdf.multi_cell(0, 5.6,
+                   "Á\nEMPRESA BRASILEIRA DE INFRAESTRUTURA AEROPORTUÁRIA - INFRAERO\n"
+                   "Setor Bancário Norte Quadra 1 Bloco F Edifício Palácio da Agricultura "
+                   "19º - Asa Norte, Brasília - DF\n"
+                   "A/C da Coordenação de Fiscalização Documental de Contratos "
+                   "Contínuos - ADCC-03")
+    pdf.ln(3)
+    pdf.set_font("helvetica", "B", 10.5)
+    pdf.multi_cell(0, 5.6, "Assunto: Fornecimento de cartão cidadão e senha ao extrato "
+                           f"do INSS\nReferência: Contrato Administrativo nº {contrato}")
+    pdf.ln(3)
+    pdf.paragrafo(f"1. {EMPRESA_RAZAO}, situada no endereço do rodapé, inscrita no "
+                  f"CNPJ/MF sob o nº {EMPRESA_CNPJ}, por seu representante legal e "
+                  "assistente de faturamento ao final subscritos e identificados, vem "
+                  "expor o que se segue.")
+    pdf.paragrafo("2. Em atenção às exigências contratuais sobre fornecimento de cartão "
+                  "cidadão e acessos aos extratos das informações previdenciárias, segue "
+                  "abaixo relação de todos os empregados alocados na prestação de "
+                  "serviços na(s) dependência(s) da Infraero - Empresa Brasileira de "
+                  "Infraestrutura Aeroportuária e as respectivas assinaturas individuais "
+                  "declarando, neste ato, que possuem acesso aos extratos de informações "
+                  "do FGTS e INSS.")
+
+    # Tabela: nome / cargo / assinatura
+    pdf.ln(1)
+    pdf.set_font("helvetica", "B", 9.5)
+    for larg, txt in ((70, "NOME DO EMPREGADO"), (50, "CARGO/FUNÇÃO"), (70, "ASSINATURA")):
+        pdf.cell(larg, 8, f" {txt}", border=1)
+    pdf.ln(8)
+    pdf.set_font("helvetica", "", 9.5)
+    situacao = ("Assinado eletronicamente\n(Lei nº 14.063/2020 - ver manifesto)"
+                if assinatura and assinatura.assinado_em else "")
+    y = pdf.get_y()
+    pdf.multi_cell(70, 6, f"{candidato.nome_completo}"
+                          + (f"\nCPF: {d.cpf}" if d and d.cpf else ""), border=1)
+    alto = max(pdf.get_y() - y, 12)
+    pdf.set_xy(80, y)
+    pdf.multi_cell(50, alto / 2 if situacao else alto, cargo, border=1)
+    pdf.set_xy(130, y)
+    pdf.multi_cell(70, alto / 2, situacao or " ", border=1)
+    pdf.set_y(y + alto)
+    pdf.ln(3)
+
+    pdf.paragrafo(f"3. Por fim, a GREEN HOUSE reafirma o seu compromisso perante este "
+                  "Contratante, bem como votos de estima e consideração.")
+    pdf.assinantes_empresa()
+
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
+    return bytes(pdf.output())
+
+
+def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
+                                  assinatura: Assinatura | None = None,
+                                  base_url: str | None = None) -> bytes:
+    contrato, _cargo = _dados_posto(db, candidato)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
+              else date.today())
+
+    pdf = _OficioPDF("Informações ao Trabalhador")
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(0, 7, "INFORMAÇÕES AO TRABALHADOR", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(2)
+    pdf.set_font("helvetica", "B", 10.5)
+    pdf.cell(0, 6, f"Contrato Administrativo nº {contrato}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    pdf.paragrafo(f"1. {EMPRESA_RAZAO}, situada no endereço do rodapé, inscrita no "
+                  f"CNPJ/MF sob o nº {EMPRESA_CNPJ}, doravante denominada GREEN HOUSE, "
+                  "por seus representantes legais, ao final subscritos e identificados, "
+                  "vem expor o que se segue.")
+    pdf.paragrafo("2. A GREEN HOUSE informa que os trabalhadores desta empresa possuem "
+                  "direitos garantidos pela Constituição Federal, pela Consolidação das "
+                  "Leis Trabalhistas (CLT) e pelas Convenções/Acordos Coletivos de "
+                  "Trabalho. Assim, listamos abaixo alguns desses direitos:")
+    direitos = [
+        "a) Carteira de trabalho assinada desde o primeiro dia de serviço;",
+        "b) Repouso semanal remunerado (1 folga por semana);",
+        "c) Salário pago até o 5º (quinto) dia útil do mês subsequente à prestação "
+        "do serviço;",
+        "d) 13º salário;",
+        "e) Férias de 30 (trinta) dias com acréscimo de 1/3 do salário;",
+        "f) Vale Transporte com desconto máximo de 6% do salário;",
+        "g) FGTS: depósito de 8% (oito por cento) do salário em conta bancária a favor "
+        "do empregado. Dirija-se a uma Agência da Caixa Econômica Federal e solicite o "
+        "extrato de contas vinculadas ao FGTS;",
+        "h) Horas Extras compensadas em banco de horas;",
+        "i) Indenizações pertinentes (verbas rescisórias), em caso de demissão;",
+        "j) Recolhimento da Contribuição Previdenciária (INSS): dirija-se a uma Agência "
+        "da Previdência Social e solicite o extrato de contribuições relativas ao seu "
+        "NIT/PIS/PASEP.",
+    ]
+    pdf.set_font("helvetica", "", 10.5)
+    for item in direitos:
+        pdf.set_x(18)
+        pdf.multi_cell(182, 5.6, item)
+        pdf.ln(1)
+    pdf.ln(1)
+    pdf.paragrafo("3. Informa, ainda, que a Infraero disponibiliza aos trabalhadores de "
+                  "empresas contratadas um canal para registro de reclamações (Ouvidoria "
+                  "Interna) relativas às questões trabalhistas decorrentes da prestação "
+                  "de seus serviços para a execução do contrato firmado entre o "
+                  "RESPONSÁVEL e esta empresa ou denúncias de desvios comportamentais "
+                  "como assédio moral e sexual. Sua mensagem pode ser enviada pelo "
+                  "seguinte canal: terceirizados@infraero.gov.br")
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.cell(0, 6, _data_extenso(quando), new_x="LMARGIN", new_y="NEXT")
+    pdf.assinantes_empresa()
+    pdf.ln(2)
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.cell(0, 6, f"Trabalhador ciente em: {quando.strftime('%d/%m/%Y')}",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    if assinatura and assinatura.assinado_em:
+        pdf.set_font("helvetica", "I", 10.5)
+        pdf.cell(0, 6, f"{candidato.nome_completo} - assinado eletronicamente",
+                 new_x="LMARGIN", new_y="NEXT")
+    else:
+        pdf.cell(0, 6, "_" * 60, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "B", 9.5)
+    pdf.cell(0, 6, "ASSINATURA DO TRABALHADOR", new_x="LMARGIN", new_y="NEXT")
+
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
+    return bytes(pdf.output())
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
     "termo_vt": gerar_termo_vt,
+    "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
+    "informacoes_trabalhador": gerar_informacoes_trabalhador,
 }
