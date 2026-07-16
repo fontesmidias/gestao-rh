@@ -88,7 +88,8 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
     from app.api.assinaturas import NOMES_DOC
     from app.models.assinatura import Assinatura
     assinaturas = db.scalars(
-        select(Assinatura).where(Assinatura.candidato_id == cand.id)).all()
+        select(Assinatura).where(Assinatura.candidato_id == cand.id,
+                                 Assinatura.invalidada_em.is_(None))).all()
     return {
         "id": cand.id,
         "nome_completo": cand.nome_completo,
@@ -112,6 +113,8 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
                 "status": s.status,
                 "motivo_rejeicao": s.motivo_rejeicao,
                 "paginas": s.paginas,
+                "origem_envio": s.origem_envio,
+                "origem_envio_obs": s.origem_envio_obs,
                 "enviado_em": s.enviado_em,
                 "revisado_em": s.revisado_em,
             }

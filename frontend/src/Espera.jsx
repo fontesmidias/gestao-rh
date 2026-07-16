@@ -90,6 +90,17 @@ const FRASES = [
   'Quem revisa duas vezes assina tranquilo. Nós revisamos três.',
   'Do Goiás ao Plano Piloto, tudo no mesmo cuidado.',
   'Feito para quem tem mais o que fazer do que preencher formulários.',
+  // Conjunto 7 (fase 2: poderes do RH com trilha completa, 2026-07-15)
+  'Toda mudança aqui deixa assinatura — a nossa e a sua.',
+  'Documentos com histórico são documentos com futuro.',
+  'O RH prepara, você assina: cada um no seu papel, tudo no seu lugar.',
+  'Nada se perde, tudo se registra. Lavoisier aprovaria o nosso RH.',
+  'Chegou pelo WhatsApp? Entra pela porta da frente, com etiqueta e tudo.',
+  'A confiança mora nos detalhes que ninguém vê — nós cuidamos deles.',
+  'Erros acontecem; o que não acontece aqui é ficarem sem correção.',
+  'Uma nova versão, uma nova assinatura — transparência de ponta a ponta.',
+  'Seu processo anda mesmo quando algo precisa ser refeito.',
+  'Auditoria completa: até as vírgulas sabem quem as trouxe.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

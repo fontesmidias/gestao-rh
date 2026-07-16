@@ -119,6 +119,27 @@ export const rh = {
   editarContato: (id, dados) =>
     req(`/rh/candidatos/${id}/contato`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  fichaCandidato: (id) => req(`/rh/candidatos/${id}/ficha`, { headers: authRH() }),
+  editarFicha: (id, secao, dados, motivo) =>
+    req(`/rh/candidatos/${id}/ficha/${secao}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),
+  inserirArquivo: async (slotId, arquivo, origem) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    fd.append('origem', origem || 'whatsapp')
+    const r = await fetch(`${BASE}/rh/slots/${slotId}/arquivo`,
+                          { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) {
+      const { detail } = await r.json()
+      const erro = new Error(detail)
+      erro.detail = detail
+      throw erro
+    }
+    return r.json()
+  },
+  reabrirSlot: (slotId, motivo) =>
+    req(`/rh/slots/${slotId}/reabrir`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
   arquivoUrl: (slotId) => `${BASE}/rh/slots/${slotId}/arquivo`,
   arquivo: (slotId) => req(`/rh/slots/${slotId}/arquivo`, { headers: authRH() }),
   aprovar: (slotId) => req(`/rh/slots/${slotId}/aprovar`, { method: 'POST', headers: authRH() }),

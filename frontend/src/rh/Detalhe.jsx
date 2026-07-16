@@ -101,6 +101,127 @@ function PostoServico({ dados, setMsg, recarregar }) {
   )
 }
 
+// Seções e campos que o RH pode completar/corrigir. A validação é a mesma do
+// candidato (backend); documentos já assinados que exibem o dado alterado são
+// invalidados e voltam para o CANDIDATO assinar — o RH prepara, nunca assina.
+const SECOES_FICHA = {
+  pessoais: ['nome_completo', 'nome_social', 'nome_mae', 'nome_pai',
+             'data_nascimento', 'naturalidade_cidade', 'naturalidade_uf'],
+  endereco: ['cep', 'logradouro_numero_complemento', 'bairro', 'cidade', 'uf'],
+  documentos: ['rg_numero', 'rg_orgao_emissor', 'rg_data_expedicao', 'cpf',
+               'pis_nis_pasep', 'cnh_numero', 'cnh_categoria',
+               'titulo_eleitor_numero', 'titulo_eleitor_zona', 'titulo_eleitor_secao'],
+  'trabalho-banco': ['tamanho_calca', 'tamanho_camisa', 'tamanho_calcado',
+                     'banco', 'pix_tipo', 'pix_chave'],
+  'vt-emergencia': ['vt_optante', 'vt_cartao_dftrans', 'vt_trajeto_descricao'],
+}
+const CHAVE_ESTADO = { 'trabalho-banco': 'trabalho_banco' }
+
+function FichaRH({ id, setMsg }) {
+  const [aberta, setAberta] = useState(false)
+  const [ficha, setFicha] = useState(null)
+  const [edicao, setEdicao] = useState({}) // {`secao.campo`: valor}
+  const [motivo, setMotivo] = useState('')
+  const [salvando, setSalvando] = useState(null)
+
+  const carregar = () => api.fichaCandidato(id).then(setFicha)
+  useEffect(() => { if (aberta) carregar() }, [aberta, id])
+
+  if (!aberta) return (
+    <div className="rh-card">
+      <button className="btn-secundario btn-mini" onClick={() => setAberta(true)}>
+        ✏️ Corrigir dados da ficha</button>
+      <span className="explica" style={{ margin: 0 }}> Completa campos faltantes ou corrige
+        erros. Fichas já assinadas que exibem o dado alterado voltam para o candidato
+        assinar de novo (só as afetadas).</span>
+    </div>
+  )
+  if (!ficha) return <div className="rh-card"><p>Carregando ficha…</p></div>
+
+  const valorAtual = (secao, campo) => {
+    const s = ficha[CHAVE_ESTADO[secao] || secao] || {}
+    if (secao === 'vt-emergencia') {
+      const vt = ficha.vt || {}
+      return { vt_optante: vt.optante, vt_cartao_dftrans: vt.cartao_dftrans,
+               vt_trajeto_descricao: vt.trajeto_descricao }[campo]
+    }
+    return s[campo]
+  }
+
+  const salvarSecao = async (secao) => {
+    const dados = {}
+    for (const campo of SECOES_FICHA[secao]) {
+      const chave = `${secao}.${campo}`
+      if (chave in edicao) dados[campo] = edicao[chave] === '' ? null : edicao[chave]
+    }
+    if (!Object.keys(dados).length) {
+      setMsg({ tipo: 'erro', texto: 'Nenhum campo desta seção foi alterado.' }); return
+    }
+    if (!motivo.trim()) {
+      setMsg({ tipo: 'erro', texto: 'Informe o motivo da correção — ele vai para a auditoria.' }); return
+    }
+    if (dados.vt_optante !== undefined && dados.vt_optante !== null) {
+      dados.vt_optante = String(dados.vt_optante).toLowerCase() === 'true'
+    }
+    setSalvando(secao); setMsg(null)
+    try {
+      const r = await api.editarFicha(id, secao, dados, motivo.trim())
+      const invalidadas = r.assinaturas_invalidadas || []
+      setMsg({ tipo: 'ok', texto: invalidadas.length
+        ? `Ficha atualizada. ${invalidadas.length} documento(s) voltaram para assinatura do candidato`
+          + (r.email_enviado ? ' — ele foi avisado por e-mail.' : ' — avise-o (e-mail não saiu).')
+        : 'Ficha atualizada (nenhum documento assinado foi afetado).' })
+      setEdicao((e) => {
+        const novo = { ...e }
+        Object.keys(novo).forEach((k) => { if (k.startsWith(`${secao}.`)) delete novo[k] })
+        return novo
+      })
+      await carregar()
+    } catch (e) {
+      const texto = Array.isArray(e.detail)
+        ? e.detail.map((d) => `${d.loc?.slice(-1)[0]}: ${d.msg}`).join('; ')
+        : (e.detail || e.message)
+      setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${texto}).` })
+    } finally { setSalvando(null) }
+  }
+
+  return (
+    <div className="rh-card ficha-rh">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong>✏️ Corrigir dados da ficha</strong>
+        <button className="btn-link" onClick={() => setAberta(false)}>fechar</button>
+      </div>
+      <p className="explica">Datas no formato <code>aaaa-mm-dd</code>. Deixar um campo em
+        branco apaga o valor. Toda alteração exige motivo e fica na auditoria com o antes e
+        o depois. Se o dado aparece em documento já assinado, a assinatura é invalidada e o
+        candidato assina a versão nova — <strong>quem assina é sempre ele</strong>.</p>
+      <label className="campo"><span className="rotulo">Motivo da correção (obrigatório)</span>
+        <input value={motivo} placeholder="ex.: candidato informou RG errado pelo WhatsApp"
+               onChange={(e) => setMotivo(e.target.value)} /></label>
+      {Object.entries(SECOES_FICHA).map(([secao, campos]) => (
+        <details key={secao} className="ficha-rh-secao">
+          <summary>{secao.replace('-', ' e ')}</summary>
+          {campos.map((campo) => {
+            const chave = `${secao}.${campo}`
+            const atual = valorAtual(secao, campo)
+            return (
+              <label className="campo" key={campo}>
+                <span className="rotulo">{campo.replaceAll('_', ' ')}
+                  {atual == null || atual === '' ? <em> — vazio</em> : null}</span>
+                <input value={chave in edicao ? edicao[chave] : (atual ?? '')}
+                       onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })} />
+              </label>
+            )
+          })}
+          <button className="btn-principal btn-mini" disabled={salvando === secao}
+                  onClick={() => salvarSecao(secao)}>
+            {salvando === secao ? 'Salvando…' : 'Salvar esta seção'}</button>
+        </details>
+      ))}
+    </div>
+  )
+}
+
 export default function Detalhe({ id, aoVoltar }) {
   const [dados, setDados] = useState(null)
   const [visualizando, setVisualizando] = useState(null) // slot id
@@ -131,6 +252,43 @@ export default function Detalhe({ id, aoVoltar }) {
     await api.rejeitar(slotId, motivo, obs || null)
     setRejeitando(null); setObs('')
     await recarregar()
+  }
+
+  const inputManual = { current: null }
+
+  const inserirNoSlot = (slot) => {
+    const origem = window.prompt(
+      'Como este documento chegou? (ex.: WhatsApp, e-mail, presencial)', 'WhatsApp')
+    if (origem == null) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*,.pdf,.doc,.docx'
+    input.onchange = async () => {
+      const arq = input.files[0]
+      if (!arq) return
+      setMsg(null)
+      try {
+        await api.inserirArquivo(slot.id, arq, origem.trim() || 'WhatsApp')
+        setMsg({ tipo: 'ok', texto: 'Documento inserido e etiquetado — revise e aprove como de costume.' })
+        await recarregar()
+      } catch (e) {
+        setMsg({ tipo: 'erro', texto: `Não foi possível inserir (${e.detail || e.message}).` })
+      }
+    }
+    input.click()
+  }
+
+  const reabrir = async (slot) => {
+    const motivo = window.prompt('Motivo da reabertura (obrigatório — vai para a auditoria):')
+    if (!motivo?.trim()) return
+    setMsg(null)
+    try {
+      await api.reabrirSlot(slot.id, motivo.trim())
+      setMsg({ tipo: 'ok', texto: 'Status reaberto (registrado na auditoria).' })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível reabrir (${e.detail || e.message}).` })
+    }
   }
 
   const gerarDossie = async (forcar = false) => {
@@ -174,6 +332,7 @@ export default function Detalhe({ id, aoVoltar }) {
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
+      <FichaRH id={id} setMsg={setMsg} />
 
       {pendDossie && (
         <div className="alerta">
@@ -250,7 +409,11 @@ export default function Detalhe({ id, aoVoltar }) {
                   <div className="slot-nome">
                     <strong>{info.nome}</strong>{!s.obrigatorio && <em> (opcional)</em>}
                     <div className="slot-status">{s.status}
-                      {s.paginas ? ` · ${s.paginas} pág.` : ''}</div>
+                      {s.paginas ? ` · ${s.paginas} pág.` : ''}
+                      {s.origem_envio === 'rh' &&
+                        <span className="etiqueta-rh"> 📎 inserido pelo RH
+                          {s.origem_envio_obs ? ` (${s.origem_envio_obs})` : ''}</span>}
+                    </div>
                   </div>
                   {s.status !== 'pendente' && s.paginas && (
                     <button className="btn-secundario btn-mini" onClick={() => ver(s)}>Ver</button>
@@ -266,6 +429,15 @@ export default function Detalhe({ id, aoVoltar }) {
                     <button className="btn-link" onClick={async () => {
                       await api.dispensar(s.id); await recarregar()
                     }}>dispensar</button>
+                  )}
+                  {['pendente', 'rejeitado', 'enviado'].includes(s.status) && (
+                    <button className="btn-secundario btn-mini"
+                            title="Documento recebido por WhatsApp/e-mail/presencial: insira aqui (fica etiquetado na auditoria)"
+                            onClick={() => inserirNoSlot(s)}>📎 Inserir</button>
+                  )}
+                  {['aprovado', 'dispensado', 'rejeitado'].includes(s.status) && (
+                    <button className="btn-link" title="Desfaz a decisão (pede motivo)"
+                            onClick={() => reabrir(s)}>↩ reabrir</button>
                   )}
                 </div>
                 {rejeitando === s.id && (

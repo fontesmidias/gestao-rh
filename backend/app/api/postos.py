@@ -101,7 +101,8 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
         if posto.exige_docs_infraero:
             existentes = {
                 a.documento for a in db.scalars(
-                    select(Assinatura).where(Assinatura.candidato_id == candidato.id)
+                    select(Assinatura).where(Assinatura.candidato_id == candidato.id,
+                                             Assinatura.invalidada_em.is_(None))
                 ).all()
             }
             for doc in DOCS_INFRAERO:

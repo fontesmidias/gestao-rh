@@ -278,7 +278,13 @@ def salvar_contatos(
 def estado_ficha(token: str, db: Session = Depends(get_db)) -> dict:
     """Estado completo para o front retomar de onde parou."""
     candidato = _candidato_do_token(token, db)
+    saida = montar_ficha(db, candidato)
+    db.commit()
+    return saida
 
+
+def montar_ficha(db: Session, candidato: Candidato) -> dict:
+    """Snapshot completo da ficha — usado pelo candidato e pelo painel do RH."""
     def _dump(obj) -> dict | None:
         if obj is None:
             return None
@@ -296,7 +302,6 @@ def estado_ficha(token: str, db: Session = Depends(get_db)) -> dict:
         .where(ContatoEmergencia.candidato_id == candidato.id)
         .order_by(ContatoEmergencia.ordem)
     ).all()
-    db.commit()
     return {
         "status": candidato.status,
         "aceite_lgpd_em": candidato.aceite_lgpd_em,

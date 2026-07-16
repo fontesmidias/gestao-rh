@@ -42,4 +42,10 @@ class Assinatura(Base):
     assinado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ip: Mapped[str | None] = mapped_column(String(45))
     user_agent: Mapped[str | None] = mapped_column(String(400))
+    # Invalidação (nunca deleção): dados que aparecem no documento mudaram após
+    # a assinatura → esta via perde a validade, o registro fica para histórico
+    # (o verificador público informa 'substituída') e um NOVO registro pendente
+    # é criado para o candidato assinar a versão atualizada.
+    invalidada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invalidada_motivo: Mapped[str | None] = mapped_column(String(300))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

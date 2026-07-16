@@ -80,7 +80,8 @@ def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = F
         a.documento: a
         for a in db.scalars(
             select(Assinatura).where(
-                Assinatura.candidato_id == candidato.id, Assinatura.assinado_em.isnot(None)
+                Assinatura.candidato_id == candidato.id, Assinatura.assinado_em.isnot(None),
+                Assinatura.invalidada_em.is_(None),
             )
         )
     }

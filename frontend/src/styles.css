@@ -477,6 +477,13 @@ input:focus, select:focus, textarea:focus {
 .captura-disparo { font-size: 1.1rem; }
 .captura-legenda { text-align: center; color: #a9bfb0; font-size: .85rem; margin: 0 0 .9rem; }
 
+/* Correção de ficha pelo RH + etiqueta de origem */
+.etiqueta-rh { color: var(--verde); font-weight: 600; }
+.ficha-rh-secao { margin: .5rem 0; border: 1px solid var(--borda);
+                  border-radius: var(--raio-input); padding: .5rem .8rem; }
+.ficha-rh-secao summary { cursor: pointer; font-weight: 600; text-transform: capitalize; }
+.ficha-rh-secao .campo { margin: .5rem 0; }
+
 /* Contato editável no detalhe do candidato (RH) */
 .contato-editavel { display: inline-flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
 .contato-editavel input { max-width: 220px; padding: .35rem .6rem; }

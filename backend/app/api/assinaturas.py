@@ -33,9 +33,12 @@ def _candidato_do_token(token: str, db: Session) -> Candidato:
 
 
 def _registro(db: Session, candidato: Candidato, documento: DocumentoAssinavel) -> Assinatura:
+    # Só registros ATIVOS: uma assinatura invalidada fica para histórico e um
+    # novo registro pendente assume o lugar dela.
     assinatura = db.scalar(
         select(Assinatura).where(
-            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento
+            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
+            Assinatura.invalidada_em.is_(None),
         )
     )
     if assinatura is None:
@@ -52,16 +55,18 @@ def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel
         select(Assinatura).where(
             Assinatura.candidato_id == candidato.id,
             Assinatura.documento.notin_(FICHAS_BASE),
+            Assinatura.invalidada_em.is_(None),
         )
     ).all()
-    return list(FICHAS_BASE) + [a.documento for a in extras]
+    return list(FICHAS_BASE) + sorted({a.documento for a in extras}, key=lambda d: d.value)
 
 
 @router.get("/c/{token}/fichas")
 def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
     candidato = _candidato_do_token(token, db)
     assinaturas = db.scalars(
-        select(Assinatura).where(Assinatura.candidato_id == candidato.id)
+        select(Assinatura).where(Assinatura.candidato_id == candidato.id,
+                                 Assinatura.invalidada_em.is_(None))
     ).all()
     por_doc = {a.documento: a for a in assinaturas}
     db.commit()
@@ -85,7 +90,7 @@ def preview(token: str, documento: DocumentoAssinavel, db: Session = Depends(get
     assinatura = db.scalar(
         select(Assinatura).where(
             Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
-            Assinatura.assinado_em.isnot(None),
+            Assinatura.assinado_em.isnot(None), Assinatura.invalidada_em.is_(None),
         )
     )
     if assinatura is not None and assinatura.pdf_key:
@@ -137,6 +142,21 @@ def verificar_assinatura(assinatura_id: uuid.UUID, db: Session = Depends(get_db)
     registrar(db, "assinatura_verificada", ator="publico",
               candidato_id=candidato.id, detalhe={"assinatura": str(assinatura.id)})
     db.commit()
+    if assinatura.invalidada_em is not None:
+        # A assinatura EXISTIU e era íntegra, mas o documento foi atualizado
+        # depois — dizer 'não encontrada' aqui soaria como fraude; a verdade
+        # é 'substituída por uma versão mais recente'.
+        return {
+            "valida": False,
+            "substituida": True,
+            "documento": NOMES_DOC[assinatura.documento],
+            "assinante": _nome_mascarado(candidato.nome_completo),
+            "cpf": _cpf_mascarado(doc_id.cpf if doc_id else None),
+            "assinado_em": assinatura.assinado_em,
+            "invalidada_em": assinatura.invalidada_em,
+            "hash_sha256": assinatura.hash_sha256,
+            "id": assinatura.id,
+        }
     return {
         "valida": True,
         "documento": NOMES_DOC[assinatura.documento],
@@ -246,7 +266,9 @@ def assinar_todos(
         assinatura.otp_expira_em = None
         pdf_assinado = GERADORES[doc.value](db, candidato, assinatura,
                                             base_url_publica(request))
-        key = f"candidatos/{candidato.id}/fichas/{doc.value}.pdf"
+        # Key com o id da assinatura: uma re-assinatura (após invalidação)
+        # nunca sobrescreve a via antiga — cada via assinada é preservada.
+        key = f"candidatos/{candidato.id}/fichas/{doc.value}-{assinatura.id}.pdf"
         storage.salvar(key, pdf_assinado, "application/pdf")
         assinatura.pdf_key = key
         anexos.append((f"{doc.value}.pdf", pdf_assinado))
@@ -296,7 +318,10 @@ def solicitar_codigo(
     candidato = _candidato_do_token(token, db)
     if candidato.status not in (StatusCandidato.aguardando_assinatura,
                                 StatusCandidato.docs_pendentes,
-                                StatusCandidato.preenchendo):
+                                StatusCandidato.preenchendo,
+                                # re-assinatura após atualização de dados pelo RH
+                                StatusCandidato.envio_concluido,
+                                StatusCandidato.em_revisao):
         raise HTTPException(status_code=409, detail="fase_invalida_para_assinatura")
     assinatura = _registro(db, candidato, documento)
     if assinatura.assinado_em is not None:
@@ -359,14 +384,15 @@ def assinar(
 
     pdf_assinado = GERADORES[documento.value](db, candidato, assinatura,
                                               base_url_publica(request))
-    key = f"candidatos/{candidato.id}/fichas/{documento.value}.pdf"
+    key = f"candidatos/{candidato.id}/fichas/{documento.value}-{assinatura.id}.pdf"
     storage.salvar(key, pdf_assinado, "application/pdf")
     assinatura.pdf_key = key
 
     # Assinou as 3? Candidato segue para a etapa de documentos.
     assinadas = db.scalars(
         select(Assinatura).where(
-            Assinatura.candidato_id == candidato.id, Assinatura.assinado_em.isnot(None)
+            Assinatura.candidato_id == candidato.id, Assinatura.assinado_em.isnot(None),
+            Assinatura.invalidada_em.is_(None),
         )
     ).all()
     todas = {a.documento for a in assinadas} | {documento}

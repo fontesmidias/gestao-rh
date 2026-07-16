@@ -20,14 +20,25 @@ export default function CandidatoApp() {
     return e
   }
 
+  const [reassinatura, setReassinatura] = useState(false)
+
   useEffect(() => {
     recarregar()
-      .then((e) => {
-        if (!e.aceite_lgpd_em) setTela('boas-vindas')
-        else if (['convidado', 'preenchendo'].includes(e.status)) setTela('formulario')
-        else if (e.status === 'aguardando_assinatura') setTela('assinatura')
-        else if (e.status === 'docs_pendentes') setTela('documentos')
-        else setTela('acompanhamento')
+      .then(async (e) => {
+        if (!e.aceite_lgpd_em) { setTela('boas-vindas'); return }
+        if (['convidado', 'preenchendo'].includes(e.status)) { setTela('formulario'); return }
+        if (e.status === 'aguardando_assinatura') { setTela('assinatura'); return }
+        // Já passou da assinatura? Se o RH atualizou dados, algum documento
+        // pode ter voltado a pendente — a assinatura fura a fila, sem travar o resto.
+        try {
+          const f = await api.fichas(token)
+          if (f.fichas.some((x) => !x.assinado)) {
+            setReassinatura(true)
+            setTela('assinatura')
+            return
+          }
+        } catch { /* segue o fluxo normal */ }
+        setTela(e.status === 'docs_pendentes' ? 'documentos' : 'acompanhamento')
       })
       .catch((e) => setErro(e.status === 404 ? 'link' : 'geral'))
   }, [token])
@@ -108,8 +119,19 @@ export default function CandidatoApp() {
       )}
 
       {tela === 'assinatura' && (
-        <Assinatura token={token} email={estado.pessoais?.email}
-                    aoConcluir={() => setTela('documentos')} />
+        <>
+          {reassinatura && (
+            <div className="alerta" style={{ maxWidth: 560, margin: '0 auto 1rem' }}>
+              📝 <strong>Alguns documentos foram atualizados</strong> pelo RH e precisam da
+              sua assinatura novamente. É rápido: confira e assine com o código do e-mail.
+            </div>
+          )}
+          <Assinatura token={token} email={estado.pessoais?.email}
+                      aoConcluir={() => setTela(
+                        reassinatura && estado.status !== 'aguardando_assinatura'
+                          ? (estado.status === 'docs_pendentes' ? 'documentos' : 'acompanhamento')
+                          : 'documentos')} />
+        </>
       )}
 
       {tela === 'documentos' && (

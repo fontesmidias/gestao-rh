@@ -15,6 +15,7 @@ from app.api.entrada import router as entrada_router
 from app.api.postos import router as postos_router
 from app.api.ficha import router as ficha_router
 from app.api.revisao import router as revisao_router
+from app.api.rh_ficha import router as rh_ficha_router
 from app.api.health import router as health_router
 from app.core.bootstrap import criar_admin_inicial
 from app.core.config import get_settings, ip_do_cliente
@@ -93,4 +94,5 @@ app.include_router(colaboradores_router, prefix="/api")
 app.include_router(postos_router, prefix="/api")
 app.include_router(assinaturas_router, prefix="/api")
 app.include_router(revisao_router, prefix="/api")
+app.include_router(rh_ficha_router, prefix="/api")
 app.include_router(configuracoes_router, prefix="/api")

@@ -65,6 +65,10 @@ class SlotDocumento(Base):
     arquivo_original_key: Mapped[str | None] = mapped_column(String(300))
     arquivo_pdf_key: Mapped[str | None] = mapped_column(String(300))
     paginas: Mapped[int | None] = mapped_column(SmallInteger)
+    # 'rh' quando o documento chegou fora do sistema (WhatsApp, presencial…) e
+    # o RH o inseriu manualmente — etiqueta visível no painel e na auditoria.
+    origem_envio: Mapped[str | None] = mapped_column(String(20))
+    origem_envio_obs: Mapped[str | None] = mapped_column(String(120))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revisado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revisado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario_rh.id"))
