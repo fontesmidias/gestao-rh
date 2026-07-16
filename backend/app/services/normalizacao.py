@@ -185,21 +185,21 @@ _MIME_IMAGEM = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"
 
 
 def _texto_do_envio(ext: str, dados: bytes, pdf: bytes) -> str:
-    """Texto do documento, na ordem de qualidade: camada de texto do PDF →
-    OCR com IA (Mistral, se houver chave configurada) → Tesseract local.
-    Qualquer degrau indisponível cai para o seguinte em silêncio."""
+    """Texto do documento. Ordem (decisão do RH, 2026-07-16): OCR com IA
+    (Mistral) SEMPRE em primeiro lugar quando há chave; depois a camada de
+    texto do PDF; por fim o Tesseract local. Qualquer degrau indisponível cai
+    para o seguinte em silêncio."""
     from app.services.ocr_ia import texto_via_mistral
 
     if ext == ".pdf":
+        texto_ia = texto_via_mistral(pdf, "application/pdf")
+        if texto_ia:
+            return texto_ia
         try:
             paginas = PdfReader(io.BytesIO(pdf)).pages[:3]
-            texto = "\n".join((p.extract_text() or "") for p in paginas)
+            return "\n".join((p.extract_text() or "") for p in paginas)
         except Exception:
-            texto = ""
-        if texto.strip():
-            return texto
-        # PDF escaneado (sem camada de texto): a IA lê, se configurada.
-        return texto_via_mistral(pdf, "application/pdf") or ""
+            return ""
     if ext in _EXT_IMAGEM:
         texto_ia = texto_via_mistral(dados, _MIME_IMAGEM.get(ext, "image/jpeg"))
         if texto_ia:

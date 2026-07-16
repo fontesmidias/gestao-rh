@@ -772,10 +772,174 @@ def gerar_termo_lgpd_infraero(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+EMPRESA_ENDERECO = ("SCIA, Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará), "
+                    "Brasília/DF, CEP 71.250-015")
+
+# Cláusulas do Acordo de Confidencialidade — texto do modelo oficial, com a
+# gramática revisada (concordância de "os DADOS" no plural, "resultará",
+# vírgulas) e a qualificação da empresa unificada com o endereço do rodapé.
+_ACORDO_CLAUSULAS = (
+    ("DEFINIÇÕES",
+     ["Para os efeitos do presente ACORDO, serão adotadas as seguintes definições:",
+      '"DADOS": toda e qualquer informação, veiculada sob qualquer forma, escrita ou '
+      'verbal, tangível ou intangível (como, por exemplo, mas não se limitando a estes '
+      'significados: descobertas, ideias, conceitos, know-how, técnicas, desenhos, '
+      'projetos, especificações, diagramas, modelos, amostras, fluxogramas, programas '
+      'de computador, mídias digitais, planos de marketing e vendas, nomes de clientes '
+      'e outras informações técnicas, financeiras ou comerciais transmitidas por uma '
+      'parte à outra), relacionada ao presente instrumento ou a qualquer outra '
+      'negociação que venha a ser mantida entre as partes, e que: (1) se veiculada sob '
+      'forma escrita ou sob qualquer outra forma tangível, esteja identificada com a '
+      'designação "CONFIDENCIAL"; ou (2) se veiculada verbalmente, desde que, no '
+      'momento de sua veiculação ou dentro de 5 (cinco) dias úteis após essa '
+      'veiculação, a parte transmissora descreva o referido DADO, por escrito, '
+      'identificando sua natureza confidencial, na forma do item (1) acima;',
+      "PESSOAL AUTORIZADO: empregados, representantes, contratados e/ou empresas "
+      "associadas de qualquer das partes e seus respectivos empregados, representantes "
+      "e/ou contratados previamente autorizados pela Diretoria."]),
+    ("VIGÊNCIA",
+     ["O presente ACORDO vigorará pelo prazo de 2 (dois) anos a partir de sua "
+      "assinatura, a menos que de outra forma seja acordado por escrito entre as partes."]),
+    ("OBRIGAÇÕES DA RECEPTORA",
+     ["A partir da data de assinatura do presente instrumento, a RECEPTORA deverá:",
+      "a) utilizar os DADOS somente nos termos do presente ACORDO, sendo expressamente "
+      "vedada sua utilização para qualquer outro fim que não os mencionados pela "
+      "TRANSMISSORA no momento de sua divulgação;",
+      "b) transmitir os DADOS somente aos membros do PESSOAL AUTORIZADO que tenham "
+      "necessidade de tomar conhecimento de tal DADO, sendo vedada a divulgação a "
+      "qualquer pessoa que não deva ter acesso ao referido DADO. A RECEPTORA deverá "
+      "certificar-se de que os membros do PESSOAL AUTORIZADO estejam devidamente "
+      "cientificados da natureza confidencial do DADO que lhes será divulgado, "
+      "orientando-os a observar as obrigações assumidas por força do presente ACORDO;",
+      "c) exigir que os membros do PESSOAL AUTORIZADO utilizem com os DADOS o mesmo "
+      "grau de cuidado e sigilo utilizado com as informações confidenciais da própria "
+      "RECEPTORA;",
+      "d) informar à TRANSMISSORA qualquer divulgação ou utilização indevida dos DADOS "
+      "de que venha a tomar conhecimento;",
+      "e) não efetuar cópias ou qualquer outro tipo de reprodução dos DADOS recebidos "
+      "por força do presente ACORDO sem a aprovação prévia da TRANSMISSORA."]),
+    ("EXCEÇÕES",
+     ["Nenhuma obrigação de confidencialidade será observada nas hipóteses em que os "
+      "DADOS:",
+      "a) já tenham sido divulgados à RECEPTORA sem obrigação de confidencialidade;",
+      "b) venham a ser divulgados à RECEPTORA por terceiros sem obrigação de "
+      "confidencialidade;",
+      "c) estejam ou tenham sido tornados disponíveis publicamente, de forma lícita, "
+      "por outra parte que não a RECEPTORA;",
+      "d) tenham sido, total e independentemente, desenvolvidos pela RECEPTORA;",
+      "e) devam ser divulgados por força de qualquer disposição legal ou regulamentar, "
+      "ou de determinação judicial ou de outra autoridade pública competente, desde que "
+      "a parte que tenha de efetuar a mencionada divulgação notifique imediatamente a "
+      "TRANSMISSORA da existência de tal requerimento e não se oponha a que a "
+      "TRANSMISSORA procure, às suas expensas, por meio de processo judicial ou "
+      "administrativo, evitar tal divulgação."]),
+    ("DISPOSIÇÕES GERAIS",
+     ["O presente ACORDO, ou qualquer divulgação de informação realizada em "
+      "conformidade com os seus termos e condições, com exceção das disposições nele "
+      "expressas, não confere, a qualquer título, nenhum tipo de licença nem qualquer "
+      "outro direito, de qualquer natureza, para a utilização dos DADOS, patentes, "
+      "marcas, nomes comerciais, direitos autorais ou outro tipo de propriedade "
+      "intelectual da TRANSMISSORA.",
+      "Todos os DADOS divulgados na forma do presente ACORDO serão considerados de "
+      "propriedade da TRANSMISSORA. Em até 15 (quinze) dias corridos do recebimento de "
+      "uma solicitação da TRANSMISSORA, a RECEPTORA deverá devolver-lhe todos e "
+      "quaisquer DADOS por ela recebidos sob forma tangível e todas as cópias de suas "
+      "eventuais reproduções, e deverá, também, destruir todos os DADOS por ela "
+      "produzidos com base, parcial ou total, em DADOS a ela divulgados pela "
+      "TRANSMISSORA por força deste pacto.",
+      "O presente ACORDO não estabelece nenhuma obrigatoriedade ou vedação a que "
+      "qualquer das partes celebre outro contrato ou participe de qualquer outra "
+      "negociação com outras partes.",
+      "O presente ACORDO somente poderá ser alterado mediante aditivo escrito celebrado "
+      "entre as partes. A tolerância de qualquer das partes com relação ao cumprimento "
+      "das obrigações da outra parte não configurará novação.",
+      "O presente ACORDO corresponde ao acordo integral entre as partes a respeito do "
+      "seu objeto, substituindo qualquer entendimento anterior, verbal ou escrito.",
+      "As partes reconhecem que o não cumprimento das obrigações assumidas sob este "
+      "ACORDO resultará em prejuízos irreparáveis para a TRANSMISSORA e que, dentre "
+      "outras medidas, a TRANSMISSORA poderá adotar qualquer medida que permita impedir "
+      "ou restringir o descumprimento das obrigações ora assumidas, respondendo a parte "
+      "infratora pelos danos diretos decorrentes da exposição de quaisquer DADOS de que "
+      "trata este ACORDO. Em hipótese alguma as partes responderão por danos indiretos, "
+      "lucros cessantes ou perda de receita.",
+      "O presente ACORDO produz efeitos desde a data de admissão da RECEPTORA junto à "
+      "TRANSMISSORA.",
+      "O presente ACORDO submete-se à legislação vigente na República Federativa do "
+      "Brasil.",
+      "As partes elegem, de forma irretratável e irrevogável, o foro da circunscrição "
+      "judiciária de Brasília/DF como o único competente para dirimir qualquer dúvida "
+      "ou eventual controvérsia que possa surgir na execução do presente instrumento, "
+      "com renúncia expressa a qualquer outro, por mais privilegiado que seja."]),
+)
+
+
+def gerar_acordo_confidencialidade(db: Session, candidato: Candidato,
+                                   assinatura: Assinatura | None = None,
+                                   base_url: str | None = None) -> bytes:
+    """Acordo de Confidencialidade — antes gerado à mão no Word; agora com a
+    qualificação puxada dinamicamente da ficha do colaborador, formatação
+    uniforme no papel timbrado e gramática revisada."""
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    p = db.get(DadosPessoais, candidato.id)
+    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
+              else date.today())
+
+    cpf_txt = (f"{d.cpf[:3]}.{d.cpf[3:6]}.{d.cpf[6:9]}-{d.cpf[9:]}"
+               if d and d.cpf and len(d.cpf) == 11 else "___.___.___-__")
+    nome_social = f" (nome social: {p.nome_social})" if p and p.nome_social else ""
+    cargo = f", na função de {candidato.cargo_funcao}" if candidato.cargo_funcao else ""
+
+    pdf = _OficioPDF("Acordo de Confidencialidade")
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(0, 7, "ACORDO DE CONFIDENCIALIDADE", align="C",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    pdf.paragrafo(
+        f"{EMPRESA_RAZAO}., inscrita no CNPJ/MF sob o nº {EMPRESA_CNPJ}, com sede na "
+        f"{EMPRESA_ENDERECO}, neste ato representada na forma de seu ato constitutivo, "
+        'doravante denominada simplesmente "TRANSMISSORA"; e '
+        f"{candidato.nome_completo}{nome_social}, inscrito(a) no CPF sob o nº "
+        f"{cpf_txt}{cargo}, doravante denominado(a) simplesmente \"RECEPTORA\".")
+    pdf.paragrafo(
+        "As partes, acima nomeadas e qualificadas, resolvem celebrar o presente Acordo "
+        'de Confidencialidade, doravante simplesmente "ACORDO", de acordo com os '
+        "seguintes termos e condições:")
+    for titulo, paragrafos in _ACORDO_CLAUSULAS:
+        pdf.ln(1)
+        pdf.set_font("helvetica", "B", 10.5)
+        pdf.cell(0, 6, titulo, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+        for texto in paragrafos:
+            pdf.paragrafo(texto)
+    pdf.paragrafo(
+        "E, por estarem assim justas e contratadas, as partes assinam o presente "
+        "ACORDO eletronicamente, na forma da Lei nº 14.063/2020, com a trilha de "
+        "evidências registrada no manifesto anexo.")
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.cell(0, 6, f"Brasília/DF, {quando.strftime('%d/%m/%Y')}.",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.assinantes_empresa(assinantes_config(db))
+    pdf.ln(2)
+    if assinatura and assinatura.assinado_em:
+        pdf.set_font("helvetica", "I", 10.5)
+        pdf.cell(0, 6, f"{candidato.nome_completo} - assinado eletronicamente",
+                 new_x="LMARGIN", new_y="NEXT")
+    else:
+        pdf.cell(0, 6, "_" * 60, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "B", 9.5)
+    pdf.cell(0, 6, "RECEPTORA (COLABORADOR)", new_x="LMARGIN", new_y="NEXT")
+
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
+    return bytes(pdf.output())
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
     "termo_vt": gerar_termo_vt,
+    "acordo_confidencialidade": gerar_acordo_confidencialidade,
     "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
     "informacoes_trabalhador": gerar_informacoes_trabalhador,
     "termo_lgpd_infraero": gerar_termo_lgpd_infraero,

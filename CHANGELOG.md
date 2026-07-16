@@ -6,6 +6,26 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.7.0] — 2026-07-16
+
+### Adicionado
+- **Acordo de Confidencialidade** como quarta ficha de todo candidato,
+  **retroativo**: quem ainda não assinou (mesmo já aprovado) passa a dever a
+  assinatura automaticamente — o link de sempre abre direto na tela de
+  assinar, e o dossiê passa a incluí-lo. Texto do modelo oficial com
+  qualificação puxada dinamicamente da ficha (nome, CPF, nome social, função),
+  endereço da sede unificado com o do rodapé, formatação uniforme no papel
+  timbrado e gramática revisada (concordâncias, vírgulas, "resultará").
+
+### Alterado
+- OCR com IA (Mistral) passou a ser o **primeiro** degrau da leitura para
+  qualquer arquivo (antes: só quando o PDF não tinha camada de texto);
+  fallback: camada de texto do PDF → Tesseract local.
+
+### Corrigido
+- Busca no relatório de colaboradores quebrava (erro 500) quando havia
+  candidato sem e-mail — efeito colateral do convite sem e-mail da 1.3.
+
 ## [1.6.0] — 2026-07-15
 
 ### Adicionado
@@ -187,6 +207,7 @@ Primeira versão candidata do Portal de Admissão.
 - Deploy: compose base+variantes (ip / traefik / certbot), stack única para Portainer com
   imagens do GHCR publicadas por CI (GitHub Actions).
 
+[1.7.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.7.0
 [1.6.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.6.0
 [1.5.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.5.0
 [1.4.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.4.0

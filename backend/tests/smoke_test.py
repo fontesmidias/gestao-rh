@@ -105,7 +105,8 @@ def _fake_email(dest, assunto, corpo, html=None, anexos=None, **kw):
     return True
 mod_ass.enviar_email = _fake_email
 
-for doc in ("ficha_cadastro", "ficha_emergencia", "termo_vt"):
+FICHAS = ("ficha_cadastro", "ficha_emergencia", "termo_vt", "acordo_confidencialidade")
+for doc in FICHAS:
     r = c.get(f"/api/c/{token}/fichas/{doc}/preview")
     assert r.status_code == 200 and r.content[:4] == b"%PDF", doc
 
@@ -113,8 +114,8 @@ assert c.post(f"/api/c/{token}/fichas/solicitar-codigo").status_code == 204
 r = c.post(f"/api/c/{token}/fichas/assinar", json={"codigo": "000000"})
 assert r.status_code == 422, r.text  # código errado é recusado
 r = c.post(f"/api/c/{token}/fichas/assinar", json={"codigo": capturado["codigo"]})
-assert r.status_code == 200 and len(r.json()["assinados"]) == 3, r.text
-assert len(capturado["anexos"]) == 3  # vias assinadas enviadas ao candidato
+assert r.status_code == 200 and len(r.json()["assinados"]) == len(FICHAS), r.text
+assert len(capturado["anexos"]) == len(FICHAS)  # vias assinadas enviadas ao candidato
 assert all(a[1][:4] == b"%PDF" for a in capturado["anexos"])
 assert c.post(f"/api/c/{token}/fichas/solicitar-codigo").status_code == 409  # tudo assinado
 
@@ -230,14 +231,14 @@ for s in detalhe["slots"]:
     if s["status"] == "enviado":
         assert c.post(f"/api/rh/slots/{s['id']}/aprovar", headers=rh).status_code == 200
 
-# 14) dossiê gerado na ordem oficial: 3 fichas assinadas + documentos aprovados
+# 14) dossiê gerado na ordem oficial: 4 fichas assinadas + documentos aprovados
 r = c.post(f"/api/rh/candidatos/{convite['candidato']['id']}/dossie", headers=rh)
 assert r.status_code == 200 and r.json()["status"] == "aprovado", r.text
 r = c.get(f"/api/rh/candidatos/{convite['candidato']['id']}/dossie", headers=rh)
 assert r.status_code == 200 and r.content[:4] == b"%PDF"
 from pypdf import PdfReader as _PR
 paginas_dossie = len(_PR(io.BytesIO(r.content)).pages)
-assert paginas_dossie >= 3 + 13, paginas_dossie  # 3 fichas + 13 docs deste candidato
+assert paginas_dossie >= 4 + 13, paginas_dossie  # 4 fichas + 13 docs deste candidato
 
 # 15) expurgo: nada a expurgar dentro da retenção; forçando retenção 0 dias, expurga
 import app.workers.expurgo as mod_exp
