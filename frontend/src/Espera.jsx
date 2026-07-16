@@ -101,6 +101,17 @@ const FRASES = [
   'Uma nova versão, uma nova assinatura — transparência de ponta a ponta.',
   'Seu processo anda mesmo quando algo precisa ser refeito.',
   'Auditoria completa: até as vírgulas sabem quem as trouxe.',
+  // Conjunto 8 (fase 3: frente e verso, 2026-07-15)
+  'Frente e verso: porque documento também tem dois lados da história.',
+  'Juntando as páginas com o capricho de quem encaderna à mão.',
+  'Duas fotos, um documento, zero complicação.',
+  'O verso do RG guarda segredos — filiação, expedição… nós lemos por você.',
+  'Costurando os arquivos num PDF só, com linha invisível.',
+  'Cada página no seu lugar, como um álbum bem montado.',
+  'Documento completo é documento aprovado de primeira.',
+  'Virando a página — literalmente — para você não precisar reenviar depois.',
+  'Um clique para a frente, outro para o verso, e o resto é conosco.',
+  'Perfeição não é pressa: é a segunda foto tão boa quanto a primeira.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

@@ -61,6 +61,24 @@ def normalizar_para_pdf(nome_arquivo: str, dados: bytes) -> tuple[bytes, int]:
     return pdf, paginas
 
 
+def combinar_pdfs(pdfs: list[bytes]) -> tuple[bytes, int]:
+    """Junta vários PDFs (frente/verso, páginas de certidão…) em um só.
+    Devolve (pdf_combinado, total_de_paginas)."""
+    if len(pdfs) == 1:
+        return pdfs[0], len(PdfReader(io.BytesIO(pdfs[0])).pages)
+    from pypdf import PdfWriter
+    escritor = PdfWriter()
+    total = 0
+    for pdf in pdfs:
+        leitor = PdfReader(io.BytesIO(pdf))
+        for pagina in leitor.pages:
+            escritor.add_page(pagina)
+            total += 1
+    saida = io.BytesIO()
+    escritor.write(saida)
+    return saida.getvalue(), total
+
+
 def _nitidez(img: Image.Image) -> float:
     """Energia de detalhe da imagem: diferença entre a imagem e ela mesma
     desfocada. Foto tremida/borrada ou totalmente lisa tem energia ~0."""

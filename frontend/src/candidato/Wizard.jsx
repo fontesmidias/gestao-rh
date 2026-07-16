@@ -138,6 +138,8 @@ function LeitorRG({ token, dados, setDados, salvar }) {
     <div className="leitor-rg">
       {camera && (
         <CapturaDocumento formato="cartao" titulo="Fotografar RG ou CNH"
+                          passos={[{ rotulo: 'FRENTE' },
+                                   { rotulo: 'VERSO', opcional: true }]}
                           aoCapturar={processar} aoArquivo={processar}
                           aoFechar={() => setCamera(false)} />
       )}

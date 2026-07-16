@@ -15,7 +15,8 @@ from app.services import storage
 from app.services.auditoria import registrar
 from app.services.email import enviar_email
 from app.services.magic_link import resolver_token
-from app.services.normalizacao import (ArquivoInvalido, normalizar_para_pdf,
+from app.services.normalizacao import (ArquivoInvalido, combinar_pdfs,
+                                       normalizar_para_pdf,
                                        validar_comprovante_recente)
 from app.services.slots import sincronizar_slots
 
@@ -62,9 +63,13 @@ def checklist(token: str, db: Session = Depends(get_db)) -> dict:
 def enviar_arquivo(
     token: str,
     slot_id: uuid.UUID,
-    arquivo: UploadFile,
+    arquivo: UploadFile | None = None,
+    arquivos: list[UploadFile] | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
+    """Aceita UM arquivo (campo `arquivo`) ou VÁRIOS (`arquivos`: frente e
+    verso, páginas de certidão…) — tudo vira um único PDF no slot, e o OCR lê
+    o texto combinado (o verso do RG é onde mora a filiação)."""
     candidato = _candidato_do_token(token, db)
     if candidato.status == StatusCandidato.envio_concluido:
         raise HTTPException(status_code=409, detail="envio_ja_concluido")
@@ -72,28 +77,35 @@ def enviar_arquivo(
     if slot is None or slot.candidato_id != candidato.id:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
 
-    dados = arquivo.file.read()
+    lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
+    if not lista:
+        raise HTTPException(status_code=422, detail="arquivo_vazio")
+
     sugestoes: dict = {}
     detectado: str | None = None
     try:
-        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
-        if slot.tipo == TipoDocumento.comp_endereco:
-            validar_comprovante_recente(arquivo.filename or "arquivo", dados, pdf)
+        partes = []  # (nome, content_type, dados, pdf)
+        for up in lista:
+            dados = up.file.read()
+            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados)
+            if slot.tipo == TipoDocumento.comp_endereco:
+                validar_comprovante_recente(up.filename or "arquivo", dados, pdf)
+            partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
+
+        texto = "\n".join(filter(None, (_texto(n, d, p) for n, _, d, p in partes)))
         if slot.tipo == TipoDocumento.cpf_doc:
-            _conferir_cpf_do_documento(db, candidato, arquivo.filename or "arquivo",
-                                       dados, pdf)
+            _conferir_cpf_no_texto(db, candidato, texto)
         # OCR de qualquer documento com dados de ficha: SUGESTÕES ao candidato
         # (o front pergunta se ele quer usar — nada é aplicado sem consentimento).
-        texto = _texto(arquivo.filename, dados, pdf)
         if texto:
             from app.services.ocr_rg import sugestoes_por_slot
             sugestoes, detectado = sugestoes_por_slot(slot.tipo.value, texto)
+        pdf_final, paginas = combinar_pdfs([p[3] for p in partes])
     except ArquivoInvalido as exc:
         # Feedback imediato ao candidato: o front traduz o código em linguagem simples.
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
 
-    _gravar_no_slot(db, candidato, slot, arquivo.filename, arquivo.content_type,
-                    dados, pdf, paginas)
+    _gravar_partes_no_slot(db, candidato, slot, partes, pdf_final, paginas)
     db.commit()
     saida = _slot_out(slot)
     if sugestoes:
@@ -113,12 +125,25 @@ def _texto(nome_arquivo: str | None, dados: bytes, pdf: bytes) -> str | None:
 def _gravar_no_slot(db: Session, candidato: Candidato, slot: SlotDocumento,
                     nome_arquivo: str | None, content_type: str | None,
                     dados: bytes, pdf: bytes, paginas: int) -> None:
-    base = f"candidatos/{candidato.id}/slots/{slot.id}"
-    storage.salvar(f"{base}/original/{nome_arquivo}", dados,
-                   content_type or "application/octet-stream")
-    storage.salvar(f"{base}/documento.pdf", pdf, "application/pdf")
+    _gravar_partes_no_slot(db, candidato, slot,
+                           [(nome_arquivo or "arquivo", content_type, dados, None)],
+                           pdf, paginas)
 
-    slot.arquivo_original_key = f"{base}/original/{nome_arquivo}"
+
+def _gravar_partes_no_slot(db: Session, candidato: Candidato, slot: SlotDocumento,
+                           partes: list[tuple], pdf_final: bytes, paginas: int) -> None:
+    """Grava 1..N originais + o PDF combinado do slot. Um reenvio primeiro
+    expurga (com hash em auditoria) o que havia antes — nada fica órfão."""
+    if slot.arquivo_pdf_key:
+        expurgar_arquivos_do_slot(db, slot, evento="documento_substituido",
+                                  ator="candidato")
+    base = f"candidatos/{candidato.id}/slots/{slot.id}"
+    for i, (nome, content_type, dados, _pdf) in enumerate(partes, start=1):
+        storage.salvar(f"{base}/original/{i}-{nome}", dados,
+                       content_type or "application/octet-stream")
+    storage.salvar(f"{base}/documento.pdf", pdf_final, "application/pdf")
+
+    slot.arquivo_original_key = f"{base}/original/1-{partes[0][0]}"
     slot.arquivo_pdf_key = f"{base}/documento.pdf"
     slot.paginas = paginas
     slot.status = StatusSlot.enviado
@@ -126,17 +151,20 @@ def _gravar_no_slot(db: Session, candidato: Candidato, slot: SlotDocumento,
     slot.motivo_rejeicao_obs = None
     slot.enviado_em = datetime.now(timezone.utc)
     registrar(db, "documento_enviado", ator="candidato", candidato_id=candidato.id,
-              detalhe={"tipo": slot.tipo.value, "paginas": paginas})
+              detalhe={"tipo": slot.tipo.value, "paginas": paginas,
+                       "arquivos": len(partes)})
     if candidato.status in (StatusCandidato.aguardando_assinatura, StatusCandidato.preenchendo):
         candidato.status = StatusCandidato.docs_pendentes
 
 
 @router.post("/c/{token}/documentos/identidade")
-def enviar_identidade(token: str, arquivo: UploadFile,
+def enviar_identidade(token: str,
+                      arquivo: UploadFile | None = None,
+                      arquivos: list[UploadFile] | None = None,
                       db: Session = Depends(get_db)) -> dict:
-    """Foto do RG OU da CNH (o candidato escolhe — muita gente só tem a CNH à
-    mão): detecta qual dos dois é, guarda no slot certo do checklist e devolve
-    as sugestões de preenchimento para o candidato conferir."""
+    """Foto(s) do RG OU da CNH (frente e verso quando houver): detecta qual dos
+    dois é, guarda tudo como um PDF no slot certo do checklist e devolve as
+    sugestões de preenchimento — a filiação e a expedição moram no verso."""
     from app.services.ocr_rg import (detectar_tipo, sugestoes_da_cnh,
                                      sugestoes_do_rg)
 
@@ -144,13 +172,21 @@ def enviar_identidade(token: str, arquivo: UploadFile,
     if candidato.status == StatusCandidato.envio_concluido:
         raise HTTPException(status_code=409, detail="envio_ja_concluido")
 
-    dados = arquivo.file.read()
+    lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
+    if not lista:
+        raise HTTPException(status_code=422, detail="arquivo_vazio")
+
     try:
-        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
+        partes = []
+        for up in lista:
+            dados = up.file.read()
+            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados)
+            partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
+        pdf_final, paginas = combinar_pdfs([p[3] for p in partes])
     except ArquivoInvalido as exc:
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
 
-    texto = _texto(arquivo.filename, dados, pdf) or ""
+    texto = "\n".join(filter(None, (_texto(n, d, p) for n, _, d, p in partes)))
     detectado = detectar_tipo(texto)
     e_cnh = detectado == "cnh"
 
@@ -161,8 +197,7 @@ def enviar_identidade(token: str, arquivo: UploadFile,
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
 
     sugestoes = sugestoes_da_cnh(texto) if e_cnh else sugestoes_do_rg(texto)
-    _gravar_no_slot(db, candidato, slot, arquivo.filename, arquivo.content_type,
-                    dados, pdf, paginas)
+    _gravar_partes_no_slot(db, candidato, slot, partes, pdf_final, paginas)
     db.commit()
     saida = _slot_out(slot)
     saida["sugestoes"] = sugestoes
@@ -170,21 +205,16 @@ def enviar_identidade(token: str, arquivo: UploadFile,
     return saida
 
 
-def _conferir_cpf_do_documento(db: Session, candidato: Candidato,
-                               nome_arquivo: str, dados: bytes, pdf: bytes) -> None:
+def _conferir_cpf_no_texto(db: Session, candidato: Candidato, texto: str) -> None:
     """Se o documento de CPF traz um número legível e ele NÃO bate com o CPF da
     ficha, recusa na hora (documento de outra pessoa ou digitação errada).
     Sem leitura ou sem CPF na ficha, não bloqueia — o RH decide na revisão."""
-    from pathlib import Path as _P
-
     from app.models.ficha import DocumentosIdentificacao
-    from app.services.normalizacao import _texto_do_envio
     from app.services.ocr_rg import cpfs_no_texto
 
     doc = db.get(DocumentosIdentificacao, candidato.id)
     if doc is None or not doc.cpf:
         return
-    texto = _texto_do_envio(_P(nome_arquivo.lower()).suffix, dados, pdf)
     achados = cpfs_no_texto(texto or "")
     if achados and doc.cpf not in achados:
         raise ArquivoInvalido("cpf_divergente")
@@ -231,15 +261,20 @@ def excluir_meu_arquivo(token: str, slot_id: uuid.UUID,
 
 def expurgar_arquivos_do_slot(db: Session, slot: SlotDocumento, evento: str,
                               ator: str, ator_detalhe: str | None = None) -> None:
-    """Remove os arquivos do slot do storage, gravando ANTES na auditoria o
-    hash SHA-256, tamanho e caminho de cada um (linha vermelha do projeto:
-    nada some sem hash na auditoria)."""
+    """Remove TODOS os arquivos do slot do storage (PDF combinado + originais,
+    inclusive frente/verso), gravando ANTES na auditoria o hash SHA-256,
+    tamanho e caminho de cada um (linha vermelha do projeto: nada some sem
+    hash na auditoria)."""
     import hashlib
 
+    base = f"candidatos/{slot.candidato_id}/slots/{slot.id}/"
+    try:
+        keys = storage.listar(base)
+    except Exception:
+        keys = [k for k in (slot.arquivo_pdf_key, slot.arquivo_original_key) if k]
+
     evidencias = []
-    for key in (slot.arquivo_pdf_key, slot.arquivo_original_key):
-        if not key:
-            continue
+    for key in keys:
         try:
             dados = storage.ler(key)
             evidencias.append({"arquivo": key,
@@ -250,12 +285,11 @@ def expurgar_arquivos_do_slot(db: Session, slot: SlotDocumento, evento: str,
     registrar(db, evento, ator=ator, ator_detalhe=ator_detalhe,
               candidato_id=slot.candidato_id,
               detalhe={"tipo": slot.tipo.value, "arquivos": evidencias})
-    for key in (slot.arquivo_pdf_key, slot.arquivo_original_key):
-        if key:
-            try:
-                storage.remover(key)
-            except Exception:
-                pass  # storage indisponível: a auditoria registrou; expurgo pega depois
+    for key in keys:
+        try:
+            storage.remover(key)
+        except Exception:
+            pass  # storage indisponível: a auditoria registrou; expurgo pega depois
     slot.arquivo_pdf_key = None
     slot.arquivo_original_key = None
 

@@ -19,6 +19,15 @@ const FORMATO_DOC = {
 const DOCS_DIGITAIS = ['ctps_digital', 'pis_comprovante',
                        'nada_consta_eleitoral', 'nada_consta_criminal']
 
+// Documentos com frente e verso: a câmera guia as duas capturas em sequência
+// e tudo vira um único PDF no checklist.
+const PASSOS_DOC = {
+  rg: [{ rotulo: 'FRENTE' }, { rotulo: 'VERSO' }],
+  reservista: [{ rotulo: 'FRENTE' }, { rotulo: 'VERSO' }],
+  habilitacao_prof: [{ rotulo: 'FRENTE' }, { rotulo: 'VERSO', opcional: true }],
+  cartao_vacina_dep: [{ rotulo: 'IDENTIFICAÇÃO' }, { rotulo: 'VACINAS', opcional: true }],
+}
+
 const STATUS = {
   pendente: { icone: '⬜', texto: 'Falta enviar' },
   enviado: { icone: '🕐', texto: 'Em análise pelo RH' },
@@ -112,6 +121,7 @@ export default function Checklist({ token, aoConcluir }) {
       slotId: slot.id,
       formato: FORMATO_DOC[slot.tipo] || 'a4',
       titulo: (DICAS[slot.tipo] || {}).nome || 'Fotografar documento',
+      passos: PASSOS_DOC[slot.tipo],
     })
   }
 
@@ -129,16 +139,17 @@ export default function Checklist({ token, aoConcluir }) {
   }
 
   const aoSelecionar = (e) => {
-    const arquivo = e.target.files[0]
+    const arquivos = [...e.target.files]
     e.target.value = ''
-    if (!arquivo) return
-    enviar(slotAtual.current, arquivo)
+    if (!arquivos.length) return
+    enviar(slotAtual.current, arquivos)
   }
 
   const enviar = async (slotId, arquivo) => {
     setCamera(null)
     setErros((x) => ({ ...x, [slotId]: null }))
-    const erroLocal = validarAntesDeEnviar(arquivo)
+    const lista = Array.isArray(arquivo) ? arquivo : [arquivo]
+    const erroLocal = lista.map(validarAntesDeEnviar).find(Boolean)
     if (erroLocal) {
       setErros((x) => ({ ...x, [slotId]: erroLocal }))
       return
@@ -181,11 +192,12 @@ export default function Checklist({ token, aoConcluir }) {
 
   return (
     <Cartao>
-      <input ref={inputRef} type="file" hidden accept="image/*,.pdf,.doc,.docx" onChange={aoSelecionar} />
+      <input ref={inputRef} type="file" hidden multiple accept="image/*,.pdf,.doc,.docx" onChange={aoSelecionar} />
       {camera && (
         <CapturaDocumento formato={camera.formato} titulo={camera.titulo}
-                          aoCapturar={(arq) => enviar(camera.slotId, arq)}
-                          aoArquivo={(arq) => enviar(camera.slotId, arq)}
+                          passos={camera.passos}
+                          aoCapturar={(arqs) => enviar(camera.slotId, arqs)}
+                          aoArquivo={(arqs) => enviar(camera.slotId, arqs)}
                           aoFechar={() => setCamera(null)} />
       )}
       <div className="progresso">

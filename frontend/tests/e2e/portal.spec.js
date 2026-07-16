@@ -111,7 +111,7 @@ test('câmera guiada: moldura, dicas em tempo real e saída para arquivo', async
   await expect(overlay.locator('.captura-moldura')).toBeVisible()
   await expect(overlay.locator('.captura-dica')).toBeVisible({ timeout: 5000 })
   // o caminho do arquivo próprio está sempre à mão
-  await expect(overlay.getByRole('button', { name: /Já tenho o arquivo/ })).toBeVisible()
+  await expect(overlay.getByRole('button', { name: /Já tenho/ })).toBeVisible()
   // o disparo existe (habilita quando o quadro está bom, ou vira
   // "fotografar assim mesmo" depois do tempo de escape)
   await expect(overlay.getByRole('button', { name: /Fotografar|Ajustando/ })).toBeVisible()

@@ -39,3 +39,10 @@ def ler(key: str) -> bytes:
 
 def remover(key: str) -> None:
     _cliente().remove_object(get_settings().minio_bucket, key)
+
+
+def listar(prefixo: str) -> list[str]:
+    """Keys de todos os objetos sob o prefixo (ex.: os originais de um slot)."""
+    return [obj.object_name for obj in
+            _cliente().list_objects(get_settings().minio_bucket,
+                                    prefix=prefixo, recursive=True)]

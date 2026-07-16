@@ -100,7 +100,12 @@ function dicaDoMomento(m) {
   return { ok: true, icone: '✅', texto: 'Ótimo! Toque em Fotografar.' }
 }
 
-export default function CapturaDocumento({ formato = 'cartao', titulo, aoCapturar, aoArquivo, aoFechar }) {
+// passos: sequência de capturas no mesmo documento — ex.:
+//   [{ rotulo: 'FRENTE' }, { rotulo: 'VERSO', opcional: true }]
+// Ao final, aoCapturar recebe a LISTA de fotos (1 foto → lista de 1).
+// aoArquivo também recebe lista (o seletor aceita vários arquivos).
+export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
+                                           aoCapturar, aoArquivo, aoFechar }) {
   const videoRef = useRef(null)
   const analiseRef = useRef(null)
   const palcoRef = useRef(null)
@@ -114,7 +119,12 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
   const [pronto, setPronto] = useState(false)
   const [teimoso, setTeimoso] = useState(false)    // libera "fotografar assim mesmo"
   const [revisao, setRevisao] = useState(null)     // {url, file}: conferir antes de enviar
+  const [passo, setPasso] = useState(0)            // índice em `passos`
+  const capturasRef = useRef([])                   // fotos já confirmadas dos passos anteriores
   const f = FORMATOS[formato] || FORMATOS.cartao
+  const seq = passos && passos.length ? passos : [{}]
+  const passoAtual = seq[Math.min(passo, seq.length - 1)]
+  const rotuloPasso = passoAtual.rotulo
 
   const fecharStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -136,18 +146,33 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     }, 'image/jpeg', 0.92)
   }, [])
 
-  const usarFoto = () => {
-    if (!revisao) return
-    URL.revokeObjectURL(revisao.url)
-    fecharStream()
-    aoCapturar(revisao.file)
-  }
-
   const tirarOutra = () => {
     if (revisao) URL.revokeObjectURL(revisao.url)
     setRevisao(null)
     bonsRef.current = 0
     setPronto(false)
+  }
+
+  const usarFoto = () => {
+    if (!revisao) return
+    URL.revokeObjectURL(revisao.url)
+    const nome = rotuloPasso ? `${rotuloPasso.toLowerCase()}.jpg` : 'documento.jpg'
+    capturasRef.current.push(new File([revisao.file], nome, { type: 'image/jpeg' }))
+    if (passo < seq.length - 1) {
+      // Próxima parte do mesmo documento (ex.: agora o verso).
+      setPasso(passo + 1)
+      tirarOutra()
+      return
+    }
+    fecharStream()
+    aoCapturar(capturasRef.current)
+  }
+
+  // Passo opcional (ex.: CNH sem verso): conclui com o que já foi capturado.
+  const concluirSemEssa = () => {
+    tirarOutra()
+    fecharStream()
+    aoCapturar(capturasRef.current)
   }
 
   useEffect(() => {
@@ -208,11 +233,11 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
   }, [estado, revisao])
 
   const escolherArquivo = (e) => {
-    const arq = e.target.files[0]
+    const arqs = [...e.target.files]
     e.target.value = ''
-    if (!arq) return
+    if (!arqs.length) return
     fecharStream()
-    aoArquivo(arq)
+    aoArquivo(arqs)
   }
 
   // Moldura: caixa central na proporção do documento; o resto escurece.
@@ -223,10 +248,12 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
 
   return (
     <div className="captura-overlay" role="dialog" aria-label={titulo || 'Fotografar documento'}>
-      <input ref={inputRef} type="file" hidden accept="image/*,.pdf,.doc,.docx"
+      <input ref={inputRef} type="file" hidden multiple accept="image/*,.pdf,.doc,.docx"
              onChange={escolherArquivo} />
       <div className="captura-topo">
-        <strong>{titulo || 'Fotografar documento'}</strong>
+        <strong>{titulo || 'Fotografar documento'}
+          {rotuloPasso && <span className="captura-passo"> — {rotuloPasso}
+            {seq.length > 1 ? ` (${passo + 1} de ${seq.length})` : ''}</span>}</strong>
         <button type="button" className="btn-link captura-fechar"
                 onClick={() => { fecharStream(); aoFechar() }}>✕ Fechar</button>
       </div>
@@ -246,6 +273,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
           <div className={`captura-dica ${(revisao || dica?.ok) ? 'ok' : ''}`} aria-live="polite">
             {revisao ? '🔍 Confira: dá para ler tudo? Sem cortes e sem reflexo?'
               : estado === 'abrindo' ? '📷 Abrindo a câmera…'
+              : rotuloPasso && !dica ? `📐 Agora o ${rotuloPasso.toLowerCase()} — ${f.dica.toLowerCase()}`
               : dica ? `${dica.icone} ${dica.texto}`
               : `📐 ${f.dica}`}
           </div>
@@ -260,7 +288,9 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
         {estado === 'ativa' && revisao && (
           <>
             <button type="button" className="btn-principal captura-disparo" onClick={usarFoto}>
-              ✔ Usar esta foto
+              {passo < seq.length - 1
+                ? `✔ Usar e fotografar o ${(seq[passo + 1].rotulo || 'próximo').toLowerCase()}`
+                : '✔ Usar esta foto'}
             </button>
             <button type="button" className="btn-secundario" onClick={tirarOutra}>
               ↺ Tirar outra
@@ -273,10 +303,15 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
             {pronto ? '📸 Fotografar' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
           </button>
         )}
+        {estado === 'ativa' && !revisao && passoAtual.opcional && capturasRef.current.length > 0 && (
+          <button type="button" className="btn-secundario" onClick={concluirSemEssa}>
+            Este documento não tem {rotuloPasso?.toLowerCase() || 'esta parte'} — concluir
+          </button>
+        )}
         {!revisao && (
           <button type="button" className="btn-secundario"
                   onClick={() => inputRef.current.click()}>
-            📁 Já tenho o arquivo — enviar do aparelho
+            📁 Já tenho o(s) arquivo(s) — enviar do aparelho
           </button>
         )}
       </div>

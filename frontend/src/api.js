@@ -48,9 +48,11 @@ export const candidato = {
   assinarTodos: (t, codigo) =>
     req(`/c/${t}/fichas/assinar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
   documentos: (t) => req(`/c/${t}/documentos`),
+  // arquivo: File único OU array (frente/verso, páginas) — vira um PDF só no slot.
   enviarArquivo: async (t, slotId, arquivo) => {
     const fd = new FormData()
-    fd.append('arquivo', arquivo)
+    const lista = Array.isArray(arquivo) ? arquivo : [arquivo]
+    lista.forEach((a) => fd.append(lista.length > 1 ? 'arquivos' : 'arquivo', a))
     const r = await fetch(`${BASE}/c/${t}/documentos/${slotId}/arquivo`, { method: 'POST', body: fd })
     if (!r.ok) {
       const { detail } = await r.json()
@@ -64,7 +66,8 @@ export const candidato = {
   // devolve as sugestões de preenchimento.
   enviarIdentidade: async (t, arquivo) => {
     const fd = new FormData()
-    fd.append('arquivo', arquivo)
+    const lista = Array.isArray(arquivo) ? arquivo : [arquivo]
+    lista.forEach((a) => fd.append(lista.length > 1 ? 'arquivos' : 'arquivo', a))
     const r = await fetch(`${BASE}/c/${t}/documentos/identidade`, { method: 'POST', body: fd })
     if (!r.ok) {
       const { detail } = await r.json()
