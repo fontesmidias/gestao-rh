@@ -134,6 +134,17 @@ export const FRASES = [
   'Cada documento sabe a que contrato pertence. Organização é isso.',
   'Do computador do RH ao seu celular, a mesma experiência inteira.',
   'Transparência não é recurso: é o padrão da casa.',
+  // Conjunto 11 (timbrado + OCR com IA, 2026-07-15)
+  'Papel timbrado digital: elegância que nem precisa de impressora.',
+  'Cada documento agora chega vestido a caráter.',
+  'Uma IA lê, um humano confere, o sistema registra. Trio de respeito.',
+  'Seu RG em papel timbrado — organizado como arquivo de colecionador.',
+  'A inteligência é artificial; o cuidado com seus dados é genuíno.',
+  'Lendo sua foto com olhos treinados em milhões de documentos.',
+  'Do rascunho ao timbrado: seus documentos subiram de categoria.',
+  'Tecnologia de ponta com pé no chão — e fallback para tudo.',
+  'O cabeçalho é da empresa; a história desses documentos é sua.',
+  'Detalhes institucionais nos cantos, seus dados no centro. Como deve ser.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

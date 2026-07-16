@@ -2,6 +2,63 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 
+// OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
+// celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
+function OcrIA() {
+  const [cfg, setCfg] = useState(null)
+  const [chave, setChave] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+
+  const carregar = () => api.verOcr().then(setCfg).catch(() => {})
+  useEffect(() => { carregar() }, [])
+  if (!cfg) return null
+
+  return (
+    <section className="rh-card">
+      <h3>🤖 OCR com IA (Mistral)</h3>
+      <p className="explica">A leitura dos documentos passa a usar a IA da Mistral —
+        muito mais precisa em fotos de celular. Crie uma chave gratuita em
+        console.mistral.ai → API Keys e cole abaixo. Sem chave (ou se a API falhar),
+        o leitor local continua funcionando normalmente.
+        <br /><strong>LGPD:</strong> com a IA ativada, as imagens dos documentos são
+        enviadas ao serviço da Mistral exclusivamente para leitura — o aviso de
+        privacidade do candidato já contempla esse tratamento.</p>
+      <div className="linha2">
+        <InputSenha placeholder={cfg.chave_definida ? 'Chave (já definida)' : 'Chave da API Mistral'}
+                    value={chave} onChange={(e) => setChave(e.target.value)} />
+        <span>
+          <button className="btn-principal btn-mini" disabled={ocupado} onClick={async () => {
+            setMsg(null); setOcupado(true)
+            try {
+              const r = await api.salvarOcr({ mistral_api_key: chave.trim() })
+              setCfg(r); setChave('')
+              setMsg({ tipo: 'ok', texto: r.chave_definida
+                ? 'Chave salva — use "Testar leitura" para confirmar.'
+                : 'OCR com IA desligado (leitor local em uso).' })
+            } catch (e) {
+              setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+            } finally { setOcupado(false) }
+          }}>Salvar</button>{' '}
+          <button className="btn-secundario btn-mini" disabled={ocupado || !cfg.chave_definida}
+                  onClick={async () => {
+                    setMsg(null); setOcupado(true)
+                    try {
+                      const r = await api.testarOcr()
+                      setMsg({ tipo: 'ok', texto: `A IA leu: "${r.texto_lido}" — funcionando!` })
+                    } catch (e) {
+                      setMsg({ tipo: 'erro', texto: `Teste falhou: ${e.detail || e.message}` })
+                    } finally { setOcupado(false) }
+                  }}>Testar leitura</button>
+        </span>
+      </div>
+      <p className="explica">Status: {cfg.chave_definida
+        ? '✅ IA ativada (com leitor local de reserva)' : '⭕ usando apenas o leitor local'}</p>
+      <Msg msg={msg} />
+    </section>
+  )
+}
+
 function Msg({ msg }) {
   if (!msg) return null
   return <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>
@@ -23,6 +80,7 @@ export default function Config({ aoVoltar }) {
       <M365 />
       <Gmail />
       <Smtp />
+      <OcrIA />
       <Auditoria />
     </main>
   )

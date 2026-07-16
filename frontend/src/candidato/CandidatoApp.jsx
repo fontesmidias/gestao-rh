@@ -101,6 +101,10 @@ export default function CandidatoApp() {
                dados de saúde são tratados para cumprimento de obrigação legal e proteção da sua
                vida e integridade física (art. 11, II, 'a' e 'e'), com uso restrito a essas
                finalidades.</p>
+            <p>As imagens de documentos que você enviar podem ser lidas por tecnologia de
+               reconhecimento de texto (OCR), inclusive com apoio de serviço externo de
+               inteligência artificial, exclusivamente para facilitar o preenchimento e a
+               conferência — as sugestões só são aplicadas com a sua confirmação.</p>
           </details>
           <button className="btn-principal" onClick={async () => {
             await api.aceiteLgpd(token)

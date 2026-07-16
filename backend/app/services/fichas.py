@@ -58,19 +58,36 @@ class _FichaPDF(FPDF):
     def __init__(self, titulo: str):
         super().__init__()
         self.titulo = titulo
-        self.set_auto_page_break(auto=True, margin=20)
+        # 26 de margem inferior: o rodapé timbrado ocupa os últimos ~23 mm.
+        self.set_auto_page_break(auto=True, margin=26)
         self.add_page()
 
     def header(self):
-        self.set_font("helvetica", "B", 14)
-        self.set_text_color(*AZUL)
-        self.cell(0, 8, "GREEN HOUSE", align="L")
-        self.set_font("helvetica", "B", 12)
-        self.cell(0, 8, self.titulo, align="R", new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(*VERDE)
-        self.set_line_width(0.8)
-        self.line(10, self.get_y() + 1, 200, self.get_y() + 1)
-        self.ln(6)
+        try:
+            # Papel timbrado oficial: arte no canto superior esquerdo.
+            self.image(TIMBRADO_TOPO, x=0, y=0, w=34)
+            self.set_y(9)
+            self.set_font("helvetica", "B", 12)
+            self.set_text_color(*AZUL)
+            self.cell(0, 8, self.titulo, align="R", new_x="LMARGIN", new_y="NEXT")
+            self.set_y(28)
+        except Exception:
+            self.set_font("helvetica", "B", 14)
+            self.set_text_color(*AZUL)
+            self.cell(0, 8, "GREEN HOUSE", align="L")
+            self.set_font("helvetica", "B", 12)
+            self.cell(0, 8, self.titulo, align="R", new_x="LMARGIN", new_y="NEXT")
+            self.set_draw_color(*VERDE)
+            self.set_line_width(0.8)
+            self.line(10, self.get_y() + 1, 200, self.get_y() + 1)
+            self.ln(6)
+        self.set_text_color(30, 30, 30)
+
+    def footer(self):
+        try:
+            self.image(TIMBRADO_RODAPE, x=0, y=self.h - 23, w=210)
+        except Exception:
+            pass  # sem arte, sem rodapé — o conteúdo não depende dele
 
     def secao(self, nome: str):
         self.ln(1)
@@ -97,7 +114,7 @@ class _FichaPDF(FPDF):
         linhas = max(1, len(self.multi_cell(largura_valor, 5.5, valor, dry_run=True,
                                             output="LINES")))
         altura = linhas * 5.5
-        if self.get_y() + altura > self.h - 20:
+        if self.get_y() + altura > self.h - 26:
             self.add_page()
         x, y = self.get_x(), self.get_y()
         self.set_font("helvetica", "B", 8.5)
@@ -473,7 +490,11 @@ EMPRESA_RODAPE = ("SCIA Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará)
 EMPRESA_ASSINANTES = (("Leandro de Sá", "CEO", "[CPF-REMOVIDO-LGPD]"),
                       ("Láysa Beatriz", "Assistente de RH", "[CPF-REMOVIDO-LGPD]"))
 NAVY = (23, 26, 60)
-LOGO = str(Path(__file__).resolve().parent.parent / "assets" / "logo.png")
+_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+LOGO = str(_ASSETS / "logo.png")
+# Papel timbrado oficial (artes extraídas do modelo Word da empresa).
+TIMBRADO_TOPO = str(_ASSETS / "timbrado-topo.png")       # canto sup. esquerdo
+TIMBRADO_RODAPE = str(_ASSETS / "timbrado-rodape.jpg")   # rodapé institucional
 
 
 def assinantes_config(db: Session) -> list[tuple[str, str, str]]:
@@ -491,31 +512,36 @@ def assinantes_config(db: Session) -> list[tuple[str, str, str]]:
 
 
 class _OficioPDF(_FichaPDF):
-    """Papel timbrado dos documentos oficiais: logo Green House no topo direito
-    e rodapé institucional com filete verde."""
+    """Papel timbrado oficial da empresa: arte do canto superior esquerdo e
+    rodapé institucional completos, extraídos do modelo Word do timbrado."""
 
     def header(self):
         try:
-            self.image(LOGO, x=145, y=8, w=52)
+            # Arte de canto sangrada na borda (984×724 px ≈ proporção 1,36).
+            self.image(TIMBRADO_TOPO, x=0, y=0, w=52)
         except Exception:
             self.set_fill_color(*NAVY)
-            self.rect(150, 0, 60, 24, style="F")
-            self.set_xy(152, 8)
+            self.rect(0, 0, 60, 24, style="F")
+            self.set_xy(2, 8)
             self.set_font("helvetica", "B", 13)
             self.set_text_color(255, 255, 255)
             self.cell(56, 8, "GREENHOUSE", align="C")
             self.set_text_color(30, 30, 30)
-        self.set_y(32)
+        self.set_y(42)
 
     def footer(self):
-        self.set_y(-24)
-        self.set_draw_color(*VERDE)
-        self.set_line_width(0.6)
-        self.line(60, self.get_y(), 200, self.get_y())
-        self.set_font("helvetica", "", 7.5)
-        self.set_text_color(90, 100, 92)
-        self.multi_cell(120, 3.6, EMPRESA_RODAPE)
-        self.set_text_color(30, 30, 30)
+        try:
+            # Rodapé oficial em largura total (2234×244 px ≈ proporção 9,16).
+            self.image(TIMBRADO_RODAPE, x=0, y=self.h - 23, w=210)
+        except Exception:
+            self.set_y(-24)
+            self.set_draw_color(*VERDE)
+            self.set_line_width(0.6)
+            self.line(60, self.get_y(), 200, self.get_y())
+            self.set_font("helvetica", "", 7.5)
+            self.set_text_color(90, 100, 92)
+            self.multi_cell(120, 3.6, EMPRESA_RODAPE)
+            self.set_text_color(30, 30, 30)
 
     def paragrafo(self, texto: str, negrito_inicio: str | None = None):
         self.set_font("helvetica", "", 10.5)

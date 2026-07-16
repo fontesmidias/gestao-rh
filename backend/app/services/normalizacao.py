@@ -34,8 +34,12 @@ class ArquivoInvalido(Exception):
         super().__init__(codigo)
 
 
-def normalizar_para_pdf(nome_arquivo: str, dados: bytes) -> tuple[bytes, int]:
-    """Devolve (pdf_bytes, paginas). Levanta ArquivoInvalido com código legível."""
+def normalizar_para_pdf(nome_arquivo: str, dados: bytes,
+                        rotulo: str | None = None) -> tuple[bytes, int]:
+    """Devolve (pdf_bytes, paginas). Levanta ArquivoInvalido com código legível.
+    Fotos ganham página A4 no papel timbrado com o `rotulo` do documento;
+    PDFs de terceiros (CTPS, certidões…) seguem intactos — não se altera
+    documento emitido por órgão."""
     if len(dados) == 0:
         raise ArquivoInvalido("arquivo_vazio")
     if len(dados) > MAX_BYTES:
@@ -46,7 +50,7 @@ def normalizar_para_pdf(nome_arquivo: str, dados: bytes) -> tuple[bytes, int]:
     if ext == ".pdf":
         pdf = dados
     elif ext in _EXT_IMAGEM:
-        pdf = _imagem_para_pdf(dados)
+        pdf = _imagem_para_pdf(dados, rotulo)
     elif ext in _EXT_WORD:
         pdf = _word_para_pdf(ext, dados)
     else:
@@ -88,7 +92,7 @@ def _nitidez(img: Image.Image) -> float:
     return ImageStat.Stat(detalhe).var[0]
 
 
-def _imagem_para_pdf(dados: bytes) -> bytes:
+def _imagem_para_pdf(dados: bytes, rotulo: str | None = None) -> bytes:
     try:
         img = Image.open(io.BytesIO(dados))
         img.load()
@@ -98,10 +102,54 @@ def _imagem_para_pdf(dados: bytes) -> bytes:
         raise ArquivoInvalido("imagem_pequena_demais")
     if _nitidez(img) < NITIDEZ_MINIMA:
         raise ArquivoInvalido("imagem_borrada")
-    # Reencoda como JPEG (remove transparência/HEIC) antes do img2pdf.
+    # Reencoda como JPEG (remove transparência/HEIC).
     buf = io.BytesIO()
-    img.convert("RGB").save(buf, format="JPEG", quality=88)
+    img = img.convert("RGB")
+    img.save(buf, format="JPEG", quality=88)
+    pagina = _pagina_timbrada(buf.getvalue(), img.width, img.height, rotulo)
+    if pagina is not None:
+        return pagina
     return img2pdf.convert(buf.getvalue())
+
+
+_ASSETS = Path(__file__).resolve().parent.parent / "assets"
+_TIMBRADO_TOPO = str(_ASSETS / "timbrado-topo.png")
+_TIMBRADO_RODAPE = str(_ASSETS / "timbrado-rodape.jpg")
+
+
+def _pagina_timbrada(jpeg: bytes, w_px: int, h_px: int,
+                     rotulo: str | None) -> bytes | None:
+    """Foto de documento vira página A4 no papel timbrado da empresa, com o
+    nome do documento e a data de recebimento — dossiê 'organizadinho'.
+    Sem as artes no disco, devolve None e o fluxo antigo (img2pdf) assume."""
+    if not (Path(_TIMBRADO_TOPO).exists() and Path(_TIMBRADO_RODAPE).exists()):
+        return None
+    try:
+        from fpdf import FPDF
+        pdf = FPDF(format="A4")
+        pdf.set_auto_page_break(False)
+        pdf.add_page()
+        pdf.image(_TIMBRADO_TOPO, x=0, y=0, w=34)
+        pdf.image(_TIMBRADO_RODAPE, x=0, y=297 - 23, w=210)
+        pdf.set_y(9)
+        pdf.set_font("helvetica", "B", 11)
+        pdf.set_text_color(23, 26, 60)
+        titulo = (rotulo or "documento").upper().replace("_", " ")
+        pdf.cell(0, 6, titulo.encode("latin-1", "replace").decode("latin-1"),
+                 align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("helvetica", "", 8)
+        pdf.set_text_color(110, 120, 112)
+        pdf.cell(0, 5, f"Recebido pelo Portal de Admissao em {date.today():%d/%m/%Y}",
+                 align="R", new_x="LMARGIN", new_y="NEXT")
+        # Foto centralizada na área útil (x 12–198, y 30–268), sem distorcer.
+        area_w, area_h = 186.0, 238.0
+        escala = min(area_w / w_px, area_h / h_px)
+        w_mm, h_mm = w_px * escala, h_px * escala
+        pdf.image(io.BytesIO(jpeg), x=(210 - w_mm) / 2, y=30 + (area_h - h_mm) / 2,
+                  w=w_mm, h=h_mm)
+        return bytes(pdf.output())
+    except Exception:
+        return None  # qualquer surpresa: página simples, nunca bloqueia o envio
 
 
 # ---------- Data do comprovante de residência (OCR) ----------
@@ -132,16 +180,30 @@ def _datas_no_texto(texto: str) -> list[date]:
     return [x for x in datas if date(hoje.year - 3, 1, 1) <= x <= hoje + timedelta(days=60)]
 
 
+_MIME_IMAGEM = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                ".webp": "image/webp"}
+
+
 def _texto_do_envio(ext: str, dados: bytes, pdf: bytes) -> str:
-    """Texto do documento: camada de texto do PDF ou OCR da foto (se o
-    tesseract estiver instalado; sem ele, a checagem é pulada em silêncio)."""
+    """Texto do documento, na ordem de qualidade: camada de texto do PDF →
+    OCR com IA (Mistral, se houver chave configurada) → Tesseract local.
+    Qualquer degrau indisponível cai para o seguinte em silêncio."""
+    from app.services.ocr_ia import texto_via_mistral
+
     if ext == ".pdf":
         try:
             paginas = PdfReader(io.BytesIO(pdf)).pages[:3]
-            return "\n".join((p.extract_text() or "") for p in paginas)
+            texto = "\n".join((p.extract_text() or "") for p in paginas)
         except Exception:
-            return ""
+            texto = ""
+        if texto.strip():
+            return texto
+        # PDF escaneado (sem camada de texto): a IA lê, se configurada.
+        return texto_via_mistral(pdf, "application/pdf") or ""
     if ext in _EXT_IMAGEM:
+        texto_ia = texto_via_mistral(dados, _MIME_IMAGEM.get(ext, "image/jpeg"))
+        if texto_ia:
+            return texto_ia
         try:
             import pytesseract
             img = Image.open(io.BytesIO(dados))

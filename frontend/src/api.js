@@ -202,6 +202,10 @@ export const rh = {
   trocarSenha: (senha_atual, senha_nova) =>
     req('/rh/me/senha', { method: 'PUT', headers: authRH(),
                           body: JSON.stringify({ senha_atual, senha_nova }) }),
+  verOcr: () => req('/rh/config/ocr', { headers: authRH() }),
+  salvarOcr: (dados) =>
+    req('/rh/config/ocr', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarOcr: () => req('/rh/config/ocr/testar', { method: 'POST', headers: authRH() }),
   verSmtp: () => req('/rh/config/smtp', { headers: authRH() }),
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

@@ -234,6 +234,42 @@ class SmtpIn(BaseModel):
     smtp_from: EmailStr
 
 
+class OcrIn(BaseModel):
+    mistral_api_key: str | None = None
+
+
+@router.get("/rh/config/ocr")
+def ver_ocr(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.ocr_ia import chave_mistral
+    return {"chave_definida": bool(chave_mistral(db))}
+
+
+@router.put("/rh/config/ocr")
+def salvar_ocr(payload: OcrIn, db: Session = Depends(get_db),
+               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Chave da Mistral para o OCR com IA. Chave vazia desliga (volta ao OCR
+    local). A chave nunca aparece em log nem volta na resposta."""
+    gravar_config(db, {"mistral_api_key": (payload.mistral_api_key or "").strip()})
+    registrar(db, "ocr_ia_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"ativado": bool((payload.mistral_api_key or "").strip())})
+    db.commit()
+    return ver_ocr(db, rh)
+
+
+@router.post("/rh/config/ocr/testar")
+def testar_ocr(db: Session = Depends(get_db),
+               _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.ocr_ia import chave_mistral, testar_mistral
+    chave = chave_mistral(db)
+    if not chave:
+        raise HTTPException(status_code=422, detail="chave_nao_configurada")
+    try:
+        texto = testar_mistral(chave)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "texto_lido": texto[:120]}
+
+
 @router.get("/rh/config/smtp")
 def ver_smtp(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
     cfg = smtp_config(db)

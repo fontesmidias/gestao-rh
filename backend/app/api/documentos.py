@@ -87,7 +87,8 @@ def enviar_arquivo(
         partes = []  # (nome, content_type, dados, pdf)
         for up in lista:
             dados = up.file.read()
-            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados)
+            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
+                                         rotulo=slot.tipo.value)
             if slot.tipo == TipoDocumento.comp_endereco:
                 validar_comprovante_recente(up.filename or "arquivo", dados, pdf)
             partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
@@ -180,7 +181,8 @@ def enviar_identidade(token: str,
         partes = []
         for up in lista:
             dados = up.file.read()
-            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados)
+            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
+                                         rotulo="documento de identidade")
             partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
         pdf_final, paginas = combinar_pdfs([p[3] for p in partes])
     except ArquivoInvalido as exc:

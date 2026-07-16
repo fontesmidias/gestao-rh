@@ -6,6 +6,23 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.6.0] — 2026-07-15
+
+### Adicionado
+- **Papel timbrado da empresa em todos os PDFs**: fichas, ofícios e manifesto
+  usam as artes oficiais (cabeçalho de canto + rodapé institucional extraídos
+  do modelo Word); fotos de documentos recebidos (RG, CPF…) viram página A4
+  timbrada com o nome do documento e a data de recebimento. PDFs emitidos por
+  órgãos (CTPS, certidões) seguem intactos — não se altera documento de
+  terceiro. Vias já assinadas não mudam (hash preservado).
+- **OCR com IA (Mistral)**: chave configurável pelo painel (com teste de
+  leitura), cadeia de qualidade camada de texto do PDF → Mistral OCR →
+  Tesseract local; falha de qualquer degrau cai para o seguinte em silêncio.
+  Telemetria registra apenas tipo, hash e tamanho — nunca o conteúdo; a chave
+  não aparece em logs; o aviso de privacidade do candidato passou a mencionar
+  a leitura assistida por IA. PDFs escaneados (sem camada de texto) agora
+  também são lidos quando a IA está ativa.
+
 ## [1.5.0] — 2026-07-15
 
 ### Adicionado
@@ -170,6 +187,7 @@ Primeira versão candidata do Portal de Admissão.
 - Deploy: compose base+variantes (ip / traefik / certbot), stack única para Portainer com
   imagens do GHCR publicadas por CI (GitHub Actions).
 
+[1.6.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.6.0
 [1.5.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.5.0
 [1.4.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.4.0
 [1.3.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.3.0

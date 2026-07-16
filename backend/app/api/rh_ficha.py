@@ -234,7 +234,8 @@ def inserir_arquivo_rh(
 
     dados = arquivo.file.read()
     try:
-        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados)
+        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados,
+                                           rotulo=slot.tipo.value)
     except ArquivoInvalido as exc:
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
 
