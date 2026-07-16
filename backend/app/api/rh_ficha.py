@@ -251,6 +251,77 @@ def inserir_arquivo_rh(
                               "origem_envio_obs": slot.origem_envio_obs}
 
 
+@router.post("/rh/candidatos/{candidato_id}/notificar")
+def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
+                         db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Cobra o candidato por e-mail com o retrato exato do que falta: ficha
+    incompleta, fichas aguardando assinatura e/ou documentos pendentes — com
+    um link novo. Nasceu do incidente real: e-mail cadastrado depois, e a
+    pessoa nunca soube que havia fichas para preencher e assinar."""
+    from app.api.assinaturas import NOMES_DOC, _docs_exigidos, _registro
+    from app.api.ficha import pendencias_da_ficha
+
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if not candidato.email:
+        raise HTTPException(status_code=422, detail="candidato_sem_email")
+
+    pend_ficha = pendencias_da_ficha(db, candidato)
+    fichas_pendentes = [NOMES_DOC[d] for d in _docs_exigidos(db, candidato)
+                        if _registro(db, candidato, d).assinado_em is None]
+    slots = db.scalars(select(SlotDocumento).where(
+        SlotDocumento.candidato_id == candidato.id)).all()
+    docs_pendentes = [s.tipo.value.replace("_", " ")
+                      for s in slots if s.obrigatorio and s.status in
+                      (StatusSlot.pendente, StatusSlot.rejeitado)]
+
+    itens: list[str] = []
+    if pend_ficha:
+        itens.append(f"Completar o formulário da admissão ({len(pend_ficha)} "
+                     "campo(s) obrigatório(s) em aberto)")
+    if fichas_pendentes:
+        itens.append("Assinar eletronicamente: " + "; ".join(fichas_pendentes))
+    if docs_pendentes:
+        itens.append("Enviar os documentos: " + "; ".join(docs_pendentes))
+    if not itens:
+        raise HTTPException(status_code=409, detail="sem_pendencias")
+
+    link = emitir_link(db, candidato, base_url_publica(request))
+    registrar(db, "candidato_notificado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato.id,
+              detalhe={"pendencias_ficha": len(pend_ficha),
+                       "fichas_para_assinar": len(fichas_pendentes),
+                       "documentos_pendentes": len(docs_pendentes)})
+    db.commit()
+
+    lista_txt = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(itens))
+    lista_html = "".join(f"<li>{t}</li>" for t in itens)
+    enviado = enviar_email(
+        candidato.email,
+        "Green House — sua admissão tem pendências que dependem de você",
+        f"Prezado(a) {candidato.nome_completo},\n\n"
+        "Sua admissão está parada aguardando as providências abaixo:\n\n"
+        f"{lista_txt}\n\n"
+        f"Acesse: {link}\n\n"
+        "Resolva HOJE — sua contratação somente será efetivada após a "
+        "conclusão de todas as etapas.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Sua admissão tem pendências",
+            [
+                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                "Sua admissão está parada aguardando as providências abaixo:"
+                f"<ol style='margin:8px 0 0 18px;color:#3a4152'>{lista_html}</ol>",
+                f"<a href='{link}'>Toque aqui para continuar de onde parou</a>. "
+                "Resolva <strong>hoje</strong> — sua contratação somente será "
+                "efetivada após a conclusão de todas as etapas.",
+            ],
+        ),
+    )
+    return {"email_enviado": enviado, "itens": itens, "link_magico": link}
+
+
 class ReabrirIn(BaseModel):
     motivo: str
 

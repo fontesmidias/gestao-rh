@@ -145,6 +145,8 @@ export const rh = {
     req(`/rh/candidatos/${id}/contato`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   fichaCandidato: (id) => req(`/rh/candidatos/${id}/ficha`, { headers: authRH() }),
+  notificar: (id) =>
+    req(`/rh/candidatos/${id}/notificar`, { method: 'POST', headers: authRH() }),
   editarFicha: (id, secao, dados, motivo) =>
     req(`/rh/candidatos/${id}/ficha/${secao}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),

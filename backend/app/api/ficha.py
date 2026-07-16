@@ -337,6 +337,20 @@ _OBRIGATORIOS_DOCS = (
 def declarar_veracidade(token: str, db: Session = Depends(get_db)) -> dict:
     """Valida completude, registra a declaração (Q50) e avança para a assinatura."""
     candidato = _candidato_do_token(token, db)
+    pendencias = pendencias_da_ficha(db, candidato)
+
+    if pendencias:
+        raise HTTPException(status_code=422, detail={"pendencias": pendencias})
+
+    candidato.declaracao_veracidade_em = datetime.now(timezone.utc)
+    candidato.status = StatusCandidato.aguardando_assinatura
+    db.commit()
+    return {"status": candidato.status}
+
+
+def pendencias_da_ficha(db: Session, candidato: Candidato) -> list[str]:
+    """Campos obrigatórios ainda vazios — usado na declaração do candidato e
+    no painel do RH (fichas sem dados não geram documento com conteúdo)."""
     pendencias: list[str] = []
 
     if candidato.aceite_lgpd_em is None:
@@ -384,10 +398,4 @@ def declarar_veracidade(token: str, db: Session = Depends(get_db)) -> dict:
     if contatos is None:
         pendencias.append("contatos_emergencia")
 
-    if pendencias:
-        raise HTTPException(status_code=422, detail={"pendencias": pendencias})
-
-    candidato.declaracao_veracidade_em = datetime.now(timezone.utc)
-    candidato.status = StatusCandidato.aguardando_assinatura
-    db.commit()
-    return {"status": candidato.status}
+    return pendencias

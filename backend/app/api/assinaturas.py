@@ -109,6 +109,8 @@ NOMES_DOC = {
         "Ofício INFRAERO — Cartão Cidadão e extrato do INSS",
     DocumentoAssinavel.informacoes_trabalhador:
         "Informações ao Trabalhador (INFRAERO)",
+    DocumentoAssinavel.termo_lgpd_infraero:
+        "Termo de Consentimento LGPD — Credenciamento (INFRAERO)",
 }
 
 

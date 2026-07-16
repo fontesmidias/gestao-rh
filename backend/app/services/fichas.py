@@ -699,10 +699,58 @@ def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+def gerar_termo_lgpd_infraero(db: Session, candidato: Candidato,
+                              assinatura: Assinatura | None = None,
+                              base_url: str | None = None) -> bytes:
+    """Anexo 04 — Termo de consentimento LGPD do sistema de credenciamento
+    (INFRAERO). Texto fiel ao modelo oficial, com nome/CPF preenchidos."""
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
+              else date.today())
+
+    pdf = _OficioPDF("Termo de Consentimento - LGPD")
+    pdf.ln(4)
+    pdf.set_font("helvetica", "B", 12)
+    pdf.cell(0, 7, "TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS",
+             align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "SISTEMA DE CREDENCIAMENTO", align="C",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+    p = db.get(DadosPessoais, candidato.id)
+    nome_social = f" (nome social: {p.nome_social})" if p and p.nome_social else ""
+    cpf_txt = (f"{d.cpf[:3]}.{d.cpf[3:6]}.{d.cpf[6:9]}-{d.cpf[9:]}"
+               if d and d.cpf and len(d.cpf) == 11 else "____________________")
+    pdf.set_font("helvetica", "", 11)
+    pdf.multi_cell(0, 6.4,
+                   f"Eu, {candidato.nome_completo}{nome_social}, CPF {cpf_txt}, "
+                   "AUTORIZO, de forma livre, informada e inequívoca, o tratamento dos "
+                   "meus dados pessoais contidos no formulário de solicitação de "
+                   "credenciais e em sua documentação anexa, em conformidade com a "
+                   "Lei nº 13.709/2018 - Lei Geral de Proteção de Dados Pessoais (LGPD).")
+    pdf.ln(6)
+    pdf.cell(0, 6, f"Brasília, {quando.strftime('%d/%m/%Y')}.",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(8)
+    if assinatura and assinatura.assinado_em:
+        pdf.set_font("helvetica", "I", 11)
+        pdf.cell(0, 6, f"Assinatura: {candidato.nome_completo} - assinado eletronicamente",
+                 new_x="LMARGIN", new_y="NEXT")
+    else:
+        pdf.cell(0, 6, "Assinatura: " + "_" * 56, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.cell(0, 6, f"[{candidato.nome_completo}]", new_x="LMARGIN", new_y="NEXT")
+
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
+    return bytes(pdf.output())
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
     "termo_vt": gerar_termo_vt,
     "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
     "informacoes_trabalhador": gerar_informacoes_trabalhador,
+    "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
 }

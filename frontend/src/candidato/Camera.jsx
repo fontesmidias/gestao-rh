@@ -120,6 +120,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
   const [teimoso, setTeimoso] = useState(false)    // libera "fotografar assim mesmo"
   const [revisao, setRevisao] = useState(null)     // {url, file}: conferir antes de enviar
   const [passo, setPasso] = useState(0)            // índice em `passos`
+  const [flash, setFlash] = useState(null)         // null = sem suporte | false/true = estado
   const capturasRef = useRef([])                   // fotos já confirmadas dos passos anteriores
   const f = FORMATOS[formato] || FORMATOS.cartao
   const seq = passos && passos.length ? passos : [{}]
@@ -195,6 +196,12 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
         v.srcObject = stream
         await v.play().catch(() => {})   // iOS às vezes exige o playsinline já no elemento
         setEstado('ativa')
+        // Flash (torch): só onde o aparelho suporta — Android/Chrome na câmera
+        // traseira, tipicamente; iOS não expõe. Sem suporte, o botão nem aparece.
+        try {
+          const track = stream.getVideoTracks()[0]
+          if (track?.getCapabilities?.().torch) setFlash(false)
+        } catch { /* sem torch */ }
       } catch (e) {
         if (!vivo) return
         setMotivoSemCamera(
@@ -232,6 +239,15 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     return () => { clearInterval(t); clearTimeout(escape) }
   }, [estado, revisao])
 
+  const alternarFlash = async () => {
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !flash }] })
+      setFlash(!flash)
+    } catch { /* aparelho recusou: mantém o estado */ }
+  }
+
   const escolherArquivo = (e) => {
     const arqs = [...e.target.files]
     e.target.value = ''
@@ -254,8 +270,17 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
         <strong>{titulo || 'Fotografar documento'}
           {rotuloPasso && <span className="captura-passo"> — {rotuloPasso}
             {seq.length > 1 ? ` (${passo + 1} de ${seq.length})` : ''}</span>}</strong>
-        <button type="button" className="btn-link captura-fechar"
-                onClick={() => { fecharStream(); aoFechar() }}>✕ Fechar</button>
+        <span>
+          {flash != null && estado === 'ativa' && !revisao && (
+            <button type="button" className="btn-link captura-fechar"
+                    title={flash ? 'Desligar o flash' : 'Ligar o flash'}
+                    aria-pressed={flash} onClick={alternarFlash}>
+              {flash ? '🔦 Flash ligado' : '🔦 Flash'}
+            </button>
+          )}
+          <button type="button" className="btn-link captura-fechar"
+                  onClick={() => { fecharStream(); aoFechar() }}>✕ Fechar</button>
+        </span>
       </div>
 
       {estado !== 'sem-camera' ? (
