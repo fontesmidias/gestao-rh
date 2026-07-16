@@ -6,6 +6,32 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.5.0] — 2026-07-15
+
+### Adicionado
+- **Fichas e assinaturas visíveis no painel**: o detalhe do candidato mostra
+  cada documento exigido com o estado (assinado/aguardando), alerta quando o
+  formulário está incompleto (fichas sairiam vazias) e ganhou o botão
+  **"Notificar pendências por e-mail"** — cobrança com a lista exata do que
+  falta e link novo. Nasceu de incidente real: e-mail cadastrado depois, e a
+  pessoa nunca soube que havia fichas para preencher e assinar.
+- **Termo de Consentimento LGPD (credenciamento)** no kit INFRAERO: gerado e
+  assinado junto com os demais documentos do posto, com o mesmo código único.
+- Painel do RH com **sidebar esquerda retrátil**, **barra de atividade** e
+  botões travados durante requisições (fim do clique repetido); frases de
+  espera agora também no painel.
+- **Flash (torch)** na câmera guiada, quando o aparelho suporta.
+- Foto OU arquivo para **todos** os documentos (fim do atalho que mandava
+  CTPS/PIS direto ao seletor).
+- Responsividade do painel para celular e tablet (tabelas com rolagem
+  própria, revisão empilhada, métricas em grade).
+- README rico (dores → soluções, rollback, resumo em inglês), CHANGELOG
+  completo e LICENSE MIT.
+
+### Alterado
+- Salvar e-mail no contato avisa explicitamente que **não** envia nada
+  sozinho — a notificação é um ato separado e auditado.
+
 ## [1.4.0] — 2026-07-15
 
 Três fases nascidas de 11 anotações de uso real em produção, priorizadas em
@@ -144,6 +170,7 @@ Primeira versão candidata do Portal de Admissão.
 - Deploy: compose base+variantes (ip / traefik / certbot), stack única para Portainer com
   imagens do GHCR publicadas por CI (GitHub Actions).
 
+[1.5.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.5.0
 [1.4.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.4.0
 [1.3.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.3.0
 [1.2.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.2.0

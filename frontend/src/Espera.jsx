@@ -123,6 +123,17 @@ export const FRASES = [
   'Paciência de um clique só — o resto é por nossa conta.',
   'Interface é como recepção: ninguém pode ficar sem resposta.',
   'De amador, só o carinho excessivo com os detalhes.',
+  // Conjunto 10 (visibilidade das fichas + termo LGPD INFRAERO, 2026-07-15)
+  'Nenhuma pendência fica no escuro — nem no modo escuro.',
+  'O que falta agora tem nome, lista e lembrete. Falta pouco.',
+  'Avisar é cuidar: ninguém deveria adivinhar o próximo passo.',
+  'Seu kit de documentos se monta sozinho — só falta a sua assinatura.',
+  'Consentimento informado: palavra difícil, gesto simples, valor enorme.',
+  'A luz do flash é sua; a luz sobre o processo é nossa.',
+  'Cobramos com elegância — firmeza e gentileza andam juntas por aqui.',
+  'Cada documento sabe a que contrato pertence. Organização é isso.',
+  'Do computador do RH ao seu celular, a mesma experiência inteira.',
+  'Transparência não é recurso: é o padrão da casa.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

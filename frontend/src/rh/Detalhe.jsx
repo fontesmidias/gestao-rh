@@ -39,7 +39,11 @@ function ContatoEditavel({ dados, setMsg, recarregar }) {
           await api.editarContato(dados.id, {
             email: email.trim() || null, celular_whatsapp: celular.trim() || null,
           })
-          setMsg({ tipo: 'ok', texto: 'Contato atualizado (registrado na auditoria).' })
+          // Lição do incidente real: atualizar o e-mail NÃO envia nada sozinho.
+          setMsg({ tipo: 'ok', texto: 'Contato atualizado (registrado na auditoria). '
+            + (email.trim() && !dados.email
+               ? 'Atenção: salvar o e-mail não envia nada — use "🔔 Notificar pendências" para o candidato receber o que falta.'
+               : '') })
           setEditando(false)
           await recarregar()
         } catch (e) {
@@ -49,6 +53,63 @@ function ContatoEditavel({ dados, setMsg, recarregar }) {
       }}>{salvando ? 'Salvando…' : 'Salvar'}</button>
       <button className="btn-link" onClick={() => setEditando(false)}>cancelar</button>
     </span>
+  )
+}
+
+// O que faltava no incidente real: as fichas ficavam invisíveis para o RH.
+// Cada documento exigido aparece com o estado, a ficha incompleta grita, e o
+// botão de notificação manda o retrato exato das pendências por e-mail.
+function FichasStatus({ dados, setMsg }) {
+  const [notificando, setNotificando] = useState(false)
+  const pend = dados.pendencias_ficha || []
+  const fichas = dados.fichas || []
+  const temPendencia = pend.length > 0 || fichas.some((f) => !f.assinado)
+
+  const notificar = async () => {
+    setNotificando(true); setMsg(null)
+    try {
+      const r = await api.notificar(dados.id)
+      setMsg({ tipo: 'ok', texto: r.email_enviado
+        ? `Cobrança enviada por e-mail (${r.itens.length} pendência(s) listadas).`
+        : 'E-mail não saiu (verifique a configuração de envio) — copie o link e cobre pelo WhatsApp.' })
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'candidato_sem_email'
+        ? 'Este candidato não tem e-mail — cadastre em "editar contato" ou cobre pelo WhatsApp com 📋 Copiar link.'
+        : e.detail === 'sem_pendencias' ? 'Nada a cobrar: está tudo em dia. 🎉'
+        : `Não foi possível notificar (${e.detail || e.message}).` })
+    } finally { setNotificando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: '.5rem' }}>
+        <strong>📝 Fichas e assinaturas</strong>
+        {temPendencia && (
+          <button className="btn-secundario btn-mini" disabled={notificando}
+                  title="E-mail com a lista exata do que falta + link novo"
+                  onClick={notificar}>
+            {notificando ? 'Enviando…' : '🔔 Notificar pendências por e-mail'}</button>
+        )}
+      </div>
+      {pend.length > 0 && (
+        <div className="alerta" style={{ marginTop: '.5rem' }}>
+          ⚠️ <strong>O formulário do candidato está incompleto</strong> ({pend.length} campo(s)
+          obrigatório(s) em aberto) — as fichas seriam geradas sem esses dados. O candidato
+          precisa completar pelo link dele, ou você preenche em "✏️ Corrigir dados da ficha".
+        </div>
+      )}
+      <ul className="fichas-status">
+        {fichas.map((f) => (
+          <li key={f.documento}>
+            {f.assinado ? '✅' : '⏳'} {f.titulo}
+            <small> — {f.assinado
+              ? `assinada em ${new Date(f.assinado_em).toLocaleDateString('pt-BR')}`
+              : 'aguardando assinatura do candidato'}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -331,6 +392,7 @@ export default function Detalhe({ id, aoVoltar }) {
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
+      <FichasStatus dados={dados} setMsg={setMsg} />
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
       <FichaRH id={id} setMsg={setMsg} />
 

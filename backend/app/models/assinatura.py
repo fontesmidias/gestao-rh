@@ -17,6 +17,7 @@ class DocumentoAssinavel(str, enum.Enum):
     # Documentos por posto de serviço (gerados quando o RH marca o posto)
     oficio_cartao_cidadao = "oficio_cartao_cidadao"
     informacoes_trabalhador = "informacoes_trabalhador"
+    termo_lgpd_infraero = "termo_lgpd_infraero"
 
 
 # Fichas exigidas de TODO candidato; os demais só existem se o RH os gerar.

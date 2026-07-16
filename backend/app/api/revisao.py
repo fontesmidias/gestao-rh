@@ -85,11 +85,19 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         .where(SlotDocumento.candidato_id == cand.id)
         .order_by(SlotDocumento.criado_em)
     ).all()
-    from app.api.assinaturas import NOMES_DOC
+    from app.api.assinaturas import NOMES_DOC, _docs_exigidos
+    from app.api.ficha import pendencias_da_ficha
     from app.models.assinatura import Assinatura
     assinaturas = db.scalars(
         select(Assinatura).where(Assinatura.candidato_id == cand.id,
                                  Assinatura.invalidada_em.is_(None))).all()
+    por_doc = {a.documento: a for a in assinaturas}
+    fichas = [
+        {"documento": doc, "titulo": NOMES_DOC[doc],
+         "assinado": doc in por_doc and por_doc[doc].assinado_em is not None,
+         "assinado_em": por_doc[doc].assinado_em if doc in por_doc else None}
+        for doc in _docs_exigidos(db, cand)
+    ]
     return {
         "id": cand.id,
         "nome_completo": cand.nome_completo,
@@ -104,6 +112,11 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
              "assinado_em": a.assinado_em}
             for a in assinaturas
         ],
+        # Visão que faltava no incidente real: fichas sem dados/sem assinatura
+        # eram invisíveis para o RH — agora cada documento exigido aparece com
+        # o seu estado, e a ficha incompleta grita.
+        "fichas": fichas,
+        "pendencias_ficha": pendencias_da_ficha(db, cand),
         "slots": [
             {
                 "id": s.id,

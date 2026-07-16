@@ -21,7 +21,8 @@ from app.services.magic_link import emitir_link
 router = APIRouter(tags=["postos-rh"], dependencies=[Depends(requer_rh)])
 
 DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
-                 DocumentoAssinavel.informacoes_trabalhador)
+                 DocumentoAssinavel.informacoes_trabalhador,
+                 DocumentoAssinavel.termo_lgpd_infraero)
 
 
 # ---------- CRUD de postos ----------

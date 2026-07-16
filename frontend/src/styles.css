@@ -556,6 +556,11 @@ body[data-rh-ocupado] .rh-layout button {
 }
 body[data-rh-ocupado] { cursor: progress; }
 
+/* Card de fichas e assinaturas no detalhe */
+.fichas-status { list-style: none; margin: .6rem 0 0; padding: 0; }
+.fichas-status li { padding: .25rem 0; }
+.fichas-status small { color: var(--tinta-suave, #6a7a70); }
+
 /* Correção de ficha pelo RH + etiqueta de origem */
 .etiqueta-rh { color: var(--verde); font-weight: 600; }
 .ficha-rh-secao { margin: .5rem 0; border: 1px solid var(--borda);
@@ -579,6 +584,24 @@ body[data-rh-ocupado] { cursor: progress; }
   font-size: 1.05rem; padding: .35rem; line-height: 1; opacity: .75;
 }
 .btn-olho:hover { opacity: 1; }
+
+/* ---------- Painel RH em celular e tablet ---------- */
+@media (max-width: 1000px) {
+  /* revisão: lista de documentos e visualizador empilham */
+  .rh-revisao { display: flex; flex-direction: column; }
+  .rh-visualizador iframe { min-height: 60vh; }
+}
+@media (max-width: 760px) {
+  .rh-painel { padding: .8rem; }
+  .rh-topo { flex-wrap: wrap; gap: .5rem; }
+  /* tabelas rolam dentro do próprio quadro, sem estourar a página */
+  .rh-tabela { display: block; overflow-x: auto; white-space: nowrap; }
+  .rh-metricas { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+  .linha2, .linha3 { grid-template-columns: 1fr; display: grid; gap: .5rem; }
+  .contato-editavel input { max-width: 100%; }
+  .rh-lote { flex-wrap: wrap; }
+  .toast-espera { left: 1rem; right: 1rem; max-width: none; text-align: center; }
+}
 
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
