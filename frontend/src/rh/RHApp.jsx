@@ -5,6 +5,7 @@ import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
+import BarraAtividade from '../BarraAtividade.jsx'
 
 const STATUS_CHIP = {
   convidado: ['Convidado', '#8896b3'],
@@ -23,7 +24,12 @@ export default function RHApp() {
   const tokenReset = new URLSearchParams(window.location.search).get('redefinir')
   if (tokenReset) return <RedefinirSenha token={tokenReset} />
   if (!logado) return <Login aoEntrar={() => setLogado(true)} />
-  return <Painel aoSair={() => { api.sair(); setLogado(false) }} />
+  return (
+    <>
+      <BarraAtividade />
+      <Painel aoSair={() => { api.sair(); setLogado(false) }} />
+    </>
+  )
 }
 
 function Login({ aoEntrar }) {
@@ -161,6 +167,44 @@ function Metricas({ dados }) {
   )
 }
 
+// Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos
+// rótulos de antes, novo lugar (feedback de campo, 2026-07-15).
+function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
+  const ITENS = [
+    ['inicio', '📋', 'Admissões'],
+    ['colaboradores', '👥', 'Colaboradores'],
+    ['config', '⚙️', 'Configurações'],
+  ]
+  return (
+    <aside className={`rh-sidebar ${aberta ? '' : 'fechada'}`}>
+      <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
+              onClick={() => setAberta(!aberta)}>{aberta ? '⟨' : '☰'}</button>
+      <div className="rh-sidebar-logo">
+        <img src={logo} alt="Green House" className="logo-topo" />
+        {aberta && <strong>Portal de Admissão</strong>}
+      </div>
+      <button className="btn-principal rh-sidebar-novo" onClick={aoNovo}
+              title="+ Novo candidato">
+        {aberta ? '+ Novo candidato' : '+'}
+      </button>
+      <nav>
+        {ITENS.map(([id, icone, rotulo]) => (
+          <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
+                  title={rotulo} onClick={() => navegar(id)}>
+            <span className="rh-sidebar-icone">{icone}</span>
+            {aberta && <span>{rotulo}</span>}
+          </button>
+        ))}
+      </nav>
+      <div className="rh-sidebar-rodape">
+        {aberta && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
+        <button className="btn-link" title="Sair" onClick={aoSair}>
+          {aberta ? 'Sair' : '⎋'}</button>
+      </div>
+    </aside>
+  )
+}
+
 function Painel({ aoSair }) {
   const [candidatos, setCandidatos] = useState(null)
   const [metricas, setMetricas] = useState(null)
@@ -169,8 +213,9 @@ function Painel({ aoSair }) {
   const [convite, setConvite] = useState(null)
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
-  const [config, setConfig] = useState(false)
-  const [colaboradores, setColaboradores] = useState(false)
+  const [pagina, setPagina] = useState('inicio') // inicio | colaboradores | config
+  const [menuAberto, setMenuAberto] = useState(
+    localStorage.getItem('rh_menu') !== 'fechado')
 
   const recarregar = () => {
     api.candidatos().then(setCandidatos).catch((e) => {
@@ -180,26 +225,35 @@ function Painel({ aoSair }) {
   }
   useEffect(() => { recarregar() }, [])
 
-  if (config) return <Config aoVoltar={() => setConfig(false)} />
-  if (colaboradores) return (
-    <Colaboradores aoVoltar={() => { setColaboradores(false); recarregar() }}
-                   aoAbrir={(id) => { setColaboradores(false); setSelecionado(id) }} />
-  )
-  if (selecionado) return (
-    <Detalhe id={selecionado} aoVoltar={() => { setSelecionado(null); recarregar() }} />
-  )
+  const navegar = (destino) => {
+    setPagina(destino)
+    setSelecionado(null)
+    if (destino === 'inicio') recarregar()
+  }
+  const setAberta = (v) => {
+    setMenuAberto(v)
+    localStorage.setItem('rh_menu', v ? 'aberto' : 'fechado')
+  }
 
   return (
+    <div className="rh-layout">
+      <Sidebar pagina={pagina} navegar={navegar} aberta={menuAberto} setAberta={setAberta}
+               aoNovo={() => { navegar('inicio'); setNovo({}) }} aoSair={aoSair} />
+      <div className="rh-conteudo">
+        {pagina === 'config' && <Config aoVoltar={() => navegar('inicio')} />}
+        {pagina === 'colaboradores' && (
+          <Colaboradores aoVoltar={() => navegar('inicio')}
+                         aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
+        )}
+        {pagina === 'inicio' && selecionado && (
+          <Detalhe id={selecionado}
+                   aoVoltar={() => { setSelecionado(null); recarregar() }} />
+        )}
+        {pagina === 'inicio' && !selecionado && (
     <main className="rh-painel">
       <header className="rh-topo">
-        <h1><img src={logo} alt="" className="logo-topo" /> Admissões</h1>
-        <div>
-          <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>
-          <button className="btn-secundario" onClick={() => setNovo({})}>+ Novo candidato</button>
-          <button className="btn-secundario" onClick={() => setColaboradores(true)}>👥 Colaboradores</button>
-          <button className="btn-secundario" onClick={() => setConfig(true)}>⚙️ Configurações</button>
-          <button className="btn-link" onClick={aoSair}>Sair</button>
-        </div>
+        <h1>Admissões</h1>
+        <div />
       </header>
 
       <Metricas dados={metricas} />
@@ -314,5 +368,8 @@ function Painel({ aoSair }) {
         </table>
       )}
     </main>
+        )}
+      </div>
+    </div>
   )
 }

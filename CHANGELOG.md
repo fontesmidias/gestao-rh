@@ -2,6 +2,96 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · versionamento semântico.
 
+Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
+`alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
+tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
+
+## [1.4.0] — 2026-07-15
+
+Três fases nascidas de 11 anotações de uso real em produção, priorizadas em
+mesa-redonda com foco em auditoria, LGPD e integridade das assinaturas.
+
+### Adicionado
+- **Fase 1 — controle do candidato:** ver o próprio envio (PDF), excluir envio
+  ainda não aprovado e reenviar; preview de conferência da foto antes do envio;
+  aviso de ciência do cartão de mobilidade (GO) com carimbo de data imutável;
+  contrato do posto exibido a partir do cadastro (nada digitado à mão).
+- **Fase 2 — poderes manuais do RH:** inserção de documento recebido fora do
+  sistema (WhatsApp/e-mail/presencial) com etiqueta de origem; reabertura de
+  status com motivo obrigatório; correção de dados da ficha por seção com
+  auditoria campo a campo (antes → depois) e **re-assinatura granular** — só os
+  documentos onde o dado aparece são invalidados e voltam para o candidato.
+- **Fase 3 — frente e verso:** envio multi-arquivo vira um único PDF por
+  documento; câmera guiada captura frente e verso em sequência (com passo
+  opcional); OCR lê o texto combinado das partes.
+- Assinaturas invalidadas são historizadas (nunca apagadas): o verificador
+  público responde "assinatura substituída" com data e hash da via antiga; cada
+  via assinada tem arquivo próprio no storage.
+- E-mail/celular do candidato editáveis pelo RH e pelo próprio candidato, com
+  trilha antes → depois na auditoria.
+- Painel do RH com **sidebar esquerda retrátil**, barra de atividade global e
+  botões travados durante requisições (fim do clique repetido).
+- Captura por **foto OU arquivo para todos os documentos** (inclusive CTPS/PIS
+  digitais — há quem tenha o cartão físico na mão).
+
+### Alterado
+- Comprovante de escolaridade passou a ser opcional.
+- Câmera guiada sem disparo automático: o botão habilita quando o quadro está
+  bom, mas quem fotografa é a pessoa; medidas de luz/foco restritas à moldura,
+  com detecção de presença do documento.
+- Exclusão/rejeição/substituição de arquivo varre todos os arquivos do slot
+  (frente, verso, PDF) — cada um com hash SHA-256 na auditoria antes de sair.
+
+### Corrigido
+- Câmera dizia "tudo certo" com o documento fora do enquadramento (as medidas
+  eram da cena inteira, não da moldura).
+
+## [1.3.0] — 2026-07-15
+
+### Adicionado
+- Convite sem e-mail (só o nome é obrigatório): link em destaque para copiar e
+  mandar pelo WhatsApp; e-mail vira pendência da ficha (o código de assinatura
+  chega por ele).
+- Leitor de identidade aceita **RG ou CNH**: detecta qual é, guarda no slot
+  certo e avisa com gentileza quando a CNH veio no lugar do RG.
+- OCR estendido: CNH (registro/categoria), título de eleitor (número/zona/
+  seção), documento de CPF e CEP de comprovante de endereço; sugestões
+  aplicadas **só com consentimento explícito** e nunca sobre campos preenchidos.
+- Recusa imediata de documento de CPF com número divergente da ficha.
+- **Câmera guiada** com moldura por tipo de documento, dicas em tempo real de
+  luz/foco/enquadramento e conferência da foto; leitores junto aos campos que
+  preenchem (RG/CNH na etapa de dados, comprovante na etapa de endereço, com
+  moldura focada no cabeçalho da conta).
+- Olhinho (mostrar/ocultar) em todos os campos de senha e segredos.
+- Tema claro/escuro seguindo o dispositivo, com troca manual.
+- Testes Playwright no CI contra a stack completa, incluindo a câmera (fake
+  device do Chromium).
+
+## [1.2.0] — 2026-07-14/15
+
+### Adicionado
+- Validações inteligentes no upload: foto tremida/borrada recusada na hora
+  (variância do Laplaciano) e comprovante de endereço com mais de 90 dias
+  bloqueado com mensagem clara.
+- **Manifesto de assinatura** gravado como última página de cada PDF assinado:
+  hash SHA-256, ID do registro, assinante, datas (Brasília + UTC), IP real,
+  dispositivo, método e modalidade legal — com QR code para o **verificador
+  público** (`/verificar/<id>`), que exibe dados minimizados (LGPD).
+- Portal único de retorno **/entrar**: CPF + 2 perguntas de verificação
+  derivadas da própria ficha (estilo TSE), com anti-enumeração, lockout e
+  fallback de link por e-mail.
+- Relatório de colaboradores com filtros e exportação **Excel** (~49 colunas).
+- **Postos de serviço** com documentos específicos por contrato (ex.: ofícios
+  INFRAERO) gerados em PDF fiel ao layout oficial e assinados na plataforma;
+  assinantes dos documentos editáveis pelo painel.
+- Nome social (Decreto 8.727/2016) e filiação (pai omitível) na ficha e nos
+  documentos.
+- Repaginada visual "fintech": fonte própria, cores vibrantes, micro-animações
+  (com respeito a `prefers-reduced-motion`); máscara de datas `dd/mm/aaaa`
+  digitável (o público trava no date picker).
+- Botão "copiar link" por candidato no painel (para WhatsApp, sem reenviar
+  e-mail).
+
 ## [1.1.0] — 2026-07-14
 
 Primeira versão em produção (VPS via Portainer) + melhorias da v1.1.
@@ -54,5 +144,8 @@ Primeira versão candidata do Portal de Admissão.
 - Deploy: compose base+variantes (ip / traefik / certbot), stack única para Portainer com
   imagens do GHCR publicadas por CI (GitHub Actions).
 
+[1.4.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.4.0
+[1.3.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.3.0
+[1.2.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.2.0
 [1.1.0]: https://github.com/fontesmidias/admissao/releases/tag/v1.1.0
 [1.0.0-rc.1]: https://github.com/fontesmidias/admissao/releases/tag/v1.0.0-rc.1

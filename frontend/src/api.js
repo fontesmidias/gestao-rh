@@ -1,6 +1,28 @@
 const BASE = '/api'
 
+// Feedback de campo (2026-07-15): o RH clicava várias vezes achando que o
+// comando não tinha ido. Toda chamada do painel conta aqui; enquanto houver
+// requisição em andamento, o body ganha data-rh-ocupado (o CSS trava os
+// botões do painel) e a BarraAtividade aparece no topo.
+let ocupadasRH = 0
+const notificarOcupado = () => {
+  document.body.toggleAttribute('data-rh-ocupado', ocupadasRH > 0)
+  window.dispatchEvent(new CustomEvent('rh-ocupado', { detail: ocupadasRH }))
+}
+const entrouRH = () => { ocupadasRH++; notificarOcupado() }
+const saiuRH = () => { ocupadasRH = Math.max(0, ocupadasRH - 1); notificarOcupado() }
+
 async function req(caminho, opcoes = {}) {
+  const doPainel = caminho.startsWith('/rh')
+  if (doPainel) entrouRH()
+  try {
+    return await _req(caminho, opcoes)
+  } finally {
+    if (doPainel) saiuRH()
+  }
+}
+
+async function _req(caminho, opcoes = {}) {
   // headers extraído antes do spread: senão opcoes.headers sobrescreveria o
   // Content-Type e a API receberia o JSON sem interpretação (bug histórico).
   const { headers, ...resto } = opcoes
@@ -130,15 +152,18 @@ export const rh = {
     const fd = new FormData()
     fd.append('arquivo', arquivo)
     fd.append('origem', origem || 'whatsapp')
-    const r = await fetch(`${BASE}/rh/slots/${slotId}/arquivo`,
-                          { method: 'POST', headers: authRH(), body: fd })
-    if (!r.ok) {
-      const { detail } = await r.json()
-      const erro = new Error(detail)
-      erro.detail = detail
-      throw erro
-    }
-    return r.json()
+    entrouRH()
+    try {
+      const r = await fetch(`${BASE}/rh/slots/${slotId}/arquivo`,
+                            { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) {
+        const { detail } = await r.json()
+        const erro = new Error(detail)
+        erro.detail = detail
+        throw erro
+      }
+      return r.json()
+    } finally { saiuRH() }
   },
   reabrirSlot: (slotId, motivo) =>
     req(`/rh/slots/${slotId}/reabrir`,

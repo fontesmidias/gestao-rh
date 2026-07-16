@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 // Mensagens de espera com personalidade: elegantes, leves, nunca agressivas.
 // COMBINADO COM O BRUNO (2026-07-15): a cada atualização do sistema,
 // acrescentar ~10 frases novas a este pool.
-const FRASES = [
+export const FRASES = [
   // Conjunto 1 — elegância e leveza
   'Um instante — capricho leva exatamente este tempinho.',
   'Preparando tudo com o cuidado de quem dobra a roupa recém-passada.',
@@ -112,6 +112,17 @@ const FRASES = [
   'Virando a página — literalmente — para você não precisar reenviar depois.',
   'Um clique para a frente, outro para o verso, e o resto é conosco.',
   'Perfeição não é pressa: é a segunda foto tão boa quanto a primeira.',
+  // Conjunto 9 (quick wins de UX do RH, 2026-07-15)
+  'Um clique basta — nós seguramos os outros quatro para você.',
+  'Trabalhando… e avisando que estamos trabalhando. Combinado é combinado.',
+  'O menu ficou à esquerda, mas o caminho ficou mais curto.',
+  'Sistemas bons respondem; sistemas ótimos respondem que estão respondendo.',
+  'Cada segundo de espera aqui vem com legenda.',
+  'Navegar sem recarregar: a página fica, só o assunto muda.',
+  'A barrinha lá em cima é a gente costurando os dados.',
+  'Paciência de um clique só — o resto é por nossa conta.',
+  'Interface é como recepção: ninguém pode ficar sem resposta.',
+  'De amador, só o carinho excessivo com os detalhes.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]
