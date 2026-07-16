@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtDataHora } from './fmt.js'
 import { useParams } from 'react-router-dom'
 import { verificarAssinatura } from './api.js'
 
@@ -28,7 +29,7 @@ export default function Verificar() {
       <div className="verificar-selo invalido">↻</div>
       <h1>Assinatura substituída</h1>
       <p className="explica centro">Esta assinatura foi realizada de forma autêntica em{' '}
-        {new Date(dados.assinado_em).toLocaleString('pt-BR')}, mas o documento foi
+        {fmtDataHora(dados.assinado_em)}, mas o documento foi
         <strong> atualizado depois disso</strong> e uma nova versão foi (ou será) assinada.
         A via que você tem em mãos <strong>não é a mais recente</strong> — solicite a
         versão atual ao RH da Green House.</p>
@@ -36,7 +37,7 @@ export default function Verificar() {
         <dt>Documento</dt><dd>{dados.documento}</dd>
         <dt>Assinante</dt><dd>{dados.assinante}</dd>
         <dt>CPF</dt><dd>{dados.cpf}</dd>
-        <dt>Substituída em</dt><dd>{new Date(dados.invalidada_em).toLocaleString('pt-BR')}</dd>
+        <dt>Substituída em</dt><dd>{fmtDataHora(dados.invalidada_em)}</dd>
         <dt>Integridade da via antiga (SHA-256)</dt><dd className="hash">{dados.hash_sha256}</dd>
       </dl>
     </main>
@@ -52,7 +53,7 @@ export default function Verificar() {
         <dt>Documento</dt><dd>{dados.documento}</dd>
         <dt>Assinante</dt><dd>{dados.assinante}</dd>
         <dt>CPF</dt><dd>{dados.cpf}</dd>
-        <dt>Assinado em</dt><dd>{new Date(dados.assinado_em).toLocaleString('pt-BR')} (horário de Brasília)</dd>
+        <dt>Assinado em</dt><dd>{fmtDataHora(dados.assinado_em)} (horário de Brasília)</dd>
         <dt>Método</dt><dd>{dados.metodo}</dd>
         <dt>Integridade (SHA-256)</dt><dd className="hash">{dados.hash_sha256}</dd>
         <dt>ID do registro</dt><dd className="hash">{dados.id}</dd>

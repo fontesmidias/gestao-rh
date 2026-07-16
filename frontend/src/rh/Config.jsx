@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 
@@ -620,7 +621,7 @@ function Auditoria() {
           <tbody>
             {eventos.map((e, i) => (
               <tr key={i}>
-                <td>{new Date(e.quando).toLocaleString('pt-BR')}</td>
+                <td>{fmtDataHora(e.quando)}</td>
                 <td>{e.acao}</td>
                 <td>{e.ator}{e.ator_detalhe ? ` (${e.ator_detalhe})` : ''}</td>
                 <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>

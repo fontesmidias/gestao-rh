@@ -1,7 +1,12 @@
 /* ============================================================
-   Design system "fintech vibrante" — Portal de Admissão Green House
-   Tipografia geométrica (Outfit), verde vivo, botões gordos,
-   micro-animações. Mobile-first, alvos de toque ≥48px.
+   FOLHA DE PADRÕES (design tokens) — Portal de Admissão Green House
+   ------------------------------------------------------------
+   Toda cor, fonte, tamanho, espaçamento, raio e sombra do sistema
+   vem das variáveis abaixo. Para mudar o visual, mude AQUI — os
+   componentes apenas consomem os tokens (var(--nome)), nunca valores
+   soltos. Tema escuro sobrepõe só o bloco [data-tema='escuro'].
+   Estilo: "fintech vibrante" — Outfit, verde vivo, cantos gordos.
+   Mobile-first, alvos de toque ≥48px.
    ============================================================ */
 
 :root {
@@ -34,22 +39,42 @@
   --alerta-txt: #b3383c;
   --sucesso-txt: #0a7a3d;
 
-  /* Tipografia */
+  /* Cores semânticas (comunicação por cor, sutil) */
+  --ok: var(--verde);
+  --ok-suave: var(--verde-suave);
+  --atencao: var(--ambar);
+  --atencao-suave: #fdf3e2;
+  --perigo: var(--erro);
+  --perigo-suave: var(--erro-suave);
+  --tinta-suave: #6a7a70;
+
+  /* Tipografia (escala única — nunca tamanhos soltos) */
+  --fonte: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --fs-titulo: 1.55rem;
   --fs-sub: 1.2rem;
   --fs-secao: 1.02rem;
   --fs-corpo: 1rem;          /* 16px: evita zoom no iOS */
   --fs-apoio: .875rem;
+  --fs-mini: .78rem;
   --toque: 50px;
 
-  /* Formas */
+  /* Espaçamentos (escala de 4px) */
+  --esp-1: .25rem;
+  --esp-2: .5rem;
+  --esp-3: .75rem;
+  --esp-4: 1rem;
+  --esp-6: 1.5rem;
+  --esp-8: 2rem;
+
+  /* Formas e elevação */
   --raio: 18px;
   --raio-input: 13px;
   --raio-botao: 14px;
+  --raio-chip: 999px;
   --sombra-cartao: 0 10px 34px rgba(16, 36, 27, .08);
   --sombra-verde: 0 8px 22px rgba(15, 178, 87, .32);
 
-  font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--fonte);
 }
 
 /* Tema escuro: ativado por escolha ou pelo modo do aparelho (main.jsx). */
@@ -496,11 +521,23 @@ input:focus, select:focus, textarea:focus {
   font-size: 1.05rem; color: var(--tinta); padding: .2rem .5rem; border-radius: 8px;
 }
 .rh-sidebar-toggle:hover { background: var(--verde-suave); }
+/* Logo em cima, nome do portal embaixo — nada de texto cortado. */
 .rh-sidebar-logo {
-  display: flex; align-items: center; gap: .5rem;
-  padding: .2rem .3rem .8rem; font-size: .92rem;
-  border-bottom: 1px solid var(--borda); margin-bottom: .5rem;
-  overflow: hidden; white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center; gap: var(--esp-2);
+  padding: var(--esp-1) var(--esp-1) var(--esp-3); text-align: center;
+  border-bottom: 1px solid var(--borda); margin-bottom: var(--esp-2);
+  overflow: hidden;
+}
+.rh-sidebar-logo .logo-topo { height: 36px; }
+.rh-sidebar-titulo { font-size: var(--fs-apoio); font-weight: 700; color: var(--tinta);
+                     line-height: 1.2; }
+.rh-sidebar-user { display: flex; align-items: center; gap: var(--esp-2); min-width: 0; }
+.rh-sidebar-user .rh-nome { overflow: hidden; text-overflow: ellipsis; }
+.rh-sidebar-avatar {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--verde-suave); color: var(--verde-escuro);
+  font-weight: 800; font-size: var(--fs-apoio);
 }
 .rh-sidebar-novo { display: flex; justify-content: center; margin-bottom: .4rem; }
 .rh-sidebar nav { display: flex; flex-direction: column; gap: .25rem; }
@@ -515,10 +552,13 @@ input:focus, select:focus, textarea:focus {
                          box-shadow: inset 3px 0 0 var(--verde); }
 .rh-sidebar-icone { font-size: 1.15rem; width: 1.5rem; text-align: center; }
 .rh-sidebar-rodape {
-  margin-top: auto; display: flex; flex-direction: column; gap: .2rem;
+  margin-top: auto; display: flex; align-items: center; gap: var(--esp-2);
+  justify-content: space-between;
   padding-top: .6rem; border-top: 1px solid var(--borda);
   overflow: hidden; white-space: nowrap;
 }
+.rh-sidebar.fechada .rh-sidebar-rodape { flex-direction: column; }
+.rh-sidebar.fechada .rh-sidebar-titulo { display: none; }
 .rh-conteudo { flex: 1; min-width: 0; }
 @media (max-width: 760px) {
   .rh-sidebar { position: fixed; z-index: 90; height: 100vh;
@@ -555,6 +595,16 @@ body[data-rh-ocupado] .rh-layout button {
   pointer-events: none; opacity: .65; cursor: progress;
 }
 body[data-rh-ocupado] { cursor: progress; }
+
+/* Comunicação assertiva: ícone ⓘ discreto sinaliza tooltip (title) */
+.dica-i { opacity: .55; font-size: var(--fs-mini); cursor: help; }
+.alerta.compacto { padding: .5rem .8rem; font-size: var(--fs-apoio); cursor: help; }
+.chip-doc {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .2rem .6rem; margin: 0 .35rem .25rem 0;
+  border: 1px solid var(--borda); border-radius: var(--raio-chip);
+  font-size: var(--fs-mini); cursor: help; background: var(--input-bg);
+}
 
 /* Card de fichas e assinaturas no detalhe */
 .fichas-status { list-style: none; margin: .6rem 0 0; padding: 0; }
