@@ -478,6 +478,84 @@ input:focus, select:focus, textarea:focus {
 .captura-disparo { font-size: 1.1rem; }
 .captura-legenda { text-align: center; color: #a9bfb0; font-size: .85rem; margin: 0 0 .9rem; }
 
+/* ---------- Sidebar do painel RH ---------- */
+.rh-layout { display: flex; min-height: 100vh; }
+.rh-sidebar {
+  position: sticky; top: 0; align-self: flex-start;
+  display: flex; flex-direction: column; gap: .4rem;
+  width: 232px; min-width: 232px; height: 100vh;
+  padding: .9rem .7rem;
+  background: var(--cartao); border-right: 1px solid var(--borda);
+  transition: width .18s ease, min-width .18s ease;
+}
+.rh-sidebar.fechada { width: 64px; min-width: 64px; }
+.rh-sidebar.fechada .rh-sidebar-item,
+.rh-sidebar.fechada .rh-sidebar-novo { justify-content: center; padding: .6rem .2rem; }
+.rh-sidebar-toggle {
+  align-self: flex-end; border: 0; background: transparent; cursor: pointer;
+  font-size: 1.05rem; color: var(--tinta); padding: .2rem .5rem; border-radius: 8px;
+}
+.rh-sidebar-toggle:hover { background: var(--verde-suave); }
+.rh-sidebar-logo {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .2rem .3rem .8rem; font-size: .92rem;
+  border-bottom: 1px solid var(--borda); margin-bottom: .5rem;
+  overflow: hidden; white-space: nowrap;
+}
+.rh-sidebar-novo { display: flex; justify-content: center; margin-bottom: .4rem; }
+.rh-sidebar nav { display: flex; flex-direction: column; gap: .25rem; }
+.rh-sidebar-item {
+  display: flex; align-items: center; gap: .65rem;
+  width: 100%; padding: .6rem .7rem; border: 0; border-radius: 12px;
+  background: transparent; color: var(--tinta); font-size: .95rem;
+  cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden;
+}
+.rh-sidebar-item:hover { background: var(--verde-suave); }
+.rh-sidebar-item.ativo { background: var(--verde-suave); font-weight: 700;
+                         box-shadow: inset 3px 0 0 var(--verde); }
+.rh-sidebar-icone { font-size: 1.15rem; width: 1.5rem; text-align: center; }
+.rh-sidebar-rodape {
+  margin-top: auto; display: flex; flex-direction: column; gap: .2rem;
+  padding-top: .6rem; border-top: 1px solid var(--borda);
+  overflow: hidden; white-space: nowrap;
+}
+.rh-conteudo { flex: 1; min-width: 0; }
+@media (max-width: 760px) {
+  .rh-sidebar { position: fixed; z-index: 90; height: 100vh;
+                box-shadow: 8px 0 24px rgba(0, 0, 0, .12); }
+  .rh-sidebar.fechada { box-shadow: none; }
+  .rh-conteudo { margin-left: 64px; }
+}
+
+/* ---------- Feedback global do painel: barra + trava de botões ---------- */
+.barra-atividade {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 200;
+  background: color-mix(in srgb, var(--verde) 25%, transparent);
+  overflow: hidden;
+}
+.barra-atividade i {
+  position: absolute; top: 0; bottom: 0; width: 38%;
+  background: var(--verde); border-radius: 3px;
+  animation: varrer 1.1s ease-in-out infinite;
+}
+@keyframes varrer {
+  0% { left: -40%; } 100% { left: 105%; }
+}
+.toast-espera {
+  position: fixed; bottom: 1rem; right: 1rem; z-index: 200;
+  background: var(--cartao); color: var(--tinta);
+  border: 1px solid var(--borda); border-radius: 999px;
+  padding: .55rem 1.1rem; font-size: .9rem;
+  box-shadow: var(--sombra-cartao); max-width: min(80vw, 420px);
+  animation: surgir .3s ease-out;
+}
+/* Enquanto o painel processa, os botões do RH travam — fim do clique repetido. */
+body[data-rh-ocupado] .rh-painel button,
+body[data-rh-ocupado] .rh-layout button {
+  pointer-events: none; opacity: .65; cursor: progress;
+}
+body[data-rh-ocupado] { cursor: progress; }
+
 /* Correção de ficha pelo RH + etiqueta de origem */
 .etiqueta-rh { color: var(--verde); font-weight: 600; }
 .ficha-rh-secao { margin: .5rem 0; border: 1px solid var(--borda);

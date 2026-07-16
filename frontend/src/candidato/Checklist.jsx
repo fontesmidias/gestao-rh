@@ -5,19 +5,20 @@ import Espera from '../Espera.jsx'
 import { Cartao } from './CandidatoApp.jsx'
 import CapturaDocumento from './Camera.jsx'
 
-// Formato da moldura da câmera guiada por tipo de documento.
+// Formato da moldura da câmera guiada por tipo de documento. TODO documento
+// abre a captura completa — foto guiada E envio de arquivo, a pessoa escolhe
+// (feedback de campo: tem gente com o cartão físico do PIS na mão, e tem
+// gente com o PDF da CTPS no aparelho — os dois caminhos valem sempre).
 const FORMATO_DOC = {
   rg: 'cartao', cpf_doc: 'cartao', habilitacao_prof: 'cartao',
   titulo_eleitor_doc: 'cartao', reservista: 'cartao', cartao_vt: 'cartao',
+  pis_comprovante: 'cartao',
   foto_3x4: 'retrato',
   comp_endereco: 'a4', comp_escolaridade: 'a4', diplomas: 'a4',
   laudo_pcd: 'a4', cert_casamento: 'a4', cert_nascimento_dep: 'a4',
   cartao_vacina_dep: 'a4', declaracao_escolar_dep: 'a4',
+  ctps_digital: 'a4', nada_consta_eleitoral: 'a4', nada_consta_criminal: 'a4',
 }
-// Documentos que nascem digitais (PDF baixado de app/site): fotografar não
-// faz sentido — o botão vai direto ao seletor de arquivo.
-const DOCS_DIGITAIS = ['ctps_digital', 'pis_comprovante',
-                       'nada_consta_eleitoral', 'nada_consta_criminal']
 
 // Documentos com frente e verso: a câmera guia as duas capturas em sequência
 // e tudo vira um único PDF no checklist.
@@ -113,10 +114,6 @@ export default function Checklist({ token, aoConcluir }) {
 
   const escolher = (slot) => {
     slotAtual.current = slot.id
-    if (DOCS_DIGITAIS.includes(slot.tipo)) {
-      inputRef.current.click()   // PDF de app/site: direto ao arquivo
-      return
-    }
     setCamera({
       slotId: slot.id,
       formato: FORMATO_DOC[slot.tipo] || 'a4',
