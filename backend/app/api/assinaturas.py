@@ -269,6 +269,9 @@ def assinar_todos(
         assinatura.otp_expira_em = None
         pdf_assinado = GERADORES[doc.value](db, candidato, assinatura,
                                             base_url_publica(request))
+        # Rubrica digital em CADA página: registro + hash + instante na lateral.
+        from app.services.fichas import carimbar_rubrica_lateral
+        pdf_assinado = carimbar_rubrica_lateral(pdf_assinado, assinatura)
         # Key com o id da assinatura: uma re-assinatura (após invalidação)
         # nunca sobrescreve a via antiga — cada via assinada é preservada.
         key = f"candidatos/{candidato.id}/fichas/{doc.value}-{assinatura.id}.pdf"
@@ -387,6 +390,8 @@ def assinar(
 
     pdf_assinado = GERADORES[documento.value](db, candidato, assinatura,
                                               base_url_publica(request))
+    from app.services.fichas import carimbar_rubrica_lateral
+    pdf_assinado = carimbar_rubrica_lateral(pdf_assinado, assinatura)
     key = f"candidatos/{candidato.id}/fichas/{documento.value}-{assinatura.id}.pdf"
     storage.salvar(key, pdf_assinado, "application/pdf")
     assinatura.pdf_key = key

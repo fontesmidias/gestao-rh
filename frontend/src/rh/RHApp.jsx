@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
@@ -181,10 +182,10 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
               onClick={() => setAberta(!aberta)}>{aberta ? '⟨' : '☰'}</button>
       <div className="rh-sidebar-logo">
         <img src={logo} alt="Green House" className="logo-topo" />
-        {aberta && <strong>Portal de Admissão</strong>}
+        {aberta && <span className="rh-sidebar-titulo">Portal de Admissão</span>}
       </div>
       <button className="btn-principal rh-sidebar-novo" onClick={aoNovo}
-              title="+ Novo candidato">
+              title="Novo candidato">
         {aberta ? '+ Novo candidato' : '+'}
       </button>
       <nav>
@@ -196,9 +197,13 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
           </button>
         ))}
       </nav>
-      <div className="rh-sidebar-rodape">
-        {aberta && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
-        <button className="btn-link" title="Sair" onClick={aoSair}>
+      <div className="rh-sidebar-rodape" title={`Conectado(a) como ${localStorage.getItem('rh_nome') || ''}`}>
+        <span className="rh-sidebar-user">
+          <span className="rh-sidebar-avatar">
+            {(localStorage.getItem('rh_nome') || '?').trim()[0]?.toUpperCase()}</span>
+          {aberta && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
+        </span>
+        <button className="btn-link" title="Sair da conta" onClick={aoSair}>
           {aberta ? 'Sair' : '⎋'}</button>
       </div>
     </aside>
@@ -336,7 +341,7 @@ function Painel({ aoSair }) {
                     <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></td>
                   <td><span className="chip" style={{ background: cor }}>{rotulo}</span></td>
                   <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
-                  <td>{new Date(c.criado_em).toLocaleDateString('pt-BR')}</td>
+                  <td>{fmtData(c.criado_em)}</td>
                   <td className="acoes-candidato">
                     <button className="btn-secundario btn-mini"
                             onClick={() => setSelecionado(c.id)}>Abrir</button>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { DICAS } from '../tooltips.js'
 
@@ -87,25 +88,24 @@ function FichasStatus({ dados, setMsg }) {
         <strong>📝 Fichas e assinaturas</strong>
         {temPendencia && (
           <button className="btn-secundario btn-mini" disabled={notificando}
-                  title="E-mail com a lista exata do que falta + link novo"
+                  title="Envia um e-mail ao candidato com a lista exata do que falta (formulário, assinaturas, documentos) e um link novo"
                   onClick={notificar}>
-            {notificando ? 'Enviando…' : '🔔 Notificar pendências por e-mail'}</button>
+            {notificando ? 'Enviando…' : '🔔 Notificar'}</button>
         )}
       </div>
       {pend.length > 0 && (
-        <div className="alerta" style={{ marginTop: '.5rem' }}>
-          ⚠️ <strong>O formulário do candidato está incompleto</strong> ({pend.length} campo(s)
-          obrigatório(s) em aberto) — as fichas seriam geradas sem esses dados. O candidato
-          precisa completar pelo link dele, ou você preenche em "✏️ Corrigir dados da ficha".
+        <div className="alerta compacto" style={{ marginTop: '.5rem' }}
+             title={'Sem esses dados, as fichas seriam geradas vazias. O candidato completa pelo link dele — ou você preenche em ✏️ Corrigir dados da ficha.'}>
+          ⚠️ Formulário incompleto — <strong>{pend.length} campo(s)</strong> em aberto <span className="dica-i">ⓘ</span>
         </div>
       )}
       <ul className="fichas-status">
         {fichas.map((f) => (
-          <li key={f.documento}>
+          <li key={f.documento}
+              title={f.assinado ? `Assinada em ${fmtData(f.assinado_em)} (horário de Brasília)`
+                                : 'Aguardando assinatura eletrônica do candidato'}>
             {f.assinado ? '✅' : '⏳'} {f.titulo}
-            <small> — {f.assinado
-              ? `assinada em ${new Date(f.assinado_em).toLocaleDateString('pt-BR')}`
-              : 'aguardando assinatura do candidato'}</small>
+            {f.assinado && <small> · {fmtData(f.assinado_em)}</small>}
           </li>
         ))}
       </ul>
@@ -133,9 +133,10 @@ function PostoServico({ dados, setMsg, recarregar }) {
           {p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
       </select>
       {postoId && (postos.find((p) => p.id === postoId)?.contrato_ref) && (
-        <span className="explica" style={{ margin: 0 }}>
-          contrato: <strong>{postos.find((p) => p.id === postoId).contrato_ref}</strong> (do
-          cadastro do posto — nada para digitar)</span>
+        <span className="explica" style={{ margin: 0 }}
+              title="Vem do cadastro do posto (Configurações → Postos) — nada para digitar">
+          📄 <strong>{postos.find((p) => p.id === postoId).contrato_ref}</strong>
+          <span className="dica-i"> ⓘ</span></span>
       )}
       <input placeholder="Cargo/função (ex.: Office Boy)" value={cargo}
              style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
@@ -155,8 +156,12 @@ function PostoServico({ dados, setMsg, recarregar }) {
       }}>{salvando ? 'Salvando…' : 'Salvar posto'}</button>
       {extras.length > 0 && (
         <span className="explica" style={{ margin: 0, width: '100%' }}>
-          Documentos do posto: {extras.map((a) =>
-            `${a.titulo} ${a.assinado_em ? '✓ assinado' : '⏳ aguardando assinatura'}`).join(' · ')}
+          {extras.map((a) => (
+            <span key={a.documento} className="chip-doc"
+                  title={a.assinado_em ? `${a.titulo} — assinado` : `${a.titulo} — aguardando assinatura do candidato`}>
+              {a.assinado_em ? '✅' : '⏳'} {a.titulo.replace(/ \(INFRAERO\)| INFRAERO —.*/, '')}
+            </span>
+          ))}
         </span>
       )}
     </div>
@@ -191,11 +196,9 @@ function FichaRH({ id, setMsg }) {
 
   if (!aberta) return (
     <div className="rh-card">
-      <button className="btn-secundario btn-mini" onClick={() => setAberta(true)}>
-        ✏️ Corrigir dados da ficha</button>
-      <span className="explica" style={{ margin: 0 }}> Completa campos faltantes ou corrige
-        erros. Fichas já assinadas que exibem o dado alterado voltam para o candidato
-        assinar de novo (só as afetadas).</span>
+      <button className="btn-secundario btn-mini" onClick={() => setAberta(true)}
+              title="Completa campos faltantes ou corrige erros. Fichas já assinadas que exibem o dado alterado voltam para o candidato assinar de novo — só as afetadas.">
+        ✏️ Corrigir dados da ficha <span className="dica-i">ⓘ</span></button>
     </div>
   )
   if (!ficha) return <div className="rh-card"><p>Carregando ficha…</p></div>

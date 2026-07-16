@@ -935,6 +935,42 @@ def gerar_acordo_confidencialidade(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+def carimbar_rubrica_lateral(pdf_bytes: bytes, assinatura: Assinatura) -> bytes:
+    """Rubrica digital em CADA página do PDF assinado: texto discreto na
+    lateral direita com o registro, o hash SHA-256 e o instante — quem tem
+    uma página avulsa em mãos consegue conferir a integridade da via.
+    Qualquer falha devolve o PDF original (a rubrica é reforço, não requisito)."""
+    import io
+
+    try:
+        from pypdf import PdfReader, PdfWriter
+
+        quando = assinatura.assinado_em.strftime("%d/%m/%Y %H:%M UTC") \
+            if assinatura.assinado_em else "-"
+        texto = (f"Assinatura eletronica (Lei 14.063/2020) | registro {assinatura.id} | "
+                 f"SHA-256 {assinatura.hash_sha256} | {quando} | "
+                 "confira em /verificar")
+        ov = FPDF(format="A4")
+        ov.set_auto_page_break(False)
+        ov.add_page()
+        ov.set_font("helvetica", "", 5.4)
+        ov.set_text_color(128, 138, 130)
+        with ov.rotation(90, 206, 288):
+            ov.text(206, 288, texto)
+        pagina_rubrica = PdfReader(io.BytesIO(bytes(ov.output()))).pages[0]
+
+        leitor = PdfReader(io.BytesIO(pdf_bytes))
+        escritor = PdfWriter()
+        for pagina in leitor.pages:
+            pagina.merge_page(pagina_rubrica)
+            escritor.add_page(pagina)
+        saida = io.BytesIO()
+        escritor.write(saida)
+        return saida.getvalue()
+    except Exception:
+        return pdf_bytes
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
