@@ -79,6 +79,17 @@ const FRASES = [
   'Seu endereço, seus dados, seu ritmo. Nós só facilitamos.',
   'Um passo de cada vez — e olha que os passos aqui são rápidos.',
   'Terminando com esmero o que começou com um simples toque.',
+  // Conjunto 6 (fase 1 do feedback de campo, 2026-07-15)
+  'Ouvimos quem usa — e cada ajuste fino nasce de uma história real.',
+  'Você no controle, nós no capricho. Boa divisão de tarefas.',
+  'Conferir antes de enviar: elegância é dar tempo ao seu próprio olhar.',
+  'Nada aqui se perde: o que sai de cena deixa recibo.',
+  'Pequenos detalhes, grandes diferenças — é neles que estamos agora.',
+  'O sistema aprende com você mais do que você imagina.',
+  'Cada versão fica um pouco mais sua. Esta acabou de ficar.',
+  'Quem revisa duas vezes assina tranquilo. Nós revisamos três.',
+  'Do Goiás ao Plano Piloto, tudo no mesmo cuidado.',
+  'Feito para quem tem mais o que fazer do que preencher formulários.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

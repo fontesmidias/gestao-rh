@@ -39,7 +39,8 @@ def _slots_aplicaveis(db: Session, candidato: Candidato) -> list[dict]:
         {"tipo": TipoDocumento.pis_comprovante, "obrigatorio": True},
         {"tipo": TipoDocumento.titulo_eleitor_doc, "obrigatorio": True},
         {"tipo": TipoDocumento.comp_endereco, "obrigatorio": True},
-        {"tipo": TipoDocumento.comp_escolaridade, "obrigatorio": True},
+        # Opcional por decisão do RH (2026-07-15): nem todo cargo exige.
+        {"tipo": TipoDocumento.comp_escolaridade, "obrigatorio": False},
         {"tipo": TipoDocumento.nada_consta_eleitoral, "obrigatorio": True},
         {"tipo": TipoDocumento.nada_consta_criminal, "obrigatorio": True},
         {"tipo": TipoDocumento.habilitacao_prof, "obrigatorio": False},

@@ -74,6 +74,9 @@ export const candidato = {
     }
     return r.json()
   },
+  meuArquivoUrl: (t, slotId) => `${BASE}/c/${t}/documentos/${slotId}/arquivo`,
+  excluirArquivo: (t, slotId) =>
+    req(`/c/${t}/documentos/${slotId}/arquivo`, { method: 'DELETE' }),
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
 }
 
@@ -113,6 +116,9 @@ export const rh = {
     req(`/rh/candidatos/${id}/reenviar-link?enviar_email_convite=false`,
         { method: 'POST', headers: authRH() }),
   detalhe: (id) => req(`/rh/candidatos/${id}`, { headers: authRH() }),
+  editarContato: (id, dados) =>
+    req(`/rh/candidatos/${id}/contato`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   arquivoUrl: (slotId) => `${BASE}/rh/slots/${slotId}/arquivo`,
   arquivo: (slotId) => req(`/rh/slots/${slotId}/arquivo`, { headers: authRH() }),
   aprovar: (slotId) => req(`/rh/slots/${slotId}/aprovar`, { method: 'POST', headers: authRH() }),

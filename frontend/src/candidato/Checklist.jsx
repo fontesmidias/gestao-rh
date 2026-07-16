@@ -225,6 +225,23 @@ export default function Checklist({ token, aoConcluir }) {
                 </button>
               )}
             </div>
+            {['enviado', 'aprovado'].includes(s.status) && (
+              <div className="slot-arquivo-acoes">
+                <a className="btn-link" target="_blank" rel="noreferrer"
+                   href={api.meuArquivoUrl(token, s.id)}>👁 Ver o que enviei</a>
+                {s.status === 'enviado' && (
+                  <button className="btn-link" onClick={async () => {
+                    if (!window.confirm('Excluir este arquivo? Você poderá enviar outro no lugar.')) return
+                    try {
+                      await api.excluirArquivo(token, s.id)
+                      await recarregar()
+                    } catch {
+                      setErros((x) => ({ ...x, [s.id]: 'Não foi possível excluir agora. Tente de novo.' }))
+                    }
+                  }}>🗑 Excluir e enviar outro</button>
+                )}
+              </div>
+            )}
             {enviando === s.id && <Espera texto="Enviando e conferindo seu documento…" />}
             {dicaAberta === s.id && <div className="slot-dica">💡 {info.dica}</div>}
             {erros[s.id] && <div className="alerta">{erros[s.id]}</div>}

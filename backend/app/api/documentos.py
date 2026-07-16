@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -188,6 +188,76 @@ def _conferir_cpf_do_documento(db: Session, candidato: Candidato,
     achados = cpfs_no_texto(texto or "")
     if achados and doc.cpf not in achados:
         raise ArquivoInvalido("cpf_divergente")
+
+
+@router.get("/c/{token}/documentos/{slot_id}/arquivo")
+def ver_meu_arquivo(token: str, slot_id: uuid.UUID,
+                    db: Session = Depends(get_db)) -> Response:
+    """O candidato confere o que ele mesmo enviou (PDF normalizado)."""
+    candidato = _candidato_do_token(token, db)
+    slot = db.get(SlotDocumento, slot_id)
+    if slot is None or slot.candidato_id != candidato.id or slot.arquivo_pdf_key is None:
+        raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
+    return Response(content=storage.ler(slot.arquivo_pdf_key),
+                    media_type="application/pdf")
+
+
+@router.delete("/c/{token}/documentos/{slot_id}/arquivo")
+def excluir_meu_arquivo(token: str, slot_id: uuid.UUID,
+                        db: Session = Depends(get_db)) -> dict:
+    """O candidato remove um envio seu que ainda não foi aprovado, para mandar
+    outro no lugar. Antes de apagar, o hash do arquivo vai para a auditoria —
+    o arquivo morre, a evidência de que existiu fica."""
+    candidato = _candidato_do_token(token, db)
+    if candidato.status in (StatusCandidato.envio_concluido, StatusCandidato.aprovado,
+                            StatusCandidato.expurgado):
+        raise HTTPException(status_code=409, detail="envio_ja_concluido")
+    slot = db.get(SlotDocumento, slot_id)
+    if slot is None or slot.candidato_id != candidato.id:
+        raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    if slot.status not in (StatusSlot.enviado, StatusSlot.rejeitado):
+        raise HTTPException(status_code=409, detail="arquivo_nao_pode_ser_excluido")
+
+    expurgar_arquivos_do_slot(db, slot, evento="documento_excluido_candidato",
+                              ator="candidato")
+    slot.status = StatusSlot.pendente
+    slot.motivo_rejeicao = None
+    slot.motivo_rejeicao_obs = None
+    slot.enviado_em = None
+    slot.paginas = None
+    db.commit()
+    return _slot_out(slot)
+
+
+def expurgar_arquivos_do_slot(db: Session, slot: SlotDocumento, evento: str,
+                              ator: str, ator_detalhe: str | None = None) -> None:
+    """Remove os arquivos do slot do storage, gravando ANTES na auditoria o
+    hash SHA-256, tamanho e caminho de cada um (linha vermelha do projeto:
+    nada some sem hash na auditoria)."""
+    import hashlib
+
+    evidencias = []
+    for key in (slot.arquivo_pdf_key, slot.arquivo_original_key):
+        if not key:
+            continue
+        try:
+            dados = storage.ler(key)
+            evidencias.append({"arquivo": key,
+                               "sha256": hashlib.sha256(dados).hexdigest(),
+                               "bytes": len(dados)})
+        except Exception:
+            evidencias.append({"arquivo": key, "sha256": "ilegivel_no_storage"})
+    registrar(db, evento, ator=ator, ator_detalhe=ator_detalhe,
+              candidato_id=slot.candidato_id,
+              detalhe={"tipo": slot.tipo.value, "arquivos": evidencias})
+    for key in (slot.arquivo_pdf_key, slot.arquivo_original_key):
+        if key:
+            try:
+                storage.remover(key)
+            except Exception:
+                pass  # storage indisponível: a auditoria registrou; expurgo pega depois
+    slot.arquivo_pdf_key = None
+    slot.arquivo_original_key = None
 
 
 @router.post("/c/{token}/concluir-envio")

@@ -10,6 +10,48 @@ const MOTIVOS = [
   ['outro', 'Outro'],
 ]
 
+// E-mail e celular editáveis pelo RH (caso real: candidato sem e-mail não
+// recebia as fichas nem o código de assinatura). Toda alteração vai para a
+// auditoria com o antes e o depois.
+function ContatoEditavel({ dados, setMsg, recarregar }) {
+  const [editando, setEditando] = useState(false)
+  const [email, setEmail] = useState(dados.email || '')
+  const [celular, setCelular] = useState(dados.celular_whatsapp || '')
+  const [salvando, setSalvando] = useState(false)
+  if (!editando) {
+    return (
+      <>
+        {dados.email || 'sem e-mail'} · {dados.celular_whatsapp || 'sem celular'}
+        <button className="btn-link" title="Corrigir e-mail/celular (fica na auditoria)"
+                onClick={() => setEditando(true)}>✏️ editar contato</button>
+      </>
+    )
+  }
+  return (
+    <span className="contato-editavel">
+      <input type="email" placeholder="E-mail" value={email}
+             onChange={(e) => setEmail(e.target.value)} />
+      <input placeholder="Celular/WhatsApp" value={celular}
+             onChange={(e) => setCelular(e.target.value)} />
+      <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+        setSalvando(true); setMsg(null)
+        try {
+          await api.editarContato(dados.id, {
+            email: email.trim() || null, celular_whatsapp: celular.trim() || null,
+          })
+          setMsg({ tipo: 'ok', texto: 'Contato atualizado (registrado na auditoria).' })
+          setEditando(false)
+          await recarregar()
+        } catch (e) {
+          setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${Array.isArray(e.detail)
+            ? 'e-mail inválido' : e.detail || e.message}).` })
+        } finally { setSalvando(false) }
+      }}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+      <button className="btn-link" onClick={() => setEditando(false)}>cancelar</button>
+    </span>
+  )
+}
+
 function PostoServico({ dados, setMsg, recarregar }) {
   const [postos, setPostos] = useState(null)
   const [postoId, setPostoId] = useState(dados.posto_servico_id || '')
@@ -25,8 +67,14 @@ function PostoServico({ dados, setMsg, recarregar }) {
       <select value={postoId} style={{ maxWidth: 220 }}
               onChange={(e) => setPostoId(e.target.value)}>
         <option value="">— sem posto —</option>
-        {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        {postos.map((p) => <option key={p.id} value={p.id}>
+          {p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
       </select>
+      {postoId && (postos.find((p) => p.id === postoId)?.contrato_ref) && (
+        <span className="explica" style={{ margin: 0 }}>
+          contrato: <strong>{postos.find((p) => p.id === postoId).contrato_ref}</strong> (do
+          cadastro do posto — nada para digitar)</span>
+      )}
       <input placeholder="Cargo/função (ex.: Office Boy)" value={cargo}
              style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
       <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
@@ -118,7 +166,8 @@ export default function Detalhe({ id, aoVoltar }) {
           )}
         </div>
       </header>
-      <p className="explica">{dados.email} · {dados.celular_whatsapp} · status:
+      <p className="explica">
+        <ContatoEditavel dados={dados} setMsg={setMsg} recarregar={recarregar} /> · status:
         <strong> {dados.status}</strong>
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>

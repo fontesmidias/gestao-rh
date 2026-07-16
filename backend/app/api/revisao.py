@@ -181,6 +181,9 @@ def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
         slot.motivo_rejeicao_obs = payload.observacao
         slot.revisado_em = datetime.now(timezone.utc)
         slot.revisado_por = rh.id
+        from app.api.documentos import expurgar_arquivos_do_slot
+        expurgar_arquivos_do_slot(db, slot, evento="documento_rejeitado_expurgado",
+                                  ator="rh", ator_detalhe=rh.email)
         registrar(db, "documento_rejeitado", ator="rh", ator_detalhe=rh.email,
                   candidato_id=slot.candidato_id,
                   detalhe={"tipo": slot.tipo.value, "motivo": payload.motivo.value, "lote": True})
@@ -267,6 +270,11 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_
     slot.motivo_rejeicao_obs = payload.observacao
     slot.revisado_em = datetime.now(timezone.utc)
     slot.revisado_por = rh.id
+    # Arquivo reprovado sai do storage na hora (minimização de dados) — o hash
+    # fica na auditoria e o slot abre para o candidato reenviar.
+    from app.api.documentos import expurgar_arquivos_do_slot
+    expurgar_arquivos_do_slot(db, slot, evento="documento_rejeitado_expurgado",
+                              ator="rh", ator_detalhe=rh.email)
 
     candidato = db.get(Candidato, slot.candidato_id)
     # Reabre o checklist para o candidato corrigir.

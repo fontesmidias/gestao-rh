@@ -293,6 +293,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       vt_optante: estado.vt?.optante ?? null,
       vt_cartao_dftrans: estado.vt?.cartao_dftrans ?? '',
       vt_trajeto_descricao: estado.vt?.trajeto_descricao ?? '',
+      vt_ciencia_cartao_go: Boolean(estado.vt?.ciencia_cartao_go_em),
       ...(estado.emergencia || {}),
     },
     contatos: estado.contatos_emergencia?.length
@@ -342,9 +343,11 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       if (etapa === 4) await api.salvarSecao(token, 'dependentes',
         dados.dependentes.filter((d) => d.nome_completo))
       if (etapa === 5) {
-        const { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao, ...emergencia } = dados.vt_emergencia
+        const { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao,
+                vt_ciencia_cartao_go, ...emergencia } = dados.vt_emergencia
         await api.salvarSecao(token, 'vt-emergencia',
-          { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao, ...emergencia })
+          { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao,
+            vt_ciencia_cartao_go, ...emergencia })
         await api.salvarSecao(token, 'contatos-emergencia',
           dados.contatos.filter((c) => c.nome_completo))
       }
@@ -603,6 +606,20 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
                  dica="linhas de ônibus/metrô da ida e da volta e o valor, se souber">
             <textarea rows={2} value={ve.vt_trajeto_descricao || ''}
                       onChange={(e) => setSec('vt_emergencia', 'vt_trajeto_descricao', e.target.value)} /></Campo>
+          {(en.uf || '').toUpperCase() === 'GO' && (
+            <div className="alerta" style={{ borderLeft: '4px solid var(--verde)' }}>
+              <strong>🚌 Você mora em Goiás:</strong> para o seu Vale-Transporte, a Green House
+              irá solicitar o(s) cartão(ões) de mobilidade da sua região (ex.: UTB) vinculados
+              ao CNPJ da empresa. Isso é feito por nós — você não precisa providenciar nada,
+              apenas ficar ciente.
+              <label style={{ display: 'flex', gap: '.5rem', marginTop: '.6rem', alignItems: 'center' }}>
+                <input type="checkbox" checked={Boolean(ve.vt_ciencia_cartao_go)}
+                       disabled={Boolean(ve.vt_ciencia_cartao_go)}
+                       onChange={(e) => setSec('vt_emergencia', 'vt_ciencia_cartao_go', e.target.checked)} />
+                <span>Estou ciente de que a empresa solicitará o(s) cartão(ões) em meu nome.</span>
+              </label>
+            </div>
+          )}
         </>}
         <hr />
         <h3>Para emergências</h3>

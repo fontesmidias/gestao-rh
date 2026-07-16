@@ -3,7 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Câmera guiada: moldura no formato do documento + dicas em tempo real de
 // enquadramento, luz e foco — tudo medido DENTRO da moldura, não na cena
 // inteira (senão "tudo certo" continuaria aparecendo com o documento fora do
-// quadro). Quando o quadro fica bom e estável, fotografa sozinha (3, 2, 1).
+// quadro). O DISPARO É SEMPRE DA PESSOA (feedback de campo, 2026-07-15: o
+// auto-disparo pegava o documento ainda sendo ajeitado) — o botão habilita
+// quando o quadro está bom. Depois do clique, a foto aparece congelada para
+// conferir: "usar esta foto" ou "tirar outra".
 // Filosofia: a câmera é um ATALHO — o botão de enviar um arquivo que a pessoa
 // já tem no aparelho está sempre visível, e qualquer falha da câmera
 // (sem permissão, sem câmera, navegador antigo, http) cai de pé nele.
@@ -23,9 +26,7 @@ const LUZ_MAX = 232       // média acima: estourado / reflexo forte
 const FOCO_MIN = 25       // variância do Laplaciano abaixo: borrado
 const ESTRUTURA_MIN = 18  // desvio-padrão mínimo dentro da moldura (documento tem texto)
 const CONTRASTE_MIN = 9   // diferença mínima dentro/fora (documento destacado do fundo)
-// Auto-captura: quadros bons consecutivos (analisados a cada ~350ms).
-const QUADROS_PRONTO = 2      // libera o botão
-const QUADROS_CAPTURA = 8     // dispara sozinho (~2,8s de quadro estável)
+const QUADROS_PRONTO = 2      // quadros bons consecutivos (~350ms cada) para liberar o disparo
 
 function medirFrame(video, canvas, palcoEl, molduraEl) {
   const w = 160
@@ -96,7 +97,7 @@ function dicaDoMomento(m) {
     return { ok: false, icone: '📐', texto: 'Encaixe o documento dentro da moldura.' }
   }
   if (m.foco < FOCO_MIN) return { ok: false, icone: '🌫️', texto: 'Imagem tremida — apoie o celular e aguarde o foco.' }
-  return { ok: true, icone: '✅', texto: 'Ótimo! Segure firme…' }
+  return { ok: true, icone: '✅', texto: 'Ótimo! Toque em Fotografar.' }
 }
 
 export default function CapturaDocumento({ formato = 'cartao', titulo, aoCapturar, aoArquivo, aoFechar }) {
@@ -106,14 +107,13 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
   const molduraRef = useRef(null)
   const streamRef = useRef(null)
   const bonsRef = useRef(0)
-  const disparadoRef = useRef(false)
   const inputRef = useRef(null)
   const [estado, setEstado] = useState('abrindo')  // abrindo | ativa | sem-camera
   const [motivoSemCamera, setMotivoSemCamera] = useState(null)
   const [dica, setDica] = useState(null)
   const [pronto, setPronto] = useState(false)
-  const [contagem, setContagem] = useState(null)   // 3, 2, 1 antes do clique automático
   const [teimoso, setTeimoso] = useState(false)    // libera "fotografar assim mesmo"
+  const [revisao, setRevisao] = useState(null)     // {url, file}: conferir antes de enviar
   const f = FORMATOS[formato] || FORMATOS.cartao
 
   const fecharStream = useCallback(() => {
@@ -121,20 +121,34 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     streamRef.current = null
   }, [])
 
+  // Congela o quadro para a pessoa CONFERIR — nada é enviado ainda.
   const fotografar = useCallback(() => {
     const v = videoRef.current
-    if (!v || !v.videoWidth || disparadoRef.current) return
-    disparadoRef.current = true
+    if (!v || !v.videoWidth) return
     const c = document.createElement('canvas')
     c.width = v.videoWidth
     c.height = v.videoHeight
     c.getContext('2d').drawImage(v, 0, 0)
     c.toBlob((blob) => {
-      if (!blob) { disparadoRef.current = false; return }
-      fecharStream()
-      aoCapturar(new File([blob], 'documento.jpg', { type: 'image/jpeg' }))
+      if (!blob) return
+      const file = new File([blob], 'documento.jpg', { type: 'image/jpeg' })
+      setRevisao({ url: URL.createObjectURL(blob), file })
     }, 'image/jpeg', 0.92)
-  }, [aoCapturar, fecharStream])
+  }, [])
+
+  const usarFoto = () => {
+    if (!revisao) return
+    URL.revokeObjectURL(revisao.url)
+    fecharStream()
+    aoCapturar(revisao.file)
+  }
+
+  const tirarOutra = () => {
+    if (revisao) URL.revokeObjectURL(revisao.url)
+    setRevisao(null)
+    bonsRef.current = 0
+    setPronto(false)
+  }
 
   useEffect(() => {
     let vivo = true
@@ -170,9 +184,9 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     return () => { vivo = false; fecharStream() }
   }, [fecharStream])
 
-  // Análise ~3x por segundo enquanto a câmera está ativa.
+  // Análise ~3x por segundo enquanto a câmera está ativa (pausa na revisão).
   useEffect(() => {
-    if (estado !== 'ativa') return undefined
+    if (estado !== 'ativa' || revisao) return undefined
     const t = setInterval(() => {
       const v = videoRef.current
       if (!v || v.readyState < 2 || !v.videoWidth || !molduraRef.current) return
@@ -182,13 +196,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
         const d = dicaDoMomento(m)
         setDica(d)
         bonsRef.current = d.ok ? bonsRef.current + 1 : 0
-        const bons = bonsRef.current
-        setPronto(bons >= QUADROS_PRONTO)
-        // Contagem regressiva rumo ao clique automático; qualquer quadro ruim zera.
-        if (bons >= QUADROS_CAPTURA) { setContagem(null); fotografar() }
-        else if (bons >= QUADROS_PRONTO) {
-          setContagem(Math.max(1, Math.ceil((QUADROS_CAPTURA - bons) / 2)))
-        } else setContagem(null)
+        setPronto(bonsRef.current >= QUADROS_PRONTO)
       } catch {
         // Frame indisponível (troca de aba, câmera fechando): tenta no próximo.
       }
@@ -197,7 +205,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
     // fraca não pode ser beco sem saída — o servidor ainda confere a nitidez.
     const escape = setTimeout(() => setTeimoso(true), 8000)
     return () => { clearInterval(t); clearTimeout(escape) }
-  }, [estado, fotografar])
+  }, [estado, revisao])
 
   const escolherArquivo = (e) => {
     const arq = e.target.files[0]
@@ -227,14 +235,18 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
         <div className="captura-palco" ref={palcoRef}>
           <video ref={videoRef} playsInline muted autoPlay className="captura-video" />
           <canvas ref={analiseRef} hidden />
-          <div className="captura-moldura" ref={molduraRef} style={molduraStyle}
-               data-ok={pronto || undefined}>
-            <i /><i /><i /><i />
-            {contagem != null && <span className="captura-contagem">{contagem}</span>}
-          </div>
-          <div className={`captura-dica ${dica?.ok ? 'ok' : ''}`} aria-live="polite">
-            {estado === 'abrindo' ? '📷 Abrindo a câmera…'
-              : dica ? `${dica.icone} ${dica.texto}${dica.ok && contagem != null ? ` ${contagem}` : ''}`
+          {revisao && <img src={revisao.url} alt="Foto capturada para conferência"
+                           className="captura-revisao" />}
+          {!revisao && (
+            <div className="captura-moldura" ref={molduraRef} style={molduraStyle}
+                 data-ok={pronto || undefined}>
+              <i /><i /><i /><i />
+            </div>
+          )}
+          <div className={`captura-dica ${(revisao || dica?.ok) ? 'ok' : ''}`} aria-live="polite">
+            {revisao ? '🔍 Confira: dá para ler tudo? Sem cortes e sem reflexo?'
+              : estado === 'abrindo' ? '📷 Abrindo a câmera…'
+              : dica ? `${dica.icone} ${dica.texto}`
               : `📐 ${f.dica}`}
           </div>
         </div>
@@ -245,19 +257,32 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, aoCaptura
       )}
 
       <div className="captura-acoes">
-        {estado === 'ativa' && (
+        {estado === 'ativa' && revisao && (
+          <>
+            <button type="button" className="btn-principal captura-disparo" onClick={usarFoto}>
+              ✔ Usar esta foto
+            </button>
+            <button type="button" className="btn-secundario" onClick={tirarOutra}>
+              ↺ Tirar outra
+            </button>
+          </>
+        )}
+        {estado === 'ativa' && !revisao && (
           <button type="button" className="btn-principal captura-disparo"
                   disabled={!pronto && !teimoso} onClick={fotografar}>
-            {pronto ? '📸 Fotografar agora' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
+            {pronto ? '📸 Fotografar' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
           </button>
         )}
-        <button type="button" className="btn-secundario"
-                onClick={() => inputRef.current.click()}>
-          📁 Já tenho o arquivo — enviar do aparelho
-        </button>
+        {!revisao && (
+          <button type="button" className="btn-secundario"
+                  onClick={() => inputRef.current.click()}>
+            📁 Já tenho o arquivo — enviar do aparelho
+          </button>
+        )}
       </div>
-      {estado === 'ativa' && (
-        <p className="captura-legenda">{f.dica}. Quando tudo estiver bom, a foto sai sozinha.</p>
+      {estado === 'ativa' && !revisao && (
+        <p className="captura-legenda">{f.dica}. Você dispara quando quiser — nada é enviado
+          sem você conferir a foto antes.</p>
       )}
     </div>
   )

@@ -149,6 +149,9 @@ class SecaoVtEmergencia(BaseModel):
     vt_optante: bool | None = None
     vt_cartao_dftrans: str | None = None
     vt_trajeto_descricao: str | None = None
+    # true = colaborador declara ciência de que, com endereço em GO e optante
+    # de VT, a empresa solicitará o(s) cartão(ões) de mobilidade no CNPJ dela.
+    vt_ciencia_cartao_go: bool | None = None
     tipo_sanguineo: str | None = None
     usa_medicamento_continuo: bool | None = None
     medicamentos: str | None = None
@@ -174,7 +177,16 @@ def salvar_pessoais(token: str, payload: SecaoPessoais, db: Session = Depends(ge
     basicos = payload.model_dump(exclude_unset=True)
     for campo in ("nome_completo", "email", "celular_whatsapp"):
         if campo in basicos:
-            setattr(candidato, campo, basicos.pop(campo))
+            novo = basicos.pop(campo)
+            antigo = getattr(candidato, campo)
+            if campo in ("email", "celular_whatsapp") and antigo and novo != antigo:
+                # Trilha de contato: o OTP de assinatura vai para este e-mail —
+                # qualquer mudança fica registrada (antes → depois).
+                from app.services.auditoria import registrar
+                registrar(db, "contato_alterado", ator="candidato",
+                          candidato_id=candidato.id,
+                          detalhe={"campo": campo, "antes": antigo, "depois": novo})
+            setattr(candidato, campo, novo)
     _upsert(db, DadosPessoais, candidato.id, SecaoPessoais(**basicos))
     _marca_preenchendo(candidato)
     db.commit()
@@ -231,6 +243,11 @@ def salvar_vt_emergencia(
     if vt:
         obj = db.get(ValeTransporte, candidato.id) or ValeTransporte(candidato_id=candidato.id)
         db.add(obj)
+        # A ciência é um carimbo de data, não um booleano regravável: marca uma
+        # vez e não se desfaz desmarcando (evidência de que o aviso foi dado).
+        ciente = vt.pop("ciencia_cartao_go", None)
+        if ciente and obj.ciencia_cartao_go_em is None:
+            obj.ciencia_cartao_go_em = datetime.now(timezone.utc)
         for campo, valor in vt.items():
             setattr(obj, campo, valor)
     if emergencia:

@@ -2,9 +2,10 @@
 
 import enum
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, Enum, ForeignKey, SmallInteger, String, Text
+from sqlalchemy import (Boolean, Date, DateTime, Enum, ForeignKey, SmallInteger,
+                        String, Text)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -161,6 +162,10 @@ class ValeTransporte(Base):
     optante: Mapped[bool | None] = mapped_column(Boolean)
     cartao_dftrans: Mapped[str | None] = mapped_column(String(40))
     trajeto_descricao: Mapped[str | None] = mapped_column(Text)
+    # Endereço em Goiás + optante de VT: a empresa solicita o(s) cartão(ões) de
+    # mobilidade (ex.: UTB) vinculados ao CNPJ — regra, não opção. Aqui fica o
+    # registro de QUANDO o colaborador declarou ciência disso.
+    ciencia_cartao_go_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FichaEmergencia(Base):

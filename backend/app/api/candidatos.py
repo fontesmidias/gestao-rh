@@ -106,6 +106,44 @@ def reenviar_link(
     )
 
 
+class ContatoIn(BaseModel):
+    email: EmailStr | None = None
+    celular_whatsapp: str | None = None
+
+    @field_validator("email", "celular_whatsapp", mode="before")
+    @classmethod
+    def _apara(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
+
+
+@router.put("/rh/candidatos/{candidato_id}/contato", response_model=CandidatoOut)
+def editar_contato(
+    candidato_id: uuid.UUID,
+    payload: ContatoIn,
+    db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(requer_rh),
+) -> CandidatoOut:
+    """O RH corrige e-mail/celular do candidato (caso real: cadastro sem
+    e-mail → fichas e código de assinatura não chegavam). O antes e o depois
+    ficam na auditoria — evidência para qualquer contestação de assinatura."""
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    antes = {"email": candidato.email, "celular_whatsapp": candidato.celular_whatsapp}
+    dados = payload.model_dump(exclude_unset=True)
+    for campo, valor in dados.items():
+        setattr(candidato, campo, valor)
+    registrar(db, "contato_alterado", ator="rh", ator_detalhe=_rh.email,
+              candidato_id=candidato.id,
+              detalhe={"antes": antes,
+                       "depois": {"email": candidato.email,
+                                  "celular_whatsapp": candidato.celular_whatsapp}})
+    db.commit()
+    return CandidatoOut.model_validate(candidato)
+
+
 # --- Candidato (acesso via token do link mágico) ---
 
 
