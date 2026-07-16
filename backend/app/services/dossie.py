@@ -18,6 +18,7 @@ ORDEM_FICHAS = (
     DocumentoAssinavel.ficha_cadastro,
     DocumentoAssinavel.ficha_emergencia,
     DocumentoAssinavel.termo_vt,
+    DocumentoAssinavel.acordo_confidencialidade,
 )
 ORDEM_DOCUMENTOS = (
     TipoDocumento.foto_3x4,

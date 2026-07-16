@@ -40,7 +40,25 @@ export default function CandidatoApp() {
         } catch { /* segue o fluxo normal */ }
         setTela(e.status === 'docs_pendentes' ? 'documentos' : 'acompanhamento')
       })
-      .catch((e) => setErro(e.status === 404 ? 'link' : 'geral'))
+      .catch(async (e) => {
+        // Admissão já encerrada (aprovado): a ficha fecha, mas documentos
+        // novos (ex.: acordo de confidencialidade retroativo) ainda podem
+        // aguardar assinatura — o link continua servindo só para isso.
+        if (e.detail === 'admissao_encerrada') {
+          try {
+            const f = await api.fichas(token)
+            if (f.fichas.some((x) => !x.assinado)) {
+              setEstado({ status: 'aprovado', pessoais: {} })
+              setReassinatura(true)
+              setTela('assinatura')
+              return
+            }
+          } catch { /* segue para o erro padrão */ }
+          setErro('encerrada')
+          return
+        }
+        setErro(e.status === 404 ? 'link' : 'geral')
+      })
   }, [token])
 
   const tour = useMemo(() => driver({
@@ -58,6 +76,12 @@ export default function CandidatoApp() {
     <Cartao>
       <h2>😕 Este link não está mais ativo</h2>
       <p>Ele pode ter vencido. Fale com o RH da Green House pelo WhatsApp para receber um novo link.</p>
+    </Cartao>
+  )
+  if (erro === 'encerrada') return (
+    <Cartao>
+      <h2>🎉 Sua admissão já foi concluída</h2>
+      <p>Não há mais nada pendente por aqui. Qualquer dúvida, fale com o RH da Green House.</p>
     </Cartao>
   )
   if (erro) return <Cartao><h2>Algo deu errado</h2><p>Tente recarregar a página.</p></Cartao>
@@ -126,8 +150,8 @@ export default function CandidatoApp() {
         <>
           {reassinatura && (
             <div className="alerta" style={{ maxWidth: 560, margin: '0 auto 1rem' }}>
-              📝 <strong>Alguns documentos foram atualizados</strong> pelo RH e precisam da
-              sua assinatura novamente. É rápido: confira e assine com o código do e-mail.
+              📝 <strong>Há documento(s) aguardando a sua assinatura</strong> — novos ou
+              atualizados pelo RH. É rápido: confira e assine com o código do e-mail.
             </div>
           )}
           <Assinatura token={token} email={estado.pessoais?.email}

@@ -122,7 +122,10 @@ def _filtrar(db: Session, status: str | None, busca: str | None) -> list[Candida
                 cpfs[doc.candidato_id] = doc.cpf or ""
         candidatos = [
             c for c in candidatos
-            if termo in c.nome_completo.lower() or termo in c.email.lower()
+            # e-mail e celular podem ser None (convite sem e-mail, v1.3) —
+            # era isto que derrubava a busca com 500.
+            if termo in (c.nome_completo or "").lower()
+            or termo in (c.email or "").lower()
             or (so_digitos and so_digitos in cpfs.get(c.id, ""))
         ]
     return candidatos

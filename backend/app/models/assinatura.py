@@ -14,6 +14,7 @@ class DocumentoAssinavel(str, enum.Enum):
     ficha_cadastro = "ficha_cadastro"
     ficha_emergencia = "ficha_emergencia"
     termo_vt = "termo_vt"
+    acordo_confidencialidade = "acordo_confidencialidade"
     # Documentos por posto de serviço (gerados quando o RH marca o posto)
     oficio_cartao_cidadao = "oficio_cartao_cidadao"
     informacoes_trabalhador = "informacoes_trabalhador"
@@ -21,8 +22,11 @@ class DocumentoAssinavel(str, enum.Enum):
 
 
 # Fichas exigidas de TODO candidato; os demais só existem se o RH os gerar.
+# O acordo de confidencialidade entrou em 2026-07-16 e vale RETROATIVAMENTE:
+# como a exigência é derivada desta tupla (não de registros pré-criados),
+# quem ainda não assinou passa a dever a assinatura automaticamente.
 FICHAS_BASE = (DocumentoAssinavel.ficha_cadastro, DocumentoAssinavel.ficha_emergencia,
-               DocumentoAssinavel.termo_vt)
+               DocumentoAssinavel.termo_vt, DocumentoAssinavel.acordo_confidencialidade)
 
 
 class Assinatura(Base):

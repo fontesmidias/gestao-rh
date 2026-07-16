@@ -105,6 +105,7 @@ NOMES_DOC = {
     DocumentoAssinavel.ficha_cadastro: "Ficha Cadastral do Colaborador",
     DocumentoAssinavel.ficha_emergencia: "Ficha de Emergência do Colaborador",
     DocumentoAssinavel.termo_vt: "Termo de Opção pelo Vale-Transporte",
+    DocumentoAssinavel.acordo_confidencialidade: "Acordo de Confidencialidade",
     DocumentoAssinavel.oficio_cartao_cidadao:
         "Ofício INFRAERO — Cartão Cidadão e extrato do INSS",
     DocumentoAssinavel.informacoes_trabalhador:

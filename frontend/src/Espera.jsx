@@ -145,6 +145,17 @@ export const FRASES = [
   'Tecnologia de ponta com pé no chão — e fallback para tudo.',
   'O cabeçalho é da empresa; a história desses documentos é sua.',
   'Detalhes institucionais nos cantos, seus dados no centro. Como deve ser.',
+  // Conjunto 12 (acordo de confidencialidade + IA em 1º lugar, 2026-07-16)
+  'Confidencialidade combinada é confiança construída.',
+  'O que é sigiloso fica entre nós — está no contrato e no coração.',
+  'Palavras têm peso; as assinadas, ainda mais.',
+  'A IA lê primeiro, o clássico confere depois: ninguém fica sem leitura.',
+  'Cada cláusula no lugar, cada vírgula respeitando a gramática.',
+  'Documentos que nasciam no Word agora nascem prontos.',
+  'Retroativo sem retrabalho: quem já passou também fica em dia.',
+  'Buscar um nome não deveria ser uma aventura. Já não é.',
+  'Acordos claros, admissões longas — assim diz o ditado atualizado.',
+  'De contrato em contrato, a papelada vira patrimônio organizado.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

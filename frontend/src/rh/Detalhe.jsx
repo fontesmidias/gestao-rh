@@ -121,7 +121,8 @@ function PostoServico({ dados, setMsg, recarregar }) {
   useEffect(() => { api.postos().then(setPostos) }, [])
   if (!postos) return null
   const extras = (dados.assinaturas || []).filter((a) =>
-    !['ficha_cadastro', 'ficha_emergencia', 'termo_vt'].includes(a.documento))
+    !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
+      'acordo_confidencialidade'].includes(a.documento))
   return (
     <div className="rh-card rh-lote">
       <strong>Posto de serviço:</strong>
