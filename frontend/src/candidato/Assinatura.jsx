@@ -18,12 +18,34 @@ export default function Assinatura({ token, email, aoConcluir }) {
   const [novoEmail, setNovoEmail] = useState(email || '')
   const [codigo, setCodigo] = useState('')
   const [msg, setMsg] = useState(null)
+  const [vtOptante, setVtOptante] = useState(null) // opção atual pelo Vale-Transporte
+  const [trocandoVt, setTrocandoVt] = useState(false)
 
   const recarregar = () => api.fichas(token).then((r) => {
     setFichas(r.fichas)
     return r.fichas
   })
   useEffect(() => { recarregar() }, [token])
+  // Opção atual pelo VT — para o colaborador poder trocar antes de assinar.
+  useEffect(() => {
+    api.ficha(token).then((f) => setVtOptante(f?.vt?.optante ?? null)).catch(() => {})
+  }, [token])
+
+  const trocarVt = async (novo) => {
+    setMsg(null); setTrocandoVt(true)
+    try {
+      await api.trocarOpcaoVt(token, novo)
+      setVtOptante(novo)
+      setMsg({ tipo: 'ok', texto: novo
+        ? 'Você agora OPTA por receber o Vale-Transporte. Confira o termo antes de assinar.'
+        : 'Você agora NÃO opta pelo Vale-Transporte. Confira o termo antes de assinar.' })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'termo_vt_ja_assinado'
+        ? 'O Termo de VT já foi assinado e não pode mais ser alterado por aqui. Fale com o RH.'
+        : 'Não foi possível trocar a opção agora. Tente de novo.' })
+    } finally { setTrocandoVt(false) }
+  }
 
   if (!fichas) return <Cartao><p>Carregando…</p></Cartao>
 
@@ -81,6 +103,16 @@ export default function Assinatura({ token, email, aoConcluir }) {
                  target="_blank" rel="noreferrer">
                 {assinado ? 'ver documento assinado' : 'conferir o documento antes de assinar'}
               </a>
+              {documento === 'termo_vt' && !assinado && vtOptante !== null && (
+                <div className="vt-opcao">
+                  Sua opção pelo Vale-Transporte:{' '}
+                  <strong>{vtOptante ? 'RECEBER o VT' : 'NÃO receber o VT'}</strong>
+                  <button className="btn-link" disabled={trocandoVt}
+                          onClick={() => trocarVt(!vtOptante)}>
+                    {trocandoVt ? 'trocando…' : `trocar para ${vtOptante ? 'NÃO receber' : 'RECEBER'}`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

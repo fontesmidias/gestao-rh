@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +41,10 @@ class Candidato(Base):
     posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("posto_servico.id"), nullable=True)
     cargo_funcao: Mapped[str | None] = mapped_column(String(120))
+    # Remuneração digitada pelo RH (texto livre: "R$ 1.500,00" ou "1500").
+    # adicionais: lista de {"nome": str, "valor": str, "tipo": "reais"|"percentual"}.
+    salario_base: Mapped[str | None] = mapped_column(String(60))
+    adicionais: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[StatusCandidato] = mapped_column(
         Enum(StatusCandidato, name="status_candidato"), default=StatusCandidato.convidado
     )

@@ -353,6 +353,11 @@ input:focus, select:focus, textarea:focus {
   .pdf-pagina { display: block; width: 100%; margin: 0 auto .6rem;
                 border: 1px solid var(--borda); border-radius: 4px; background: #fff; }
 }
+.vt-opcao { margin-top: .4rem; font-size: .9rem; color: var(--tinta); }
+.vt-opcao .btn-link { margin-left: .5rem; }
+.rh-adicionais { display: flex; flex-direction: column; gap: .4rem; width: 100%; }
+.rh-adicional { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.rh-adicional input, .rh-adicional select { flex: 1; min-width: 90px; }
 .rejeicao { display: flex; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
 .rejeicao select, .rejeicao input { width: auto; flex: 1; }
 

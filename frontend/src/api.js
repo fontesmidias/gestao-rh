@@ -94,6 +94,8 @@ export const candidato = {
   solicitarCodigoUnico: (t) => req(`/c/${t}/fichas/solicitar-codigo`, { method: 'POST' }),
   assinarTodos: (t, codigo) =>
     req(`/c/${t}/fichas/assinar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
+  trocarOpcaoVt: (t, optante) =>
+    req(`/c/${t}/vale-transporte`, { method: 'PUT', body: JSON.stringify({ optante }) }),
   documentos: (t) => req(`/c/${t}/documentos`),
   // arquivo: File único OU array (frente/verso, páginas) — vira um PDF só no slot.
   enviarArquivo: async (t, slotId, arquivo) => {

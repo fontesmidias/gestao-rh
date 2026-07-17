@@ -281,6 +281,19 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
     if p:
         pdf.campo("Cor/raça (autodeclaração, IBGE)", p.cor_raca)
 
+    contrato, cargo = _dados_posto(db, candidato)
+    if (candidato.posto_servico_id or candidato.cargo_funcao
+            or candidato.salario_base or candidato.adicionais):
+        pdf.ln(2); pdf.secao("1.1 CARGO E REMUNERAÇÃO")
+        pdf.campo("Posto de serviço / contrato", contrato)
+        pdf.campo("Cargo / função", cargo)
+        pdf.campo("Salário base", candidato.salario_base)
+        for ad in (candidato.adicionais or []):
+            sufixo = "%" if ad.get("tipo") == "percentual" else ""
+            prefixo = "" if ad.get("tipo") == "percentual" else "R$ "
+            pdf.campo(f"Adicional — {ad.get('nome', '-')}",
+                      f"{prefixo}{ad.get('valor', '-')}{sufixo}")
+
     pdf.ln(2); pdf.secao("2. ENDEREÇO")
     if e:
         pdf.campo("Endereço", e.logradouro_numero_complemento)

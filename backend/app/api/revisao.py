@@ -107,6 +107,8 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "dossie_gerado_em": cand.dossie_gerado_em,
         "posto_servico_id": cand.posto_servico_id,
         "cargo_funcao": cand.cargo_funcao,
+        "salario_base": cand.salario_base,
+        "adicionais": cand.adicionais or [],
         "assinaturas": [
             {"documento": a.documento, "titulo": NOMES_DOC[a.documento],
              "assinado_em": a.assinado_em}

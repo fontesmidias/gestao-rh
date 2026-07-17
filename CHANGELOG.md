@@ -6,6 +6,28 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.12.0] — 2026-07-17
+
+### Adicionado
+- **Cargo, salário base e adicionais na ficha de cadastro**: o RH digita o
+  salário à mão (texto livre) e adiciona quantos adicionais quiser (nome +
+  valor em R$ ou %) na tela do posto; tudo passa a constar automaticamente na
+  Ficha Cadastral do Colaborador. Alterar cargo/salário/adicionais de uma
+  ficha já assinada a reabre para o colaborador assinar a versão atualizada
+  (invalidação historizada, nunca deleção).
+- **Colaborador troca a opção pelo Vale-Transporte** direto na tela de
+  assinatura, enquanto o Termo de VT não foi assinado; depois de assinado, a
+  troca é bloqueada (exigiria nova assinatura).
+
+### Alterado
+- **Marca d'água "GREENHOUSE"** (arte oficial que existia mas não era usada)
+  agora aparece esmaecida na borda direita de todos os PDFs timbrados: fichas,
+  ofícios, manifesto e páginas geradas a partir de fotos recebidas.
+
+### Infraestrutura
+- Os dois workflows de CI viraram um só (`ci.yml`, jobs `imagens` +
+  `testes-de-interface`): cada commit aparece uma vez na lista de Actions.
+
 ## [1.10.0] — 2026-07-17
 
 ### Adicionado

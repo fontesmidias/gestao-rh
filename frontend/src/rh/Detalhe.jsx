@@ -118,12 +118,16 @@ function PostoServico({ dados, setMsg, recarregar }) {
   const [postos, setPostos] = useState(null)
   const [postoId, setPostoId] = useState(dados.posto_servico_id || '')
   const [cargo, setCargo] = useState(dados.cargo_funcao || '')
+  const [salario, setSalario] = useState(dados.salario_base || '')
+  const [adicionais, setAdicionais] = useState(dados.adicionais || [])
   const [salvando, setSalvando] = useState(false)
   useEffect(() => { api.postos().then(setPostos) }, [])
   if (!postos) return null
   const extras = (dados.assinaturas || []).filter((a) =>
     !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
       'acordo_confidencialidade'].includes(a.documento))
+  const setAdic = (i, campo, v) =>
+    setAdicionais(adicionais.map((a, j) => j === i ? { ...a, [campo]: v } : a))
   return (
     <div className="rh-card rh-lote">
       <strong>Posto de serviço:</strong>
@@ -141,15 +145,46 @@ function PostoServico({ dados, setMsg, recarregar }) {
       )}
       <input placeholder="Cargo/função (ex.: Office Boy)" value={cargo}
              style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
+      <input placeholder="Salário base (ex.: R$ 1.500,00)" value={salario}
+             style={{ maxWidth: 200 }} onChange={(e) => setSalario(e.target.value)} />
+      <div className="rh-adicionais">
+        <span className="explica" style={{ margin: 0, width: '100%' }}>Adicionais
+          (entram na ficha junto com cargo e salário):</span>
+        {adicionais.map((a, i) => (
+          <div className="rh-adicional" key={i}>
+            <input placeholder="Nome (ex.: Periculosidade)" value={a.nome || ''}
+                   onChange={(e) => setAdic(i, 'nome', e.target.value)} />
+            <input placeholder="Valor" value={a.valor || ''} style={{ maxWidth: 110 }}
+                   onChange={(e) => setAdic(i, 'valor', e.target.value)} />
+            <select value={a.tipo || 'reais'} style={{ maxWidth: 130 }}
+                    onChange={(e) => setAdic(i, 'tipo', e.target.value)}>
+              <option value="reais">R$ (reais)</option>
+              <option value="percentual">% (percentual)</option>
+            </select>
+            <button className="btn-link" title="Remover adicional"
+                    onClick={() => setAdicionais(adicionais.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        <button className="btn-secundario btn-mini"
+                onClick={() => setAdicionais([...adicionais, { nome: '', valor: '', tipo: 'reais' }])}>
+          + Adicional</button>
+      </div>
       <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
         setMsg(null); setSalvando(true)
         try {
           const r = await api.definirPosto(dados.id, {
             posto_id: postoId || null, cargo_funcao: cargo.trim() || null,
+            salario_base: salario.trim() || null,
+            adicionais: adicionais
+              .filter((a) => (a.nome || '').trim())
+              .map((a) => ({ nome: a.nome.trim(), valor: (a.valor || '').trim(), tipo: a.tipo || 'reais' })),
           })
-          setMsg({ tipo: 'ok', texto: r.docs_gerados.length
+          const reaberta = r.ficha_reaberta
+            ? ' A ficha de cadastro já assinada foi reaberta — use 🔔 Notificar para o colaborador assinar a versão atualizada.'
+            : ''
+          setMsg({ tipo: 'ok', texto: (r.docs_gerados.length
             ? `Posto salvo. ${r.docs_gerados.length} documento(s) gerados e enviados para assinatura${r.email_enviado ? ' — o colaborador foi avisado por e-mail' : ' (e-mail não configurado: envie o link manualmente)'}.`
-            : 'Posto salvo.' })
+            : 'Posto e remuneração salvos.') + reaberta })
           await recarregar()
         } catch (e) {
           setMsg({ tipo: 'erro', texto: `Não foi possível salvar o posto (${e.detail || e.message}).` })
