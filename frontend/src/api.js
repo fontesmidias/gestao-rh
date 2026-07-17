@@ -122,6 +122,13 @@ export const candidato = {
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
 }
 
+// --- Banco de Talentos (cadastro público, sem token) ---
+export const talentos = {
+  opcoes: () => req('/talentos/opcoes'),
+  cadastrar: (dados) =>
+    req('/talentos', { method: 'POST', body: JSON.stringify(dados) }),
+}
+
 // --- RH (token de sessão no localStorage) ---
 const tokenRH = () => localStorage.getItem('rh_token')
 const authRH = () => ({ Authorization: `Bearer ${tokenRH()}` })
@@ -236,6 +243,15 @@ export const rh = {
     req(`/rh/candidatos/${candidatoId}/modelos-aplicaveis`, { headers: authRH() }),
   gerarModelo: (candidatoId, modeloId) =>
     req(`/rh/candidatos/${candidatoId}/modelos/${modeloId}/gerar`, { headers: authRH() }),
+  // Banco de talentos (RH)
+  listarTalentos: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/talentos${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  statusTalento: (id, status) =>
+    req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(), body: JSON.stringify({ status }) }),
+  converterTalento: (id) =>
+    req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>

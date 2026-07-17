@@ -4,6 +4,7 @@ import { rh as api } from '../api.js'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
+import TalentosRH from './TalentosRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -174,6 +175,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
   const ITENS = [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
+    ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
   return (
@@ -249,6 +251,9 @@ function Painel({ aoSair }) {
         {pagina === 'colaboradores' && (
           <Colaboradores aoVoltar={() => navegar('inicio')}
                          aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
+        )}
+        {pagina === 'talentos' && (
+          <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
         {pagina === 'inicio' && selecionado && (
           <Detalhe id={selecionado}

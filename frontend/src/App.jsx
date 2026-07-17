@@ -3,6 +3,7 @@ import CandidatoApp from './candidato/CandidatoApp.jsx'
 import RHApp from './rh/RHApp.jsx'
 import Verificar, { VerificarEntrada } from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
+import BancoDeTalentos from './Talentos.jsx'
 import logo from './assets/logo.png'
 import BotaoTema from './Tema.jsx'
 
@@ -36,6 +37,9 @@ function Home() {
           </Link>
         ))}
       </nav>
+      <p className="portal-talentos">
+        Ainda não é da equipe? <Link to="/banco-de-talentos">Cadastre-se no Banco de Talentos →</Link>
+      </p>
       <p className="portal-rodape">Assinatura eletrônica conforme a Lei nº 14.063/2020 ·
         dados tratados segundo a LGPD.</p>
     </main>
@@ -52,6 +56,7 @@ export default function App() {
       <Route path="/rh/*" element={<RHApp />} />
       <Route path="/verificar" element={<VerificarEntrada />} />
       <Route path="/verificar/:id" element={<Verificar />} />
+      <Route path="/banco-de-talentos" element={<BancoDeTalentos />} />
       <Route path="/entrar" element={<Entrar />} />
     </Routes>
     </>

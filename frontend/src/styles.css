@@ -164,6 +164,12 @@ a { color: var(--verde-escuro); }
 .porta-seta { color: var(--verde); font-size: 1.3rem; flex-shrink: 0; }
 .portal-rodape { text-align: center; color: var(--tinta-suave); font-size: var(--fs-mini);
                  margin: 0; }
+.portal-talentos { text-align: center; margin: 0; font-size: var(--fs-apoio); }
+.talento-form { max-width: 560px; margin: 4vh auto; }
+.talento-form h1 { text-align: center; }
+/* honeypot: invisível para humanos, presente no DOM para bots preencherem */
+.campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
+              opacity: 0; pointer-events: none; }
 .verificar-marca { display: block; text-align: center; margin-bottom: .6rem; }
 .verificar-marca .logo-img { margin: 0 auto; }
 .verificar-selo.neutro { background: var(--verde-suave); color: var(--verde-escuro);
@@ -389,6 +395,8 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 }
 .vt-opcao { margin-top: .4rem; font-size: .9rem; color: var(--tinta); }
 .vt-opcao .btn-link { margin-left: .5rem; }
+.talento-detalhe { padding: .4rem .2rem; font-size: var(--fs-apoio); }
+.talento-detalhe p { margin: .25rem 0; }
 .rh-adicionais { display: flex; flex-direction: column; gap: .4rem; width: 100%; }
 .rh-adicional { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
 .rh-adicional input, .rh-adicional select { flex: 1; min-width: 90px; }

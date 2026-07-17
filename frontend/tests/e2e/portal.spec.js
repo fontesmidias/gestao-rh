@@ -48,6 +48,16 @@ test('/entrar valida o CPF na hora', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Continuar' })).toBeEnabled()
 })
 
+test('banco de talentos: formulário público envia e confirma', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: /Banco de Talentos/ }).click()
+  await expect(page.getByRole('heading', { name: 'Banco de Talentos' })).toBeVisible()
+  await page.getByLabel(/Nome completo/).fill('Fulano de Teste')
+  await page.getByLabel(/Cargo de interesse/).fill('Recepcionista')
+  await page.getByRole('button', { name: /Entrar para o Banco de Talentos/ }).click()
+  await expect(page.getByRole('heading', { name: /Cadastro recebido/ })).toBeVisible()
+})
+
 test('verificador público: ID inexistente alerta possível adulteração', async ({ page }) => {
   await page.goto('/verificar/00000000-0000-0000-0000-000000000001')
   await expect(page.getByRole('heading', { name: 'Assinatura não encontrada' })).toBeVisible()

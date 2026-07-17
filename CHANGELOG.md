@@ -6,6 +6,17 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.15.0] — 2026-07-17
+
+### Adicionado
+- **Banco de Talentos**: formulário **público** (`/banco-de-talentos`, também
+  linkado no portal) onde interessados deixam nome, contato, cargo pretendido,
+  cidade, escolaridade e uma apresentação — protegido por honeypot anti-spam.
+  No painel, uma aba **Banco de Talentos** lista os cadastros com filtros
+  (status, cargo, busca livre), triagem de status e o botão **Converter em
+  candidato**, que cria o cadastro migrando os dados já preenchidos, dispara o
+  link de admissão e abre a ficha do novo candidato.
+
 ## [1.14.0] — 2026-07-17
 
 ### Adicionado
