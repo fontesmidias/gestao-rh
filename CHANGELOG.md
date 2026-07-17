@@ -6,6 +6,41 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.10.0] — 2026-07-17
+
+### Adicionado
+- **Envio de e-mail via Power Automate (webhook)** como caminho "plug and play"
+  para locatários do Microsoft 365 em que o admin bloqueia SMTP autenticado e
+  registro de aplicativo: o RH cola a URL de um fluxo HTTP e o sistema manda o
+  e-mail em JSON (com anexos em base64) para ele. Entra na cadeia de envio como
+  Microsoft 365 → Google → **Power Automate** → SMTP, com card próprio no painel
+  (passo a passo do fluxo e teste de envio). O envio OAuth direto via Microsoft
+  Graph já existia e continua sendo a opção recomendada.
+
+## [1.9.0] — 2026-07-17
+
+### Adicionado
+- **Frente e verso à prova de falhas**: nos documentos de duas partes (RG,
+  reservista, CNH) o envio é passo a passo, um arquivo por vez — o seletor perde
+  a seleção múltipla, acabando com o erro de quem tentava mandar os dois juntos.
+- **Editor de imagem** (sem bibliotecas externas, para não pesar no aparelho de
+  quem tem pouca internet): recorte com folga de segurança de 18% além da
+  moldura já usada para alinhar, cantos arrastáveis (mouse e toque) e rotação de
+  90° para a foto que saiu deitada. Vale para a foto tirada e para a imagem
+  enviada do aparelho. Botão "Voltar" claro na câmera e no editor.
+
+## [1.8.0] — 2026-07-17
+
+### Corrigido
+- **PDF não abria no Chrome do Android** (fundo escuro com um botão "Abrir" sem
+  ação): o RH passa a ver os documentos por um visualizador em canvas (pdf.js)
+  **apenas no celular** — no desktop segue o visualizador nativo do navegador.
+- **Erros de upload** deixavam de virar um "sem conexão" genérico: queda real de
+  rede, arquivo grande demais (413), formato inválido e erro de validação agora
+  têm mensagens próprias e específicas.
+- **Cabeçalho timbrado** dos documentos: arte alinhada à direita e título do
+  documento centralizado.
+
 ## [1.7.0] — 2026-07-16
 
 ### Adicionado

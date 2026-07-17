@@ -178,6 +178,17 @@ export const FRASES = [
   'A moldura mostra onde encaixar; o recorte cuida do resto.',
   'Nada de dois arquivos atropelados: cada campo pede o seu.',
   'Documento bem enquadrado hoje é aprovação mais rápida amanhã.',
+  // Conjunto 15 (Épico 5.1: e-mail via Power Automate, 2026-07-17)
+  'Quando a porta da frente trava, a gente abre a janela: o e-mail sai mesmo assim.',
+  'Sem depender do admin: um fluxo, uma URL, e a mensagem parte.',
+  'Três caminhos para o e-mail chegar — e um quarto de reserva.',
+  'Burocracia de locatário não segura mais a sua notificação.',
+  'Plug and play de verdade: cole a URL e pronto.',
+  'O Power Automate carrega o envelope quando o resto não pode.',
+  'Nenhum aviso perdido por causa de configuração travada.',
+  'A mensagem encontra o caminho — nem que seja pelo fluxo.',
+  'Conectar deveria ser simples. Agora é: um link basta.',
+  'Do sistema ao fluxo, do fluxo à caixa de entrada.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

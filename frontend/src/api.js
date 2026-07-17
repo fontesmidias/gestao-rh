@@ -236,6 +236,10 @@ export const rh = {
   salvarM365: (dados) =>
     req('/rh/config/m365', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   urlLoginM365: () => req('/rh/config/m365/url-login', { headers: authRH() }),
+  verWebhook: () => req('/rh/config/webhook', { headers: authRH() }),
+  salvarWebhook: (dados) =>
+    req('/rh/config/webhook', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarWebhook: () => req('/rh/config/webhook/testar', { method: 'POST', headers: authRH() }),
   verGmail: () => req('/rh/config/gmail', { headers: authRH() }),
   salvarGmail: (dados) =>
     req('/rh/config/gmail', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
