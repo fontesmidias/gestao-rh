@@ -255,11 +255,16 @@ input:focus, select:focus, textarea:focus {
 .otp input { width: 130px; text-align: center; letter-spacing: .3em; font-size: 1.35rem;
              font-weight: 800; }
 
-.slot { border: 2px solid var(--borda-suave); border-radius: var(--raio-input); padding: .85rem;
-        margin-bottom: .7rem; transition: border-color .2s, background .2s; }
-.slot.aprovado { border-color: var(--verde); background: var(--verde-suave); }
-.slot.rejeitado { border-color: var(--erro); background: var(--erro-suave); }
-.slot.ativo { outline: 3px solid rgba(22, 196, 100, .35); }
+/* Cor só onde há significado: filete lateral colorido, fundo neutro. */
+.slot { border: 1px solid var(--borda); border-left: 3px solid var(--borda);
+        border-radius: var(--raio-input); padding: .85rem;
+        margin-bottom: .55rem; transition: border-color .2s, background .2s; }
+.slot.aprovado { border-left-color: var(--ok);
+                 background: color-mix(in srgb, var(--ok) 5%, transparent); }
+.slot.rejeitado { border-left-color: var(--perigo);
+                  background: color-mix(in srgb, var(--perigo) 5%, transparent); }
+.slot.enviado { border-left-color: var(--atencao); }
+.slot.ativo { outline: 2px solid color-mix(in srgb, var(--ok) 40%, transparent); }
 .slot-linha { display: flex; align-items: center; gap: .6rem; }
 .slot-icone { font-size: 1.2rem; }
 .slot-nome { flex: 1; font-size: .95rem; }
@@ -297,26 +302,37 @@ input:focus, select:focus, textarea:focus {
            margin-bottom: 1.1rem; flex-wrap: wrap; }
 .rh-topo > div { display: flex; gap: .6rem; align-items: center; }
 .rh-nome { color: #7b8b81; font-size: .9rem; font-weight: 600; }
+/* Direção "plano e sutil" (validada com o Bruno, 2026-07-16): no painel do
+   RH, seções planas com borda fina, sem sombras grandes; cor só onde há
+   significado. O portal do candidato mantém o estilo acolhedor. */
 .rh-card {
   background: var(--cartao);
-  border: 1px solid var(--borda-suave);
-  border-radius: var(--raio); padding: 1.4rem; margin-bottom: 1.1rem;
-  box-shadow: var(--sombra-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 12px; padding: var(--esp-4) 1.1rem; margin-bottom: var(--esp-3);
   animation: surgir .3s ease-out;
 }
+.rh-card h3 { font-size: var(--fs-apoio); text-transform: uppercase;
+              letter-spacing: .05em; color: var(--tinta-suave); margin-top: 0; }
 .rh-lote { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .check-slot { width: 22px; height: 22px; min-height: 0; flex-shrink: 0;
               accent-color: var(--verde-escuro); }
-.rh-tabela { width: 100%; background: var(--cartao); border-radius: var(--raio);
-             border-collapse: collapse; box-shadow: var(--sombra-cartao); overflow: hidden; }
-.rh-tabela th { text-align: left; padding: .9rem .8rem; background: var(--th-bg); color: #fff;
-                font-size: .85rem; font-weight: 700; letter-spacing: .03em;
+.rh-tabela { width: 100%; background: var(--cartao); border-radius: 12px;
+             border: 1px solid var(--borda);
+             border-collapse: separate; border-spacing: 0; overflow: hidden; }
+.rh-tabela th { text-align: left; padding: .7rem .8rem; background: transparent;
+                color: var(--tinta-suave); border-bottom: 1px solid var(--borda);
+                font-size: var(--fs-mini); font-weight: 700; letter-spacing: .05em;
                 text-transform: uppercase; }
-.rh-tabela td { padding: .85rem .8rem; border-top: 1px solid var(--borda-suave); font-size: .93rem; }
+.rh-tabela td { padding: .8rem; border-top: 1px solid var(--borda-suave); font-size: .93rem; }
 .rh-tabela tbody tr { transition: background .12s; }
 .rh-tabela tbody tr:hover { background: var(--hover); }
-.chip { color: #fff; border-radius: 999px; padding: .3rem .8rem; font-size: .8rem;
-        font-weight: 700; white-space: nowrap; }
+/* Chip sutil: fundo translúcido da cor do status, texto na cor — comunicação
+   por cor sem gritar. A cor vem por variável (--chip-cor). */
+.chip { border-radius: var(--raio-chip); padding: .25rem .7rem; font-size: var(--fs-mini);
+        font-weight: 700; white-space: nowrap;
+        color: var(--chip-cor, var(--tinta-suave));
+        background: color-mix(in srgb, var(--chip-cor, #889) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--chip-cor, #889) 28%, transparent); }
 .link-copiar { display: block; background: var(--cartao); border-radius: 8px; padding: .45rem .65rem;
                margin-top: .4rem; font-size: .82rem; word-break: break-all;
                border: 1px solid var(--borda); }
@@ -339,9 +355,9 @@ input:focus, select:focus, textarea:focus {
 }
 .rh-metrica {
   background: var(--cartao);
-  border: 1px solid var(--borda-suave);
-  border-radius: var(--raio);
-  padding: 1rem .6rem .85rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: .8rem .6rem .7rem;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -350,11 +366,11 @@ input:focus, select:focus, textarea:focus {
   transition: transform .15s, box-shadow .2s;
   animation: surgir .35s ease-out;
 }
-.rh-metrica:hover { transform: translateY(-2px); }
-.rh-metrica strong { font-size: 1.7rem; color: var(--tinta); line-height: 1.05;
+.rh-metrica strong { font-size: 1.45rem; color: var(--tinta); line-height: 1.05;
                      font-weight: 800; letter-spacing: -.02em; }
-.rh-metrica span { font-size: .76rem; color: #7b8b81; font-weight: 600; }
-.rh-metrica.destaque { border: 2px solid var(--ambar); background: #fff9ef; }
+.rh-metrica span { font-size: var(--fs-mini); color: var(--tinta-suave); font-weight: 600; }
+.rh-metrica.destaque { border-color: color-mix(in srgb, var(--atencao) 55%, transparent);
+                       background: color-mix(in srgb, var(--atencao) 9%, transparent); }
 .rh-metrica.destaque strong { color: #c07d10; }
 
 /* Mobile-first: ajustes para telas pequenas */
@@ -430,7 +446,6 @@ input:focus, select:focus, textarea:focus {
 :root[data-tema='escuro'] .passo.atual { color: var(--tinta); }
 :root[data-tema='escuro'] .btn-principal:disabled { background: #24402f; color: #6f8a7a; }
 :root[data-tema='escuro'] .btn-rejeitar:disabled { background: #4a2a2b; color: #9a7c7d; }
-:root[data-tema='escuro'] .rh-metrica.destaque { background: #2b2313; }
 :root[data-tema='escuro'] .logo-img,
 :root[data-tema='escuro'] .logo-topo {
   filter: brightness(0) invert(1);  /* marca em branco sobre fundo escuro */
