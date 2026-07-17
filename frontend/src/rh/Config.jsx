@@ -80,6 +80,7 @@ export default function Config({ aoVoltar }) {
       <Assinantes />
       <M365 />
       <Gmail />
+      <WebhookEmail />
       <Smtp />
       <OcrIA />
       <Auditoria />
@@ -536,6 +537,76 @@ function Gmail() {
           </div>
         </>
       )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+function WebhookEmail() {
+  const [cfg, setCfg] = useState(null)
+  const [url, setUrl] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  const recarregar = () => api.verWebhook().then(setCfg).catch(() => {})
+  useEffect(() => { recarregar() }, [])
+  if (!cfg) return null
+  return (
+    <div className="rh-card">
+      <h3>Power Automate (webhook) — sem depender do admin do Microsoft 365</h3>
+      <p className="explica">Caminho "plug and play" para quando o administrador do Office bloqueia
+        tanto o SMTP autenticado quanto o registro de aplicativo: você cria um fluxo no
+        <strong> Power Automate</strong> e o sistema só manda os dados do e-mail para ele.
+        Usado quando o Microsoft 365 e o Google acima não estiverem conectados.</p>
+      <details style={{ margin: '.2rem 0 .8rem' }}>
+        <summary style={{ cursor: 'pointer', color: 'var(--verde-escuro)' }}>Como montar o fluxo (uma vez)</summary>
+        <ol className="explica" style={{ marginTop: '.5rem' }}>
+          <li>Em <strong>make.powerautomate.com</strong> → <em>Criar → Fluxo de nuvem instantâneo</em>,
+            gatilho <em>"Quando uma solicitação HTTP é recebida"</em>.</li>
+          <li>No corpo do JSON, use as propriedades: <code>para</code>, <code>assunto</code>,
+            <code> texto</code>, <code>html</code> e <code>anexos</code> (lista com
+            <code> nome</code>, <code>tipo</code> e <code>conteudo_base64</code>).</li>
+          <li>Adicione a ação <em>Office 365 Outlook → Enviar um email (V2)</em>: Para = <code>para</code>,
+            Assunto = <code>assunto</code>, Corpo = <code>html</code>. Para anexos, use
+            <em> Base64ToBinary(item()?['conteudo_base64'])</em> num "Aplicar a cada".</li>
+          <li>Salve, copie a <strong>URL HTTP POST</strong> gerada e cole abaixo.</li>
+        </ol>
+      </details>
+      {cfg.configurado && (
+        <div className="sucesso" style={{ marginBottom: '.6rem' }}>✅ Fluxo configurado
+          (<code>{cfg.url_mascarada}</code>) — os e-mails saem por ele quando o M365/Google
+          não estiverem conectados.</div>
+      )}
+      <label className="campo"><span className="rotulo">URL do fluxo (HTTP POST, https://…)</span>
+        <InputSenha placeholder={cfg.configurado ? 'URL já definida — preencha para trocar' : 'Cole a URL do gatilho HTTP'}
+                    value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+      <div className="navegacao">
+        <button className="btn-secundario" disabled={ocupado} onClick={async () => {
+          setMsg(null); setOcupado(true)
+          try {
+            const r = await api.salvarWebhook({ webhook_url: url.trim() })
+            setCfg(r); setUrl('')
+            setMsg({ tipo: 'ok', texto: r.configurado
+              ? 'URL salva — use "Testar envio" para confirmar.'
+              : 'Webhook desligado.' })
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: e.detail === 'url_precisa_ser_https'
+              ? 'A URL precisa começar com https://.'
+              : `Não foi possível salvar (${e.detail || e.message}).` })
+          } finally { setOcupado(false) }
+        }}>Salvar</button>
+        <button className="btn-principal btn-mini" disabled={ocupado || !cfg.configurado}
+                onClick={async () => {
+                  setMsg(null); setOcupado(true)
+                  try {
+                    const r = await api.testarWebhook()
+                    setMsg({ tipo: 'ok', texto: `E-mail de teste enviado ao fluxo para ${r.enviado_para} — confira a caixa de entrada.` })
+                  } catch (e) {
+                    setMsg({ tipo: 'erro', texto: e.detail === 'falha_no_envio_pelo_fluxo'
+                      ? 'O fluxo não confirmou o envio. Confira a URL e se o fluxo está ligado.'
+                      : `Teste falhou: ${e.detail || e.message}` })
+                  } finally { setOcupado(false) }
+                }}>Testar envio</button>
+      </div>
       <Msg msg={msg} />
     </div>
   )

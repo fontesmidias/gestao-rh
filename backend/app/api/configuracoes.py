@@ -523,6 +523,61 @@ def gmail_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(req
     db.commit()
 
 
+# ---------- Webhook (Power Automate / fluxo HTTP) ----------
+
+from app.services import webhook_email
+
+
+class WebhookIn(BaseModel):
+    webhook_url: str | None = None  # vazio = desliga
+
+
+def _mascara_url(url: str) -> str:
+    """Mostra só o começo e o fim da URL (ela contém uma assinatura secreta)."""
+    if not url:
+        return ""
+    if len(url) <= 40:
+        return url[:12] + "…"
+    return url[:40] + "…" + url[-8:]
+
+
+@router.get("/rh/config/webhook")
+def ver_webhook(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    url = webhook_email.url_webhook(db)
+    return {"configurado": bool(url), "url_mascarada": _mascara_url(url)}
+
+
+@router.put("/rh/config/webhook")
+def salvar_webhook(payload: WebhookIn, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    url = (payload.webhook_url or "").strip()
+    if url and not url.lower().startswith("https://"):
+        raise HTTPException(status_code=422, detail="url_precisa_ser_https")
+    gravar_config(db, {"webhook_email_url": url})
+    registrar(db, "webhook_email_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"ativado": bool(url)})
+    db.commit()
+    return ver_webhook(db, rh)
+
+
+@router.post("/rh/config/webhook/testar")
+def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    if not webhook_email.url_webhook(db):
+        raise HTTPException(status_code=422, detail="webhook_nao_configurado")
+    ok = webhook_email.enviar_via_webhook(
+        db, rh.email, "✅ Teste de e-mail — Portal de Admissão Green House",
+        "Se você recebeu esta mensagem, o fluxo do Power Automate está funcionando.",
+        html_moderno("Fluxo do Power Automate funcionando",
+                     ["Se você recebeu esta mensagem, o envio de e-mails pelo fluxo do "
+                      "Power Automate está configurado corretamente."]),
+    )
+    if not ok:
+        raise HTTPException(status_code=422, detail="falha_no_envio_pelo_fluxo")
+    registrar(db, "webhook_email_teste_ok", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return {"enviado_para": rh.email}
+
+
 # ---------- Auditoria ----------
 
 

@@ -22,8 +22,9 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
     from app.services.config_dinamica import smtp_config
     from app.services.gmail import config_gmail, enviar_via_gmail
     from app.services.m365 import config_m365, enviar_via_graph
+    from app.services.webhook_email import enviar_via_webhook, url_webhook
 
-    # Prioridade: Microsoft 365 → Google → SMTP.
+    # Prioridade: Microsoft 365 → Google → Webhook (Power Automate) → SMTP.
     with SessionLocal() as db:
         if config_m365(db).get("m365_refresh_token"):
             ok = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
@@ -38,6 +39,13 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
                 return True
             if levantar_erro:
                 raise RuntimeError("falha_envio_google: reconecte a conta em Configurações")
+            return False
+        if url_webhook(db):
+            ok = enviar_via_webhook(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
+            if ok:
+                return True
+            if levantar_erro:
+                raise RuntimeError("falha_envio_webhook: confira a URL do fluxo no Power Automate")
             return False
         cfg = smtp_config(db)
 
