@@ -19,7 +19,10 @@ export const DICAS = {
   },
   pis_comprovante: {
     nome: 'Comprovante do PIS/PASEP',
-    dica: 'Consulte e baixe no app Meu INSS, Caixa Trabalhador ou no próprio app da CTPS Digital.',
+    dica: 'Pelo app Meu INSS é fácil: 1) abra o app e toque no menu ☰ (os "três risquinhos"); '
+      + '2) toque em "Cadastro e Contribuições"; 3) depois em "Meu Cadastro"; '
+      + '4) role a tela — o número do PIS aparece lá embaixo; '
+      + '5) toque no botão "Baixar documento" e anexe o arquivo baixado aqui.',
   },
   titulo_eleitor_doc: {
     nome: 'Título de Eleitor',
@@ -54,8 +57,10 @@ export const DICAS = {
     dica: 'Grátis e na hora no site do TSE: tse.jus.br → Certidões → Quitação eleitoral.',
   },
   nada_consta_criminal: {
-    nome: 'Nada Consta Criminal',
-    dica: 'Grátis no site do TJDFT (tjdft.jus.br) ou da Polícia Federal (pf.gov.br → antecedentes criminais).',
+    nome: 'Certidão de Antecedentes Criminais (Polícia Federal)',
+    dica: 'Grátis e na hora, no site da Polícia Federal: acesse servicos.pf.gov.br/epol-sinic-publico, '
+      + 'informe seus dados (nome completo, CPF e filiação, iguais aos do seu documento), '
+      + 'emita a certidão e anexe aqui o PDF gerado.',
   },
   cert_casamento: {
     nome: 'Certidão de casamento',
