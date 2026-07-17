@@ -115,6 +115,7 @@ def _imagem_para_pdf(dados: bytes, rotulo: str | None = None) -> bytes:
 _ASSETS = Path(__file__).resolve().parent.parent / "assets"
 _TIMBRADO_TOPO = str(_ASSETS / "timbrado-topo.png")
 _TIMBRADO_RODAPE = str(_ASSETS / "timbrado-rodape.jpg")
+_TIMBRADO_MARCA = str(_ASSETS / "timbrado-marca.png")
 
 
 def _pagina_timbrada(jpeg: bytes, w_px: int, h_px: int,
@@ -129,6 +130,11 @@ def _pagina_timbrada(jpeg: bytes, w_px: int, h_px: int,
         pdf = FPDF(format="A4")
         pdf.set_auto_page_break(False)
         pdf.add_page()
+        try:  # marca d'água ao fundo (a foto, opaca, fica por cima)
+            larg = 104
+            pdf.image(_TIMBRADO_MARCA, x=210 - larg, y=(297 - larg * 662 / 296) / 2, w=larg)
+        except Exception:
+            pass
         pdf.image(_TIMBRADO_TOPO, x=0, y=0, w=34)
         pdf.image(_TIMBRADO_RODAPE, x=0, y=297 - 23, w=210)
         pdf.set_y(9)
