@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import EditorImagem, { cropDaMoldura } from './EditorImagem.jsx'
 
 // Câmera guiada: moldura no formato do documento + dicas em tempo real de
 // enquadramento, luz e foco — tudo medido DENTRO da moldura, não na cena
@@ -118,7 +119,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
   const [dica, setDica] = useState(null)
   const [pronto, setPronto] = useState(false)
   const [teimoso, setTeimoso] = useState(false)    // libera "fotografar assim mesmo"
-  const [revisao, setRevisao] = useState(null)     // {url, file}: conferir antes de enviar
+  const [editando, setEditando] = useState(null)   // {file, cropInicial, concluir}: recorte/rotação antes de enviar
   const [passo, setPasso] = useState(0)            // índice em `passos`
   const [flash, setFlash] = useState(null)         // null = sem suporte | false/true = estado
   const capturasRef = useRef([])                   // fotos já confirmadas dos passos anteriores
@@ -132,10 +133,30 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     streamRef.current = null
   }, [])
 
-  // Congela o quadro para a pessoa CONFERIR — nada é enviado ainda.
+  const voltarDoEditor = () => {
+    setEditando(null)
+    bonsRef.current = 0
+    setPronto(false)
+  }
+
+  // Foto confirmada no editor (já recortada/girada): guarda com o nome do passo
+  // e avança para o próximo (ex.: verso) ou conclui o documento.
+  const capturaConfirmada = useCallback((file) => {
+    const nome = rotuloPasso ? `${rotuloPasso.toLowerCase()}.jpg` : 'documento.jpg'
+    capturasRef.current.push(new File([file], nome, { type: 'image/jpeg' }))
+    setEditando(null)
+    bonsRef.current = 0
+    setPronto(false)
+    if (passo < seq.length - 1) { setPasso(passo + 1); return }
+    fecharStream()
+    aoCapturar(capturasRef.current)
+  }, [rotuloPasso, passo, seq.length, aoCapturar, fecharStream])
+
+  // Congela o quadro e abre o editor (recorte com folga da moldura + rotação).
   const fotografar = useCallback(() => {
     const v = videoRef.current
     if (!v || !v.videoWidth) return
+    const crop = cropDaMoldura(v, palcoRef.current, molduraRef.current)
     const c = document.createElement('canvas')
     c.width = v.videoWidth
     c.height = v.videoHeight
@@ -143,35 +164,13 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     c.toBlob((blob) => {
       if (!blob) return
       const file = new File([blob], 'documento.jpg', { type: 'image/jpeg' })
-      setRevisao({ url: URL.createObjectURL(blob), file })
+      setEditando({ file, cropInicial: crop, concluir: capturaConfirmada })
     }, 'image/jpeg', 0.92)
-  }, [])
-
-  const tirarOutra = () => {
-    if (revisao) URL.revokeObjectURL(revisao.url)
-    setRevisao(null)
-    bonsRef.current = 0
-    setPronto(false)
-  }
-
-  const usarFoto = () => {
-    if (!revisao) return
-    URL.revokeObjectURL(revisao.url)
-    const nome = rotuloPasso ? `${rotuloPasso.toLowerCase()}.jpg` : 'documento.jpg'
-    capturasRef.current.push(new File([revisao.file], nome, { type: 'image/jpeg' }))
-    if (passo < seq.length - 1) {
-      // Próxima parte do mesmo documento (ex.: agora o verso).
-      setPasso(passo + 1)
-      tirarOutra()
-      return
-    }
-    fecharStream()
-    aoCapturar(capturasRef.current)
-  }
+  }, [capturaConfirmada])
 
   // Passo opcional (ex.: CNH sem verso): conclui com o que já foi capturado.
   const concluirSemEssa = () => {
-    tirarOutra()
+    voltarDoEditor()
     fecharStream()
     aoCapturar(capturasRef.current)
   }
@@ -216,9 +215,9 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     return () => { vivo = false; fecharStream() }
   }, [fecharStream])
 
-  // Análise ~3x por segundo enquanto a câmera está ativa (pausa na revisão).
+  // Análise ~3x por segundo enquanto a câmera está ativa (pausa na edição).
   useEffect(() => {
-    if (estado !== 'ativa' || revisao) return undefined
+    if (estado !== 'ativa' || editando) return undefined
     const t = setInterval(() => {
       const v = videoRef.current
       if (!v || v.readyState < 2 || !v.videoWidth || !molduraRef.current) return
@@ -237,7 +236,7 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     // fraca não pode ser beco sem saída — o servidor ainda confere a nitidez.
     const escape = setTimeout(() => setTeimoso(true), 8000)
     return () => { clearInterval(t); clearTimeout(escape) }
-  }, [estado, revisao])
+  }, [estado, editando])
 
   const alternarFlash = async () => {
     const track = streamRef.current?.getVideoTracks()[0]
@@ -248,12 +247,41 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     } catch { /* aparelho recusou: mantém o estado */ }
   }
 
+  // Envia as partes já reunidas deste documento (fotos e/ou arquivos).
+  const enviarPartes = (arqs) => { fecharStream(); aoArquivo(arqs) }
+
   const escolherArquivo = (e) => {
     const arqs = [...e.target.files]
     e.target.value = ''
     if (!arqs.length) return
-    fecharStream()
-    aoArquivo(arqs)
+
+    // Documento de parte única: comportamento de sempre — aceita PDF, Word e
+    // várias páginas de uma vez. Uma única imagem passa pelo editor (recorte
+    // e rotação também valem para quem sobe a foto pronta).
+    if (seq.length <= 1) {
+      if (arqs.length === 1 && arqs[0].type.startsWith('image/')) {
+        setEditando({ file: arqs[0], cropInicial: null, concluir: (f) => enviarPartes([f]) })
+        return
+      }
+      enviarPartes(arqs)
+      return
+    }
+
+    // Frente e verso: UM arquivo por passo (o seletor já vem sem seleção
+    // múltipla) — à prova de quem tentaria mandar os dois juntos e falhava.
+    const arq = arqs[0]
+    const guardarEavancar = (f) => {
+      const nome = rotuloPasso ? `${rotuloPasso.toLowerCase()}-${f.name}` : f.name
+      capturasRef.current.push(new File([f], nome, { type: f.type }))
+      setEditando(null)
+      if (passo < seq.length - 1) { setPasso(passo + 1); return }
+      enviarPartes(capturasRef.current)
+    }
+    if (arq.type.startsWith('image/')) {
+      setEditando({ file: arq, cropInicial: null, concluir: guardarEavancar })
+      return
+    }
+    guardarEavancar(arq)
   }
 
   // Moldura: caixa central na proporção do documento; o resto escurece.
@@ -262,16 +290,20 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
     ? { width: 'min(86vw, 480px)', aspectRatio: String(f.razao) }
     : { height: 'min(58vh, 480px)', aspectRatio: String(f.razao) }
 
+  // Sem seleção múltipla nos documentos de frente e verso: um arquivo por vez,
+  // à prova de falhas (Épico 2.1). Parte única segue aceitando vários.
+  const permiteVarios = seq.length <= 1
+
   return (
     <div className="captura-overlay" role="dialog" aria-label={titulo || 'Fotografar documento'}>
-      <input ref={inputRef} type="file" hidden multiple accept="image/*,.pdf,.doc,.docx"
-             onChange={escolherArquivo} />
+      <input ref={inputRef} type="file" hidden {...(permiteVarios ? { multiple: true } : {})}
+             accept="image/*,.pdf,.doc,.docx" onChange={escolherArquivo} />
       <div className="captura-topo">
         <strong>{titulo || 'Fotografar documento'}
           {rotuloPasso && <span className="captura-passo"> — {rotuloPasso}
             {seq.length > 1 ? ` (${passo + 1} de ${seq.length})` : ''}</span>}</strong>
         <span>
-          {flash != null && estado === 'ativa' && !revisao && (
+          {flash != null && estado === 'ativa' && !editando && (
             <button type="button" className="btn-link captura-fechar"
                     title={flash ? 'Desligar o flash' : 'Ligar o flash'}
                     aria-pressed={flash} onClick={alternarFlash}>
@@ -283,66 +315,64 @@ export default function CapturaDocumento({ formato = 'cartao', titulo, passos,
         </span>
       </div>
 
-      {estado !== 'sem-camera' ? (
-        <div className="captura-palco" ref={palcoRef}>
-          <video ref={videoRef} playsInline muted autoPlay className="captura-video" />
-          <canvas ref={analiseRef} hidden />
-          {revisao && <img src={revisao.url} alt="Foto capturada para conferência"
-                           className="captura-revisao" />}
-          {!revisao && (
+      {editando ? (
+        <EditorImagem file={editando.file} cropInicial={editando.cropInicial}
+                      aoConcluir={editando.concluir} aoVoltar={voltarDoEditor} />
+      ) : estado !== 'sem-camera' ? (
+        <>
+          <div className="captura-palco" ref={palcoRef}>
+            <video ref={videoRef} playsInline muted autoPlay className="captura-video" />
+            <canvas ref={analiseRef} hidden />
             <div className="captura-moldura" ref={molduraRef} style={molduraStyle}
                  data-ok={pronto || undefined}>
               <i /><i /><i /><i />
             </div>
-          )}
-          <div className={`captura-dica ${(revisao || dica?.ok) ? 'ok' : ''}`} aria-live="polite">
-            {revisao ? '🔍 Confira: dá para ler tudo? Sem cortes e sem reflexo?'
-              : estado === 'abrindo' ? '📷 Abrindo a câmera…'
-              : rotuloPasso && !dica ? `📐 Agora o ${rotuloPasso.toLowerCase()} — ${f.dica.toLowerCase()}`
-              : dica ? `${dica.icone} ${dica.texto}`
-              : `📐 ${f.dica}`}
+            <div className={`captura-dica ${dica?.ok ? 'ok' : ''}`} aria-live="polite">
+              {estado === 'abrindo' ? '📷 Abrindo a câmera…'
+                : rotuloPasso && !dica ? `📐 Agora o ${rotuloPasso.toLowerCase()} — ${f.dica.toLowerCase()}`
+                : dica ? `${dica.icone} ${dica.texto}`
+                : `📐 ${f.dica}`}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="captura-palco captura-sem-camera">
-          <p>📁 {motivoSemCamera}</p>
-        </div>
-      )}
 
-      <div className="captura-acoes">
-        {estado === 'ativa' && revisao && (
-          <>
-            <button type="button" className="btn-principal captura-disparo" onClick={usarFoto}>
-              {passo < seq.length - 1
-                ? `✔ Usar e fotografar o ${(seq[passo + 1].rotulo || 'próximo').toLowerCase()}`
-                : '✔ Usar esta foto'}
+          <div className="captura-acoes">
+            {estado === 'ativa' && (
+              <button type="button" className="btn-principal captura-disparo"
+                      disabled={!pronto && !teimoso} onClick={fotografar}>
+                {pronto ? '📸 Fotografar' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
+              </button>
+            )}
+            {estado === 'ativa' && passoAtual.opcional && capturasRef.current.length > 0 && (
+              <button type="button" className="btn-secundario" onClick={concluirSemEssa}>
+                Este documento não tem {rotuloPasso?.toLowerCase() || 'esta parte'} — concluir
+              </button>
+            )}
+            <button type="button" className="btn-secundario"
+                    onClick={() => inputRef.current.click()}>
+              📁 {permiteVarios ? 'Já tenho o(s) arquivo(s)' : `Já tenho o arquivo${rotuloPasso ? ` da ${rotuloPasso.toLowerCase()}` : ''}`} — enviar do aparelho
             </button>
-            <button type="button" className="btn-secundario" onClick={tirarOutra}>
-              ↺ Tirar outra
+            <button type="button" className="btn-link captura-voltar"
+                    onClick={() => { fecharStream(); aoFechar() }}>‹ Voltar</button>
+          </div>
+          {estado === 'ativa' && (
+            <p className="captura-legenda">{f.dica}. Você dispara quando quiser — depois ainda
+              recorta, gira e confere a foto antes de enviar.</p>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="captura-palco captura-sem-camera">
+            <p>📁 {motivoSemCamera}</p>
+          </div>
+          <div className="captura-acoes">
+            <button type="button" className="btn-principal"
+                    onClick={() => inputRef.current.click()}>
+              📁 Enviar {permiteVarios ? 'arquivo' : `a ${rotuloPasso?.toLowerCase() || 'parte'}`} do aparelho
             </button>
-          </>
-        )}
-        {estado === 'ativa' && !revisao && (
-          <button type="button" className="btn-principal captura-disparo"
-                  disabled={!pronto && !teimoso} onClick={fotografar}>
-            {pronto ? '📸 Fotografar' : teimoso ? '📸 Fotografar assim mesmo' : '⏳ Ajustando…'}
-          </button>
-        )}
-        {estado === 'ativa' && !revisao && passoAtual.opcional && capturasRef.current.length > 0 && (
-          <button type="button" className="btn-secundario" onClick={concluirSemEssa}>
-            Este documento não tem {rotuloPasso?.toLowerCase() || 'esta parte'} — concluir
-          </button>
-        )}
-        {!revisao && (
-          <button type="button" className="btn-secundario"
-                  onClick={() => inputRef.current.click()}>
-            📁 Já tenho o(s) arquivo(s) — enviar do aparelho
-          </button>
-        )}
-      </div>
-      {estado === 'ativa' && !revisao && (
-        <p className="captura-legenda">{f.dica}. Você dispara quando quiser — nada é enviado
-          sem você conferir a foto antes.</p>
+            <button type="button" className="btn-link captura-voltar"
+                    onClick={() => { fecharStream(); aoFechar() }}>‹ Voltar</button>
+          </div>
+        </>
       )}
     </div>
   )

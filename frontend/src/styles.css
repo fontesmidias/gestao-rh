@@ -516,17 +516,40 @@ input:focus, select:focus, textarea:focus {
   padding: .5rem 1.1rem; font-size: .95rem;
 }
 .captura-dica.ok { background: rgba(22, 100, 56, .92); }
-.captura-revisao {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; background: #0c120e; z-index: 2;
-}
 .captura-sem-camera { padding: 2rem; text-align: center; font-size: 1.05rem; }
 .captura-acoes {
   display: flex; flex-direction: column; gap: .6rem;
   padding: 1rem 1rem .5rem;
 }
 .captura-disparo { font-size: 1.1rem; }
+.captura-voltar { color: #a9bfb0; align-self: center; font-size: 1rem; padding: .3rem; }
 .captura-legenda { text-align: center; color: #a9bfb0; font-size: .85rem; margin: 0 0 .9rem; }
+
+/* ---------- Editor de imagem (recorte + rotação) ---------- */
+.editor-imagem { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+.editor-ajuda { text-align: center; color: #cfe0d4; font-size: .9rem; margin: .4rem 1rem .6rem; }
+.editor-palco {
+  position: relative; align-self: center; max-width: 100%;
+  margin: 0 auto; touch-action: none; user-select: none;
+  line-height: 0;
+}
+.editor-base { display: block; background: #0c120e; }
+.editor-crop {
+  position: absolute; box-sizing: border-box;
+  border: 2px solid var(--verde);
+  box-shadow: 0 0 0 200vmax rgba(6, 10, 8, .55);
+  cursor: move;
+}
+.editor-canto {
+  position: absolute; width: 26px; height: 26px; background: transparent;
+  border: 4px solid var(--verde); touch-action: none;
+}
+.editor-canto.nw { top: -3px; left: -3px; border-right: 0; border-bottom: 0; cursor: nwse-resize; }
+.editor-canto.ne { top: -3px; right: -3px; border-left: 0; border-bottom: 0; cursor: nesw-resize; }
+.editor-canto.sw { bottom: -3px; left: -3px; border-right: 0; border-top: 0; cursor: nesw-resize; }
+.editor-canto.se { bottom: -3px; right: -3px; border-left: 0; border-top: 0; cursor: nwse-resize; }
+.editor-barra { display: flex; gap: .6rem; justify-content: center; padding: .7rem 1rem 0; }
+.editor-barra .btn-secundario { flex: 1; max-width: 180px; }
 
 /* ---------- Sidebar do painel RH ---------- */
 .rh-layout { display: flex; min-height: 100vh; }

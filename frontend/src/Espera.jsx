@@ -167,6 +167,17 @@ export const FRASES = [
   'A tela pequena merece o mesmo capricho da grande.',
   'Quando algo falha, o sistema explica — ninguém fica no escuro.',
   'Polir o que já funciona também é avançar.',
+  // Conjunto 14 (Épico 2: frente/verso guiado, recorte e rotação, 2026-07-17)
+  'Frente e verso, um de cada vez: sem confusão, sem erro.',
+  'Foto deitada? Um toque e ela fica em pé.',
+  'Recortamos a sobra e guardamos uma folga — a borda do documento fica salva.',
+  'Cada parte no seu tempo — a pressa não ajuda a papelada.',
+  'Você enquadra, a gente sugere o corte; a última palavra é sua.',
+  'Girar, ajustar, conferir: a foto sai do jeito certo.',
+  'Um passo de cada vez também é um jeito de cuidar.',
+  'A moldura mostra onde encaixar; o recorte cuida do resto.',
+  'Nada de dois arquivos atropelados: cada campo pede o seu.',
+  'Documento bem enquadrado hoje é aprovação mais rápida amanhã.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]
