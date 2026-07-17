@@ -232,6 +232,37 @@ def salvar_dependentes(
     db.commit()
 
 
+def _termo_vt_assinado(db: Session, candidato: Candidato) -> bool:
+    """O Termo de Opção pelo VT já foi assinado (e não foi invalidado depois)?"""
+    from app.models.assinatura import Assinatura, DocumentoAssinavel
+    return db.scalar(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id,
+            Assinatura.documento == DocumentoAssinavel.termo_vt,
+            Assinatura.assinado_em.isnot(None),
+            Assinatura.invalidada_em.is_(None),
+        )
+    ) is not None
+
+
+class OpcaoVtIn(BaseModel):
+    optante: bool
+
+
+@router.put("/c/{token}/vale-transporte", status_code=204)
+def trocar_opcao_vt(token: str, payload: OpcaoVtIn, db: Session = Depends(get_db)) -> None:
+    """O próprio colaborador troca a opção pelo Vale-Transporte — permitido
+    apenas enquanto o Termo de VT não foi assinado (depois de assinado, a via
+    já vale juridicamente e mudar exigiria nova assinatura)."""
+    candidato = _candidato_do_token(token, db)
+    if _termo_vt_assinado(db, candidato):
+        raise HTTPException(status_code=409, detail="termo_vt_ja_assinado")
+    obj = db.get(ValeTransporte, candidato.id) or ValeTransporte(candidato_id=candidato.id)
+    db.add(obj)
+    obj.optante = payload.optante
+    db.commit()
+
+
 @router.put("/c/{token}/ficha/vt-emergencia", status_code=204)
 def salvar_vt_emergencia(
     token: str, payload: SecaoVtEmergencia, db: Session = Depends(get_db)
@@ -242,6 +273,10 @@ def salvar_vt_emergencia(
     emergencia = {k: v for k, v in dados.items() if not k.startswith("vt_")}
     if vt:
         obj = db.get(ValeTransporte, candidato.id) or ValeTransporte(candidato_id=candidato.id)
+        # Termo de VT já assinado: a opção não pode mudar sem nova assinatura.
+        if ("optante" in vt and obj.optante is not None
+                and vt["optante"] != obj.optante and _termo_vt_assinado(db, candidato)):
+            raise HTTPException(status_code=409, detail="termo_vt_ja_assinado")
         db.add(obj)
         # A ciência é um carimbo de data, não um booleano regravável: marca uma
         # vez e não se desfaz desmarcando (evidência de que o aviso foi dado).

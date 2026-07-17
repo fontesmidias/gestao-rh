@@ -73,9 +73,17 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
 # ---------- Vínculo do candidato + geração dos documentos ----------
 
 
+class AdicionalIn(BaseModel):
+    nome: str
+    valor: str
+    tipo: str = "reais"  # "reais" | "percentual"
+
+
 class PostoCandidatoIn(BaseModel):
     posto_id: uuid.UUID | None = None  # None = remover o posto
     cargo_funcao: str | None = None
+    salario_base: str | None = None
+    adicionais: list[AdicionalIn] | None = None  # None = não mexe; [] = limpa
 
 
 @router.put("/rh/candidatos/{candidato_id}/posto")
@@ -89,16 +97,28 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
     if candidato is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
 
+    # Guarda o estado anterior dos campos que aparecem na ficha de cadastro,
+    # para saber se a via já assinada precisa ser reemitida.
+    antes = (candidato.cargo_funcao, candidato.salario_base,
+             list(candidato.adicionais or []))
+
+    def _aplica_remuneracao() -> None:
+        candidato.cargo_funcao = (payload.cargo_funcao or "").strip() or None
+        if payload.salario_base is not None:
+            candidato.salario_base = payload.salario_base.strip() or None
+        if payload.adicionais is not None:
+            candidato.adicionais = [a.model_dump() for a in payload.adicionais]
+
     docs_novos: list[DocumentoAssinavel] = []
     if payload.posto_id is None:
         candidato.posto_servico_id = None
-        candidato.cargo_funcao = (payload.cargo_funcao or "").strip() or None
+        _aplica_remuneracao()
     else:
         posto = db.get(PostoServico, payload.posto_id)
         if posto is None:
             raise HTTPException(status_code=404, detail="posto_nao_encontrado")
         candidato.posto_servico_id = posto.id
-        candidato.cargo_funcao = (payload.cargo_funcao or "").strip() or None
+        _aplica_remuneracao()
         if posto.exige_docs_infraero:
             existentes = {
                 a.documento for a in db.scalars(
@@ -111,10 +131,25 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
                     db.add(Assinatura(candidato_id=candidato.id, documento=doc))
                     docs_novos.append(doc)
 
+    # Cargo, salário e adicionais aparecem na ficha de cadastro. Se algo disso
+    # mudou e a ficha já estava assinada, a via assinada divergiria dos dados
+    # reais — então ela é invalidada (nunca deletada) e volta para assinatura.
+    ficha_reaberta = False
+    depois = (candidato.cargo_funcao, candidato.salario_base,
+              list(candidato.adicionais or []))
+    if depois != antes:
+        from app.api.rh_ficha import invalidar_assinaturas_afetadas
+        reabertos = invalidar_assinaturas_afetadas(
+            db, candidato, "trabalho-banco", rh.email, ["cargo/salário/adicionais"])
+        ficha_reaberta = bool(reabertos)
+
     registrar(db, "posto_definido", ator="rh", ator_detalhe=rh.email,
               candidato_id=candidato.id,
               detalhe={"posto": str(candidato.posto_servico_id),
                        "cargo": candidato.cargo_funcao,
+                       "salario_base": candidato.salario_base,
+                       "adicionais": len(candidato.adicionais or []),
+                       "ficha_reaberta": ficha_reaberta,
                        "docs_gerados": [d.value for d in docs_novos]})
     db.commit()
 
@@ -150,6 +185,9 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
     return {
         "posto_servico_id": candidato.posto_servico_id,
         "cargo_funcao": candidato.cargo_funcao,
+        "salario_base": candidato.salario_base,
+        "adicionais": candidato.adicionais or [],
         "docs_gerados": [d.value for d in docs_novos],
         "email_enviado": email_enviado,
+        "ficha_reaberta": ficha_reaberta,
     }
