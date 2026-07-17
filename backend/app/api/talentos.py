@@ -44,7 +44,9 @@ class TalentoIn(BaseModel):
     # (Não pode começar com "_": o pydantic trata como atributo privado.)
     website: str | None = None
 
-    @field_validator("nome", "telefone", "cargo_interesse", "cidade",
+    # Inclui "email": o formulário público envia "" quando em branco, e o
+    # EmailStr recusaria string vazia — aqui "" vira None antes da validação.
+    @field_validator("nome", "email", "telefone", "cargo_interesse", "cidade",
                      "escolaridade", "resumo", "origem", mode="before")
     @classmethod
     def _apara(cls, v):

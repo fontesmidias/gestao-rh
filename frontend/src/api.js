@@ -171,6 +171,12 @@ export const rh = {
   fichaCandidato: (id) => req(`/rh/candidatos/${id}/ficha`, { headers: authRH() }),
   notificar: (id) =>
     req(`/rh/candidatos/${id}/notificar`, { method: 'POST', headers: authRH() }),
+  enviarTeams: (id) =>
+    req(`/rh/candidatos/${id}/teams`, { method: 'POST', headers: authRH() }),
+  verTeams: () => req('/rh/config/teams', { headers: authRH() }),
+  salvarTeams: (dados) =>
+    req('/rh/config/teams', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarTeams: () => req('/rh/config/teams/testar', { method: 'POST', headers: authRH() }),
   editarFicha: (id, secao, dados, motivo) =>
     req(`/rh/candidatos/${id}/ficha/${secao}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),
