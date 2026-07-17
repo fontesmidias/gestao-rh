@@ -1,7 +1,46 @@
 import { useEffect, useState } from 'react'
 import { fmtDataHora } from './fmt.js'
-import { useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { verificarAssinatura } from './api.js'
+import logo from './assets/logo.png'
+
+// Cabeçalho comum das páginas públicas de verificação: logo + volta ao início.
+function VerificarTopo() {
+  return (
+    <Link to="/" className="verificar-marca">
+      <img src={logo} alt="Green House" className="logo-img" />
+    </Link>
+  )
+}
+
+// Entrada pública de verificação (rota /verificar, sem código): a pessoa lê o
+// QR do documento (que já leva a /verificar/{id}) ou digita o código aqui.
+export function VerificarEntrada() {
+  const [id, setId] = useState('')
+  const navigate = useNavigate()
+  const ir = (e) => {
+    e.preventDefault()
+    const v = id.trim()
+    if (v) navigate(`/verificar/${encodeURIComponent(v)}`)
+  }
+  return (
+    <main className="cartao verificar">
+      <VerificarTopo />
+      <div className="verificar-selo neutro">🔎</div>
+      <h1>Verificar documento</h1>
+      <p className="explica centro">Todo documento assinado no Portal traz um <strong>QR code</strong> e
+        um <strong>código de registro</strong> (no manifesto da última página e na lateral de cada
+        página). Aponte a câmera do celular para o QR code — ou digite o código do registro abaixo.</p>
+      <form onSubmit={ir} className="verificar-form">
+        <input placeholder="Código do registro (ex.: 3fa85f64-5717-…)" value={id}
+               onChange={(e) => setId(e.target.value)} aria-label="Código do registro" />
+        <button className="btn-principal" type="submit" disabled={!id.trim()}>Verificar</button>
+      </form>
+      <p className="explica centro" style={{ marginTop: '1rem' }}>
+        <Link to="/">← Voltar ao início</Link></p>
+    </main>
+  )
+}
 
 // Página PÚBLICA de verificação de assinatura (destino do QR code do manifesto).
 export default function Verificar() {
@@ -15,17 +54,21 @@ export default function Verificar() {
 
   if (erro) return (
     <main className="cartao verificar">
+      <VerificarTopo />
       <div className="verificar-selo invalido">✕</div>
       <h1>Assinatura não encontrada</h1>
       <p className="explica centro">Não existe registro de assinatura com este código.
         Se você chegou aqui por um QR code impresso em um documento, ele pode ter sido
         adulterado — trate a via com desconfiança e confirme com o RH da Green House.</p>
+      <p className="explica centro"><Link to="/verificar">← Tentar outro código</Link></p>
     </main>
   )
-  if (!dados) return <main className="cartao verificar"><p className="centro">Verificando…</p></main>
+  if (!dados) return <main className="cartao verificar"><VerificarTopo />
+    <p className="centro">Verificando…</p></main>
 
   if (dados.substituida) return (
     <main className="cartao verificar">
+      <VerificarTopo />
       <div className="verificar-selo invalido">↻</div>
       <h1>Assinatura substituída</h1>
       <p className="explica centro">Esta assinatura foi realizada de forma autêntica em{' '}
@@ -45,6 +88,7 @@ export default function Verificar() {
 
   return (
     <main className="cartao verificar">
+      <VerificarTopo />
       <div className="verificar-selo valido">✓</div>
       <h1>Assinatura válida</h1>
       <p className="explica centro">Este registro confirma a autenticidade da assinatura
