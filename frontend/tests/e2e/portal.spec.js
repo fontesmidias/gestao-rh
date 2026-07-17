@@ -4,12 +4,18 @@ import { expect, test } from '@playwright/test'
 const RH_EMAIL = process.env.RH_EMAIL || 'rh@greenhousedf.com.br'
 const RH_SENHA = process.env.RH_SENHA || 'admin-inicial-trocar'
 
-test('home carrega com logo e caminhos de entrada', async ({ page }) => {
+test('home é um portal com as três portas', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Portal de Admissão' })).toBeVisible()
-  await expect(page.getByAltText('Green House')).toBeVisible()
-  await expect(page.getByRole('link', { name: /Perdeu o link/ })).toBeVisible()
-  await expect(page.getByRole('link', { name: /Acesso do RH/ })).toBeVisible()
+  await expect(page.getByAltText('Green House').first()).toBeVisible()
+  await expect(page.getByRole('link', { name: /Sou Candidato/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Sou RH/ })).toBeVisible()
+  const verificar = page.getByRole('link', { name: /Verificar documento/ })
+  await expect(verificar).toBeVisible()
+  // a porta de verificação leva à entrada pública de verificação
+  await verificar.click()
+  await expect(page.getByRole('heading', { name: 'Verificar documento' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Verificar' })).toBeVisible()
 })
 
 test('login do RH: senha errada avisa, senha certa abre o painel', async ({ page }) => {
