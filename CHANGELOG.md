@@ -6,6 +6,19 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.16.0] — 2026-07-17
+
+### Adicionado
+- **Notificações no Microsoft Teams**: em Configurações, o RH cola a URL de um
+  Incoming Webhook (ou fluxo do Power Automate que posta no Teams) e escreve um
+  **template** com variáveis (`{{nome}}`, `{{cargo}}`, `{{posto}}`,
+  `{{status}}`…). Na tela do colaborador, o botão **Enviar ao Teams** posta a
+  mensagem preenchida no canal. Sem OAuth — mesmo espírito do webhook de e-mail.
+
+### Corrigido
+- Cadastro público do Banco de Talentos falhava quando o e-mail era deixado em
+  branco (o `EmailStr` recusava string vazia); agora vazio vira "sem e-mail".
+
 ## [1.15.0] — 2026-07-17
 
 ### Adicionado

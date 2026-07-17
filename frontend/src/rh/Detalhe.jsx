@@ -449,6 +449,18 @@ export default function Detalhe({ id, aoVoltar }) {
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>{dados.nome_completo}</h1>
         <div>
+          <button className="btn-secundario" title="Posta no canal do Teams (se configurado em Configurações)"
+                  onClick={async () => {
+                    setMsg(null)
+                    try {
+                      await api.enviarTeams(id)
+                      setMsg({ tipo: 'ok', texto: 'Mensagem enviada ao Teams.' })
+                    } catch (e) {
+                      setMsg({ tipo: 'erro', texto: e.detail === 'teams_nao_configurado'
+                        ? 'Configure o webhook do Teams em Configurações → Notificações no Teams.'
+                        : `Não foi possível enviar ao Teams (${e.detail || e.message}).` })
+                    }
+                  }}>💬 Enviar ao Teams</button>
           <button className="btn-secundario" onClick={() => gerarDossie(false)}>Gerar dossiê</button>
           {dados.dossie_gerado_em && (
             <button className="btn-principal" onClick={baixarDossie}>⬇ Baixar dossiê</button>

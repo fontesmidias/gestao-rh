@@ -578,6 +578,49 @@ def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer
     return {"enviado_para": rh.email}
 
 
+# ---------- Microsoft Teams (webhook + template) ----------
+
+from app.services import teams
+
+
+class TeamsIn(BaseModel):
+    webhook_url: str | None = None  # None = não mexe; "" = desliga
+    template: str | None = None
+
+
+@router.get("/rh/config/teams")
+def ver_teams(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    url = teams.url_teams(db)
+    return {"configurado": bool(url), "url_mascarada": _mascara_url(url),
+            "template": teams.template_teams(db)}
+
+
+@router.put("/rh/config/teams")
+def salvar_teams(payload: TeamsIn, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    url = payload.webhook_url
+    if url and not url.strip().lower().startswith("https://"):
+        raise HTTPException(status_code=422, detail="url_precisa_ser_https")
+    teams.salvar_config(db, url, payload.template)
+    registrar(db, "teams_config_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"configurado": bool(teams.url_teams(db))})
+    db.commit()
+    return ver_teams(db, rh)
+
+
+@router.post("/rh/config/teams/testar")
+def testar_teams(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    if not teams.url_teams(db):
+        raise HTTPException(status_code=422, detail="teams_nao_configurado")
+    if not teams.enviar_mensagem(
+            db, "✅ Teste do Portal de Admissão Green House — se você está vendo esta "
+                "mensagem, o webhook do Teams está funcionando."):
+        raise HTTPException(status_code=422, detail="falha_no_envio_ao_teams")
+    registrar(db, "teams_teste_ok", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return {"ok": True}
+
+
 # ---------- Auditoria ----------
 
 

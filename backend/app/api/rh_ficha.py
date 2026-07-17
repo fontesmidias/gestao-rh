@@ -323,6 +323,31 @@ def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
     return {"email_enviado": enviado, "itens": itens, "link_magico": link}
 
 
+@router.post("/rh/candidatos/{candidato_id}/teams")
+def enviar_ao_teams(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Posta no canal do Teams a mensagem do template do RH, com as variáveis
+    do candidato preenchidas ({{nome}}, {{cargo}}, {{posto}}, {{status}}…)."""
+    from app.services import teams
+    from app.services.fichas import _contexto_modelo, aplicar_variaveis
+
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if not teams.url_teams(db):
+        raise HTTPException(status_code=422, detail="teams_nao_configurado")
+
+    contexto = _contexto_modelo(db, candidato)
+    contexto["status"] = candidato.status.value.replace("_", " ")
+    mensagem = aplicar_variaveis(teams.template_teams(db), contexto)
+    if not teams.enviar_mensagem(db, mensagem):
+        raise HTTPException(status_code=422, detail="falha_no_envio_ao_teams")
+    registrar(db, "teams_mensagem_enviada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato.id)
+    db.commit()
+    return {"ok": True}
+
+
 class ReabrirIn(BaseModel):
     motivo: str
 

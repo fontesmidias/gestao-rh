@@ -84,6 +84,7 @@ export default function Config({ aoVoltar }) {
       <Smtp />
       <OcrIA />
       <ModelosDocumento />
+      <Teams />
       <Auditoria />
     </main>
   )
@@ -800,6 +801,64 @@ function ModelosDocumento() {
           </div>
         </div>
       )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+function Teams() {
+  const [cfg, setCfg] = useState(null)
+  const [url, setUrl] = useState('')
+  const [template, setTemplate] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+  const recarregar = () => api.verTeams().then((c) => { setCfg(c); setTemplate(c.template) }).catch(() => {})
+  useEffect(() => { recarregar() }, [])
+  if (!cfg) return null
+  return (
+    <div className="rh-card">
+      <h3>💬 Notificações no Microsoft Teams</h3>
+      <p className="explica">Avise a equipe no Teams a cada movimentação. Crie um
+        <strong> Incoming Webhook</strong> no canal (ou um fluxo do Power Automate que poste no
+        Teams) e cole a URL abaixo. A mensagem sai do <strong>template</strong> — use variáveis
+        entre chaves duplas; na tela do colaborador há o botão <strong>Enviar ao Teams</strong>.</p>
+      {cfg.configurado && (
+        <div className="sucesso" style={{ marginBottom: '.6rem' }}>✅ Webhook configurado
+          (<code>{cfg.url_mascarada}</code>).</div>
+      )}
+      <label className="campo"><span className="rotulo">URL do webhook (https://…)</span>
+        <InputSenha placeholder={cfg.configurado ? 'URL definida — preencha para trocar' : 'Cole a URL do webhook do Teams'}
+                    value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+      <label className="campo"><span className="rotulo">Template da mensagem (Markdown + variáveis)</span>
+        <textarea rows={5} value={template} onChange={(e) => setTemplate(e.target.value)} /></label>
+      <p className="explica" style={{ marginTop: '-.4rem' }}>Variáveis:{' '}
+        {['nome', 'cargo', 'posto', 'contrato', 'salario', 'status', 'cpf', 'data'].map((v) => (
+          <code key={v} style={{ marginRight: '.4rem' }}>{`{{${v}}}`}</code>
+        ))}</p>
+      <div className="navegacao">
+        <button className="btn-secundario" disabled={ocupado} onClick={async () => {
+          setMsg(null); setOcupado(true)
+          try {
+            const r = await api.salvarTeams({ webhook_url: url.trim() || null, template })
+            setCfg(r); setUrl('')
+            setMsg({ tipo: 'ok', texto: 'Configuração do Teams salva.' })
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: e.detail === 'url_precisa_ser_https'
+              ? 'A URL precisa começar com https://.'
+              : `Não foi possível salvar (${e.detail || e.message}).` })
+          } finally { setOcupado(false) }
+        }}>Salvar</button>
+        <button className="btn-principal btn-mini" disabled={ocupado || !cfg.configurado}
+                onClick={async () => {
+                  setMsg(null); setOcupado(true)
+                  try { await api.testarTeams(); setMsg({ tipo: 'ok', texto: 'Mensagem de teste enviada ao Teams.' }) }
+                  catch (e) {
+                    setMsg({ tipo: 'erro', texto: e.detail === 'falha_no_envio_ao_teams'
+                      ? 'O Teams não confirmou o recebimento. Confira a URL do webhook.'
+                      : `Teste falhou: ${e.detail || e.message}` })
+                  } finally { setOcupado(false) }
+                }}>Enviar teste</button>
+      </div>
       <Msg msg={msg} />
     </div>
   )
