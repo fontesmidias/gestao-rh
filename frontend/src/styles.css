@@ -340,13 +340,19 @@ input:focus, select:focus, textarea:focus {
 .rh-revisao { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; }
 .rh-lista-slots { max-height: 75vh; overflow-y: auto; }
 .rh-visualizador { background: var(--cartao); border-radius: var(--raio); min-height: 75vh;
-                   box-shadow: var(--sombra-cartao); display: flex; flex-direction: column;
-                   gap: .5rem; padding: .6rem; max-height: 80vh; overflow-y: auto; }
+                   box-shadow: var(--sombra-cartao); display: flex; flex-direction: column; }
 .rh-visualizador > p { margin: auto; }
-/* pdf.js em canvas: único jeito que renderiza igual no Chrome do Android */
-.pdf-viewer { width: 100%; }
-.pdf-pagina { display: block; width: 100%; margin: 0 auto .6rem;
-              border: 1px solid var(--borda); border-radius: 4px; background: #fff; }
+/* Desktop: iframe nativo ocupando todo o painel (com a barra do navegador). */
+.pdf-iframe { width: 100%; flex: 1; border: 0; border-radius: var(--raio); min-height: 75vh; }
+.so-celular { display: none; }
+/* Celular: pdf.js em canvas — único jeito que renderiza no Chrome do Android. */
+@media (max-width: 820px), (pointer: coarse) {
+  .rh-visualizador { gap: .5rem; padding: .6rem; max-height: 80vh; overflow-y: auto; }
+  .so-celular { display: inline-block; }
+  .pdf-viewer { width: 100%; }
+  .pdf-pagina { display: block; width: 100%; margin: 0 auto .6rem;
+                border: 1px solid var(--borda); border-radius: 4px; background: #fff; }
+}
 .rejeicao { display: flex; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
 .rejeicao select, .rejeicao input { width: auto; flex: 1; }
 
@@ -659,6 +665,7 @@ body[data-rh-ocupado] { cursor: progress; }
   /* revisão: lista de documentos e visualizador empilham */
   .rh-revisao { display: flex; flex-direction: column; }
   .rh-visualizador { min-height: 40vh; max-height: 70vh; }
+  .pdf-iframe { min-height: 60vh; }
 }
 @media (max-width: 760px) {
   .rh-painel { padding: .8rem; }
