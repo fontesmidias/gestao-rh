@@ -64,12 +64,14 @@ class _FichaPDF(FPDF):
 
     def header(self):
         try:
-            # Papel timbrado oficial: arte no canto superior esquerdo.
-            self.image(TIMBRADO_TOPO, x=0, y=0, w=34)
+            # Papel timbrado oficial: arte alinhada à direita, título do
+            # documento estritamente centralizado na página (pedido do RH).
+            self.image(TIMBRADO_TOPO, x=self.w - 34, y=0, w=34)
             self.set_y(9)
             self.set_font("helvetica", "B", 12)
             self.set_text_color(*AZUL)
-            self.cell(0, 8, self.titulo, align="R", new_x="LMARGIN", new_y="NEXT")
+            self.set_x(0)
+            self.cell(self.w, 8, self.titulo, align="C", new_x="LMARGIN", new_y="NEXT")
             self.set_y(28)
         except Exception:
             self.set_font("helvetica", "B", 14)
@@ -517,8 +519,8 @@ class _OficioPDF(_FichaPDF):
 
     def header(self):
         try:
-            # Arte de canto sangrada na borda (984×724 px ≈ proporção 1,36).
-            self.image(TIMBRADO_TOPO, x=0, y=0, w=52)
+            # Arte de canto sangrada na borda direita (984×724 px ≈ 1,36).
+            self.image(TIMBRADO_TOPO, x=self.w - 52, y=0, w=52)
         except Exception:
             self.set_fill_color(*NAVY)
             self.rect(0, 0, 60, 24, style="F")

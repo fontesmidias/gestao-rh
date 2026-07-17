@@ -22,22 +22,47 @@ async function req(caminho, opcoes = {}) {
   }
 }
 
+// Erro de rede de verdade (sem resposta do servidor): fetch rejeita com
+// TypeError. Só ESSE caso vira "sem conexão" — resposta HTTP ruim é outra
+// coisa e carrega o detail real do backend (bug de campo: upload de arquivo
+// grande demais aparecia como "sem internet").
+async function buscar(url, opcoes) {
+  try {
+    return await fetch(url, opcoes)
+  } catch (e) {
+    const erro = new Error('sem_conexao')
+    erro.detail = 'sem_conexao'
+    erro.offline = true
+    throw erro
+  }
+}
+
+// Resposta !ok → Error com status + detail SEMPRE string utilizável, mesmo
+// quando o corpo não é JSON (413 do proxy vem em HTML) ou o detail é
+// estruturado (422 de validação do FastAPI vem como lista).
+async function lancarErro(r) {
+  let detail
+  try { detail = (await r.json()).detail } catch { detail = null }
+  if (typeof detail !== 'string') {
+    if (r.status === 413) detail = 'arquivo_grande_demais'
+    else if (r.status === 422) detail = 'dados_invalidos'
+    else detail = r.statusText || 'erro'
+  }
+  const erro = new Error(detail)
+  erro.status = r.status
+  erro.detail = detail
+  throw erro
+}
+
 async function _req(caminho, opcoes = {}) {
   // headers extraído antes do spread: senão opcoes.headers sobrescreveria o
   // Content-Type e a API receberia o JSON sem interpretação (bug histórico).
   const { headers, ...resto } = opcoes
-  const r = await fetch(`${BASE}${caminho}`, {
+  const r = await buscar(`${BASE}${caminho}`, {
     ...resto,
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
   })
-  if (!r.ok) {
-    let detail
-    try { detail = (await r.json()).detail } catch { detail = r.statusText }
-    const erro = new Error(typeof detail === 'string' ? detail : 'erro')
-    erro.status = r.status
-    erro.detail = detail
-    throw erro
-  }
+  if (!r.ok) await lancarErro(r)
   if (r.status === 204) return null
   const tipo = r.headers.get('content-type') || ''
   return tipo.includes('json') ? r.json() : r.blob()
@@ -75,13 +100,8 @@ export const candidato = {
     const fd = new FormData()
     const lista = Array.isArray(arquivo) ? arquivo : [arquivo]
     lista.forEach((a) => fd.append(lista.length > 1 ? 'arquivos' : 'arquivo', a))
-    const r = await fetch(`${BASE}/c/${t}/documentos/${slotId}/arquivo`, { method: 'POST', body: fd })
-    if (!r.ok) {
-      const { detail } = await r.json()
-      const erro = new Error(detail)
-      erro.detail = detail
-      throw erro
-    }
+    const r = await buscar(`${BASE}/c/${t}/documentos/${slotId}/arquivo`, { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
     return r.json()
   },
   // Foto do RG OU da CNH: o backend detecta qual é, guarda no slot certo e
@@ -90,13 +110,8 @@ export const candidato = {
     const fd = new FormData()
     const lista = Array.isArray(arquivo) ? arquivo : [arquivo]
     lista.forEach((a) => fd.append(lista.length > 1 ? 'arquivos' : 'arquivo', a))
-    const r = await fetch(`${BASE}/c/${t}/documentos/identidade`, { method: 'POST', body: fd })
-    if (!r.ok) {
-      const { detail } = await r.json()
-      const erro = new Error(detail)
-      erro.detail = detail
-      throw erro
-    }
+    const r = await buscar(`${BASE}/c/${t}/documentos/identidade`, { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
     return r.json()
   },
   meuArquivoUrl: (t, slotId) => `${BASE}/c/${t}/documentos/${slotId}/arquivo`,
@@ -156,14 +171,9 @@ export const rh = {
     fd.append('origem', origem || 'whatsapp')
     entrouRH()
     try {
-      const r = await fetch(`${BASE}/rh/slots/${slotId}/arquivo`,
-                            { method: 'POST', headers: authRH(), body: fd })
-      if (!r.ok) {
-        const { detail } = await r.json()
-        const erro = new Error(detail)
-        erro.detail = detail
-        throw erro
-      }
+      const r = await buscar(`${BASE}/rh/slots/${slotId}/arquivo`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
       return r.json()
     } finally { saiuRH() }
   },

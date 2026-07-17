@@ -171,9 +171,11 @@ export default function Checklist({ token, aoConcluir }) {
       setErros((x) => ({
         ...x,
         [slotId]: CODIGOS_ERRO_UPLOAD[err.detail]
-          || (err.status >= 500
-              ? 'Tivemos um problema no servidor ao processar o arquivo. Tente de novo em instantes — se continuar, avise o RH.'
-              : 'Não foi possível enviar. Verifique sua conexão e tente de novo.'),
+          || (err.offline
+              ? CODIGOS_ERRO_UPLOAD.sem_conexao
+              : err.status >= 500
+                ? 'Tivemos um problema no servidor ao processar o arquivo. Tente de novo em instantes — se continuar, avise o RH.'
+                : `Não conseguimos receber esse arquivo${err.detail ? ` (${err.detail})` : ''}. Tente de novo — se continuar, avise o RH.`),
       }))
     } finally { setEnviando(null) }
   }
