@@ -339,7 +339,7 @@ function Painel({ aoSair }) {
                 <tr key={c.id}>
                   <td><strong>{c.nome_completo}</strong><br />
                     <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></td>
-                  <td><span className="chip" style={{ background: cor }}>{rotulo}</span></td>
+                  <td><span className="chip" style={{ '--chip-cor': cor }}>{rotulo}</span></td>
                   <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
                   <td>{fmtData(c.criado_em)}</td>
                   <td className="acoes-candidato">
