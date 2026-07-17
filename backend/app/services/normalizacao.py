@@ -48,7 +48,11 @@ def normalizar_para_pdf(nome_arquivo: str, dados: bytes,
     ext = Path(nome_arquivo.lower()).suffix
 
     if ext == ".pdf":
-        pdf = dados
+        # Decisão do RH: todo PDF também vai para o papel timbrado da empresa,
+        # com cada página reduzida para caber no corpo A4. Se as artes faltarem
+        # (ou algo falhar), o PDF segue intacto.
+        timbrado = _pdf_para_timbrado(dados, rotulo)
+        pdf = timbrado if timbrado is not None else dados
     elif ext in _EXT_IMAGEM:
         pdf = _imagem_para_pdf(dados, rotulo)
     elif ext in _EXT_WORD:
@@ -118,44 +122,106 @@ _TIMBRADO_RODAPE = str(_ASSETS / "timbrado-rodape.jpg")
 _TIMBRADO_MARCA = str(_ASSETS / "timbrado-marca.png")
 
 
+# Área útil do corpo da página timbrada (mm): abaixo do cabeçalho, acima do
+# rodapé. Documentos são reduzidos para caber aqui, sem distorção.
+_CORPO_X, _CORPO_LARG = 12.0, 186.0
+_CORPO_Y, _CORPO_ALT = 30.0, 238.0
+
+
+def _tem_artes_timbrado() -> bool:
+    return Path(_TIMBRADO_TOPO).exists() and Path(_TIMBRADO_RODAPE).exists()
+
+
+def _desenhar_timbrado(pdf, rotulo: str | None) -> None:
+    """Desenha, numa página A4 já adicionada ao FPDF, a marca d'água + arte de
+    canto (à direita) + rodapé + rótulo e data centralizados. Reutilizado pela
+    página de foto e pelo fundo dos PDFs."""
+    try:  # marca d'água ao fundo (o conteúdo, opaco, fica por cima)
+        larg = 104
+        pdf.image(_TIMBRADO_MARCA, x=210 - larg, y=(297 - larg * 662 / 296) / 2, w=larg)
+    except Exception:
+        pass
+    pdf.image(_TIMBRADO_TOPO, x=210 - 34, y=0, w=34)
+    pdf.image(_TIMBRADO_RODAPE, x=0, y=297 - 23, w=210)
+    pdf.set_y(9)
+    pdf.set_font("helvetica", "B", 11)
+    pdf.set_text_color(23, 26, 60)
+    titulo = (rotulo or "documento").upper().replace("_", " ")
+    pdf.set_x(0)
+    pdf.cell(210, 6, titulo.encode("latin-1", "replace").decode("latin-1"),
+             align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 8)
+    pdf.set_text_color(110, 120, 112)
+    pdf.set_x(0)
+    pdf.cell(210, 5, f"Recebido pelo Portal de Admissao em {date.today():%d/%m/%Y}",
+             align="C", new_x="LMARGIN", new_y="NEXT")
+
+
 def _pagina_timbrada(jpeg: bytes, w_px: int, h_px: int,
                      rotulo: str | None) -> bytes | None:
     """Foto de documento vira página A4 no papel timbrado da empresa, com o
     nome do documento e a data de recebimento — dossiê 'organizadinho'.
     Sem as artes no disco, devolve None e o fluxo antigo (img2pdf) assume."""
-    if not (Path(_TIMBRADO_TOPO).exists() and Path(_TIMBRADO_RODAPE).exists()):
+    if not _tem_artes_timbrado():
         return None
     try:
         from fpdf import FPDF
         pdf = FPDF(format="A4")
         pdf.set_auto_page_break(False)
         pdf.add_page()
-        try:  # marca d'água ao fundo (a foto, opaca, fica por cima)
-            larg = 104
-            pdf.image(_TIMBRADO_MARCA, x=210 - larg, y=(297 - larg * 662 / 296) / 2, w=larg)
-        except Exception:
-            pass
-        pdf.image(_TIMBRADO_TOPO, x=0, y=0, w=34)
-        pdf.image(_TIMBRADO_RODAPE, x=0, y=297 - 23, w=210)
-        pdf.set_y(9)
-        pdf.set_font("helvetica", "B", 11)
-        pdf.set_text_color(23, 26, 60)
-        titulo = (rotulo or "documento").upper().replace("_", " ")
-        pdf.cell(0, 6, titulo.encode("latin-1", "replace").decode("latin-1"),
-                 align="R", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("helvetica", "", 8)
-        pdf.set_text_color(110, 120, 112)
-        pdf.cell(0, 5, f"Recebido pelo Portal de Admissao em {date.today():%d/%m/%Y}",
-                 align="R", new_x="LMARGIN", new_y="NEXT")
-        # Foto centralizada na área útil (x 12–198, y 30–268), sem distorcer.
-        area_w, area_h = 186.0, 238.0
-        escala = min(area_w / w_px, area_h / h_px)
+        _desenhar_timbrado(pdf, rotulo)
+        # Foto reduzida proporcionalmente para caber na área útil, sem distorcer.
+        escala = min(_CORPO_LARG / w_px, _CORPO_ALT / h_px)
         w_mm, h_mm = w_px * escala, h_px * escala
-        pdf.image(io.BytesIO(jpeg), x=(210 - w_mm) / 2, y=30 + (area_h - h_mm) / 2,
-                  w=w_mm, h=h_mm)
+        pdf.image(io.BytesIO(jpeg),
+                  x=(210 - w_mm) / 2, y=_CORPO_Y + (_CORPO_ALT - h_mm) / 2, w=w_mm, h=h_mm)
         return bytes(pdf.output())
     except Exception:
         return None  # qualquer surpresa: página simples, nunca bloqueia o envio
+
+
+def _pdf_para_timbrado(pdf_bytes: bytes, rotulo: str | None) -> bytes | None:
+    """Cada página do PDF original é reduzida proporcionalmente e centralizada
+    no corpo de uma página A4 timbrada da empresa (decisão do RH: todo PDF vai
+    para o papel timbrado). Preserva as características do original — apenas
+    reduz para caber. Devolve None se as artes não estiverem no disco (aí o PDF
+    segue intacto)."""
+    if not _tem_artes_timbrado():
+        return None
+    try:
+        from fpdf import FPDF
+        from pypdf import PdfWriter, Transformation
+        from pypdf._page import PageObject
+
+        base = FPDF(format="A4")
+        base.set_auto_page_break(False)
+        base.add_page()
+        _desenhar_timbrado(base, rotulo)
+        fundo = PdfReader(io.BytesIO(bytes(base.output()))).pages[0]
+
+        mm = 2.834645  # pontos por mm
+        a4_w, a4_h = 210 * mm, 297 * mm
+        bx, bw = _CORPO_X * mm, _CORPO_LARG * mm
+        by, bh = _CORPO_Y * mm, _CORPO_ALT * mm
+
+        writer = PdfWriter()
+        for pagina in PdfReader(io.BytesIO(pdf_bytes)).pages:
+            pw = float(pagina.mediabox.width) or 1.0
+            ph = float(pagina.mediabox.height) or 1.0
+            escala = min(bw / pw, bh / ph)
+            dx = bx + (bw - pw * escala) / 2
+            dy = by + (bh - ph * escala) / 2
+            folha = PageObject.create_blank_page(width=a4_w, height=a4_h)
+            folha.merge_page(fundo)  # timbrado ao fundo
+            folha.merge_transformed_page(
+                pagina, Transformation().scale(escala).translate(dx, dy))
+            writer.add_page(folha)
+        saida = io.BytesIO()
+        writer.write(saida)
+        return saida.getvalue()
+    except Exception:
+        log.exception("Falha ao aplicar timbrado no PDF; mantendo o original")
+        return None
 
 
 # ---------- Data do comprovante de residência (OCR) ----------
@@ -198,11 +264,14 @@ def _texto_do_envio(ext: str, dados: bytes, pdf: bytes) -> str:
     from app.services.ocr_ia import texto_via_mistral
 
     if ext == ".pdf":
-        texto_ia = texto_via_mistral(pdf, "application/pdf")
+        # Lê SEMPRE o PDF original (`dados`), não a versão já colocada no papel
+        # timbrado: o merge/transform da página degrada a camada de texto e
+        # confunde o OCR (isso quebrava a checagem de data do comprovante).
+        texto_ia = texto_via_mistral(dados, "application/pdf")
         if texto_ia:
             return texto_ia
         try:
-            paginas = PdfReader(io.BytesIO(pdf)).pages[:3]
+            paginas = PdfReader(io.BytesIO(dados)).pages[:3]
             return "\n".join((p.extract_text() or "") for p in paginas)
         except Exception:
             return ""
