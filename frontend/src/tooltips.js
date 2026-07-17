@@ -110,4 +110,8 @@ export const CODIGOS_ERRO_UPLOAD = {
   imagem_borrada: 'A foto ficou tremida ou sem foco e não dá para ler. Apoie o celular, aproxime com boa luz e tire de novo.',
   comprovante_antigo: 'Este comprovante tem mais de 90 dias. Envie uma conta recente (luz, água, telefone ou internet) do último mês.',
   cpf_divergente: 'O número neste documento não é o mesmo CPF que você informou na ficha. Confira se enviou o documento certo — ou corrija o CPF digitado na etapa de dados.',
+  sem_conexao: 'Parece que você está sem internet agora. Verifique a conexão e toque em Enviar de novo — nada foi perdido.',
+  dados_invalidos: 'O envio chegou incompleto ou em um formato que não reconhecemos. Selecione o arquivo de novo e tente outra vez.',
+  envio_ja_concluido: 'Seu envio já foi concluído e está com o RH. Se precisar trocar algum documento, fale com o RH.',
+  arquivos_demais: 'Selecione apenas um arquivo para este documento.',
 }

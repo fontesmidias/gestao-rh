@@ -156,6 +156,17 @@ export const FRASES = [
   'Buscar um nome não deveria ser uma aventura. Já não é.',
   'Acordos claros, admissões longas — assim diz o ditado atualizado.',
   'De contrato em contrato, a papelada vira patrimônio organizado.',
+  // Conjunto 13 (Épico 1: PDF no celular, erros com nome e timbrado alinhado, 2026-07-16)
+  'O documento agora abre em qualquer celular — sem botão que não faz nada.',
+  'Erro bom é erro que se explica: dizemos o que houve e o que fazer.',
+  'Sem internet não é culpa sua — e agora a mensagem também sabe disso.',
+  'Cabeçalho no lugar, título no centro: até o papel ficou mais elegante.',
+  'Página por página, o PDF se desenha na sua tela.',
+  'Arquivo grande demais? Avisamos antes de gastar o seu 4G.',
+  'Cada detalhe alinhado é um retrabalho que não acontece.',
+  'A tela pequena merece o mesmo capricho da grande.',
+  'Quando algo falha, o sistema explica — ninguém fica no escuro.',
+  'Polir o que já funciona também é avançar.',
 ]
 
 const embaralhada = () => FRASES[Math.floor(Math.random() * FRASES.length)]

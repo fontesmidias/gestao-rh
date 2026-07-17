@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { DICAS } from '../tooltips.js'
+import PdfViewer from '../PdfViewer.jsx'
 
 const MOTIVOS = [
   ['ilegivel', 'Ilegível'],
@@ -290,7 +291,7 @@ function FichaRH({ id, setMsg }) {
 export default function Detalhe({ id, aoVoltar }) {
   const [dados, setDados] = useState(null)
   const [visualizando, setVisualizando] = useState(null) // slot id
-  const [urlPdf, setUrlPdf] = useState(null)
+  const [pdf, setPdf] = useState(null) // {blob, url} do documento em exibição
   const [rejeitando, setRejeitando] = useState(null)
   const [motivo, setMotivo] = useState('ilegivel')
   const [obs, setObs] = useState('')
@@ -305,7 +306,7 @@ export default function Detalhe({ id, aoVoltar }) {
   const ver = async (slot) => {
     setVisualizando(slot.id)
     const blob = await api.arquivo(slot.id)
-    setUrlPdf(URL.createObjectURL(blob))
+    setPdf({ blob, url: URL.createObjectURL(blob) })
   }
 
   if (!dados) return <main className="rh-painel"><p>Carregando…</p></main>
@@ -522,8 +523,12 @@ export default function Detalhe({ id, aoVoltar }) {
           })}
         </div>
         <div className="rh-visualizador">
-          {urlPdf ? <iframe title="documento" src={urlPdf} />
-                  : <p className="explica centro">Selecione "Ver" em um documento para visualizar aqui.</p>}
+          {pdf ? (
+            <>
+              <a className="btn-link" href={pdf.url} download="documento.pdf">⬇ Baixar este PDF</a>
+              <PdfViewer blob={pdf.blob} />
+            </>
+          ) : <p className="explica centro">Selecione "Ver" em um documento para visualizar aqui.</p>}
         </div>
       </div>
     </main>

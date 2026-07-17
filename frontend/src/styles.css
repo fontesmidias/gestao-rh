@@ -340,9 +340,13 @@ input:focus, select:focus, textarea:focus {
 .rh-revisao { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; }
 .rh-lista-slots { max-height: 75vh; overflow-y: auto; }
 .rh-visualizador { background: var(--cartao); border-radius: var(--raio); min-height: 75vh;
-                   box-shadow: var(--sombra-cartao); display: flex; }
-.rh-visualizador iframe { width: 100%; border: 0; border-radius: var(--raio); }
-.rh-visualizador p { margin: auto; }
+                   box-shadow: var(--sombra-cartao); display: flex; flex-direction: column;
+                   gap: .5rem; padding: .6rem; max-height: 80vh; overflow-y: auto; }
+.rh-visualizador > p { margin: auto; }
+/* pdf.js em canvas: único jeito que renderiza igual no Chrome do Android */
+.pdf-viewer { width: 100%; }
+.pdf-pagina { display: block; width: 100%; margin: 0 auto .6rem;
+              border: 1px solid var(--borda); border-radius: 4px; background: #fff; }
 .rejeicao { display: flex; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
 .rejeicao select, .rejeicao input { width: auto; flex: 1; }
 
@@ -654,7 +658,7 @@ body[data-rh-ocupado] { cursor: progress; }
 @media (max-width: 1000px) {
   /* revisão: lista de documentos e visualizador empilham */
   .rh-revisao { display: flex; flex-direction: column; }
-  .rh-visualizador iframe { min-height: 60vh; }
+  .rh-visualizador { min-height: 40vh; max-height: 70vh; }
 }
 @media (max-width: 760px) {
   .rh-painel { padding: .8rem; }
