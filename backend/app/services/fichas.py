@@ -63,6 +63,7 @@ class _FichaPDF(FPDF):
         self.add_page()
 
     def header(self):
+        _desenhar_marca_dagua(self)
         try:
             # Papel timbrado oficial: arte alinhada à direita, título do
             # documento estritamente centralizado na página (pedido do RH).
@@ -497,6 +498,20 @@ LOGO = str(_ASSETS / "logo.png")
 # Papel timbrado oficial (artes extraídas do modelo Word da empresa).
 TIMBRADO_TOPO = str(_ASSETS / "timbrado-topo.png")       # canto sup. esquerdo
 TIMBRADO_RODAPE = str(_ASSETS / "timbrado-rodape.jpg")   # rodapé institucional
+TIMBRADO_MARCA = str(_ASSETS / "timbrado-marca.png")     # marca d'água vertical (borda direita)
+_MARCA_RAZAO = 662 / 296                                 # altura/largura da arte
+
+
+def _desenhar_marca_dagua(pdf) -> None:
+    """Marca d'água "GREENHOUSE" (esmaecida) rente à borda direita, como no
+    modelo Word. Desenhada no header (antes do conteúdo) para ficar ao fundo."""
+    try:
+        larg = 104  # mm — a arte tem a esquerda transparente, então a marca
+        alt = larg * _MARCA_RAZAO      # visível fica junto à borda direita
+        y = (pdf.h - alt) / 2          # centralizada na vertical
+        pdf.image(TIMBRADO_MARCA, x=pdf.w - larg, y=y, w=larg)
+    except Exception:
+        pass  # sem a arte, o documento continua válido
 
 
 def assinantes_config(db: Session) -> list[tuple[str, str, str]]:
@@ -518,6 +533,7 @@ class _OficioPDF(_FichaPDF):
     rodapé institucional completos, extraídos do modelo Word do timbrado."""
 
     def header(self):
+        _desenhar_marca_dagua(self)
         try:
             # Arte de canto sangrada na borda direita (984×724 px ≈ 1,36).
             self.image(TIMBRADO_TOPO, x=self.w - 52, y=0, w=52)
