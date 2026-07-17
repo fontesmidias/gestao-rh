@@ -13,6 +13,7 @@ import app.models.configuracao  # noqa: F401
 import app.models.documento  # noqa: F401
 import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
+import app.models.modelo_documento  # noqa: F401
 import app.models.usuario_rh  # noqa: F401
 
 config = context.config

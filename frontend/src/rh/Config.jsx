@@ -83,6 +83,7 @@ export default function Config({ aoVoltar }) {
       <WebhookEmail />
       <Smtp />
       <OcrIA />
+      <ModelosDocumento />
       <Auditoria />
     </main>
   )
@@ -669,6 +670,136 @@ function Smtp() {
           } finally { setTestando(false) }
         }}>{testando ? 'Testando…' : 'Salvar acima e testar envio'}</button>
       </div>
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+const ESCOPOS = [
+  ['avulso', 'Qualquer colaborador'],
+  ['cargo', 'Colaboradores de um cargo'],
+  ['posto', 'Colaboradores de um posto'],
+]
+const VAZIO = { titulo: '', corpo: '', escopo: 'avulso', cargo_alvo: '', posto_alvo_id: '' }
+
+// Abre um PDF (blob autenticado) em nova aba.
+async function abrirBlob(promessaBlob, setMsg) {
+  try {
+    const blob = await promessaBlob
+    window.open(URL.createObjectURL(blob), '_blank')
+  } catch (e) {
+    setMsg?.({ tipo: 'erro', texto: `Não foi possível gerar o PDF (${e.detail || e.message}).` })
+  }
+}
+
+function ModelosDocumento() {
+  const [dados, setDados] = useState(null) // {modelos, variaveis}
+  const [postos, setPostos] = useState([])
+  const [edit, setEdit] = useState(null) // {id?, titulo, corpo, escopo, cargo_alvo, posto_alvo_id}
+  const [msg, setMsg] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  const recarregar = () => api.modelos().then(setDados).catch(() => {})
+  useEffect(() => { recarregar(); api.postos().then(setPostos).catch(() => {}) }, [])
+  if (!dados) return null
+
+  const salvar = async () => {
+    if (!edit.titulo.trim() || !edit.corpo.trim()) {
+      setMsg({ tipo: 'erro', texto: 'Preencha o título e o corpo do documento.' }); return
+    }
+    setSalvando(true); setMsg(null)
+    const corpo = {
+      titulo: edit.titulo.trim(), corpo: edit.corpo, escopo: edit.escopo,
+      cargo_alvo: edit.escopo === 'cargo' ? edit.cargo_alvo.trim() : null,
+      posto_alvo_id: edit.escopo === 'posto' ? (edit.posto_alvo_id || null) : null,
+    }
+    try {
+      if (edit.id) await api.editarModelo(edit.id, corpo)
+      else await api.criarModelo(corpo)
+      setEdit(null); setMsg({ tipo: 'ok', texto: 'Modelo salvo.' })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+    } finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>📝 Modelos de documento</h3>
+      <p className="explica">Crie documentos do zero já no papel timbrado da empresa. Use
+        variáveis entre chaves duplas — na hora de gerar para um colaborador, elas são
+        preenchidas automaticamente. Depois, na tela do colaborador, é só clicar em
+        <strong> Gerar</strong>.</p>
+      <p className="explica" style={{ marginTop: '-.4rem' }}>Variáveis disponíveis:{' '}
+        {Object.entries(dados.variaveis).map(([k, desc]) => (
+          <code key={k} title={desc} style={{ marginRight: '.4rem' }}>{`{{${k}}}`}</code>
+        ))}</p>
+
+      {dados.modelos.length > 0 && (
+        <table className="rh-tabela">
+          <thead><tr><th>Título</th><th>Aplica-se a</th><th></th></tr></thead>
+          <tbody>
+            {dados.modelos.map((m) => (
+              <tr key={m.id}>
+                <td><strong>{m.titulo}</strong></td>
+                <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
+                  {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}</td>
+                <td>
+                  <button className="btn-secundario btn-mini"
+                          onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
+                  <button className="btn-secundario btn-mini" onClick={() => setEdit({
+                    id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
+                    cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
+                  })}>Editar</button>
+                  <button className="btn-link" onClick={async () => {
+                    if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
+                    await api.excluirModelo(m.id); await recarregar()
+                  }}>excluir</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {!edit ? (
+        <button className="btn-secundario" style={{ marginTop: '.75rem' }}
+                onClick={() => setEdit({ ...VAZIO })}>+ Novo modelo</button>
+      ) : (
+        <div style={{ marginTop: '.75rem' }}>
+          <label className="campo"><span className="rotulo">Título (aceita variáveis)</span>
+            <input value={edit.titulo} placeholder="Ex.: Declaração de vínculo — {{nome}}"
+                   onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} /></label>
+          <label className="campo"><span className="rotulo">Corpo do documento</span>
+            <textarea rows={7} value={edit.corpo}
+                      placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…"
+                      onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
+          <div className="linha2">
+            <label className="campo"><span className="rotulo">Aplica-se a</span>
+              <select value={edit.escopo}
+                      onChange={(e) => setEdit({ ...edit, escopo: e.target.value })}>
+                {ESCOPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+              </select></label>
+            {edit.escopo === 'cargo' && (
+              <label className="campo"><span className="rotulo">Cargo</span>
+                <input value={edit.cargo_alvo} placeholder="Ex.: Recepcionista"
+                       onChange={(e) => setEdit({ ...edit, cargo_alvo: e.target.value })} /></label>
+            )}
+            {edit.escopo === 'posto' && (
+              <label className="campo"><span className="rotulo">Posto</span>
+                <select value={edit.posto_alvo_id}
+                        onChange={(e) => setEdit({ ...edit, posto_alvo_id: e.target.value })}>
+                  <option value="">— escolha —</option>
+                  {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select></label>
+            )}
+          </div>
+          <div className="navegacao">
+            <button className="btn-secundario" onClick={() => setEdit(null)}>Cancelar</button>
+            <button className="btn-principal" disabled={salvando} onClick={salvar}>
+              {salvando ? 'Salvando…' : 'Salvar modelo'}</button>
+          </div>
+        </div>
+      )}
       <Msg msg={msg} />
     </div>
   )

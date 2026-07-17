@@ -5,6 +5,7 @@ Quando `assinatura` é passada, o rodapé ganha o bloco de assinatura eletrônic
 com a trilha de evidências (Lei 14.063/2020).
 """
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1000,6 +1001,78 @@ def carimbar_rubrica_lateral(pdf_bytes: bytes, assinatura: Assinatura) -> bytes:
         return saida.getvalue()
     except Exception:
         return pdf_bytes
+
+
+# ---------- Documentos criados pelo RH (modelos com variáveis) ----------
+
+# Variáveis disponíveis nos modelos de documento (o RH usa {{nome}}, {{cargo}}…).
+VARIAVEIS_MODELO = {
+    "nome": "Nome completo do colaborador",
+    "nome_social": "Nome social (ou o nome completo, se não houver)",
+    "cpf": "CPF do colaborador",
+    "cargo": "Cargo/função",
+    "posto": "Posto de serviço",
+    "contrato": "Contrato de referência do posto",
+    "salario": "Salário base",
+    "data": "Data de hoje (dd/mm/aaaa)",
+    "empresa": "Razão social da empresa",
+}
+
+
+def _cpf_formatado(cpf: str | None) -> str:
+    n = "".join(filter(str.isdigit, cpf or ""))
+    return f"{n[:3]}.{n[3:6]}.{n[6:9]}-{n[9:]}" if len(n) == 11 else (cpf or "-")
+
+
+def _contexto_modelo(db: Session, candidato: Candidato | None) -> dict:
+    from app.models.candidato import PostoServico
+    if candidato is None:
+        return {k: f"{{{{{k}}}}}" for k in VARIAVEIS_MODELO} | {
+            "data": date.today().strftime("%d/%m/%Y"), "empresa": EMPRESA_RAZAO}
+    contrato, cargo = _dados_posto(db, candidato)
+    posto = db.get(PostoServico, candidato.posto_servico_id) \
+        if candidato.posto_servico_id else None
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    p = db.get(DadosPessoais, candidato.id)
+    return {
+        "nome": candidato.nome_completo or "-",
+        "nome_social": (getattr(p, "nome_social", None) or candidato.nome_completo or "-"),
+        "cpf": _cpf_formatado(d.cpf if d else None),
+        "cargo": cargo,
+        "posto": posto.nome if posto else "-",
+        "contrato": contrato,
+        "salario": candidato.salario_base or "-",
+        "data": date.today().strftime("%d/%m/%Y"),
+        "empresa": EMPRESA_RAZAO,
+    }
+
+
+def aplicar_variaveis(texto: str, contexto: dict) -> str:
+    """Substitui {{chave}} (tolerante a espaços/caixa) pelo valor do contexto.
+    Chave desconhecida fica como está — o RH vê o placeholder e corrige."""
+    def repl(m):
+        return str(contexto.get(m.group(1).strip().lower(), m.group(0)))
+    return re.sub(r"\{\{\s*(\w+)\s*\}\}", repl, texto or "")
+
+
+def gerar_documento_modelo(db: Session, titulo: str, corpo: str,
+                           candidato: Candidato | None = None) -> bytes:
+    """Renderiza um modelo do RH como PDF no papel timbrado padrão, com as
+    variáveis preenchidas para o `candidato` (ou mantidas como {{...}} numa
+    prévia sem colaborador)."""
+    ctx = _contexto_modelo(db, candidato)
+    pdf = _OficioPDF(aplicar_variaveis(titulo, ctx))
+    pdf.set_font("helvetica", "B", 13)
+    pdf.set_text_color(*AZUL)
+    pdf.multi_cell(0, 7, aplicar_variaveis(titulo, ctx), align="C")
+    pdf.set_text_color(30, 30, 30)
+    pdf.ln(3)
+    for paragrafo in aplicar_variaveis(corpo, ctx).split("\n"):
+        if paragrafo.strip():
+            pdf.paragrafo(paragrafo.strip())
+        else:
+            pdf.ln(2.5)
+    return bytes(pdf.output())
 
 
 GERADORES = {

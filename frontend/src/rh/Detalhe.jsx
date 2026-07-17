@@ -204,6 +204,36 @@ function PostoServico({ dados, setMsg, recarregar }) {
   )
 }
 
+// Documentos-modelo (criados em Configurações) que se aplicam a este colaborador,
+// com o botão de gerar o PDF já preenchido no papel timbrado.
+function ModelosDoColaborador({ id, setMsg }) {
+  const [modelos, setModelos] = useState(null)
+  const [gerando, setGerando] = useState(null)
+  useEffect(() => { api.modelosAplicaveis(id).then(setModelos).catch(() => setModelos([])) }, [id])
+  if (!modelos || modelos.length === 0) return null
+  const gerar = async (m) => {
+    setGerando(m.id); setMsg(null)
+    try {
+      const blob = await api.gerarModelo(id, m.id)
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível gerar (${e.detail || e.message}).` })
+    } finally { setGerando(null) }
+  }
+  return (
+    <div className="rh-card rh-lote">
+      <strong>📝 Documentos do colaborador:</strong>
+      {modelos.map((m) => (
+        <button key={m.id} className="btn-secundario btn-mini" disabled={gerando === m.id}
+                onClick={() => gerar(m)}>
+          {gerando === m.id ? 'Gerando…' : `⬇ ${m.titulo}`}</button>
+      ))}
+      <span className="explica" style={{ margin: 0, width: '100%' }}>Gerados no papel timbrado,
+        com os dados deste colaborador preenchidos. Crie/edite modelos em Configurações.</span>
+    </div>
+  )
+}
+
 // Seções e campos que o RH pode completar/corrigir. A validação é a mesma do
 // candidato (backend); documentos já assinados que exibem o dado alterado são
 // invalidados e voltam para o CANDIDATO assinar — o RH prepara, nunca assina.
@@ -434,6 +464,7 @@ export default function Detalhe({ id, aoVoltar }) {
 
       <FichasStatus dados={dados} setMsg={setMsg} />
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
+      <ModelosDoColaborador id={id} setMsg={setMsg} />
       <FichaRH id={id} setMsg={setMsg} />
 
       {pendDossie && (

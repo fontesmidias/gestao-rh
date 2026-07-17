@@ -6,6 +6,26 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.14.0] — 2026-07-17
+
+### Adicionado
+- **Módulo de criação de documentos (CRUD)**: o RH cria/edita documentos do
+  zero em Configurações, já no papel timbrado padrão, com **variáveis
+  dinâmicas** (`{{nome}}`, `{{cpf}}`, `{{cargo}}`, `{{posto}}`, `{{salario}}`,
+  `{{data}}`…). Cada modelo pode ser vinculado a **qualquer colaborador**, a um
+  **cargo** ou a um **posto**; na tela do colaborador aparecem os modelos
+  aplicáveis com um botão **Gerar** (PDF preenchido no timbrado). Prévia
+  disponível com os placeholders visíveis.
+- **Todo PDF enviado vai para o papel timbrado A4** (decisão do RH): cada
+  página do original é reduzida proporcionalmente e centralizada no corpo da
+  página timbrada, sem distorcer. A leitura de texto (OCR e data do
+  comprovante) passou a usar sempre o PDF original.
+
+### Alterado
+- Raiz do sistema virou um **portal com três portas** (Sou Candidato / Sou RH /
+  Verificar documento) e há uma **entrada pública de verificação** (`/verificar`)
+  onde se digita o código do registro.
+
 ## [1.12.0] — 2026-07-17
 
 ### Adicionado

@@ -222,6 +222,20 @@ export const rh = {
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarSmtp: () => req('/rh/config/smtp/testar', { method: 'POST', headers: authRH() }),
+  // Modelos de documento (CRUD + geração)
+  modelos: () => req('/rh/modelos-documento', { headers: authRH() }),
+  criarModelo: (dados) =>
+    req('/rh/modelos-documento', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarModelo: (id, dados) =>
+    req(`/rh/modelos-documento/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirModelo: (id) =>
+    req(`/rh/modelos-documento/${id}`, { method: 'DELETE', headers: authRH() }),
+  previaModelo: (id) =>
+    req(`/rh/modelos-documento/${id}/previa`, { headers: authRH() }),
+  modelosAplicaveis: (candidatoId) =>
+    req(`/rh/candidatos/${candidatoId}/modelos-aplicaveis`, { headers: authRH() }),
+  gerarModelo: (candidatoId, modeloId) =>
+    req(`/rh/candidatos/${candidatoId}/modelos/${modeloId}/gerar`, { headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>
