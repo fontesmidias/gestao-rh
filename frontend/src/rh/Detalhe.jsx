@@ -525,8 +525,8 @@ export default function Detalhe({ id, aoVoltar }) {
         <div className="rh-visualizador">
           {pdf ? (
             <>
-              <a className="btn-link" href={pdf.url} download="documento.pdf">⬇ Baixar este PDF</a>
-              <PdfViewer blob={pdf.blob} />
+              <a className="btn-link so-celular" href={pdf.url} download="documento.pdf">⬇ Baixar este PDF</a>
+              <PdfViewer blob={pdf.blob} url={pdf.url} />
             </>
           ) : <p className="explica centro">Selecione "Ver" em um documento para visualizar aqui.</p>}
         </div>
