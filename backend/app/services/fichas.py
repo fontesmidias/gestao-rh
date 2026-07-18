@@ -1173,6 +1173,94 @@ def gerar_informativo_intermitente(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+def gerar_ficha_cadastral_terceirizado(db: Session, candidato: Candidato,
+                                       assinatura: Assinatura | None = None,
+                                       base_url: str | None = None) -> bytes:
+    """Ficha Cadastral de Terceirizado (kit da Presidência da República) — réplica
+    do modelo, preenchida com os dados do colaborador."""
+    p = db.get(DadosPessoais, candidato.id)
+    e = db.get(Endereco, candidato.id)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+
+    def _campo(p, attr, default=None):
+        return getattr(p, attr, default) if p else default
+
+    pdf = _FichaPDF("FICHA CADASTRAL DE TERCEIRIZADO")
+    _nota(pdf, "Preencher com letra de forma. Documento gerado a partir do Formulário de "
+               "Admissão Green House para credenciamento na Presidência da República.")
+    pdf.campo("Nome", _campo(p, "nome_completo") or candidato.nome_completo)
+    pdf.campo("Nome social", _campo(p, "nome_social"))
+    pdf.campo("CPF", d.cpf if d else None)
+    pdf.campo("Sexo", _campo(p, "sexo"))
+    pdf.campo("Nome da mãe", _campo(p, "nome_mae"))
+    pdf.campo("Nome do pai", _campo(p, "nome_pai"))
+    pdf.campo("Data de nascimento", _campo(p, "data_nascimento"))
+    pdf.campo("Naturalidade / UF",
+              f"{_campo(p, 'naturalidade_cidade') or '-'} / {_campo(p, 'naturalidade_uf') or '-'}")
+    pdf.campo("Nacionalidade", _campo(p, "nacionalidade"))
+    pdf.campo("PIS/PASEP", d.pis_nis_pasep if d else None)
+    pdf.campo("RG — nº / órgão / UF / expedição",
+              f"{(d.rg_numero if d else None) or '-'} / {(d.rg_orgao_emissor if d else None) or '-'}"
+              f" / {(d.rg_data_expedicao if d else None) or '-'}")
+    pdf.campo("Estado civil", _campo(p, "estado_civil"))
+    pdf.campo("Escolaridade", _campo(p, "escolaridade"))
+    pdf.campo("Endereço", e.logradouro_numero_complemento if e else None)
+    pdf.campo("Bairro", e.bairro if e else None)
+    pdf.campo("Cidade / UF / CEP",
+              f"{(e.cidade if e else None) or '-'} / {(e.uf if e else None) or '-'}"
+              f" / {(e.cep if e else None) or '-'}")
+    pdf.campo("Celular / WhatsApp", candidato.celular_whatsapp)
+    pdf.campo("E-mail", candidato.email)
+    pdf.campo("Cargo / função", candidato.cargo_funcao)
+    return bytes(pdf.output())
+
+
+def gerar_oficio_apresentacao_presidencia(db: Session, candidato: Candidato,
+                                          assinatura: Assinatura | None = None,
+                                          base_url: str | None = None) -> bytes:
+    """Ofício de Apresentação de Funcionário à Presidência da República
+    (Coordenação de Serviços Gerais), para credenciamento na Divisão de
+    Segurança — réplica do modelo, com as variáveis do colaborador."""
+    contrato, cargo = _dados_posto(db, candidato)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    e = db.get(Endereco, candidato.id)
+    cpf = _cpf_formatado(d.cpf if d else None)
+    rg = (d.rg_numero if d else None) or "................."
+    orgao = (d.rg_orgao_emissor if d else None) or "SSP/____"
+    endereco = (e.logradouro_numero_complemento if e else None) or "................................"
+    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
+              else date.today())
+
+    pdf = _OficioPDF("Ofício de Apresentação — Presidência da República")
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.cell(0, 6, f"Brasília/DF, {quando.day:02d} de {_MESES_PT[quando.month - 1]} de {quando.year}.",
+             align="R", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+    _NX = {"new_x": "LMARGIN", "new_y": "NEXT"}
+    pdf.set_font("helvetica", "B", 10.5)
+    pdf.multi_cell(0, 5.6, "PRESIDÊNCIA DA REPÚBLICA\nCoordenação de Serviços Gerais - PR", **_NX)
+    pdf.ln(2)
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.multi_cell(0, 5.6, "Assunto: Apresentação de funcionário", **_NX)
+    pdf.multi_cell(0, 5.6, f"Ref.: Contrato nº {contrato}", **_NX)
+    pdf.ln(2)
+    pdf.multi_cell(0, 5.6, "Senhor Gestor,", **_NX)
+    pdf.ln(1)
+    pdf.multi_cell(0, 5.6,
+        "Encaminhamos, para fins de credenciamento junto à Divisão de Segurança da Presidência "
+        f"da República, o(a) Sr(a). {candidato.nome_completo}, que iniciou suas atividades "
+        f"laborais no referido contrato em ______________, na função de {cargo}, no local "
+        "________________ das ________ hs, portador(a) do documento de identidade nº "
+        f"{rg}, expedido pela {orgao}, CPF {cpf}, residente e domiciliado(a) à {endereco}.", **_NX)
+    pdf.ln(1)
+    pdf.multi_cell(0, 5.6,
+        f"Por oportuno, solicita-se providenciar a confecção de crachá funcional para o(a) "
+        f"funcionário(a) {candidato.nome_completo}, conforme documentação anexa.", **_NX)
+    pdf.ln(3)
+    pdf.assinantes_empresa()
+    return bytes(pdf.output())
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
@@ -1182,4 +1270,6 @@ GERADORES = {
     "informacoes_trabalhador": gerar_informacoes_trabalhador,
     "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
     "informativo_intermitente": gerar_informativo_intermitente,
+    "ficha_cadastral_terceirizado": gerar_ficha_cadastral_terceirizado,
+    "oficio_apresentacao_presidencia": gerar_oficio_apresentacao_presidencia,
 }

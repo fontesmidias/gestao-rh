@@ -36,6 +36,9 @@ class PostoServico(Base):
     # Default agora é False: só INFRAERO exige o kit dela. Na Leva de kits por
     # posto, esse booleano dá lugar a uma lista de documentos específicos.
     exige_docs_infraero: Mapped[bool] = mapped_column(default=False)
+    # Documentos assináveis específicos deste posto (o RH marca no CRUD): lista
+    # de valores de DocumentoAssinavel. Ex.: kit da Presidência.
+    documentos_kit: Mapped[list] = mapped_column(JSON, default=list)
     # Colunas dinâmicas do painel: {"chave": "valor", ...}.
     atributos: Mapped[dict] = mapped_column(JSON, default=dict)
     ativo: Mapped[bool] = mapped_column(default=True)
