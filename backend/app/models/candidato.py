@@ -43,9 +43,19 @@ class PostoServico(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nome: Mapped[str] = mapped_column(String(200), unique=True)
+    # ID do posto na base do Tirvu — chave natural, à prova do truncamento do
+    # "Nome/Apelido" (que colide entre postos diferentes). É por ele que a
+    # importação de postos casa/atualiza sem duplicar.
+    tirvu_id: Mapped[str | None] = mapped_column(String(30), index=True)
     sigla: Mapped[str | None] = mapped_column(String(60))
+    razao_social: Mapped[str | None] = mapped_column(String(200))
     cnpj: Mapped[str | None] = mapped_column(String(20))
     contrato_ref: Mapped[str | None] = mapped_column(String(200))
+    # Endereço do posto (usado em ofícios/documentos que precisam dele).
+    endereco: Mapped[str | None] = mapped_column(String(300))
+    cidade: Mapped[str | None] = mapped_column(String(120))
+    uf: Mapped[str | None] = mapped_column(String(2))
+    cep: Mapped[str | None] = mapped_column(String(10))
     # Default agora é False: só INFRAERO exige o kit dela. Na Leva de kits por
     # posto, esse booleano dá lugar a uma lista de documentos específicos.
     exige_docs_infraero: Mapped[bool] = mapped_column(default=False)

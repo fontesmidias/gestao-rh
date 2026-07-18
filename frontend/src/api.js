@@ -247,6 +247,19 @@ export const rh = {
     req(`/rh/postos/${id}`, { method: 'DELETE', headers: authRH() }),
   importarPostos: (texto) =>
     req('/rh/postos/importar', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
+  importarPostosPlanilha: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/postos/importar-planilha`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
+  editarPostosMassa: (dados) =>
+    req('/rh/postos/massa', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   definirColunasPosto: (colunas) =>
     req('/rh/postos/colunas', { method: 'PUT', headers: authRH(), body: JSON.stringify({ colunas }) }),
   definirPosto: (candidatoId, dados) =>
