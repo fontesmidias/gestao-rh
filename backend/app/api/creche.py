@@ -7,19 +7,50 @@ dados das crianças (idade em anos/meses, documentos) entra na 2ª onda, quando 
 autocadastro público estiver no ar; a estrutura já a comporta."""
 
 import io
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
 from app.core.db import get_db
+from app.models.beneficio import BeneficioCreche, CriancaCreche, StatusBeneficio
 from app.models.candidato import Candidato, PostoServico
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
+from app.services.email import enviar_email, html_moderno
 
 router = APIRouter(tags=["creche-rh"], dependencies=[Depends(requer_rh)])
+
+
+def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int] | None:
+    """Idade em (anos, meses) a partir de 'dd/mm/aaaa'. A IN 147 usa o limite de
+    5 anos e 11 meses — por isso os meses importam."""
+    ref = ref or datetime.now(timezone.utc)
+    try:
+        d, m, a = (int(x) for x in nasc.split("/"))
+    except (ValueError, AttributeError):
+        return None
+    anos = ref.year - a
+    meses = ref.month - m
+    if ref.day < d:
+        meses -= 1
+    if meses < 0:
+        anos -= 1
+        meses += 12
+    return (anos, meses) if anos >= 0 else None
+
+
+def _elegivel_por_idade(nasc: str) -> bool:
+    """<= 5 anos e 11 meses (art. 2º, §1º da IN 147/2026)."""
+    am = _idade_anos_meses(nasc)
+    if am is None:
+        return False
+    anos, meses = am
+    return anos < 5 or (anos == 5 and meses <= 11)
 
 
 def _postos_elegiveis(db: Session) -> list[PostoServico]:
@@ -117,4 +148,175 @@ def exportar(db: Session = Depends(get_db),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition":
                  f'attachment; filename="reembolso-creche-elegiveis-{agora}.xlsx"'},
+    )
+
+
+# ======================================================================
+# Levantamentos: o RH revisa as adesões, aprova/ativa (com prazo mensal) ou
+# indefere. Ao ativar, o colaborador recebe as orientações da entrega mensal.
+# ======================================================================
+
+
+def _dump_crianca_rh(c: CriancaCreche) -> dict:
+    am = _idade_anos_meses(c.data_nascimento)
+    return {
+        "id": c.id, "nome": c.nome, "data_nascimento": c.data_nascimento,
+        "parentesco": c.parentesco, "tipo_comprovante": c.tipo_comprovante,
+        "idade_anos": am[0] if am else None, "idade_meses": am[1] if am else None,
+        "elegivel_idade": _elegivel_por_idade(c.data_nascimento),
+        "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key),
+    }
+
+
+def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
+    col = db.get(Candidato, ben.candidato_id)
+    posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
+    criancas = [_dump_crianca_rh(c) for c in ben.criancas]
+    return {
+        "id": ben.id, "candidato_id": col.id,
+        "nome": col.nome_completo, "cpf": col.cpf, "matricula": col.matricula,
+        "email": ben.email_confirmado or col.email, "telefone": ben.telefone,
+        "posto": posto.nome if posto else None,
+        "posto_da_direito": bool(posto and posto.da_direito_creche),
+        "valor_posto": posto.valor_reembolso_creche if posto else None,
+        "status": ben.status, "enviado_em": ben.enviado_em,
+        "dia_entrega_mensal": ben.dia_entrega_mensal,
+        "valor_reembolso": ben.valor_reembolso,
+        "motivo_indeferimento": ben.motivo_indeferimento,
+        "criancas": criancas,
+        "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
+    }
+
+
+@router.get("/rh/creche/levantamentos")
+def listar_levantamentos(status: str | None = None,
+                         db: Session = Depends(get_db)) -> list[dict]:
+    """Adesões ao benefício. Por padrão as que precisam de ação (em análise);
+    aceita filtro por status."""
+    q = select(BeneficioCreche).order_by(BeneficioCreche.enviado_em.desc().nullslast())
+    if status:
+        q = q.where(BeneficioCreche.status == StatusBeneficio(status))
+    return [_dump_beneficio(db, b) for b in db.scalars(q).all()]
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}")
+def detalhe_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    return _dump_beneficio(db, ben)
+
+
+class AtivarIn(BaseModel):
+    dia_entrega_mensal: int | None = None
+    valor_reembolso: str | None = None
+    # se True, só aprova (aguardando_repactuacao); se False, ativa de fato
+    aguardar_repactuacao: bool = False
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/ativar")
+def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Aprova o benefício. Se aguardar_repactuacao=True, fica em
+    'aguardando_repactuacao'; senão vai a 'ativo' e o colaborador recebe as
+    orientações da entrega mensal (com o prazo)."""
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    col = db.get(Candidato, ben.candidato_id)
+    posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
+    if payload.dia_entrega_mensal is not None:
+        ben.dia_entrega_mensal = max(1, min(28, payload.dia_entrega_mensal))
+    ben.valor_reembolso = (payload.valor_reembolso
+                           or (posto.valor_reembolso_creche if posto else None))
+    ben.revisado_por = rh.email
+    ben.revisado_em = datetime.now(timezone.utc)
+    if payload.aguardar_repactuacao:
+        ben.status = StatusBeneficio.aguardando_repactuacao
+    else:
+        ben.status = StatusBeneficio.ativo
+        ben.ativado_em = datetime.now(timezone.utc)
+        _email_orientacoes_mensais(ben, col)
+    registrar(db, "creche_beneficio_ativado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=col.id,
+              detalhe={"status": ben.status.value, "dia": ben.dia_entrega_mensal})
+    db.commit()
+    return _dump_beneficio(db, ben)
+
+
+class IndeferirIn(BaseModel):
+    motivo: str
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/indeferir")
+def indeferir_beneficio(beneficio_id: uuid.UUID, payload: IndeferirIn,
+                        db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    ben.status = StatusBeneficio.indeferido
+    ben.motivo_indeferimento = payload.motivo.strip() or None
+    ben.revisado_por = rh.email
+    ben.revisado_em = datetime.now(timezone.utc)
+    registrar(db, "creche_beneficio_indeferido", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_indeferimento})
+    db.commit()
+    return _dump_beneficio(db, ben)
+
+
+class PrazoMassaIn(BaseModel):
+    beneficio_ids: list[uuid.UUID]
+    dia_entrega_mensal: int
+
+
+@router.put("/rh/creche/prazos")
+def editar_prazos(payload: PrazoMassaIn, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Ajusta o dia de entrega mensal de vários benefícios de uma vez (ou de um,
+    passando um id só)."""
+    dia = max(1, min(28, payload.dia_entrega_mensal))
+    bens = db.scalars(select(BeneficioCreche)
+                      .where(BeneficioCreche.id.in_(payload.beneficio_ids))).all()
+    for b in bens:
+        b.dia_entrega_mensal = dia
+    registrar(db, "creche_prazos_alterados", ator="rh", ator_detalhe=rh.email,
+              detalhe={"qtd": len(bens), "dia": dia})
+    db.commit()
+    return {"atualizados": len(bens), "dia_entrega_mensal": dia}
+
+
+def _email_orientacoes_mensais(ben: BeneficioCreche, col: Candidato) -> None:
+    """Enviado ao ATIVAR: orienta a entrega mensal da documentação de despesa."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    dia = ben.dia_entrega_mensal
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche ativado: orientações da entrega mensal",
+        f"Olá, {col.nome_completo.split()[0].title()}!\n\n"
+        "Seu benefício de Reembolso-Creche foi ATIVADO.\n\n"
+        f"Todo mês, até o dia {dia}, você deve nos enviar a comprovação da "
+        "despesa do mês anterior, de UMA destas formas:\n"
+        "  - DECLARAÇÃO assinada pela pessoa que cuida da criança (modelo que "
+        "enviamos), quando for cuidador(a)/babá; ou\n"
+        "  - NOTA FISCAL da creche/pré-escola, quando for estabelecimento.\n\n"
+        "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.\n\n"
+        "Atenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Reembolso-Creche ativado",
+            [
+                f"Olá, <strong>{col.nome_completo.split()[0].title()}</strong>!",
+                "Seu benefício de <strong>Reembolso-Creche</strong> foi ativado. 🎉",
+                f"Todo mês, <strong>até o dia {dia}</strong>, envie a comprovação "
+                "da despesa do mês anterior, de uma destas formas:",
+                "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
+                "<li><strong>Declaração</strong> assinada por quem cuida da criança "
+                "(cuidador(a)/babá) — use o modelo que enviamos; ou</li>"
+                "<li><strong>Nota fiscal</strong> da creche/pré-escola, quando for "
+                "um estabelecimento.</li></ul>",
+                "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.",
+            ],
+        ),
     )
