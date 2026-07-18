@@ -171,6 +171,9 @@ export const rh = {
   },
   efetivarColaborador: (id) =>
     req(`/rh/colaboradores/${id}/efetivar`, { method: 'POST', headers: authRH() }),
+  efetivarLote: (ids) =>
+    req('/rh/colaboradores/lote/efetivar', { method: 'POST', headers: authRH(),
+                                             body: JSON.stringify({ ids }) }),
   desligarColaborador: (id, data_desligamento) =>
     req(`/rh/colaboradores/${id}/desligar`, { method: 'POST', headers: authRH(),
                                               body: JSON.stringify({ data_desligamento }) }),
