@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import CheckMestre from '../CheckMestre.jsx'
 
 const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
   documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
@@ -43,6 +44,11 @@ export default function PostosRH() {
   const alternarSel = (id) => setSelecionados((s) => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
   })
+  const idsVisiveis = postos.map((p) => p.id)
+  const todosSelecionados = idsVisiveis.length > 0 && idsVisiveis.every((id) => selecionados.has(id))
+  const algunsSelecionados = idsVisiveis.some((id) => selecionados.has(id))
+  const marcarTodos = (marcar) =>
+    setSelecionados(marcar ? new Set(idsVisiveis) : new Set())
   const aplicarMassa = async (payload) => {
     setMsg(null)
     try {
@@ -100,6 +106,9 @@ export default function PostosRH() {
           <strong>{selecionados.size} posto(s) selecionado(s):</strong>
           <button className="btn-secundario btn-mini" onClick={() => setMassaKit({})}>
             🗂️ Vincular documentos / creche</button>
+          {!todosSelecionados && (
+            <button className="btn-link" onClick={() => marcarTodos(true)}>
+              selecionar todos ({postos.length})</button>)}
           <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar seleção</button>
         </div>
       )}
@@ -200,7 +209,13 @@ export default function PostosRH() {
       )}
 
       <table className="rh-tabela">
-        <thead><tr><th style={{ width: 34 }}></th><th>Sigla</th><th>Nome</th><th>CNPJ</th><th>Contrato</th>
+        <thead><tr>
+          <th style={{ width: 34 }}>
+            <CheckMestre marcado={todosSelecionados} parcial={algunsSelecionados && !todosSelecionados}
+                         onChange={() => marcarTodos(!todosSelecionados)}
+                         title="Selecionar todos os postos visíveis" />
+          </th>
+          <th>Sigla</th><th>Nome</th><th>CNPJ</th><th>Contrato</th>
           {colunas.map((c) => <th key={c}>{c}</th>)}<th></th></tr></thead>
         <tbody>
           {postos.map((p) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import CheckMestre from '../CheckMestre.jsx'
 import Espera from '../Espera.jsx'
 
 const fmtCpf = (c) => {
@@ -213,7 +214,16 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       ) : (
         <table className="rh-tabela">
           <thead>
-            <tr>{efetivaveis.length > 0 && <th style={{ width: 34 }}></th>}
+            <tr>{efetivaveis.length > 0 && (
+                  <th style={{ width: 34 }}>
+                    <CheckMestre
+                      marcado={efetivaveis.length > 0 && efetivaveis.every((c) => selecionados.has(c.id))}
+                      parcial={efetivaveis.some((c) => selecionados.has(c.id))
+                               && !efetivaveis.every((c) => selecionados.has(c.id))}
+                      onChange={() => selecionarTodos(
+                        !efetivaveis.every((c) => selecionados.has(c.id)))}
+                      title="Selecionar todos os candidatos em admissão" />
+                  </th>)}
                 <th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
                 <th>Contato</th><th>Situação/Status</th><th>Ações</th></tr>
           </thead>
