@@ -34,8 +34,13 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const timer = useRef(null)
   const inputArquivo = useRef(null)
 
-  // Candidatos ainda em admissão (situacao vazia) — os únicos efetiváveis.
-  const efetivaveis = (lista || []).filter((c) => !c.situacao)
+  // Recortes da lista para decidir quais ações em massa fazem sentido.
+  const registros = lista || []
+  const efetivaveis = registros.filter((c) => !c.situacao)          // candidatos em admissão
+  const selList = registros.filter((c) => selecionados.has(c.id))
+  const selEfetivaveis = selList.filter((c) => !c.situacao).length
+  const selAtivos = selList.filter((c) => c.situacao === 'ativo').length
+  const selDesligados = selList.filter((c) => c.situacao === 'desligado').length
 
   const carregar = (f = {}) => {
     api.colaboradores({
@@ -102,7 +107,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n
   })
   const selecionarTodos = (marcar) =>
-    setSelecionados(marcar ? new Set(efetivaveis.map((c) => c.id)) : new Set())
+    setSelecionados(marcar ? new Set(registros.map((c) => c.id)) : new Set())
   const efetivarSelecionados = async () => {
     const ids = [...selecionados]
     if (!ids.length) return
@@ -116,6 +121,28 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       carregar()
     } catch (e) {
       setErro(`Não foi possível efetivar em massa (${e.detail || e.message}).`)
+    }
+  }
+  const acaoMassa = async (acao) => {
+    const ids = [...selecionados]
+    if (!ids.length) return
+    let data = null
+    if (acao === 'desligar') {
+      data = window.prompt(`Desligar ${ids.length} colaborador(es) selecionado(s).`
+        + '\nInforme a data de desligamento (dd/mm/aaaa):', new Date().toLocaleDateString('pt-BR'))
+      if (!data) return
+    } else {
+      if (!window.confirm(`Reativar ${ids.length} colaborador(es) selecionado(s)?`)) return
+    }
+    setErro(null); setAviso(null)
+    try {
+      const r = await comAmpulheta(acao === 'desligar' ? 'Desligando selecionados…' : 'Reativando selecionados…',
+        () => api.acaoMassaColaboradores(ids, acao, data?.trim()))
+      setAviso(`${r.afetados} ${acao === 'desligar' ? 'desligado(s)' : 'reativado(s)'}`
+        + (r.pulados ? `, ${r.pulados} ignorado(s) (não eram colaboradores).` : '.'))
+      setSelecionados(new Set()); carregar()
+    } catch (e) {
+      setErro(`Não foi possível ${acao} em massa (${e.detail || e.message}).`)
     }
   }
   const desligar = async (c) => {
@@ -192,15 +219,19 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         quem já é colaborador — importado ou efetivado).
       </label>
 
-      {efetivaveis.length > 0 && (
+      {selecionados.size > 0 && (
         <div className="rh-card rh-lote" style={{ alignItems: 'center' }}>
-          <strong>Efetivação em massa:</strong>
-          <span className="explica" style={{ margin: 0 }}>
-            {selecionados.size} de {efetivaveis.length} candidato(s) em admissão selecionado(s)</span>
-          <button className="btn-link" onClick={() => selecionarTodos(true)}>selecionar todos</button>
-          <button className="btn-link" onClick={() => selecionarTodos(false)}>limpar</button>
-          <button className="btn-principal btn-mini" disabled={!selecionados.size}
-                  onClick={efetivarSelecionados}>✅ Efetivar selecionados</button>
+          <strong>{selecionados.size} selecionado(s):</strong>
+          {selEfetivaveis > 0 && (
+            <button className="btn-principal btn-mini" onClick={efetivarSelecionados}>
+              ✅ Efetivar ({selEfetivaveis})</button>)}
+          {selAtivos > 0 && (
+            <button className="btn-secundario btn-mini" onClick={() => acaoMassa('desligar')}>
+              🚪 Desligar ({selAtivos})</button>)}
+          {selDesligados > 0 && (
+            <button className="btn-secundario btn-mini" onClick={() => acaoMassa('reativar')}>
+              ♻️ Reativar ({selDesligados})</button>)}
+          <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar seleção</button>
         </div>
       )}
 
@@ -214,28 +245,25 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       ) : (
         <table className="rh-tabela">
           <thead>
-            <tr>{efetivaveis.length > 0 && (
-                  <th style={{ width: 34 }}>
-                    <CheckMestre
-                      marcado={efetivaveis.length > 0 && efetivaveis.every((c) => selecionados.has(c.id))}
-                      parcial={efetivaveis.some((c) => selecionados.has(c.id))
-                               && !efetivaveis.every((c) => selecionados.has(c.id))}
-                      onChange={() => selecionarTodos(
-                        !efetivaveis.every((c) => selecionados.has(c.id)))}
-                      title="Selecionar todos os candidatos em admissão" />
-                  </th>)}
-                <th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
-                <th>Contato</th><th>Situação/Status</th><th>Ações</th></tr>
+            <tr>
+              <th style={{ width: 34 }}>
+                <CheckMestre
+                  marcado={registros.length > 0 && registros.every((c) => selecionados.has(c.id))}
+                  parcial={registros.some((c) => selecionados.has(c.id))
+                           && !registros.every((c) => selecionados.has(c.id))}
+                  onChange={() => selecionarTodos(
+                    !registros.every((c) => selecionados.has(c.id)))}
+                  title="Selecionar todos os registros visíveis" />
+              </th>
+              <th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
+              <th>Contato</th><th>Situação/Status</th><th>Ações</th></tr>
           </thead>
           <tbody>
             {lista.map((c) => (
               <tr key={c.id}>
-                {efetivaveis.length > 0 && (
-                  <td>{!c.situacao && (
-                    <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                <td><input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
                            checked={selecionados.has(c.id)} onChange={() => alternarSel(c.id)}
-                           title="Selecionar para efetivar em massa" />)}</td>
-                )}
+                           title="Selecionar para ação em massa" /></td>
                 <td><strong>{c.nome_completo}</strong><br /><small>{c.email}</small></td>
                 <td>{fmtCpf(c.cpf)}</td>
                 <td>{c.posto_nome || '—'}</td>

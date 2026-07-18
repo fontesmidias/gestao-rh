@@ -106,6 +106,7 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "status": cand.status,
         "situacao": cand.situacao,  # None se ainda em admissão; ativo/desligado se colaborador
         "data_admissao": cand.data_admissao,
+        "data_desligamento": cand.data_desligamento,
         "dossie_gerado_em": cand.dossie_gerado_em,
         "posto_servico_id": cand.posto_servico_id,
         "cargo_funcao": cand.cargo_funcao,

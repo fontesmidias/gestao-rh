@@ -60,6 +60,29 @@ export default function PostosRH() {
       setMsg({ tipo: 'erro', texto: `Falha na edição em massa (${e.detail || e.message}).` })
     }
   }
+  const acaoMassa = async (acao) => {
+    const n = selecionados.size
+    const verbo = { ativar: 'Ativar', desativar: 'Desativar', excluir: 'EXCLUIR DEFINITIVAMENTE' }[acao]
+    const aviso = acao === 'excluir'
+      ? `EXCLUIR ${n} posto(s) DE FORMA DEFINITIVA?\n\nSó os postos SEM colaborador vinculado serão`
+        + ' apagados; os demais são mantidos (desative-os se quiser escondê-los). Esta ação NÃO tem volta.'
+      : `${verbo} ${n} posto(s) selecionado(s)?`
+    if (!window.confirm(aviso)) return
+    if (acao === 'excluir' && !window.confirm('Tem certeza? A exclusão é permanente.')) return
+    setMsg(null)
+    try {
+      const r = await comAmpulheta(`${verbo} postos…`,
+        () => api.acaoMassaPostos([...selecionados], acao))
+      let txt = `${r.afetados} posto(s) ${acao === 'ativar' ? 'ativado(s)'
+        : acao === 'desativar' ? 'desativado(s)' : 'excluído(s)'}.`
+      if (r.bloqueados?.length) txt += ` ${r.bloqueados.length} não foram excluídos por terem`
+        + ` colaboradores vinculados (${r.bloqueados.slice(0, 3).join(', ')}${r.bloqueados.length > 3 ? '…' : ''}) — desative-os se quiser.`
+      setMsg({ tipo: r.bloqueados?.length ? 'erro' : 'ok', texto: txt })
+      setSelecionados(new Set()); await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Falha na ação em massa (${e.detail || e.message}).` })
+    }
+  }
 
   const salvar = async () => {
     if (!edit.nome.trim()) { setMsg({ tipo: 'erro', texto: 'Informe o nome do posto.' }); return }
@@ -106,6 +129,10 @@ export default function PostosRH() {
           <strong>{selecionados.size} posto(s) selecionado(s):</strong>
           <button className="btn-secundario btn-mini" onClick={() => setMassaKit({})}>
             🗂️ Vincular documentos / creche</button>
+          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('ativar')}>✅ Ativar</button>
+          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('desativar')}>🚫 Desativar</button>
+          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('excluir')}
+                  style={{ color: '#d9534f' }}>🗑️ Excluir</button>
           {!todosSelecionados && (
             <button className="btn-link" onClick={() => marcarTodos(true)}>
               selecionar todos ({postos.length})</button>)}

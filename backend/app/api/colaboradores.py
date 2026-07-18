@@ -454,6 +454,43 @@ def efetivar_lote(payload: LoteEfetivarIn, db: Session = Depends(get_db),
     return {"efetivados": efetivados, "pulados": pulados}
 
 
+class AcaoMassaColabIn(BaseModel):
+    ids: list[uuid.UUID]
+    acao: str  # "desligar" | "reativar"
+    data_desligamento: str | None = None  # obrigatória para "desligar"
+
+
+@router.post("/rh/colaboradores/lote/acao")
+def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(get_db),
+                             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Ação em massa nos colaboradores selecionados: desligar (com data) ou
+    reativar. Não há exclusão — registro trabalhista não se apaga; desligar é o
+    correto. Só age sobre quem já é colaborador (tem situação)."""
+    if payload.acao not in ("desligar", "reativar"):
+        raise HTTPException(status_code=422, detail="acao_invalida")
+    if payload.acao == "desligar" and not (payload.data_desligamento or "").strip():
+        raise HTTPException(status_code=422, detail="data_desligamento_obrigatoria")
+    afetados, pulados = 0, 0
+    for cid in payload.ids:
+        c = db.get(Candidato, cid)
+        if c is None or not c.situacao:  # ignora candidatos em admissão
+            pulados += 1
+            continue
+        if payload.acao == "desligar":
+            c.situacao = "desligado"
+            c.status = StatusCandidato.desligado
+            c.data_desligamento = payload.data_desligamento.strip()
+        else:  # reativar
+            c.situacao = "ativo"
+            c.status = StatusCandidato.ativo
+            c.data_desligamento = None
+        afetados += 1
+    registrar(db, "colaboradores_acao_massa", ator="rh", ator_detalhe=rh.email,
+              detalhe={"acao": payload.acao, "afetados": afetados, "pulados": pulados})
+    db.commit()
+    return {"afetados": afetados, "pulados": pulados}
+
+
 @router.post("/rh/colaboradores/{cid}/efetivar")
 def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> dict:

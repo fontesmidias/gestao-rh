@@ -207,6 +207,48 @@ def editar_postos_massa(payload: EdicaoMassaPostosIn, db: Session = Depends(get_
     return {"atualizados": len(postos)}
 
 
+class AcaoMassaPostosIn(BaseModel):
+    posto_ids: list[uuid.UUID]
+    acao: str  # "ativar" | "desativar" | "excluir"
+
+
+@router.post("/rh/postos/massa/acao")
+def acao_massa_postos(payload: AcaoMassaPostosIn, db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Ação em massa nos postos selecionados:
+    - "desativar": soft (ativo=False) — some das listas, colaboradores intactos;
+    - "ativar": volta a aparecer;
+    - "excluir": remoção DEFINITIVA do banco, permitida SÓ para postos sem
+      colaborador vinculado (senão quebraria o vínculo). Postos com vínculo são
+      pulados e devolvidos em `bloqueados` para o RH desativar em vez de excluir.
+    """
+    if payload.acao not in ("ativar", "desativar", "excluir"):
+        raise HTTPException(status_code=422, detail="acao_invalida")
+    postos = db.scalars(select(PostoServico)
+                        .where(PostoServico.id.in_(payload.posto_ids))).all()
+    afetados, bloqueados = 0, []
+    for p in postos:
+        if payload.acao == "ativar":
+            p.ativo = True
+            afetados += 1
+        elif payload.acao == "desativar":
+            p.ativo = False
+            afetados += 1
+        else:  # excluir definitivo — só sem vínculo
+            tem_vinculo = db.scalar(
+                select(Candidato.id).where(Candidato.posto_servico_id == p.id).limit(1))
+            if tem_vinculo:
+                bloqueados.append(p.nome)
+                continue
+            db.delete(p)
+            afetados += 1
+    registrar(db, "postos_acao_massa", ator="rh", ator_detalhe=rh.email,
+              detalhe={"acao": payload.acao, "afetados": afetados,
+                       "bloqueados": len(bloqueados)})
+    db.commit()
+    return {"afetados": afetados, "bloqueados": bloqueados}
+
+
 @router.put("/rh/postos/{posto_id}")
 def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(requer_rh)) -> dict:

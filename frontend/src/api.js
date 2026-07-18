@@ -174,6 +174,9 @@ export const rh = {
   efetivarLote: (ids) =>
     req('/rh/colaboradores/lote/efetivar', { method: 'POST', headers: authRH(),
                                              body: JSON.stringify({ ids }) }),
+  acaoMassaColaboradores: (ids, acao, data_desligamento) =>
+    req('/rh/colaboradores/lote/acao', { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ ids, acao, data_desligamento }) }),
   desligarColaborador: (id, data_desligamento) =>
     req(`/rh/colaboradores/${id}/desligar`, { method: 'POST', headers: authRH(),
                                               body: JSON.stringify({ data_desligamento }) }),
@@ -260,6 +263,9 @@ export const rh = {
   },
   editarPostosMassa: (dados) =>
     req('/rh/postos/massa', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  acaoMassaPostos: (posto_ids, acao) =>
+    req('/rh/postos/massa/acao', { method: 'POST', headers: authRH(),
+                                   body: JSON.stringify({ posto_ids, acao }) }),
   definirColunasPosto: (colunas) =>
     req('/rh/postos/colunas', { method: 'PUT', headers: authRH(), body: JSON.stringify({ colunas }) }),
   definirPosto: (candidatoId, dados) =>
