@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
@@ -686,69 +686,100 @@ function ModelosDocumento() {
         <table className="rh-tabela">
           <thead><tr><th>Título</th><th>Aplica-se a</th><th></th></tr></thead>
           <tbody>
-            {dados.modelos.map((m) => (
-              <tr key={m.id}>
-                <td><strong>{m.titulo}</strong></td>
-                <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
-                  {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}</td>
-                <td>
-                  <button className="btn-secundario btn-mini"
-                          onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
-                  <button className="btn-secundario btn-mini" onClick={() => setEdit({
-                    id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
-                    cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
-                  })}>Editar</button>
-                  <button className="btn-link" onClick={async () => {
-                    if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
-                    await api.excluirModelo(m.id); await recarregar()
-                  }}>excluir</button>
-                </td>
-              </tr>
-            ))}
+            {dados.modelos.map((m) => {
+              const editando = edit?.id === m.id
+              return (
+                <Fragment key={m.id}>
+                  <tr className={editando ? 'linha-editando' : ''}>
+                    <td><strong>{m.titulo}</strong></td>
+                    <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
+                      {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}</td>
+                    <td>
+                      <button className="btn-secundario btn-mini"
+                              onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
+                      <button className="btn-secundario btn-mini"
+                              onClick={() => editando ? setEdit(null) : setEdit({
+                        id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
+                        cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
+                      })}>{editando ? 'Fechar' : 'Editar'}</button>
+                      <button className="btn-link" onClick={async () => {
+                        if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
+                        await api.excluirModelo(m.id); await recarregar()
+                      }}>excluir</button>
+                    </td>
+                  </tr>
+                  {editando && (
+                    <tr className="linha-form-inline">
+                      <td colSpan={3}>
+                        <CamposModelo edit={edit} setEdit={setEdit} postos={postos} inline
+                                      salvar={salvar} salvando={salvando}
+                                      onCancelar={() => setEdit(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       )}
 
-      {!edit ? (
+      {(!edit || edit.id) ? (
         <button className="btn-secundario" style={{ marginTop: '.75rem' }}
                 onClick={() => setEdit({ ...VAZIO })}>+ Novo modelo</button>
       ) : (
         <div style={{ marginTop: '.75rem' }}>
-          <label className="campo"><span className="rotulo">Título (aceita variáveis)</span>
-            <input value={edit.titulo} placeholder="Ex.: Declaração de vínculo — {{nome}}"
-                   onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} /></label>
-          <label className="campo"><span className="rotulo">Corpo do documento</span>
-            <textarea rows={7} value={edit.corpo}
-                      placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…"
-                      onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
-          <div className="linha2">
-            <label className="campo"><span className="rotulo">Aplica-se a</span>
-              <select value={edit.escopo}
-                      onChange={(e) => setEdit({ ...edit, escopo: e.target.value })}>
-                {ESCOPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-              </select></label>
-            {edit.escopo === 'cargo' && (
-              <label className="campo"><span className="rotulo">Cargo</span>
-                <input value={edit.cargo_alvo} placeholder="Ex.: Recepcionista"
-                       onChange={(e) => setEdit({ ...edit, cargo_alvo: e.target.value })} /></label>
-            )}
-            {edit.escopo === 'posto' && (
-              <label className="campo"><span className="rotulo">Posto</span>
-                <select value={edit.posto_alvo_id}
-                        onChange={(e) => setEdit({ ...edit, posto_alvo_id: e.target.value })}>
-                  <option value="">— escolha —</option>
-                  {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select></label>
-            )}
-          </div>
-          <div className="navegacao">
-            <button className="btn-secundario" onClick={() => setEdit(null)}>Cancelar</button>
-            <button className="btn-principal" disabled={salvando} onClick={salvar}>
-              {salvando ? 'Salvando…' : 'Salvar modelo'}</button>
-          </div>
+          <CamposModelo edit={edit} setEdit={setEdit} postos={postos}
+                        salvar={salvar} salvando={salvando}
+                        onCancelar={() => setEdit(null)} />
         </div>
       )}
       <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Campos do modelo de documento — no card de criação (embaixo) e inline na
+// linha (edição). Inline: rola a si mesmo ao centro para o RH não se perder.
+function CamposModelo({ edit, setEdit, postos, salvar, salvando, onCancelar, inline }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (inline && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
+  return (
+    <div ref={ref} className={inline ? 'form-inline-conteudo' : ''}>
+      <label className="campo"><span className="rotulo">Título (aceita variáveis)</span>
+        <input value={edit.titulo} placeholder="Ex.: Declaração de vínculo — {{nome}}" autoFocus
+               onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} /></label>
+      <label className="campo"><span className="rotulo">Corpo do documento</span>
+        <textarea rows={7} value={edit.corpo}
+                  placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…"
+                  onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
+      <div className="linha2">
+        <label className="campo"><span className="rotulo">Aplica-se a</span>
+          <select value={edit.escopo}
+                  onChange={(e) => setEdit({ ...edit, escopo: e.target.value })}>
+            {ESCOPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+          </select></label>
+        {edit.escopo === 'cargo' && (
+          <label className="campo"><span className="rotulo">Cargo</span>
+            <input value={edit.cargo_alvo} placeholder="Ex.: Recepcionista"
+                   onChange={(e) => setEdit({ ...edit, cargo_alvo: e.target.value })} /></label>
+        )}
+        {edit.escopo === 'posto' && (
+          <label className="campo"><span className="rotulo">Posto</span>
+            <select value={edit.posto_alvo_id}
+                    onChange={(e) => setEdit({ ...edit, posto_alvo_id: e.target.value })}>
+              <option value="">— escolha —</option>
+              {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select></label>
+        )}
+      </div>
+      <div className="navegacao">
+        <button className="btn-secundario" onClick={onCancelar}>Cancelar</button>
+        <button className="btn-principal" disabled={salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar modelo'}</button>
+      </div>
     </div>
   )
 }
