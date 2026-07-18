@@ -25,6 +25,31 @@ DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
                  DocumentoAssinavel.termo_lgpd_infraero)
 
 
+def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[DocumentoAssinavel]:
+    """Cria os registros de Assinatura extras exigidos pelo POSTO (kit INFRAERO)
+    e pelo REGIME (Informativo do Intermitente) deste candidato, que ainda não
+    existam. Devolve os documentos criados. Fonte única usada pelo convite e
+    pela (re)definição de posto — mantém os dois em sincronia."""
+    existentes = {
+        a.documento for a in db.scalars(
+            select(Assinatura).where(Assinatura.candidato_id == candidato.id,
+                                     Assinatura.invalidada_em.is_(None))).all()
+    }
+    exigidos: list[DocumentoAssinavel] = []
+    posto = (db.get(PostoServico, candidato.posto_servico_id)
+             if candidato.posto_servico_id else None)
+    if posto and posto.exige_docs_infraero:
+        exigidos += list(DOCS_INFRAERO)
+    if candidato.regime == "intermitente":
+        exigidos.append(DocumentoAssinavel.informativo_intermitente)
+    novos = []
+    for doc in exigidos:
+        if doc not in existentes:
+            db.add(Assinatura(candidato_id=candidato.id, documento=doc))
+            novos.append(doc)
+    return novos
+
+
 # ---------- CRUD de postos ----------
 
 
@@ -220,7 +245,6 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
         if payload.adicionais is not None:
             candidato.adicionais = [a.model_dump() for a in payload.adicionais]
 
-    docs_novos: list[DocumentoAssinavel] = []
     if payload.posto_id is None:
         candidato.posto_servico_id = None
         _aplica_remuneracao()
@@ -230,17 +254,8 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
             raise HTTPException(status_code=404, detail="posto_nao_encontrado")
         candidato.posto_servico_id = posto.id
         _aplica_remuneracao()
-        if posto.exige_docs_infraero:
-            existentes = {
-                a.documento for a in db.scalars(
-                    select(Assinatura).where(Assinatura.candidato_id == candidato.id,
-                                             Assinatura.invalidada_em.is_(None))
-                ).all()
-            }
-            for doc in DOCS_INFRAERO:
-                if doc not in existentes:
-                    db.add(Assinatura(candidato_id=candidato.id, documento=doc))
-                    docs_novos.append(doc)
+    db.flush()
+    docs_novos = gerar_docs_do_posto_e_regime(db, candidato)
 
     # Cargo, salário e adicionais aparecem na ficha de cadastro. Se algo disso
     # mudou e a ficha já estava assinada, a via assinada divergiria dos dados

@@ -208,6 +208,7 @@ function Painel({ aoSair }) {
   const [metricas, setMetricas] = useState(null)
   const [selecionado, setSelecionado] = useState(null)
   const [novo, setNovo] = useState(null) // form de novo candidato
+  const [postos, setPostos] = useState([])
   const [convite, setConvite] = useState(null)
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
@@ -221,7 +222,8 @@ function Painel({ aoSair }) {
     })
     api.metricas().then(setMetricas).catch(() => {})
   }
-  useEffect(() => { recarregar() }, [])
+  const recarregarPostos = () => api.postos().then((r) => setPostos(r.postos)).catch(() => {})
+  useEffect(() => { recarregar(); recarregarPostos() }, [])
 
   const navegar = (destino) => {
     setPagina(destino)
@@ -263,9 +265,9 @@ function Painel({ aoSair }) {
       {novo && (
         <div className="rh-card">
           <h3>Convidar candidato</h3>
-          <p className="explica">Só o nome é obrigatório. Sem e-mail? Sem problema:
-            o link aparece aqui para você copiar e mandar pelo WhatsApp — o candidato
-            completa e-mail e celular na própria ficha.</p>
+          <p className="explica">Nome e <strong>posto</strong> são obrigatórios — com base no posto
+            e no regime, os documentos específicos do kit já nascem certos. Sem e-mail? Sem problema:
+            o link aparece aqui para copiar e mandar pelo WhatsApp.</p>
           <div className="linha3">
             <input placeholder="Nome completo"
                    onChange={(e) => setNovo({ ...novo, nome_completo: e.target.value })} />
@@ -274,6 +276,43 @@ function Painel({ aoSair }) {
             <input placeholder="Celular/WhatsApp (opcional)"
                    onChange={(e) => setNovo({ ...novo, celular_whatsapp: e.target.value })} />
           </div>
+          <div className="linha3">
+            <select value={novo.posto_id || ''} onChange={(e) => {
+              if (e.target.value === '__novo') { setNovo({ ...novo, criandoPosto: '' }); return }
+              setNovo({ ...novo, posto_id: e.target.value, criandoPosto: undefined })
+            }}>
+              <option value="">— posto de serviço (obrigatório) —</option>
+              {postos.map((p) => <option key={p.id} value={p.id}>
+                {p.sigla || p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
+              <option value="__novo">➕ Outro (cadastrar novo posto)</option>
+            </select>
+            <select value={novo.regime || 'efetivo'}
+                    onChange={(e) => setNovo({ ...novo, regime: e.target.value })}>
+              <option value="efetivo">Regime: Efetivo</option>
+              <option value="intermitente">Regime: Intermitente</option>
+            </select>
+            <input placeholder="Cargo/função (opcional)"
+                   onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
+          </div>
+          {novo.criandoPosto !== undefined && (
+            <div className="rh-adicional">
+              <input placeholder="Nome do novo posto" value={novo.criandoPosto}
+                     onChange={(e) => setNovo({ ...novo, criandoPosto: e.target.value })} />
+              <input placeholder="Sigla (ex.: INEP Adm)" value={novo.criandoSigla || ''}
+                     onChange={(e) => setNovo({ ...novo, criandoSigla: e.target.value })} style={{ maxWidth: 160 }} />
+              <button className="btn-principal btn-mini" onClick={async () => {
+                if (!novo.criandoPosto.trim()) return
+                try {
+                  const p = await api.criarPosto({ nome: novo.criandoPosto.trim(), sigla: (novo.criandoSigla || '').trim() || null })
+                  await recarregarPostos()
+                  setNovo({ ...novo, posto_id: p.id, criandoPosto: undefined, criandoSigla: undefined })
+                } catch (e) {
+                  setErroConvite(e.detail === 'posto_ja_existe' ? 'Já existe um posto com esse nome.' : `Não foi possível criar o posto (${e.detail || e.message}).`)
+                }
+              }}>Criar posto</button>
+              <button className="btn-link" onClick={() => setNovo({ ...novo, criandoPosto: undefined })}>cancelar</button>
+            </div>
+          )}
           <div className="navegacao">
             <button className="btn-secundario" onClick={() => { setNovo(null); setConvite(null) }}>
               Cancelar</button>
@@ -282,12 +321,18 @@ function Painel({ aoSair }) {
               if (!novo.nome_completo?.trim()) {
                 setErroConvite('Informe pelo menos o nome do candidato.'); return
               }
+              if (!novo.posto_id) {
+                setErroConvite('Escolha o posto de serviço (ou cadastre um novo em "Outro").'); return
+              }
               setEnviandoConvite(true)
               try {
                 const r = await api.novoCandidato({
                   nome_completo: novo.nome_completo.trim(),
                   email: (novo.email || '').trim() || null,
                   celular_whatsapp: (novo.celular_whatsapp || '').trim() || null,
+                  posto_id: novo.posto_id,
+                  regime: novo.regime || 'efetivo',
+                  cargo_funcao: (novo.cargo_funcao || '').trim() || null,
                 })
                 setConvite(r)
                 recarregar()
