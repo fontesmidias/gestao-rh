@@ -299,6 +299,22 @@ function Painel({ aoSair }) {
             <input placeholder="Cargo/função (opcional)"
                    onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
           </div>
+          <div className="rh-lote" style={{ margin: '.5rem 0 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+              <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                     checked={!!novo.fazer_disc}
+                     onChange={(e) => setNovo({ ...novo, fazer_disc: e.target.checked })} />
+              <span>🧭 Fazer o <strong>Inventário DISC</strong></span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+              <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                     checked={!!novo.fazer_situacional}
+                     onChange={(e) => setNovo({ ...novo, fazer_situacional: e.target.checked })} />
+              <span>🧩 Fazer o <strong>Teste Situacional</strong></span>
+            </label>
+            <span className="explica" style={{ margin: 0 }}>O candidato responde antes do cadastro;
+              o resultado é visível só para o RH.</span>
+          </div>
           {novo.criandoPosto !== undefined && (
             <div className="rh-adicional">
               <input placeholder="Nome do novo posto" value={novo.criandoPosto}
@@ -338,6 +354,8 @@ function Painel({ aoSair }) {
                   posto_id: novo.posto_id,
                   regime: novo.regime || 'efetivo',
                   cargo_funcao: (novo.cargo_funcao || '').trim() || null,
+                  fazer_disc: !!novo.fazer_disc,
+                  fazer_situacional: !!novo.fazer_situacional,
                 })
                 setConvite(r)
                 recarregar()

@@ -6,6 +6,7 @@ import { candidato as api } from '../api.js'
 import Wizard from './Wizard.jsx'
 import Assinatura from './Assinatura.jsx'
 import Checklist from './Checklist.jsx'
+import TesteApp from './TesteApp.jsx'
 import logo from '../assets/logo.png'
 
 export default function CandidatoApp() {
@@ -25,6 +26,12 @@ export default function CandidatoApp() {
   useEffect(() => {
     recarregar()
       .then(async (e) => {
+        // Testes (DISC/situacional) marcados no convite vêm ANTES de tudo:
+        // o candidato responde e só então segue para o cadastro.
+        try {
+          const t = await api.testes(token)
+          if (t.tem_testes && !t.todos_concluidos) { setTela('testes'); return }
+        } catch { /* sem testes ou erro: segue o fluxo normal */ }
         if (!e.aceite_lgpd_em) { setTela('boas-vindas'); return }
         if (['convidado', 'preenchendo'].includes(e.status)) { setTela('formulario'); return }
         if (e.status === 'aguardando_assinatura') { setTela('assinatura'); return }
@@ -109,6 +116,13 @@ export default function CandidatoApp() {
           </div>
         ))}
       </nav>
+
+      {tela === 'testes' && (
+        <TesteApp token={token} aoConcluirTudo={() => {
+          // testes concluídos: segue o fluxo normal da admissão
+          setTela(estado?.aceite_lgpd_em ? 'formulario' : 'boas-vindas')
+        }} />
+      )}
 
       {tela === 'boas-vindas' && (
         <Cartao>

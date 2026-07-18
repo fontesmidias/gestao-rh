@@ -567,6 +567,7 @@ export default function Detalhe({ id, aoVoltar }) {
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
       <FichasStatus dados={dados} setMsg={setMsg} />
+      <TestesDoCandidato id={id} />
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
       <ModelosDoColaborador id={id} setMsg={setMsg} />
       <FichaRH id={id} setMsg={setMsg} />
@@ -706,5 +707,97 @@ export default function Detalhe({ id, aoVoltar }) {
         </div>
       </div>
     </main>
+  )
+}
+
+// Cores clássicas do DISC para o gráfico.
+const CORES_DISC = { D: '#d9534f', I: '#f0ad4e', S: '#0fb257', C: '#3b7dd8' }
+const STATUS_TESTE = {
+  pendente: 'aguardando o candidato', em_andamento: 'em andamento',
+  concluido: 'concluído', expirado: 'tempo esgotado (pontuado parcial)',
+}
+
+// Resultados dos testes — VISÍVEIS SÓ AQUI (painel do RH). O candidato nunca
+// recebe o resultado. Uso como APOIO à decisão, nunca critério único
+// (inventário comportamental não é avaliação psicológica — Res. CFP 31/2022).
+function TestesDoCandidato({ id }) {
+  const [dados, setDados] = useState(null)
+
+  useEffect(() => {
+    api.testesCandidato(id).then(setDados).catch(() => setDados({ testes: [] }))
+  }, [id])
+
+  if (!dados || !dados.testes.length) return null
+  const disc = dados.testes.find((t) => t.tipo === 'disc')
+  const sit = dados.testes.find((t) => t.tipo === 'situacional')
+
+  return (
+    <div className="rh-card">
+      <h3>🧭 Testes do candidato</h3>
+      <p className="explica">Resultado restrito ao RH — use como <strong>apoio</strong> à decisão,
+        nunca como critério único (inventário comportamental de gestão; não substitui avaliação
+        psicológica).</p>
+
+      {disc && (
+        <div className="disc-bloco">
+          <strong>Inventário DISC</strong>{' '}
+          <span className="explica" style={{ margin: 0 }}>
+            — {STATUS_TESTE[disc.status]}{disc.respondidas ? ` · ${disc.respondidas}/24 respondidas` : ''}</span>
+          {disc.resultado && disc.resultado.percentuais && (
+            <>
+              <div className="disc-grafico">
+                {['D', 'I', 'S', 'C'].map((d) => (
+                  <div key={d} className="disc-coluna">
+                    <div className="disc-barra-area">
+                      <div className="disc-barra" style={{
+                        height: `${Math.max(4, disc.resultado.percentuais[d])}%`,
+                        background: CORES_DISC[d] }} />
+                    </div>
+                    <strong style={{ color: CORES_DISC[d] }}>{d}</strong>
+                    <small>{disc.resultado.percentuais[d]}%</small>
+                  </div>
+                ))}
+              </div>
+              {disc.perfis && (
+                <div className="disc-perfil">
+                  <p><strong>Perfil predominante:{' '}
+                    <span style={{ color: CORES_DISC[disc.resultado.principal] }}>
+                      {disc.perfis[disc.resultado.principal].nome}</span>
+                    {disc.resultado.secundaria && <> com traços de{' '}
+                      <span style={{ color: CORES_DISC[disc.resultado.secundaria] }}>
+                        {disc.perfis[disc.resultado.secundaria].nome}</span></>}
+                  </strong></p>
+                  <p>{disc.perfis[disc.resultado.principal].resumo}</p>
+                  <p><strong>Pontos fortes:</strong> {disc.perfis[disc.resultado.principal].fortes}</p>
+                  <p><strong>Pontos de atenção:</strong> {disc.perfis[disc.resultado.principal].atencao}</p>
+                  <p><strong>Ambiente em que rende mais:</strong> {disc.perfis[disc.resultado.principal].ambiente}</p>
+                  <details>
+                    <summary className="btn-link" style={{ cursor: 'pointer' }}>Ver os 4 perfis (D · I · S · C)</summary>
+                    {['D', 'I', 'S', 'C'].map((d) => (
+                      <p key={d} style={{ marginTop: '.5rem' }}>
+                        <strong style={{ color: CORES_DISC[d] }}>{d} — {disc.perfis[d].nome}:</strong>{' '}
+                        {disc.perfis[d].resumo}</p>
+                    ))}
+                  </details>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {sit && (
+        <div className="disc-bloco">
+          <strong>Teste Situacional</strong>{' '}
+          <span className="explica" style={{ margin: 0 }}>— {STATUS_TESTE[sit.status]}</span>
+          {sit.resultado && sit.resultado.percentual != null && (
+            <p style={{ margin: '.4rem 0 0' }}>
+              Conduta profissional: <strong>{sit.resultado.percentual}%</strong>{' '}
+              (<strong>{sit.resultado.faixa}</strong>) — {sit.resultado.respondidas}/10 respondidas,
+              {' '}{sit.resultado.pontos}/{sit.resultado.maximo} pontos.</p>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
