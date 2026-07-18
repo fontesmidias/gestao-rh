@@ -29,6 +29,10 @@ class NovoCandidato(BaseModel):
     posto_id: uuid.UUID | None = None
     regime: str = "efetivo"
     cargo_funcao: str | None = None
+    # Testes marcados pelo RH ao gerar o link: o candidato responde ANTES de
+    # seguir para o cadastro; o resultado é restrito ao RH.
+    fazer_disc: bool = False
+    fazer_situacional: bool = False
 
     @field_validator("nome_completo", "email", "celular_whatsapp", "cargo_funcao",
                      mode="before")
@@ -77,6 +81,8 @@ def criar_candidato(
     posto_id = dados.pop("posto_id", None)
     regime = (dados.pop("regime", None) or "efetivo").strip().lower()
     cargo = dados.pop("cargo_funcao", None)
+    fazer_disc = bool(dados.pop("fazer_disc", False))
+    fazer_situacional = bool(dados.pop("fazer_situacional", False))
     if posto_id is not None and db.get(PostoServico, posto_id) is None:
         raise HTTPException(status_code=404, detail="posto_nao_encontrado")
     candidato = Candidato(**dados, posto_servico_id=posto_id,
@@ -85,6 +91,12 @@ def criar_candidato(
     db.add(candidato)
     db.flush()
     docs_novos = gerar_docs_do_posto_e_regime(db, candidato)
+    # testes marcados no convite (respondidos antes do cadastro)
+    from app.models.teste import TesteCandidato, TipoTeste
+    if fazer_disc:
+        db.add(TesteCandidato(candidato_id=candidato.id, tipo=TipoTeste.disc))
+    if fazer_situacional:
+        db.add(TesteCandidato(candidato_id=candidato.id, tipo=TipoTeste.situacional))
     link = emitir_link(db, candidato, base_url_publica(request))
     registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id,
               detalhe={"posto": str(posto_id), "regime": candidato.regime,

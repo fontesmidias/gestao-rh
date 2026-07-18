@@ -120,6 +120,17 @@ export const candidato = {
   excluirArquivo: (t, slotId) =>
     req(`/c/${t}/documentos/${slotId}/arquivo`, { method: 'DELETE' }),
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
+  // Testes (DISC / situacional) — respondidos antes do cadastro
+  testes: (t) => req(`/c/${t}/testes`),
+  testesIdentificar: (t, dados) =>
+    req(`/c/${t}/testes/identificar`, { method: 'POST', body: JSON.stringify(dados) }),
+  testesConfirmar: (t, codigo) =>
+    req(`/c/${t}/testes/confirmar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
+  testeIniciar: (t, tipo) => req(`/c/${t}/testes/${tipo}/iniciar`, { method: 'POST' }),
+  testeQuestoes: (t, tipo) => req(`/c/${t}/testes/${tipo}/questoes`),
+  testeResponder: (t, tipo, dados) =>
+    req(`/c/${t}/testes/${tipo}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
+  testeConcluir: (t, tipo) => req(`/c/${t}/testes/${tipo}/concluir`, { method: 'POST' }),
   // Reembolso-creche na admissão (só se o posto do candidato é elegível)
   crecheStatus: (t) => req(`/c/${t}/creche`),
   crecheAddCrianca: (t, dados) =>
@@ -371,6 +382,8 @@ export const rh = {
   crecheBaixarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { headers: authRH() }),
   crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
+  // Testes do candidato (resultado restrito ao RH)
+  testesCandidato: (id) => req(`/rh/candidatos/${id}/testes`, { headers: authRH() }),
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

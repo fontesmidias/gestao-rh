@@ -862,6 +862,82 @@ body[data-rh-ocupado] { cursor: progress; }
 .creche-nova { margin-top: .8rem; }
 .creche-enviar { width: 100%; margin-top: .4rem; }
 
+/* ---------- Testes do candidato (DISC / situacional) ---------- */
+/* Formato do material de referência do RH: caixa branca com cabeçalho escuro,
+   colunas "Mais a ver"/"Menos a ver" e rodapé com o timer. */
+.teste-caixa {
+  max-width: 900px; margin: 1rem auto; background: var(--cartao);
+  border-radius: 10px; overflow: hidden; box-shadow: var(--sombra-cartao);
+  border: 1px solid var(--borda);
+}
+.teste-cabecalho {
+  background: #29465b; color: #fff; font-weight: 700; font-size: 1.05rem;
+  padding: .8rem 1.1rem;
+}
+.teste-corpo { padding: 1rem 1.1rem; }
+.teste-rodape {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .8rem; padding: .7rem 1.1rem; background: var(--fundo, #f4f6f4);
+  border-top: 1px solid var(--borda);
+}
+.teste-rodape .btn-principal, .teste-rodape .btn-mini { margin-left: auto; }
+.teste-timer { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.teste-orientacoes { list-style: none; margin: 0; padding: 0; }
+.teste-orientacoes li { padding: .8rem 0; border-bottom: 1px solid var(--borda); line-height: 1.5; }
+.teste-orientacoes li:last-child { border-bottom: none; }
+.teste-instrucao {
+  display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+  padding: .55rem 1.1rem; font-size: .85rem; color: var(--tinta-suave, #6a7a70);
+  border-bottom: 1px solid var(--borda); text-align: center;
+}
+.teste-tag {
+  background: #3c3c3c; color: #fff; font-weight: 700; font-size: .8rem;
+  padding: .3rem .7rem; border-radius: 4px; white-space: nowrap; flex-shrink: 0;
+}
+.teste-opcoes { }
+.teste-linha {
+  display: grid; grid-template-columns: 56px 1fr 56px; align-items: center;
+  border-bottom: 1px solid var(--borda); padding: .35rem 0;
+}
+.teste-linha:last-child { border-bottom: none; }
+.teste-linha input[type="radio"] {
+  width: 22px; height: 22px; margin: 0 auto; accent-color: #1c7ed6; cursor: pointer;
+  min-height: 0;
+}
+.teste-adjetivo { text-align: center; font-size: 1.06rem; padding: .55rem 0; }
+.teste-situacao { font-weight: 600; line-height: 1.5; }
+.teste-opcao-sit {
+  display: flex; gap: .6rem; align-items: flex-start; padding: .6rem .7rem;
+  border: 1px solid var(--borda); border-radius: 8px; margin: .45rem 0; cursor: pointer;
+}
+.teste-opcao-sit input { width: 20px; height: 20px; min-height: 0; margin-top: .1rem;
+                         accent-color: #1c7ed6; flex-shrink: 0; }
+.teste-opcao-sit.marcada { border-color: var(--verde); background: var(--verde-suave); }
+.teste-fim { text-align: center; padding: 2rem 1.2rem; }
+.teste-fim-circulo {
+  width: 84px; height: 84px; margin: 0 auto 1rem; border: 4px solid #1c7ed6;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 2.4rem; color: #1c7ed6; font-weight: 800;
+}
+@media (max-width: 560px) {
+  .teste-linha { grid-template-columns: 44px 1fr 44px; }
+  .teste-instrucao span:nth-child(2) { font-size: .74rem; }
+}
+
+/* Gráfico DISC no painel do RH (resultado restrito) */
+.disc-bloco { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--borda); }
+.disc-bloco:first-of-type { border-top: none; }
+.disc-grafico {
+  display: flex; gap: 1.4rem; align-items: flex-end; justify-content: center;
+  margin: 1rem 0 .4rem; height: 170px;
+}
+.disc-coluna { display: flex; flex-direction: column; align-items: center; gap: .15rem; width: 64px; }
+.disc-barra-area { height: 120px; width: 100%; display: flex; align-items: flex-end;
+                   background: var(--input-bg, #f2f5f2); border-radius: 6px; overflow: hidden; }
+.disc-barra { width: 100%; border-radius: 6px 6px 0 0; transition: height .5s ease; }
+.disc-perfil { max-width: 62ch; }
+.disc-perfil p { margin: .35rem 0; }
+
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
