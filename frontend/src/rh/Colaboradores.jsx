@@ -29,8 +29,12 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState(null)
   const [aviso, setAviso] = useState(null)
+  const [selecionados, setSelecionados] = useState(() => new Set())
   const timer = useRef(null)
   const inputArquivo = useRef(null)
+
+  // Candidatos ainda em admissão (situacao vazia) — os únicos efetiváveis.
+  const efetivaveis = (lista || []).filter((c) => !c.situacao)
 
   const carregar = (f = {}) => {
     api.colaboradores({
@@ -92,6 +96,26 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     if (!window.confirm(`Efetivar ${c.nome_completo} como colaborador ativo?`)) return
     try { await api.efetivarColaborador(c.id); carregar() }
     catch { setErro('Não foi possível efetivar.') }
+  }
+  const alternarSel = (cid) => setSelecionados((s) => {
+    const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n
+  })
+  const selecionarTodos = (marcar) =>
+    setSelecionados(marcar ? new Set(efetivaveis.map((c) => c.id)) : new Set())
+  const efetivarSelecionados = async () => {
+    const ids = [...selecionados]
+    if (!ids.length) return
+    if (!window.confirm(`Efetivar ${ids.length} candidato(s) como colaboradores ativos?`
+      + '\n\nCandidatos ainda não aprovados também serão efetivados se estiverem selecionados.')) return
+    setErro(null); setAviso(null)
+    try {
+      const r = await comAmpulheta('Efetivando selecionados…', () => api.efetivarLote(ids))
+      setAviso(`${r.efetivados} efetivado(s)` + (r.pulados ? `, ${r.pulados} já eram colaboradores.` : '.'))
+      setSelecionados(new Set())
+      carregar()
+    } catch (e) {
+      setErro(`Não foi possível efetivar em massa (${e.detail || e.message}).`)
+    }
   }
   const desligar = async (c) => {
     const data = window.prompt(
@@ -167,6 +191,18 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         quem já é colaborador — importado ou efetivado).
       </label>
 
+      {efetivaveis.length > 0 && (
+        <div className="rh-card rh-lote" style={{ alignItems: 'center' }}>
+          <strong>Efetivação em massa:</strong>
+          <span className="explica" style={{ margin: 0 }}>
+            {selecionados.size} de {efetivaveis.length} candidato(s) em admissão selecionado(s)</span>
+          <button className="btn-link" onClick={() => selecionarTodos(true)}>selecionar todos</button>
+          <button className="btn-link" onClick={() => selecionarTodos(false)}>limpar</button>
+          <button className="btn-principal btn-mini" disabled={!selecionados.size}
+                  onClick={efetivarSelecionados}>✅ Efetivar selecionados</button>
+        </div>
+      )}
+
       {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
       {aviso && <div className="alerta" style={{ borderColor: 'var(--verde)',
                      background: 'var(--verde-suave)', color: 'var(--verde-escuro)' }}>{aviso}</div>}
@@ -177,12 +213,19 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       ) : (
         <table className="rh-tabela">
           <thead>
-            <tr><th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
+            <tr>{efetivaveis.length > 0 && <th style={{ width: 34 }}></th>}
+                <th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
                 <th>Contato</th><th>Situação/Status</th><th>Ações</th></tr>
           </thead>
           <tbody>
             {lista.map((c) => (
               <tr key={c.id}>
+                {efetivaveis.length > 0 && (
+                  <td>{!c.situacao && (
+                    <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                           checked={selecionados.has(c.id)} onChange={() => alternarSel(c.id)}
+                           title="Selecionar para efetivar em massa" />)}</td>
+                )}
                 <td><strong>{c.nome_completo}</strong><br /><small>{c.email}</small></td>
                 <td>{fmtCpf(c.cpf)}</td>
                 <td>{c.posto_nome || '—'}</td>

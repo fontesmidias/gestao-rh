@@ -421,15 +421,45 @@ def _get_colab(db: Session, cid: uuid.UUID) -> Candidato:
     return c
 
 
+def _efetivar_um(db: Session, c: Candidato) -> None:
+    c.situacao = "ativo"
+    c.status = StatusCandidato.ativo
+    if not c.data_admissao:
+        c.data_admissao = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+
+
+class LoteEfetivarIn(BaseModel):
+    ids: list[uuid.UUID]
+
+
+# ATENÇÃO: a rota específica /lote/efetivar precisa vir ANTES da paramétrica
+# /{cid}/efetivar, senão "lote" é interpretado como um UUID inválido (422).
+@router.post("/rh/colaboradores/lote/efetivar")
+def efetivar_lote(payload: LoteEfetivarIn, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Efetiva vários candidatos de uma vez. Já-colaboradores são pulados."""
+    efetivados, pulados = 0, 0
+    for cid in payload.ids:
+        c = db.get(Candidato, cid)
+        if c is None:
+            continue
+        if c.situacao:  # já é colaborador (ativo/desligado): não mexe
+            pulados += 1
+            continue
+        _efetivar_um(db, c)
+        efetivados += 1
+    registrar(db, "colaboradores_efetivados_lote", ator="rh", ator_detalhe=rh.email,
+              detalhe={"efetivados": efetivados, "pulados": pulados})
+    db.commit()
+    return {"efetivados": efetivados, "pulados": pulados}
+
+
 @router.post("/rh/colaboradores/{cid}/efetivar")
 def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """Transforma um candidato aprovado em colaborador ativo (mesmo registro)."""
     c = _get_colab(db, cid)
-    c.situacao = "ativo"
-    c.status = StatusCandidato.ativo
-    if not c.data_admissao:
-        c.data_admissao = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+    _efetivar_um(db, c)
     registrar(db, "colaborador_efetivado", ator="rh", ator_detalhe=rh.email,
               candidato_id=c.id, detalhe={"nome": c.nome_completo})
     db.commit()

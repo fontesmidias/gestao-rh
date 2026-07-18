@@ -507,6 +507,23 @@ export default function Detalhe({ id, aoVoltar }) {
     a.click()
   }
 
+  const efetivar = async () => {
+    const aprovado = dados.status === 'aprovado'
+    const aviso = aprovado
+      ? `Efetivar ${dados.nome_completo} como colaborador ativo? Ele passará a constar na página de Colaboradores.`
+      : `ATENÇÃO: ${dados.nome_completo} ainda NÃO está aprovado (status atual: ${statusInfo(dados.status).label}).`
+        + '\n\nEfetivar mesmo assim como colaborador ativo?'
+    if (!window.confirm(aviso)) return
+    setMsg(null)
+    try {
+      await api.efetivarColaborador(id)
+      setMsg({ tipo: 'ok', texto: `${dados.nome_completo} agora é colaborador ativo.` })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível efetivar (${e.detail || e.message}).` })
+    }
+  }
+
   return (
     <main className="rh-painel">
       <header className="rh-topo">
@@ -530,6 +547,15 @@ export default function Detalhe({ id, aoVoltar }) {
           {dados.dossie_gerado_em && (
             <button className="btn-principal" onClick={baixarDossie}>⬇ Baixar dossiê</button>
           )}
+          {dados.situacao === 'ativo'
+            ? <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.4rem' }}
+                    title={dados.data_admissao ? `Admissão: ${dados.data_admissao}` : undefined}>
+                ✅ Colaborador ativo</span>
+            : dados.situacao === 'desligado'
+            ? <span className="chip" style={{ '--chip-cor': '#889', marginLeft: '.4rem' }}>⚪ Desligado</span>
+            : <button className="btn-secundario" onClick={efetivar}
+                      title="Transforma este candidato em colaborador ativo (aparece em Colaboradores)">
+                ✅ Efetivar como colaborador</button>}
         </div>
       </header>
       <p className="explica">
