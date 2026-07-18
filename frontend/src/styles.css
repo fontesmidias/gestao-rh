@@ -747,6 +747,30 @@ body[data-rh-ocupado] { cursor: progress; }
   text-align: center; line-height: 1.35;
 }
 
+/* ---------- Edição inline na linha (postos e afins) ---------- */
+/* A linha que está sendo editada ganha destaque; o form abre logo abaixo dela
+   (colSpan), então o RH não precisa rolar até o topo e se perder. */
+.rh-tabela tr.linha-editando > td {
+  background: var(--verde-suave);
+  border-top: 2px solid var(--verde);
+}
+.rh-tabela tr.linha-form-inline > td {
+  background: var(--verde-suave);
+  padding: 0;
+  border-bottom: 2px solid var(--verde);
+}
+.rh-tabela tr.linha-form-inline .form-posto,
+.rh-tabela tr.linha-form-inline .form-inline-conteudo {
+  padding: 1rem 1.1rem;
+  /* o form não deve herdar o nowrap da tabela em telas estreitas */
+  white-space: normal;
+}
+.rh-tabela tr.linha-form-inline .form-posto input,
+.rh-tabela tr.linha-form-inline .form-posto textarea,
+.rh-tabela tr.linha-form-inline .form-inline-conteudo input,
+.rh-tabela tr.linha-form-inline .form-inline-conteudo textarea,
+.rh-tabela tr.linha-form-inline .form-inline-conteudo select { max-width: 100%; }
+
 /* Comunicação assertiva: ícone ⓘ discreto sinaliza tooltip (title) */
 .dica-i { opacity: .55; font-size: var(--fs-mini); cursor: help; }
 .alerta.compacto { padding: .5rem .8rem; font-size: var(--fs-apoio); cursor: help; }
