@@ -28,15 +28,57 @@ DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
 # ---------- CRUD de postos ----------
 
 
+CHAVE_COLUNAS = "posto_colunas"  # colunas dinâmicas (config global do painel)
+
+
 class PostoIn(BaseModel):
     nome: str
+    sigla: str | None = None
+    cnpj: str | None = None
     contrato_ref: str | None = None
+    exige_docs_infraero: bool | None = None
+    atributos: dict | None = None
+
+
+def _dump_posto(p: PostoServico) -> dict:
+    return {"id": p.id, "nome": p.nome, "sigla": p.sigla, "cnpj": p.cnpj,
+            "contrato_ref": p.contrato_ref, "exige_docs_infraero": p.exige_docs_infraero,
+            "atributos": p.atributos or {}, "ativo": p.ativo}
+
+
+def _colunas(db: Session) -> list[str]:
+    from app.services.config_dinamica import ler_config
+    import json
+    bruto = ler_config(db, (CHAVE_COLUNAS,)).get(CHAVE_COLUNAS)
+    try:
+        return json.loads(bruto) if bruto else []
+    except Exception:
+        return []
 
 
 @router.get("/rh/postos")
-def listar_postos(db: Session = Depends(get_db)) -> list[dict]:
-    postos = db.scalars(select(PostoServico).order_by(PostoServico.nome)).all()
-    return [{"id": p.id, "nome": p.nome, "contrato_ref": p.contrato_ref} for p in postos]
+def listar_postos(incluir_inativos: bool = False,
+                  db: Session = Depends(get_db)) -> dict:
+    consulta = select(PostoServico).order_by(PostoServico.nome)
+    if not incluir_inativos:
+        consulta = consulta.where(PostoServico.ativo == True)  # noqa: E712
+    postos = db.scalars(consulta).all()
+    return {"postos": [_dump_posto(p) for p in postos], "colunas": _colunas(db)}
+
+
+@router.put("/rh/postos/colunas")
+def definir_colunas(payload: dict, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Colunas dinâmicas da tabela de postos (para oportunidades futuras) —
+    sem DDL: são chaves guardadas em `atributos` de cada posto."""
+    import json
+    colunas = [str(c).strip() for c in (payload.get("colunas") or []) if str(c).strip()]
+    from app.services.config_dinamica import gravar_config
+    gravar_config(db, {CHAVE_COLUNAS: json.dumps(colunas, ensure_ascii=False)})
+    registrar(db, "posto_colunas_alteradas", ator="rh", ator_detalhe=rh.email,
+              detalhe={"colunas": colunas})
+    db.commit()
+    return {"colunas": colunas}
 
 
 @router.post("/rh/postos", status_code=201)
@@ -47,12 +89,16 @@ def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
     if db.scalar(select(PostoServico).where(PostoServico.nome == nome)):
         raise HTTPException(status_code=409, detail="posto_ja_existe")
-    posto = PostoServico(nome=nome,
-                         contrato_ref=(payload.contrato_ref or "").strip() or None)
+    posto = PostoServico(
+        nome=nome, sigla=(payload.sigla or "").strip() or None,
+        cnpj=(payload.cnpj or "").strip() or None,
+        contrato_ref=(payload.contrato_ref or "").strip() or None,
+        exige_docs_infraero=bool(payload.exige_docs_infraero),
+        atributos=payload.atributos or {})
     db.add(posto)
     registrar(db, "posto_criado", ator="rh", ator_detalhe=rh.email, detalhe={"nome": nome})
     db.commit()
-    return {"id": posto.id, "nome": posto.nome, "contrato_ref": posto.contrato_ref}
+    return _dump_posto(posto)
 
 
 @router.put("/rh/postos/{posto_id}")
@@ -63,11 +109,76 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="posto_nao_encontrado")
     if payload.nome.strip():
         posto.nome = payload.nome.strip()
+    posto.sigla = (payload.sigla or "").strip() or None
+    posto.cnpj = (payload.cnpj or "").strip() or None
     posto.contrato_ref = (payload.contrato_ref or "").strip() or None
+    if payload.exige_docs_infraero is not None:
+        posto.exige_docs_infraero = payload.exige_docs_infraero
+    if payload.atributos is not None:
+        posto.atributos = payload.atributos
     registrar(db, "posto_editado", ator="rh", ator_detalhe=rh.email,
               detalhe={"nome": posto.nome})
     db.commit()
-    return {"id": posto.id, "nome": posto.nome, "contrato_ref": posto.contrato_ref}
+    return _dump_posto(posto)
+
+
+@router.delete("/rh/postos/{posto_id}", status_code=204)
+def excluir_posto(posto_id: uuid.UUID, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+    """Exclusão SOFT (ativo=False): candidatos já vinculados a este posto e a
+    auditoria continuam íntegros — o posto só some das listas de escolha."""
+    posto = db.get(PostoServico, posto_id)
+    if posto is None:
+        raise HTTPException(status_code=404, detail="posto_nao_encontrado")
+    posto.ativo = False
+    registrar(db, "posto_desativado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": posto.nome})
+    db.commit()
+
+
+class ImportarPostosIn(BaseModel):
+    # Uma linha por posto: "Nome; Sigla; CNPJ; Contrato" (só o nome é obrigatório).
+    texto: str
+
+
+@router.post("/rh/postos/importar")
+def importar_postos(payload: ImportarPostosIn, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Importa vários postos de uma vez a partir de texto colado (uma linha por
+    posto, campos separados por ';' ou tab). Postos com nome já existente são
+    ignorados (não duplica). Devolve o que criou e o que pulou."""
+    existentes = {p.nome.strip().lower()
+                  for p in db.scalars(select(PostoServico)).all()}
+    criados, pulados = [], []
+    for linha in payload.texto.splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        partes = [c.strip() for c in re_split(linha)]
+        nome = partes[0] if partes else ""
+        if not nome:
+            continue
+        if nome.lower() in existentes:
+            pulados.append(nome)
+            continue
+        posto = PostoServico(
+            nome=nome,
+            sigla=(partes[1] if len(partes) > 1 else "") or None,
+            cnpj=(partes[2] if len(partes) > 2 else "") or None,
+            contrato_ref=(partes[3] if len(partes) > 3 else "") or None,
+        )
+        db.add(posto)
+        existentes.add(nome.lower())
+        criados.append(nome)
+    registrar(db, "postos_importados", ator="rh", ator_detalhe=rh.email,
+              detalhe={"criados": len(criados), "pulados": len(pulados)})
+    db.commit()
+    return {"criados": criados, "pulados": pulados}
+
+
+def re_split(linha: str) -> list[str]:
+    import re
+    return re.split(r"\t|;", linha)
 
 
 # ---------- Vínculo do candidato + geração dos documentos ----------
