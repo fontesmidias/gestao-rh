@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
+import { ErrosRecentes } from './Diagnostico.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -86,6 +87,7 @@ export default function Config({ aoVoltar }) {
       <ModelosDocumento />
       <AvisosInternos />
       <Teams />
+      <ErrosRecentes />
       <Auditoria />
     </main>
   )

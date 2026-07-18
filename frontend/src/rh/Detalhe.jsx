@@ -3,6 +3,7 @@ import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
+import { DiagnosticoColaborador } from './Diagnostico.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 
 const MOTIVOS = [
@@ -69,6 +70,7 @@ function FichasStatus({ dados, setMsg }) {
   const temPendencia = pend.length > 0 || fichas.some((f) => !f.assinado)
 
   const notificar = async () => {
+    if (!window.confirm(`Enviar um e-mail de cobrança para ${dados.nome_completo} com a lista de pendências?`)) return
     setNotificando(true); setMsg(null)
     try {
       const r = await api.notificar(dados.id)
@@ -185,6 +187,7 @@ function PostoServico({ dados, setMsg, recarregar }) {
           + Adicional</button>
       </div>
       <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+        if (!window.confirm('Salvar posto e remuneração?\n\nSe a ficha de cadastro já estiver assinada e o cargo/salário mudar, ela será reaberta para nova assinatura do colaborador.')) return
         setMsg(null); setSalvando(true)
         try {
           const r = await api.definirPosto(dados.id, {
@@ -306,6 +309,7 @@ function FichaRH({ id, setMsg }) {
     if (!motivo.trim()) {
       setMsg({ tipo: 'erro', texto: 'Informe o motivo da correção — ele vai para a auditoria.' }); return
     }
+    if (!window.confirm('Salvar a correção desta seção?\n\nSe algum documento já assinado exibir um dado alterado, ele será reaberto para o colaborador assinar novamente.')) return
     if (dados.vt_optante !== undefined && dados.vt_optante !== null) {
       dados.vt_optante = String(dados.vt_optante).toLowerCase() === 'true'
     }
@@ -393,9 +397,15 @@ export default function Detalhe({ id, aoVoltar }) {
 
   const enviados = dados.slots.filter((s) => s.status === 'enviado')
 
-  const aprovar = async (slotId) => { await api.aprovar(slotId); await recarregar() }
-  const rejeitar = async (slotId) => {
-    await api.rejeitar(slotId, motivo, obs || null)
+  const nomeDoc = (slot) => (DICAS[slot.tipo] || {}).nome || slot.tipo.replace(/_/g, ' ')
+  const aprovar = async (slot) => {
+    if (!window.confirm(`Aprovar "${nomeDoc(slot)}"? Ele entra no dossiê do colaborador.`)) return
+    await api.aprovar(slot.id); await recarregar()
+  }
+  const rejeitar = async (slot) => {
+    if (!window.confirm(`Rejeitar "${nomeDoc(slot)}"?\n\nO arquivo enviado será apagado e o `
+      + 'colaborador precisará enviar outro. Esta ação fica registrada na auditoria.')) return
+    await api.rejeitar(slot.id, motivo, obs || null)
     setRejeitando(null); setObs('')
     await recarregar()
   }
@@ -438,6 +448,9 @@ export default function Detalhe({ id, aoVoltar }) {
   }
 
   const gerarDossie = async (forcar = false) => {
+    if (!window.confirm(forcar
+      ? 'Gerar o dossiê PARCIAL (com pendências)? O colaborador NÃO será marcado como aprovado.'
+      : `Gerar o dossiê de ${dados.nome_completo} e marcar como APROVADO?`)) return
     setMsg(null); setPendDossie(null)
     try {
       await api.gerarDossie(id, forcar)
@@ -474,6 +487,7 @@ export default function Detalhe({ id, aoVoltar }) {
         <div>
           <button className="btn-secundario" title="Posta no canal do Teams (se configurado em Configurações)"
                   onClick={async () => {
+                    if (!window.confirm(`Enviar uma mensagem ao canal do Teams sobre ${dados.nome_completo}?`)) return
                     setMsg(null)
                     try {
                       await api.enviarTeams(id)
@@ -502,6 +516,7 @@ export default function Detalhe({ id, aoVoltar }) {
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
       <ModelosDoColaborador id={id} setMsg={setMsg} />
       <FichaRH id={id} setMsg={setMsg} />
+      <DiagnosticoColaborador id={id} />
 
       {pendDossie && (
         <div className="alerta">
@@ -524,6 +539,7 @@ export default function Detalhe({ id, aoVoltar }) {
           <span className="explica" style={{ margin: 0 }}>{selecionados.size} selecionado(s)</span>
           <button className="btn-principal btn-mini" disabled={!selecionados.size}
                   onClick={async () => {
+                    if (!window.confirm(`Aprovar ${selecionados.size} documento(s) selecionado(s)? Todos entram no dossiê.`)) return
                     try {
                       const r = await api.aprovarLote([...selecionados])
                       setSelecionados(new Set()); setMsg({ tipo: 'ok',
@@ -544,6 +560,7 @@ export default function Detalhe({ id, aoVoltar }) {
               <input placeholder="Observação (opcional)" value={obs}
                      onChange={(e) => setObs(e.target.value)} />
               <button className="btn-rejeitar btn-mini" onClick={async () => {
+                if (!window.confirm(`Rejeitar ${selecionados.size} documento(s)? Os arquivos serão apagados e o colaborador precisará reenviá-los.`)) return
                 try {
                   const r = await api.rejeitarLote([...selecionados], motivo, obs || null)
                   setSelecionados(new Set()); setLoteRejeitar(false); setObs('')
@@ -588,7 +605,7 @@ export default function Detalhe({ id, aoVoltar }) {
                     <button className="btn-secundario btn-mini" onClick={() => ver(s)}>Ver</button>
                   )}
                   {s.status === 'enviado' && <>
-                    <button className="btn-principal btn-mini" onClick={() => aprovar(s.id)}>
+                    <button className="btn-principal btn-mini" onClick={() => aprovar(s)}>
                       Aprovar</button>
                     <button className="btn-rejeitar btn-mini"
                             onClick={() => setRejeitando(rejeitando === s.id ? null : s.id)}>
@@ -596,6 +613,7 @@ export default function Detalhe({ id, aoVoltar }) {
                   </>}
                   {s.status === 'pendente' && !s.obrigatorio && (
                     <button className="btn-link" onClick={async () => {
+                      if (!window.confirm(`Dispensar "${nomeDoc(s)}"? Este documento deixará de ser exigido deste colaborador.`)) return
                       await api.dispensar(s.id); await recarregar()
                     }}>dispensar</button>
                   )}
@@ -616,7 +634,7 @@ export default function Detalhe({ id, aoVoltar }) {
                     </select>
                     <input placeholder="Observação (opcional)" value={obs}
                            onChange={(e) => setObs(e.target.value)} />
-                    <button className="btn-rejeitar btn-mini" onClick={() => rejeitar(s.id)}>
+                    <button className="btn-rejeitar btn-mini" onClick={() => rejeitar(s)}>
                       Confirmar rejeição</button>
                   </div>
                 )}

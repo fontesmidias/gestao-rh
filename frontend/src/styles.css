@@ -395,6 +395,11 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 }
 .vt-opcao { margin-top: .4rem; font-size: .9rem; color: var(--tinta); }
 .vt-opcao .btn-link { margin-left: .5rem; }
+.diag-veredito { padding: .7rem .9rem; border-radius: var(--raio-input); font-weight: 600; }
+.diag-veredito.ok { background: var(--ok-suave); color: var(--sucesso-txt); }
+.diag-veredito.bloq { background: var(--perigo-suave); color: var(--alerta-txt); }
+.diag-veredito ul { margin: .4rem 0 0 1.1rem; font-weight: 400; }
+.diag-erro-linha td { background: var(--perigo-suave); }
 .talento-detalhe { padding: .4rem .2rem; font-size: var(--fs-apoio); }
 .talento-detalhe p { margin: .25rem 0; }
 .rh-adicionais { display: flex; flex-direction: column; gap: .4rem; width: 100%; }

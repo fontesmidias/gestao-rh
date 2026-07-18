@@ -353,6 +353,7 @@ function Painel({ aoSair }) {
                     <button className="btn-secundario btn-mini"
                             title="Gera um link novo e reenvia o convite por e-mail"
                             onClick={async (e) => {
+                              if (!window.confirm(`Reenviar o convite por e-mail para ${c.nome_completo}?`)) return
                               const btn = e.currentTarget
                               const r = await api.reenviarLink(c.id)
                               const original = btn.textContent
