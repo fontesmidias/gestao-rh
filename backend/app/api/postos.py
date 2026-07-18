@@ -24,12 +24,24 @@ DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
                  DocumentoAssinavel.informacoes_trabalhador,
                  DocumentoAssinavel.termo_lgpd_infraero)
 
+# Catálogo de documentos ESPECÍFICOS de posto que o RH pode marcar no CRUD.
+# (Bruno: só Presidência e INFRAERO têm kit próprio; os demais usam o padrão.)
+DOCS_ESPECIFICOS_DISPONIVEIS = {
+    DocumentoAssinavel.oficio_cartao_cidadao.value: "Ofício Cartão Cidadão (INFRAERO)",
+    DocumentoAssinavel.informacoes_trabalhador.value: "Informações ao Trabalhador (INFRAERO)",
+    DocumentoAssinavel.termo_lgpd_infraero.value: "Termo LGPD Credenciamento (INFRAERO)",
+    DocumentoAssinavel.ficha_cadastral_terceirizado.value:
+        "Ficha Cadastral de Terceirizado (Presidência)",
+    DocumentoAssinavel.oficio_apresentacao_presidencia.value:
+        "Ofício de Apresentação (Presidência)",
+}
+
 
 def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[DocumentoAssinavel]:
-    """Cria os registros de Assinatura extras exigidos pelo POSTO (kit INFRAERO)
-    e pelo REGIME (Informativo do Intermitente) deste candidato, que ainda não
-    existam. Devolve os documentos criados. Fonte única usada pelo convite e
-    pela (re)definição de posto — mantém os dois em sincronia."""
+    """Cria os registros de Assinatura extras exigidos pelo POSTO (kit marcado no
+    CRUD + o legado exige_docs_infraero) e pelo REGIME (Informativo do
+    Intermitente) deste candidato, que ainda não existam. Fonte única usada pelo
+    convite e pela (re)definição de posto."""
     existentes = {
         a.documento for a in db.scalars(
             select(Assinatura).where(Assinatura.candidato_id == candidato.id,
@@ -38,13 +50,19 @@ def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[Docu
     exigidos: list[DocumentoAssinavel] = []
     posto = (db.get(PostoServico, candidato.posto_servico_id)
              if candidato.posto_servico_id else None)
-    if posto and posto.exige_docs_infraero:
-        exigidos += list(DOCS_INFRAERO)
+    if posto:
+        if posto.exige_docs_infraero:   # legado (posto INFRAERO existente)
+            exigidos += list(DOCS_INFRAERO)
+        for chave in (posto.documentos_kit or []):
+            try:
+                exigidos.append(DocumentoAssinavel(chave))
+            except ValueError:
+                pass  # chave desconhecida (ex.: enum removido): ignora
     if candidato.regime == "intermitente":
         exigidos.append(DocumentoAssinavel.informativo_intermitente)
     novos = []
     for doc in exigidos:
-        if doc not in existentes:
+        if doc not in existentes and doc not in novos:
             db.add(Assinatura(candidato_id=candidato.id, documento=doc))
             novos.append(doc)
     return novos
@@ -62,12 +80,14 @@ class PostoIn(BaseModel):
     cnpj: str | None = None
     contrato_ref: str | None = None
     exige_docs_infraero: bool | None = None
+    documentos_kit: list[str] | None = None
     atributos: dict | None = None
 
 
 def _dump_posto(p: PostoServico) -> dict:
     return {"id": p.id, "nome": p.nome, "sigla": p.sigla, "cnpj": p.cnpj,
             "contrato_ref": p.contrato_ref, "exige_docs_infraero": p.exige_docs_infraero,
+            "documentos_kit": p.documentos_kit or [],
             "atributos": p.atributos or {}, "ativo": p.ativo}
 
 
@@ -88,7 +108,8 @@ def listar_postos(incluir_inativos: bool = False,
     if not incluir_inativos:
         consulta = consulta.where(PostoServico.ativo == True)  # noqa: E712
     postos = db.scalars(consulta).all()
-    return {"postos": [_dump_posto(p) for p in postos], "colunas": _colunas(db)}
+    return {"postos": [_dump_posto(p) for p in postos], "colunas": _colunas(db),
+            "documentos_disponiveis": DOCS_ESPECIFICOS_DISPONIVEIS}
 
 
 @router.put("/rh/postos/colunas")
@@ -119,6 +140,8 @@ def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
         cnpj=(payload.cnpj or "").strip() or None,
         contrato_ref=(payload.contrato_ref or "").strip() or None,
         exige_docs_infraero=bool(payload.exige_docs_infraero),
+        documentos_kit=[k for k in (payload.documentos_kit or [])
+                        if k in DOCS_ESPECIFICOS_DISPONIVEIS],
         atributos=payload.atributos or {})
     db.add(posto)
     registrar(db, "posto_criado", ator="rh", ator_detalhe=rh.email, detalhe={"nome": nome})
@@ -139,6 +162,9 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
     posto.contrato_ref = (payload.contrato_ref or "").strip() or None
     if payload.exige_docs_infraero is not None:
         posto.exige_docs_infraero = payload.exige_docs_infraero
+    if payload.documentos_kit is not None:
+        posto.documentos_kit = [k for k in payload.documentos_kit
+                                if k in DOCS_ESPECIFICOS_DISPONIVEIS]
     if payload.atributos is not None:
         posto.atributos = payload.atributos
     registrar(db, "posto_editado", ator="rh", ator_detalhe=rh.email,

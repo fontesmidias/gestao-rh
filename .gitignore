@@ -43,9 +43,15 @@ frontend/playwright-report/
 # Subpastas de docs tambem podem ter dados sensiveis (repo publico!)
 docs/**/*.docx
 docs/**/*.pdf
+docs/**/*.doc
 docs/**/*.xlsx
 docs/prints-teste-disc/
 docs/green-house-logo*.png
+# Listas internas (CNPJs, lotacoes, dados da empresa) — repo publico
+docs/postos_para_importar.txt
+docs/**/*.txt
+docs/Lota*
+docs/**/*.PDF
 
 # Ferramentas locais BMAD
 _bmad/
