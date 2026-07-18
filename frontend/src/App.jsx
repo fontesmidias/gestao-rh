@@ -4,6 +4,7 @@ import RHApp from './rh/RHApp.jsx'
 import Verificar, { VerificarEntrada } from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
 import BancoDeTalentos from './Talentos.jsx'
+import CrecheLink from './CrecheLink.jsx'
 import logo from './assets/logo.png'
 import BotaoTema from './Tema.jsx'
 
@@ -58,6 +59,7 @@ export default function App() {
       <Route path="/verificar/:id" element={<Verificar />} />
       <Route path="/banco-de-talentos" element={<BancoDeTalentos />} />
       <Route path="/entrar" element={<Entrar />} />
+      <Route path="/creche" element={<CrecheLink />} />
     </Routes>
     </>
   )

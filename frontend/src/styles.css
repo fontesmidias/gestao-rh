@@ -829,6 +829,39 @@ body[data-rh-ocupado] { cursor: progress; }
   .toast-espera { left: 1rem; right: 1rem; max-width: none; text-align: center; }
 }
 
+/* ---------- Abas do painel (Reembolso-Creche etc.) ---------- */
+.rh-abas { display: flex; gap: .3rem; border-bottom: 2px solid var(--borda);
+           margin: .4rem 0 1rem; flex-wrap: wrap; }
+.rh-abas button { background: transparent; border: none; border-bottom: 2px solid transparent;
+                  margin-bottom: -2px; padding: .55rem .9rem; cursor: pointer; font-weight: 600;
+                  color: var(--tinta-suave, #6a7a70); border-radius: 0; width: auto; min-height: 0; }
+.rh-abas button.ativa { color: var(--verde-escuro); border-bottom-color: var(--verde); }
+
+/* ---------- Link público do Reembolso-Creche ---------- */
+.creche-publico { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+.creche-topo { text-align: center; margin-bottom: 1.2rem; }
+.creche-topo .logo-img { height: 54px; margin-bottom: .5rem; }
+.creche-topo h1 { margin: .2rem 0; }
+.creche-sub { color: var(--tinta-suave, #6a7a70); max-width: 46ch; margin: .3rem auto 0; }
+.creche-card { margin-bottom: 1rem; }
+.creche-card.centro { text-align: center; }
+.creche-card h2 { margin-top: 0; }
+.creche-dados { display: grid; gap: .7rem; }
+.creche-dados > div { display: flex; flex-direction: column; }
+.creche-sessao { display: flex; flex-direction: column; }
+.creche-crianca { border: 1px solid var(--borda); border-radius: var(--raio-input, 10px);
+                  padding: .7rem .8rem; margin: .5rem 0; }
+.creche-crianca-topo { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+.creche-crianca-topo .btn-link { margin-left: auto; }
+.creche-docs { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+.creche-doc { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+              padding: .45rem .8rem; border: 1px dashed var(--borda); border-radius: 999px;
+              font-size: var(--fs-apoio, .9rem); background: var(--input-bg, transparent); }
+.creche-doc.ok { border-style: solid; border-color: var(--verde); color: var(--verde-escuro);
+                 background: var(--verde-suave); }
+.creche-nova { margin-top: .8rem; }
+.creche-enviar { width: 100%; margin-top: .4rem; }
+
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
