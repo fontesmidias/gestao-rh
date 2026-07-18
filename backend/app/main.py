@@ -13,6 +13,7 @@ from app.api.documentos import router as documentos_router
 from app.api.colaboradores import router as colaboradores_router
 from app.api.entrada import router as entrada_router
 from app.api.postos import router as postos_router
+from app.api.creche import router as creche_router
 from app.api.modelos import router as modelos_router
 from app.api.talentos import router as talentos_router
 from app.api.diagnostico import router as diagnostico_router
@@ -95,6 +96,7 @@ app.include_router(documentos_router, prefix="/api")
 app.include_router(entrada_router, prefix="/api")
 app.include_router(colaboradores_router, prefix="/api")
 app.include_router(postos_router, prefix="/api")
+app.include_router(creche_router, prefix="/api")
 app.include_router(modelos_router, prefix="/api")
 app.include_router(talentos_router, prefix="/api")
 app.include_router(diagnostico_router, prefix="/api")

@@ -696,6 +696,57 @@ body[data-rh-ocupado] .rh-layout button {
 }
 body[data-rh-ocupado] { cursor: progress; }
 
+/* ---------- Overlay de carregamento com ampulheta (ações pesadas) ---------- */
+.ampulheta-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, #0b1f14 42%, transparent);
+  backdrop-filter: blur(2px);
+  animation: surgir .18s ease-out;
+}
+.ampulheta-caixa {
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  padding: 1.6rem 2rem; border-radius: 16px;
+  background: var(--cartao); color: var(--verde-vivo);
+  border: 1px solid var(--borda); box-shadow: var(--sombra-cartao);
+  min-width: 200px; max-width: min(86vw, 360px);
+}
+/* A ampulheta inteira vira 180° e faz uma pausa — como quem inverte o vidro.
+   3,2s por ciclo: virada suave (~0,9s) e descanso enquanto a areia escoa. */
+.ampulheta-svg { color: var(--verde-vivo); animation: virar-ampulheta 3.2s ease-in-out infinite; }
+@keyframes virar-ampulheta {
+  0%, 62% { transform: rotate(0deg); }
+  78%, 100% { transform: rotate(180deg); }
+}
+/* A areia de cima escoa (some) e a de baixo se acumula (cresce), reiniciando
+   a cada virada — sincronizado com a rotação. */
+.areia-cima {
+  transform-origin: 24px 10px;
+  animation: escoa-cima 3.2s ease-in infinite;
+}
+.areia-baixo {
+  transform-origin: 24px 50px;
+  animation: enche-baixo 3.2s ease-out infinite;
+}
+.areia-filete { animation: filete 3.2s linear infinite; }
+@keyframes escoa-cima {
+  0% { transform: scaleY(1); opacity: 1; }
+  60% { transform: scaleY(.05); opacity: .85; }
+  62%, 100% { transform: scaleY(.05); opacity: 0; }
+}
+@keyframes enche-baixo {
+  0% { transform: scaleY(.05); }
+  60%, 100% { transform: scaleY(1); }
+}
+@keyframes filete {
+  0%, 60% { opacity: .9; }
+  62%, 100% { opacity: 0; }
+}
+.ampulheta-texto {
+  color: var(--tinta); font-weight: 600; font-size: .98rem;
+  text-align: center; line-height: 1.35;
+}
+
 /* Comunicação assertiva: ícone ⓘ discreto sinaliza tooltip (title) */
 .dica-i { opacity: .55; font-size: var(--fs-mini); cursor: help; }
 .alerta.compacto { padding: .5rem .8rem; font-size: var(--fs-apoio); cursor: help; }
@@ -757,4 +808,9 @@ body[data-rh-ocupado] { cursor: progress; }
 /* Movimento reduzido: respeita a preferência do sistema */
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  /* A ampulheta perde o giro, mas continua legível e sinalizando espera:
+     mantém a areia meio-a-meio e uma pulsação leve de opacidade. */
+  .ampulheta-svg { animation: pulsar-suave 1.6s ease-in-out infinite !important; }
+  .areia-cima, .areia-baixo { transform: scaleY(.5); }
 }
+@keyframes pulsar-suave { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }

@@ -52,6 +52,13 @@ docs/postos_para_importar.txt
 docs/**/*.txt
 docs/Lota*
 docs/**/*.PDF
+# Regra guarda-chuva (repo PUBLICO): ignora TODA a pasta docs/ — material de
+# trabalho do RH com dados sensiveis (oficios com CNPJ/contrato, planilha de
+# colaboradores, modelos .html/.doc). So o planejamento (markdown, sem dado
+# pessoal) e versionado. Qualquer arquivo novo em docs/ ja nasce ignorado.
+docs/*
+!docs/planejamento/
+!docs/planejamento/**
 
 # Ferramentas locais BMAD
 _bmad/

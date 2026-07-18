@@ -82,13 +82,17 @@ class PostoIn(BaseModel):
     exige_docs_infraero: bool | None = None
     documentos_kit: list[str] | None = None
     atributos: dict | None = None
+    da_direito_creche: bool | None = None
+    valor_reembolso_creche: str | None = None
 
 
 def _dump_posto(p: PostoServico) -> dict:
     return {"id": p.id, "nome": p.nome, "sigla": p.sigla, "cnpj": p.cnpj,
             "contrato_ref": p.contrato_ref, "exige_docs_infraero": p.exige_docs_infraero,
             "documentos_kit": p.documentos_kit or [],
-            "atributos": p.atributos or {}, "ativo": p.ativo}
+            "atributos": p.atributos or {}, "ativo": p.ativo,
+            "da_direito_creche": p.da_direito_creche,
+            "valor_reembolso_creche": p.valor_reembolso_creche}
 
 
 def _colunas(db: Session) -> list[str]:
@@ -142,7 +146,9 @@ def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
         exige_docs_infraero=bool(payload.exige_docs_infraero),
         documentos_kit=[k for k in (payload.documentos_kit or [])
                         if k in DOCS_ESPECIFICOS_DISPONIVEIS],
-        atributos=payload.atributos or {})
+        atributos=payload.atributos or {},
+        da_direito_creche=bool(payload.da_direito_creche),
+        valor_reembolso_creche=(payload.valor_reembolso_creche or "").strip() or None)
     db.add(posto)
     registrar(db, "posto_criado", ator="rh", ator_detalhe=rh.email, detalhe={"nome": nome})
     db.commit()
@@ -167,6 +173,10 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
                                 if k in DOCS_ESPECIFICOS_DISPONIVEIS]
     if payload.atributos is not None:
         posto.atributos = payload.atributos
+    if payload.da_direito_creche is not None:
+        posto.da_direito_creche = payload.da_direito_creche
+    if payload.valor_reembolso_creche is not None:
+        posto.valor_reembolso_creche = payload.valor_reembolso_creche.strip() or None
     registrar(db, "posto_editado", ator="rh", ator_detalhe=rh.email,
               detalhe={"nome": posto.nome})
     db.commit()

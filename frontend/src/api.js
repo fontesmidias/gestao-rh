@@ -157,6 +157,26 @@ export const rh = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/colaboradores/exportar${q ? `?${q}` : ''}`, { headers: authRH() })
   },
+  // Importação em massa da base do Tirvu (.xlsx). Idempotente por CPF.
+  importarColaboradores: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/colaboradores/importar`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
+  efetivarColaborador: (id) =>
+    req(`/rh/colaboradores/${id}/efetivar`, { method: 'POST', headers: authRH() }),
+  desligarColaborador: (id, data_desligamento) =>
+    req(`/rh/colaboradores/${id}/desligar`, { method: 'POST', headers: authRH(),
+                                              body: JSON.stringify({ data_desligamento }) }),
+  transferirColaborador: (id, posto_id, data_transferencia) =>
+    req(`/rh/colaboradores/${id}/transferir`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ posto_id, data_transferencia }) }),
   novoCandidato: (dados) =>
     req('/rh/candidatos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   reenviarLink: (id) =>
@@ -271,6 +291,9 @@ export const rh = {
     req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(), body: JSON.stringify({ status }) }),
   converterTalento: (id) =>
     req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
+  // Reembolso-Creche (IN 147/2026)
+  crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
+  exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

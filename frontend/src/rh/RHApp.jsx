@@ -7,9 +7,11 @@ import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
+import Creche from './Creche.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
+import Carregando from '../Carregando.jsx'
 
 export default function RHApp() {
   const [logado, setLogado] = useState(api.logado())
@@ -19,6 +21,7 @@ export default function RHApp() {
   return (
     <>
       <BarraAtividade />
+      <Carregando />
       <Painel aoSair={() => { api.sair(); setLogado(false) }} />
     </>
   )
@@ -166,6 +169,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
     ['postos', '🏢', 'Postos'],
+    ['creche', '🍼', 'Reembolso-Creche'],
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
@@ -246,6 +250,7 @@ function Painel({ aoSair }) {
                          aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
         {pagina === 'postos' && <PostosRH />}
+        {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}

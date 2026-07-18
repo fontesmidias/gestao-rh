@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 
-const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false, documentos_kit: [], atributos: {} }
+const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
+  documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
 
 // Aba própria de Postos: CRUD, importador em massa da lista de lotações e
 // colunas dinâmicas (o RH cria colunas novas sem mexer no banco).
@@ -26,6 +27,8 @@ export default function PostosRH() {
       contrato_ref: edit.contrato_ref.trim() || null,
       exige_docs_infraero: !!edit.exige_docs_infraero,
       documentos_kit: edit.documentos_kit || [], atributos: edit.atributos || {},
+      da_direito_creche: !!edit.da_direito_creche,
+      valor_reembolso_creche: (edit.valor_reembolso_creche || '').trim() || null,
     }
     try {
       if (edit.id) await api.editarPosto(edit.id, corpo)
@@ -131,6 +134,23 @@ export default function PostosRH() {
               })}
             </div>
           )}
+          <div style={{ marginTop: '.6rem' }}>
+            <span className="rotulo">Reembolso-Creche (IN SEGES/MGI 147/2026)</span>
+            <p className="explica" style={{ margin: '.2rem 0 .4rem' }}>Marque se este tomador/contrato
+              dá direito ao benefício. O valor varia por posto (repactuação do contrato) — informe o
+              valor vigente; deixe em branco enquanto o contrato não for repactuado.</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.4rem' }}>
+              <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                     checked={!!edit.da_direito_creche}
+                     onChange={(e) => setEdit({ ...edit, da_direito_creche: e.target.checked })} />
+              <span>Este posto dá direito ao reembolso-creche</span>
+            </label>
+            {edit.da_direito_creche && (
+              <input placeholder="Valor do reembolso (ex.: R$ 526,64)"
+                     value={edit.valor_reembolso_creche || ''} style={{ maxWidth: 280 }}
+                     onChange={(e) => setEdit({ ...edit, valor_reembolso_creche: e.target.value })} />
+            )}
+          </div>
           {colunas.length > 0 && (
             <div className="linha3">
               {colunas.map((c) => (
@@ -153,7 +173,8 @@ export default function PostosRH() {
           {postos.map((p) => (
             <tr key={p.id} style={p.ativo ? {} : { opacity: .5 }}>
               <td><strong>{p.sigla || '—'}</strong></td>
-              <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}</td>
+              <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}
+                {p.da_direito_creche ? <span title={`Reembolso-creche${p.valor_reembolso_creche ? ': ' + p.valor_reembolso_creche : ''}`}> 🍼</span> : ''}</td>
               <td>{p.cnpj || '—'}</td>
               <td>{p.contrato_ref || '—'}</td>
               {colunas.map((c) => <td key={c}>{(p.atributos || {})[c] || '—'}</td>)}
@@ -161,6 +182,8 @@ export default function PostosRH() {
                 <button className="btn-secundario btn-mini" onClick={() => setEdit({
                   ...p, sigla: p.sigla || '', cnpj: p.cnpj || '', contrato_ref: p.contrato_ref || '',
                   documentos_kit: p.documentos_kit || [], atributos: p.atributos || {},
+                  da_direito_creche: !!p.da_direito_creche,
+                  valor_reembolso_creche: p.valor_reembolso_creche || '',
                 })}>Editar</button>
                 {p.ativo && (
                   <button className="btn-link" onClick={async () => {

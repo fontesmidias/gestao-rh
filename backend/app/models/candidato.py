@@ -19,6 +19,19 @@ class StatusCandidato(str, enum.Enum):
     aprovado = "aprovado"
     reprovado_pendencias = "reprovado_pendencias"
     expurgado = "expurgado"
+    # Já é colaborador da casa (aprovado e efetivado, ou importado da base do
+    # Tirvu). É o "estado colaborador" do mesmo registro — Candidato é a fase
+    # inicial do ciclo de vida, o colaborador é a fase de vínculo ativo.
+    ativo = "ativo"
+    desligado = "desligado"
+
+
+class SituacaoColaborador(str, enum.Enum):
+    """Situação do vínculo, independente do fluxo de admissão. Só faz sentido
+    para quem já é colaborador (importado do Tirvu ou efetivado)."""
+
+    ativo = "ativo"
+    desligado = "desligado"
 
 
 class PostoServico(Base):
@@ -41,6 +54,11 @@ class PostoServico(Base):
     documentos_kit: Mapped[list] = mapped_column(JSON, default=list)
     # Colunas dinâmicas do painel: {"chave": "valor", ...}.
     atributos: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Reembolso-creche (IN SEGES/MGI 147/2026): o direito ao benefício é POR
+    # posto/contrato — nem todo tomador o oferece. O valor varia por
+    # repactuação de contrato (ex.: Presidência difere do teto da IN).
+    da_direito_creche: Mapped[bool] = mapped_column(default=False)
+    valor_reembolso_creche: Mapped[str | None] = mapped_column(String(30))  # "R$ 526,64"
     ativo: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -62,6 +80,23 @@ class Candidato(Base):
     status: Mapped[StatusCandidato] = mapped_column(
         Enum(StatusCandidato, name="status_candidato"), default=StatusCandidato.convidado
     )
+    # --- Vínculo de colaborador (preenchido para quem já está na casa) ---
+    # CPF é a chave natural do colaborador na base do Tirvu; usado para
+    # deduplicar a importação em massa e autenticar no autocadastro público.
+    cpf: Mapped[str | None] = mapped_column(String(14), index=True, nullable=True)
+    matricula: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
+    data_nascimento: Mapped[str | None] = mapped_column(String(10))  # dd/mm/aaaa
+    # Situação do vínculo: None enquanto é candidato em admissão; "ativo" ou
+    # "desligado" quando vira colaborador. Não confundir com `status` (fluxo).
+    situacao: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    data_admissao: Mapped[str | None] = mapped_column(String(10))
+    data_desligamento: Mapped[str | None] = mapped_column(String(10))
+    # Como o registro entrou na base: "admissao" (fluxo normal) ou "importacao"
+    # (planilha do Tirvu). Ajuda o diagnóstico e evita reprocessar convites.
+    origem: Mapped[str] = mapped_column(String(20), default="admissao")
+    # Todas as demais colunas do Tirvu (52 no total) que não viram campo fixo
+    # entram aqui como {rótulo legível: valor}. É o CRUD de colunas dinâmicas.
+    dados_tirvu: Mapped[dict] = mapped_column(JSON, default=dict)
     nome_completo: Mapped[str] = mapped_column(String(200))
     # E-mail e celular são opcionais no convite (o RH pode só copiar o link e
     # mandar por WhatsApp); o candidato completa na ficha — e o e-mail passa a
