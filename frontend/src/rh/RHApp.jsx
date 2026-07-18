@@ -12,6 +12,7 @@ import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
 import Carregando from '../Carregando.jsx'
+import { observarTabelas } from '../responsivo.js'
 
 export default function RHApp() {
   const [logado, setLogado] = useState(api.logado())
@@ -165,6 +166,9 @@ function Metricas({ dados }) {
 // Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos
 // rótulos de antes, novo lugar (feedback de campo, 2026-07-15).
 function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
+  // No celular o menu vira gaveta: só o hambúrguer aparece; ao tocar, a gaveta
+  // abre por cima do conteúdo e RETRAI assim que uma opção é escolhida.
+  const [movelAberto, setMovelAberto] = useState(false)
   const ITENS = [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
@@ -173,37 +177,45 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
+  const irPara = (fn) => { fn(); setMovelAberto(false) }
+  const expandida = aberta || movelAberto
   return (
-    <aside className={`rh-sidebar ${aberta ? '' : 'fechada'}`}>
-      <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
-              onClick={() => setAberta(!aberta)}>{aberta ? '⟨' : '☰'}</button>
-      <div className="rh-sidebar-logo">
-        <img src={logo} alt="Green House" className="logo-topo" />
-        {aberta && <span className="rh-sidebar-titulo">Portal de Admissão</span>}
-      </div>
-      <button className="btn-principal rh-sidebar-novo" onClick={aoNovo}
-              title="Novo candidato">
-        {aberta ? '+ Novo candidato' : '+'}
-      </button>
-      <nav>
-        {ITENS.map(([id, icone, rotulo]) => (
-          <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
-                  title={rotulo} onClick={() => navegar(id)}>
-            <span className="rh-sidebar-icone">{icone}</span>
-            {aberta && <span>{rotulo}</span>}
-          </button>
-        ))}
-      </nav>
-      <div className="rh-sidebar-rodape" title={`Conectado(a) como ${localStorage.getItem('rh_nome') || ''}`}>
-        <span className="rh-sidebar-user">
-          <span className="rh-sidebar-avatar">
-            {(localStorage.getItem('rh_nome') || '?').trim()[0]?.toUpperCase()}</span>
-          {aberta && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
-        </span>
-        <button className="btn-link" title="Sair da conta" onClick={aoSair}>
-          {aberta ? 'Sair' : '⎋'}</button>
-      </div>
-    </aside>
+    <>
+      <button className="rh-hamburguer" aria-label="Abrir menu"
+              onClick={() => setMovelAberto(true)}>☰</button>
+      {movelAberto && <div className="rh-sidebar-fundo" onClick={() => setMovelAberto(false)} />}
+      <aside className={`rh-sidebar ${aberta ? '' : 'fechada'} ${movelAberto ? 'movel-aberta' : ''}`}>
+        <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
+                onClick={() => (movelAberto ? setMovelAberto(false) : setAberta(!aberta))}>
+          {movelAberto ? '✕' : aberta ? '⟨' : '☰'}</button>
+        <div className="rh-sidebar-logo">
+          <img src={logo} alt="Green House" className="logo-topo" />
+          {expandida && <span className="rh-sidebar-titulo">Portal de Admissão</span>}
+        </div>
+        <button className="btn-principal rh-sidebar-novo" onClick={() => irPara(aoNovo)}
+                title="Novo candidato">
+          {expandida ? '+ Novo candidato' : '+'}
+        </button>
+        <nav>
+          {ITENS.map(([id, icone, rotulo]) => (
+            <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
+                    title={rotulo} onClick={() => irPara(() => navegar(id))}>
+              <span className="rh-sidebar-icone">{icone}</span>
+              {expandida && <span>{rotulo}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="rh-sidebar-rodape" title={`Conectado(a) como ${localStorage.getItem('rh_nome') || ''}`}>
+          <span className="rh-sidebar-user">
+            <span className="rh-sidebar-avatar">
+              {(localStorage.getItem('rh_nome') || '?').trim()[0]?.toUpperCase()}</span>
+            {expandida && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
+          </span>
+          <button className="btn-link" title="Sair da conta" onClick={aoSair}>
+            {expandida ? 'Sair' : '⎋'}</button>
+        </div>
+      </aside>
+    </>
   )
 }
 
@@ -228,6 +240,8 @@ function Painel({ aoSair }) {
   }
   const recarregarPostos = () => api.postos().then((r) => setPostos(r.postos)).catch(() => {})
   useEffect(() => { recarregar(); recarregarPostos() }, [])
+  // no celular, as tabelas viram cards com rótulos automáticos das colunas
+  useEffect(() => observarTabelas(), [])
 
   const navegar = (destino) => {
     setPagina(destino)
