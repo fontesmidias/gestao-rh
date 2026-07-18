@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
+import { STATUS_OPCOES, statusInfo } from '../status.js'
 import Espera from '../Espera.jsx'
-
-const STATUS_OPCOES = [
-  ['', 'Todos os status'], ['convidado', 'Convidado'], ['preenchendo', 'Preenchendo'],
-  ['aguardando_assinatura', 'Assinando'], ['docs_pendentes', 'Enviando docs'],
-  ['envio_concluido', 'Aguardando revisão'], ['em_revisao', 'Em revisão'],
-  ['aprovado', 'Aprovado'], ['reprovado_pendencias', 'Pendências'], ['expurgado', 'Expurgado'],
-]
 
 const fmtCpf = (c) => c && c.length === 11
   ? `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}` : (c || '—')
@@ -90,7 +84,8 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                 <td>{c.nascimento ? new Date(`${c.nascimento}T12:00:00`).toLocaleDateString('pt-BR') : '—'}</td>
                 <td>{c.cidade || '—'}</td>
                 <td>{c.celular_whatsapp}</td>
-                <td>{(c.status || '').replace(/_/g, ' ')}</td>
+                <td><span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
+                  {statusInfo(c.status).icone} {statusInfo(c.status).label}</span></td>
                 <td><button className="btn-secundario btn-mini"
                             onClick={() => aoAbrir(c.id)}>Abrir</button></td>
               </tr>
