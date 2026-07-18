@@ -352,6 +352,11 @@ export const rh = {
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),
+  crecheGerarDossie: (id) =>
+    req(`/rh/creche/levantamentos/${id}/dossie`, { method: 'POST', headers: authRH() }),
+  crecheBaixarDossie: (id) =>
+    req(`/rh/creche/levantamentos/${id}/dossie`, { headers: authRH() }),
+  crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

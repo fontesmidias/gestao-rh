@@ -20,10 +20,21 @@ from app.core.db import get_db
 from app.models.beneficio import BeneficioCreche, CriancaCreche, StatusBeneficio
 from app.models.candidato import Candidato, PostoServico
 from app.models.usuario_rh import UsuarioRH
+from app.services import storage
 from app.services.auditoria import registrar
 from app.services.email import enviar_email, html_moderno
 
 router = APIRouter(tags=["creche-rh"], dependencies=[Depends(requer_rh)])
+
+
+def _gerar_e_guardar_dossie(db: Session, ben: BeneficioCreche) -> str:
+    from app.services.creche_pdf import gerar_dossie_creche
+    pdf = gerar_dossie_creche(db, ben)
+    key = f"creche/{ben.id}/dossie-reembolso-creche.pdf"
+    storage.salvar(key, pdf, "application/pdf")
+    ben.dossie_pdf_key = key
+    ben.dossie_gerado_em = datetime.now(timezone.utc)
+    return key
 
 
 def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int] | None:
@@ -231,6 +242,11 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
                            or (posto.valor_reembolso_creche if posto else None))
     ben.revisado_por = rh.email
     ben.revisado_em = datetime.now(timezone.utc)
+    # gera o dossiê do benefício (requerimento + anexos + declaração-modelo)
+    try:
+        _gerar_e_guardar_dossie(db, ben)
+    except Exception:
+        pass  # o dossiê é reproduzível pelo botão; não trava a ativação
     if payload.aguardar_repactuacao:
         ben.status = StatusBeneficio.aguardando_repactuacao
     else:
@@ -320,3 +336,52 @@ def _email_orientacoes_mensais(ben: BeneficioCreche, col: Candidato) -> None:
             ],
         ),
     )
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/dossie")
+def gerar_dossie_endpoint(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """(Re)gera o dossiê do benefício sob demanda."""
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    _gerar_e_guardar_dossie(db, ben)
+    registrar(db, "creche_dossie_gerado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id)
+    db.commit()
+    return {"gerado_em": ben.dossie_gerado_em}
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}/dossie")
+def baixar_dossie(beneficio_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    if not ben.dossie_pdf_key:
+        _gerar_e_guardar_dossie(db, ben)
+        db.commit()
+    dados = storage.ler(ben.dossie_pdf_key)
+    col = db.get(Candidato, ben.candidato_id)
+    nome = (col.nome_completo or "colaborador").replace(" ", "-").lower()
+    return Response(content=dados, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'inline; filename="dossie-creche-{nome}.pdf"'})
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}/documento/{tipo}")
+def previa_documento(beneficio_id: uuid.UUID, tipo: str, db: Session = Depends(get_db)) -> Response:
+    """Prévia do requerimento preenchido (tipo=requerimento) ou da declaração
+    modelo (tipo=declaracao) no timbrado."""
+    from app.services.creche_pdf import (gerar_declaracao_modelo,
+                                        gerar_requerimento_creche)
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    if tipo == "requerimento":
+        pdf = gerar_requerimento_creche(db, ben)
+    elif tipo == "declaracao":
+        pdf = gerar_declaracao_modelo(db, ben)
+    else:
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{tipo}.pdf"'})

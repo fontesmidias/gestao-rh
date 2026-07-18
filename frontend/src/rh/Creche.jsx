@@ -89,6 +89,16 @@ function Levantamentos() {
     try { await api.crechePrazos([ben.id], parseInt(dia, 10)); setMsg('Prazo atualizado.'); carregar() }
     catch (e) { setErro(`Falha ao alterar o prazo (${e.detail || e.message}).`) }
   }
+  const baixarDossie = async (ben) => {
+    setErro(null)
+    try {
+      const blob = await comAmpulheta('Montando o dossiê do benefício…',
+                                      () => api.crecheBaixarDossie(ben.id))
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (e) { setErro(`Falha ao gerar o dossiê (${e.detail || e.message}).`) }
+  }
 
   return (
     <>
@@ -166,6 +176,13 @@ function Levantamentos() {
                 ))}
               </tbody>
             </table>
+            <div className="rh-lote" style={{ marginTop: '.6rem' }}>
+              <a className="btn-secundario btn-mini" href={api.crecheDocumentoUrl(b.id, 'requerimento')}
+                 target="_blank" rel="noreferrer">📄 Prévia do requerimento</a>
+              <a className="btn-secundario btn-mini" href={api.crecheDocumentoUrl(b.id, 'declaracao')}
+                 target="_blank" rel="noreferrer">📄 Declaração-modelo</a>
+              <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
+            </div>
             {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
               <div className="navegacao">
                 <button className="btn-link" style={{ color: '#d9534f' }}
