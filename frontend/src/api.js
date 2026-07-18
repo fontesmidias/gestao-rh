@@ -122,6 +122,30 @@ export const candidato = {
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
 }
 
+// --- Reembolso-Creche: link público de levantamento (sem token de sessão RH) ---
+export const creche = {
+  iniciar: (cpf, email) =>
+    req('/creche/iniciar', { method: 'POST', body: JSON.stringify({ cpf, email }) }),
+  confirmar: (cpf, codigo, email) =>
+    req('/creche/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo, email }) }),
+  sessao: (t) => req(`/creche/sessao/${t}`),
+  conferirDados: (t, dados) =>
+    req(`/creche/sessao/${t}/dados`, { method: 'PUT', body: JSON.stringify(dados) }),
+  addCrianca: (t, dados) =>
+    req(`/creche/sessao/${t}/criancas`, { method: 'POST', body: JSON.stringify(dados) }),
+  delCrianca: (t, id) =>
+    req(`/creche/sessao/${t}/criancas/${id}`, { method: 'DELETE' }),
+  subirDocumento: async (t, criancaId, tipo, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/creche/sessao/${t}/criancas/${criancaId}/documento?tipo=${tipo}`,
+                           { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  enviar: (t) => req(`/creche/sessao/${t}/enviar`, { method: 'POST' }),
+}
+
 // --- Banco de Talentos (cadastro público, sem token) ---
 export const talentos = {
   opcoes: () => req('/talentos/opcoes'),
@@ -316,6 +340,18 @@ export const rh = {
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),
+  crecheLevantamentos: (status) =>
+    req(`/rh/creche/levantamentos${status ? `?status=${status}` : ''}`, { headers: authRH() }),
+  crecheLevantamento: (id) => req(`/rh/creche/levantamentos/${id}`, { headers: authRH() }),
+  crecheAtivar: (id, dados) =>
+    req(`/rh/creche/levantamentos/${id}/ativar`, { method: 'POST', headers: authRH(),
+                                                   body: JSON.stringify(dados) }),
+  crecheIndeferir: (id, motivo) =>
+    req(`/rh/creche/levantamentos/${id}/indeferir`, { method: 'POST', headers: authRH(),
+                                                      body: JSON.stringify({ motivo }) }),
+  crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
+    req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

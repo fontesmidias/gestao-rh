@@ -98,6 +98,15 @@ test('jornada do candidato: convite → LGPD → máscara de datas do wizard', a
   await expect(page.getByText(/Essa data não existe/)).toHaveCount(0)
 })
 
+test('reembolso-creche: link público inicia pelo CPF', async ({ page }) => {
+  await page.goto('/creche')
+  await expect(page.getByRole('heading', { name: 'Reembolso-Creche' })).toBeVisible()
+  await expect(page.getByText(/Instrução Normativa SEGES\/MGI nº 147\/2026/)).toBeVisible()
+  // CPF válido habilita o envio do código
+  await page.getByLabel('CPF').fill('529.982.247-25')
+  await expect(page.getByRole('button', { name: /Enviar código/ })).toBeEnabled()
+})
+
 test('convite só com nome: link sai mesmo sem e-mail', async ({ request }) => {
   const convite = await criarConvite(request, { nome_completo: 'E2e Sem Email' })
   expect(convite.candidato.email).toBeNull()
