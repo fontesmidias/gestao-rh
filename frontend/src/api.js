@@ -213,11 +213,19 @@ export const rh = {
   rejeitarLote: (slotIds, motivo, observacao) =>
     req('/rh/slots/lote/rejeitar', { method: 'POST', headers: authRH(),
       body: JSON.stringify({ slot_ids: slotIds, motivo, observacao }) }),
-  postos: () => req('/rh/postos', { headers: authRH() }),
+  // Devolve { postos, colunas }. Use api.postos().then(r => r.postos) para a lista.
+  postos: (incluirInativos = false) =>
+    req(`/rh/postos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
   criarPosto: (dados) =>
     req('/rh/postos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarPosto: (id, dados) =>
     req(`/rh/postos/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirPosto: (id) =>
+    req(`/rh/postos/${id}`, { method: 'DELETE', headers: authRH() }),
+  importarPostos: (texto) =>
+    req('/rh/postos/importar', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
+  definirColunasPosto: (colunas) =>
+    req('/rh/postos/colunas', { method: 'PUT', headers: authRH(), body: JSON.stringify({ colunas }) }),
   definirPosto: (candidatoId, dados) =>
     req(`/rh/candidatos/${candidatoId}/posto`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

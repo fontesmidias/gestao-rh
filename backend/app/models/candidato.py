@@ -22,15 +22,23 @@ class StatusCandidato(str, enum.Enum):
 
 
 class PostoServico(Base):
-    """Posto/contrato onde o colaborador será lotado (ex.: INFRAERO). Postos
-    podem exigir documentos adicionais assinados."""
+    """Posto/contrato (lotação) onde o colaborador será lotado. Cada posto tem
+    sigla, CNPJ do tomador, contrato de referência e pode carregar atributos
+    extras (colunas dinâmicas criadas pelo RH pelo painel)."""
 
     __tablename__ = "posto_servico"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nome: Mapped[str] = mapped_column(String(200), unique=True)
+    sigla: Mapped[str | None] = mapped_column(String(60))
+    cnpj: Mapped[str | None] = mapped_column(String(20))
     contrato_ref: Mapped[str | None] = mapped_column(String(200))
-    exige_docs_infraero: Mapped[bool] = mapped_column(default=True)
+    # Default agora é False: só INFRAERO exige o kit dela. Na Leva de kits por
+    # posto, esse booleano dá lugar a uma lista de documentos específicos.
+    exige_docs_infraero: Mapped[bool] = mapped_column(default=False)
+    # Colunas dinâmicas do painel: {"chave": "valor", ...}.
+    atributos: Mapped[dict] = mapped_column(JSON, default=dict)
+    ativo: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

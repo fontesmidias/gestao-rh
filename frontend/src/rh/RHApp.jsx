@@ -6,6 +6,7 @@ import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
+import PostosRH from './PostosRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -164,6 +165,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
   const ITENS = [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
+    ['postos', '🏢', 'Postos'],
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
@@ -241,6 +243,7 @@ function Painel({ aoSair }) {
           <Colaboradores aoVoltar={() => navegar('inicio')}
                          aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
+        {pagina === 'postos' && <PostosRH />}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}

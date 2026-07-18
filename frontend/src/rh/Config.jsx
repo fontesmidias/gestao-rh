@@ -77,7 +77,6 @@ export default function Config({ aoVoltar }) {
       <Perfil />
       <Senha />
       <Equipe />
-      <Postos />
       <Assinantes />
       <M365 />
       <Gmail />
@@ -197,61 +196,6 @@ function Assinantes() {
   )
 }
 
-function Postos() {
-  const [postos, setPostos] = useState(null)
-  const [novo, setNovo] = useState(null) // {nome, contrato_ref}
-  const [msg, setMsg] = useState(null)
-  const recarregar = () => api.postos().then(setPostos)
-  useEffect(() => { recarregar() }, [])
-  if (!postos) return null
-  return (
-    <div className="rh-card">
-      <h3>Postos de serviço</h3>
-      <p className="explica">Postos com documentação específica (ex.: INFRAERO). Ao vincular
-        um colaborador a um posto (na tela do candidato), os documentos adicionais são gerados
-        e enviados para assinatura eletrônica automaticamente.</p>
-      {postos.length > 0 && (
-        <table className="rh-tabela">
-          <thead><tr><th>Posto</th><th>Contrato (referência)</th></tr></thead>
-          <tbody>
-            {postos.map((p) => (
-              <tr key={p.id}><td><strong>{p.nome}</strong></td><td>{p.contrato_ref || '—'}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!novo ? (
-        <button className="btn-secundario" style={{ marginTop: '.75rem' }}
-                onClick={() => setNovo({ nome: '', contrato_ref: '' })}>+ Novo posto</button>
-      ) : (
-        <div style={{ marginTop: '.75rem' }}>
-          <div className="linha2">
-            <input placeholder="Nome do posto (ex.: INFRAERO)" value={novo.nome}
-                   onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
-            <input placeholder="Contrato (ex.: 0053-OS 2025_0001)" value={novo.contrato_ref}
-                   onChange={(e) => setNovo({ ...novo, contrato_ref: e.target.value })} />
-          </div>
-          <div className="navegacao">
-            <button className="btn-secundario" onClick={() => setNovo(null)}>Cancelar</button>
-            <button className="btn-principal" onClick={async () => {
-              setMsg(null)
-              try {
-                await api.criarPosto({ nome: novo.nome.trim(), contrato_ref: novo.contrato_ref.trim() || null })
-                setNovo(null); setMsg({ tipo: 'ok', texto: 'Posto criado.' })
-                await recarregar()
-              } catch (e) {
-                setMsg({ tipo: 'erro', texto: e.detail === 'posto_ja_existe'
-                  ? 'Já existe um posto com esse nome.'
-                  : `Não foi possível criar (${e.detail || e.message}).` })
-              }
-            }}>Criar posto</button>
-          </div>
-        </div>
-      )}
-      <Msg msg={msg} />
-    </div>
-  )
-}
 
 const ERROS_EQUIPE = {
   email_ja_utilizado: 'Este e-mail já é usado por outro usuário.',
@@ -703,7 +647,7 @@ function ModelosDocumento() {
   const [msg, setMsg] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const recarregar = () => api.modelos().then(setDados).catch(() => {})
-  useEffect(() => { recarregar(); api.postos().then(setPostos).catch(() => {}) }, [])
+  useEffect(() => { recarregar(); api.postos().then((r) => setPostos(r.postos)).catch(() => {}) }, [])
   if (!dados) return null
 
   const salvar = async () => {

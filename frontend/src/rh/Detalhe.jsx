@@ -138,7 +138,9 @@ function PostoServico({ dados, setMsg, recarregar }) {
   const [salario, setSalario] = useState(dados.salario_base || '')
   const [adicionais, setAdicionais] = useState(dados.adicionais || [])
   const [salvando, setSalvando] = useState(false)
-  useEffect(() => { api.postos().then(setPostos) }, [])
+  const [novoPosto, setNovoPosto] = useState(null) // criar posto na hora
+  const recarregarPostos = () => api.postos().then((r) => setPostos(r.postos))
+  useEffect(() => { recarregarPostos() }, [])
   if (!postos) return null
   const extras = (dados.assinaturas || []).filter((a) =>
     !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
@@ -149,11 +151,37 @@ function PostoServico({ dados, setMsg, recarregar }) {
     <div className="rh-card rh-lote">
       <strong>Posto de serviço:</strong>
       <select value={postoId} style={{ maxWidth: 220 }}
-              onChange={(e) => setPostoId(e.target.value)}>
+              onChange={(e) => {
+                if (e.target.value === '__novo') { setNovoPosto({ nome: '', sigla: '', contrato_ref: '' }); return }
+                setPostoId(e.target.value)
+              }}>
         <option value="">— sem posto —</option>
         {postos.map((p) => <option key={p.id} value={p.id}>
-          {p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
+          {p.sigla || p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
+        <option value="__novo">➕ Cadastrar novo posto…</option>
       </select>
+      {novoPosto && (
+        <div className="rh-adicional" style={{ width: '100%' }}>
+          <input placeholder="Nome do posto" value={novoPosto.nome}
+                 onChange={(e) => setNovoPosto({ ...novoPosto, nome: e.target.value })} />
+          <input placeholder="Sigla (ex.: INEP Adm)" style={{ maxWidth: 140 }} value={novoPosto.sigla}
+                 onChange={(e) => setNovoPosto({ ...novoPosto, sigla: e.target.value })} />
+          <input placeholder="Contrato (opcional)" style={{ maxWidth: 160 }} value={novoPosto.contrato_ref}
+                 onChange={(e) => setNovoPosto({ ...novoPosto, contrato_ref: e.target.value })} />
+          <button className="btn-principal btn-mini" onClick={async () => {
+            if (!novoPosto.nome.trim()) return
+            try {
+              const p = await api.criarPosto({ nome: novoPosto.nome.trim(),
+                sigla: novoPosto.sigla.trim() || null, contrato_ref: novoPosto.contrato_ref.trim() || null })
+              await recarregarPostos(); setPostoId(p.id); setNovoPosto(null)
+            } catch (e) {
+              setMsg({ tipo: 'erro', texto: e.detail === 'posto_ja_existe'
+                ? 'Já existe um posto com esse nome.' : `Não foi possível criar (${e.detail || e.message}).` })
+            }
+          }}>Criar</button>
+          <button className="btn-link" onClick={() => setNovoPosto(null)}>cancelar</button>
+        </div>
+      )}
       {postoId && (postos.find((p) => p.id === postoId)?.contrato_ref) && (
         <span className="explica" style={{ margin: 0 }}
               title="Vem do cadastro do posto (Configurações → Postos) — nada para digitar">
