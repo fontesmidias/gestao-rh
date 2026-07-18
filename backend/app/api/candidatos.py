@@ -20,13 +20,18 @@ from pydantic import field_validator
 
 
 class NovoCandidato(BaseModel):
-    # Só o nome é obrigatório: sem e-mail, o RH copia o link e manda pelo
-    # WhatsApp; o candidato completa e-mail e celular na própria ficha.
+    # Nome obrigatório; sem e-mail, o RH copia o link e manda pelo WhatsApp.
+    # O posto é escolhido no convite (obrigatório no painel): com base nele e no
+    # regime, os documentos específicos do kit já nascem certos.
     nome_completo: str
     email: EmailStr | None = None
     celular_whatsapp: str | None = None
+    posto_id: uuid.UUID | None = None
+    regime: str = "efetivo"
+    cargo_funcao: str | None = None
 
-    @field_validator("nome_completo", "email", "celular_whatsapp", mode="before")
+    @field_validator("nome_completo", "email", "celular_whatsapp", "cargo_funcao",
+                     mode="before")
     @classmethod
     def _apara_espacos(cls, v):
         # E-mails colados do WhatsApp costumam vir com espaço no fim;
@@ -63,12 +68,27 @@ def criar_candidato(
     _rh: UsuarioRH = Depends(requer_rh),
 ) -> ConviteOut:
     """Cadastra o candidato aprovado, emite o link mágico e envia o convite por e-mail.
-    O link também volta na resposta: se o SMTP falhar, o RH envia manualmente (WhatsApp)."""
-    candidato = Candidato(**payload.model_dump())
+    Com o posto e o regime escolhidos aqui, os documentos específicos do kit
+    (INFRAERO / Informativo do Intermitente) já nascem exigidos."""
+    from app.api.postos import gerar_docs_do_posto_e_regime
+    from app.models.candidato import PostoServico
+
+    dados = payload.model_dump()
+    posto_id = dados.pop("posto_id", None)
+    regime = (dados.pop("regime", None) or "efetivo").strip().lower()
+    cargo = dados.pop("cargo_funcao", None)
+    if posto_id is not None and db.get(PostoServico, posto_id) is None:
+        raise HTTPException(status_code=404, detail="posto_nao_encontrado")
+    candidato = Candidato(**dados, posto_servico_id=posto_id,
+                          regime=regime if regime in ("efetivo", "intermitente") else "efetivo",
+                          cargo_funcao=cargo)
     db.add(candidato)
     db.flush()
+    docs_novos = gerar_docs_do_posto_e_regime(db, candidato)
     link = emitir_link(db, candidato, base_url_publica(request))
-    registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id)
+    registrar(db, "convite_criado", ator="rh", ator_detalhe=_rh.email, candidato_id=candidato.id,
+              detalhe={"posto": str(posto_id), "regime": candidato.regime,
+                       "docs_kit": [d.value for d in docs_novos]})
     db.commit()
     enviado = False
     if candidato.email:

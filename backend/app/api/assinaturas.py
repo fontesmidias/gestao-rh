@@ -112,6 +112,8 @@ NOMES_DOC = {
         "Informações ao Trabalhador (INFRAERO)",
     DocumentoAssinavel.termo_lgpd_infraero:
         "Termo de Consentimento LGPD — Credenciamento (INFRAERO)",
+    DocumentoAssinavel.informativo_intermitente:
+        "Informativo de Integração — Intermitente",
 }
 
 

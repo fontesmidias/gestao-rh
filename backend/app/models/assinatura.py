@@ -19,6 +19,8 @@ class DocumentoAssinavel(str, enum.Enum):
     oficio_cartao_cidadao = "oficio_cartao_cidadao"
     informacoes_trabalhador = "informacoes_trabalhador"
     termo_lgpd_infraero = "termo_lgpd_infraero"
+    # Ficha de integração do intermitente (só quando o regime é intermitente)
+    informativo_intermitente = "informativo_intermitente"
 
 
 # Fichas exigidas de TODO candidato; os demais só existem se o RH os gerar.

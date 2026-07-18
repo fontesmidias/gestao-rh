@@ -1075,6 +1075,104 @@ def gerar_documento_modelo(db: Session, titulo: str, corpo: str,
     return bytes(pdf.output())
 
 
+def gerar_informativo_intermitente(db: Session, candidato: Candidato,
+                                   assinatura: Assinatura | None = None,
+                                   base_url: str | None = None) -> bytes:
+    """Informativo de Integração do intermitente (GHS - INTERMITENTE): difere do
+    efetivo nos períodos de pagamento de VT/VA (semanal), ponto pelo Tirvu+,
+    prazos de assinatura e declaração de normativos. O colaborador lê e assina."""
+    p = db.get(DadosPessoais, candidato.id)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    b = db.get(DadosProfissionaisBancarios, candidato.id)
+    nome = (p.nome_completo if p and getattr(p, "nome_completo", None)
+            else candidato.nome_completo)
+
+    pdf = _FichaPDF("INFORMATIVO DE INTEGRAÇÃO")
+    pdf.set_font("helvetica", "", 10)
+    pdf.multi_cell(0, 5.4,
+        "É com grande satisfação que damos as boas-vindas à nossa equipe! Estamos muito "
+        "felizes com a sua chegada e confiantes de que sua experiência e dedicação "
+        "contribuirão de forma significativa para o nosso crescimento e sucesso coletivo.")
+    pdf.ln(1)
+    pdf.set_font("helvetica", "B", 10)
+    pdf.cell(0, 6, "Local e data: Brasília, DF, ____ / ____ / ______.",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1)
+
+    pdf.campo("Nome Completo", nome)
+    pdf.campo("CPF", d.cpf if d else None)
+    pdf.campo("Telefone (WhatsApp)", candidato.celular_whatsapp)
+    pdf.campo("E-mail", candidato.email)
+    pdf.campo("Cargo", candidato.cargo_funcao)
+    pdf.campo("Local de Trabalho (Posto)", "GHS - INTERMITENTE")
+
+    pdf.secao("VALE TRANSPORTE")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.multi_cell(0, 5,
+        "O primeiro ciclo de Vale-Transporte, caso optante, será disponibilizado em até 5 "
+        "(cinco) dias úteis, a partir da data da assinatura do contrato de trabalho, por meio "
+        "de pix. Neste primeiro momento, o valor será calculado de forma proporcional, da data "
+        "de admissão até o dia 19 do respectivo mês.\n"
+        "A partir de então, o benefício passará a ser pago semanalmente, até a quarta-feira da "
+        "semana seguinte, por meio do cartão de vale-transporte, destinado à mobilidade no "
+        "Distrito Federal ou, no caso de colaboradores residentes no Entorno, por meio dos "
+        "cartões das respectivas empresas de transporte coletivo.")
+
+    pdf.secao("VALE ALIMENTAÇÃO")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.multi_cell(0, 5,
+        "O cartão de vale-alimentação estará disponível em até 10 (dez) dias úteis, contados da "
+        "assinatura do contrato de trabalho. No ato do recebimento do cartão, será obrigatória a "
+        "assinatura do respectivo recibo. Após o envio do recibo devidamente assinado ao "
+        "Departamento Pessoal (e-mail: departamentopessoal@greenhousedf.com.br ou WhatsApp: "
+        "61-99834-2311), será realizado o crédito do benefício no cartão.\n"
+        "Os valores serão disponibilizados considerando o período de apuração semanal, sendo "
+        "pago até a quarta-feira da semana seguinte.")
+
+    pdf.secao("CONTA SALÁRIO")
+    pdf.campo("Banco", b.banco if b else None)
+    pdf.campo("Chave PIX", (b.pix_chave if b else None))
+    pdf.set_font("helvetica", "", 9)
+    pdf.multi_cell(0, 5, "O salário será depositado até o 5º (quinto) dia útil de cada mês.")
+
+    pdf.secao("PONTO ELETRÔNICO (App Tirvu+)")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.multi_cell(0, 5,
+        "Primeiro acesso: 1) baixe o aplicativo Tirvu+ na loja do seu celular; 2) conceda as "
+        "permissões solicitadas (localização e câmera); 3) no campo Tirvu ID, insira GREENHOUSE, "
+        "preencha os dados e confirme; 4) crie uma senha e use seu CPF + a senha para entrar.\n"
+        "Registro de ponto: menu Colaborador > Ponto Eletrônico > Entrada. A captura da imagem é "
+        "automática em até 3 segundos — não é preciso clicar em nenhum botão.")
+    pdf.ln(1)
+    pdf.set_font("helvetica", "B", 9.5)
+    pdf.multi_cell(0, 5,
+        "Os documentos são disponibilizados no app Tirvu e devem ser assinados dentro dos prazos:",
+        new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.multi_cell(0, 5,
+        "- Folha de Ponto: assinar no 1º dia útil de cada mês.\n"
+        "- Contracheque: assinar no 5º dia útil de cada mês.\n"
+        "- Recibo de vale alimentação/transporte: assinar no dia 20 de cada mês.\n"
+        "- Demais documentos: assinar na data em que forem disponibilizados.\n"
+        "Os documentos de pagamento (contracheque, vale-alimentação e vale-transporte) devem ser "
+        "assinados imediatamente após a confirmação do crédito. O descumprimento dos prazos "
+        "poderá acarretar medidas disciplinares conforme o art. 482 da CLT.")
+
+    pdf.secao("NORMATIVOS E ORIENTAÇÕES")
+    pdf.set_font("helvetica", "", 9.5)
+    pdf.multi_cell(0, 5,
+        "Declaro que recebi, via Tirvu, os seguintes normativos da GREEN HOUSE, cujo cumprimento "
+        "é obrigatório: a) Código de Ética; b) Política Antiassédio; c) Política de Equidade de "
+        "Gênero e Empoderamento Feminino; d) Política de Apresentação de Atestados.\n"
+        "Orientações: mantenha apresentação e higiene pessoal condizentes com o ambiente "
+        "corporativo; o uso do uniforme é obrigatório nas funções em que houver disponibilização; "
+        "o uso do celular deve ser feito com bom senso, restrito ao necessário.\n"
+        "Em caso de divergências, inconsistências ou dúvidas, contate imediatamente o setor "
+        "responsável pelo telefone (61) 3346-8812.")
+
+    return bytes(pdf.output())
+
+
 GERADORES = {
     "ficha_cadastro": gerar_ficha_cadastro,
     "ficha_emergencia": gerar_ficha_emergencia,
@@ -1083,4 +1181,5 @@ GERADORES = {
     "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
     "informacoes_trabalhador": gerar_informacoes_trabalhador,
     "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
+    "informativo_intermitente": gerar_informativo_intermitente,
 }
