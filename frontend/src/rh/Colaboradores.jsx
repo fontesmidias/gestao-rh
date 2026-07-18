@@ -24,6 +24,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [status, setStatus] = useState('')
   const [situacao, setSituacao] = useState('')
   const [postoId, setPostoId] = useState('')
+  const [incluirAdmissao, setIncluirAdmissao] = useState(false)
   const [busca, setBusca] = useState('')
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState(null)
@@ -35,6 +36,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     api.colaboradores({
       status: f.status ?? status, busca: f.busca ?? busca,
       situacao: f.situacao ?? situacao, posto_id: f.posto_id ?? postoId,
+      incluir_admissao: (f.incluirAdmissao ?? incluirAdmissao) || undefined,
     }).then(setLista).catch(() => setErro('Não foi possível carregar a lista.'))
   }
   useEffect(() => {
@@ -73,7 +75,8 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const exportar = async () => {
     setErro(null); setExportando(true)
     try {
-      const blob = await api.exportarColaboradores({ status, busca, situacao, posto_id: postoId })
+      const blob = await api.exportarColaboradores({ status, busca, situacao,
+        posto_id: postoId, incluir_admissao: incluirAdmissao || undefined })
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `colaboradores-${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -154,8 +157,15 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         <input placeholder="Buscar por nome, e-mail ou CPF…" value={busca}
                style={{ flex: 1, minWidth: 200 }} onChange={(e) => aoBuscar(e.target.value)} />
         <span className="explica" style={{ margin: 0 }}>
-          {lista ? `${lista.length} colaborador(es)` : ''}</span>
+          {lista ? `${lista.length} registro(s)` : ''}</span>
       </div>
+      <label className="explica" style={{ display: 'flex', alignItems: 'center', gap: '.5rem',
+              margin: '0 0 .6rem' }}>
+        <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={incluirAdmissao}
+               onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
+        Incluir candidatos ainda em processo de admissão (por padrão, esta tela mostra só
+        quem já é colaborador — importado ou efetivado).
+      </label>
 
       {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
       {aviso && <div className="alerta" style={{ borderColor: 'var(--verde)',
