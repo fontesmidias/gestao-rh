@@ -84,6 +84,7 @@ export default function Config({ aoVoltar }) {
       <Smtp />
       <OcrIA />
       <ModelosDocumento />
+      <AvisosInternos />
       <Teams />
       <Auditoria />
     </main>
@@ -801,6 +802,40 @@ function ModelosDocumento() {
           </div>
         </div>
       )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+function AvisosInternos() {
+  const [cfg, setCfg] = useState(null)
+  const [email, setEmail] = useState('')
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { api.verAvisos().then((c) => { setCfg(c); setEmail(c.email_avisos_internos || '') }).catch(() => {}) }, [])
+  if (!cfg) return null
+  return (
+    <div className="rh-card">
+      <h3>📥 E-mail de avisos internos</h3>
+      <p className="explica">Para onde vão os avisos internos do sistema (ex.: "Dossiê de admissão
+        pronto"). Deixe em branco para usar o remetente padrão
+        (<code>{cfg.padrao || '—'}</code>).</p>
+      <div className="linha2">
+        <input type="email" placeholder="avisos@suaempresa.com.br" value={email}
+               onChange={(e) => setEmail(e.target.value)} />
+        <button className="btn-secundario" onClick={async () => {
+          setMsg(null)
+          try {
+            const r = await api.salvarAvisos({ email_avisos_internos: email.trim() })
+            setCfg(r)
+            setMsg({ tipo: 'ok', texto: r.email_avisos_internos
+              ? `Avisos internos irão para ${r.email_avisos_internos}.`
+              : `Sem e-mail definido — usando o remetente padrão (${r.padrao}).` })
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: e.detail === 'email_invalido'
+              ? 'E-mail inválido.' : `Não foi possível salvar (${e.detail || e.message}).` })
+          }
+        }}>Salvar</button>
+      </div>
       <Msg msg={msg} />
     </div>
   )

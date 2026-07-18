@@ -355,19 +355,35 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
         completo = True
     except DossieIncompleto as exc:
         raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
+    except Exception as exc:
+        # Erro REAL (arquivo faltando no storage, PDF corrompido…): registra com
+        # detalhe e devolve mensagem legível. Antes virava um 500 genérico que o
+        # painel exibia como "sem pendências" — o RH achava que estava tudo certo.
+        import logging
+        logging.getLogger(__name__).exception("Falha ao montar o dossiê de %s", cand.id)
+        registrar(db, "dossie_falhou", ator="rh", candidato_id=cand.id,
+                  detalhe={"erro": f"{type(exc).__name__}: {exc}"[:300]})
+        db.commit()
+        raise HTTPException(status_code=422,
+                            detail=f"erro_ao_montar_dossie: {type(exc).__name__}") from exc
     if completo and not forcar:
         cand.status = StatusCandidato.aprovado
     registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id,
               detalhe={"parcial": forcar})
     db.commit()
 
-    settings = get_settings()
-    enviar_email(
-        settings.smtp_from,
-        f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
-        f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
-        f"Baixe no painel: {base_url_publica(request)}/rh\n",
-    )
+    # Aviso interno "Dossiê pronto": vai para o e-mail configurado no painel
+    # (Configurações → E-mail de avisos internos), com fallback ao remetente.
+    from app.services.config_dinamica import ler_config
+    destino = (ler_config(db, ("email_avisos_internos",)).get("email_avisos_internos")
+               or get_settings().smtp_from)
+    if destino:
+        enviar_email(
+            destino,
+            f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
+            f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
+            f"Baixe no painel: {base_url_publica(request)}/rh\n",
+        )
     return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
 
 

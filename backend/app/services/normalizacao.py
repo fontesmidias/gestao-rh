@@ -193,12 +193,6 @@ def _pdf_para_timbrado(pdf_bytes: bytes, rotulo: str | None) -> bytes | None:
         from pypdf import PdfWriter, Transformation
         from pypdf._page import PageObject
 
-        base = FPDF(format="A4")
-        base.set_auto_page_break(False)
-        base.add_page()
-        _desenhar_timbrado(base, rotulo)
-        fundo = PdfReader(io.BytesIO(bytes(base.output()))).pages[0]
-
         mm = 2.834645  # pontos por mm
         a4_w, a4_h = 210 * mm, 297 * mm
         bx, bw = _CORPO_X * mm, _CORPO_LARG * mm
@@ -209,10 +203,22 @@ def _pdf_para_timbrado(pdf_bytes: bytes, rotulo: str | None) -> bytes | None:
             pw = float(pagina.mediabox.width) or 1.0
             ph = float(pagina.mediabox.height) or 1.0
             escala = min(bw / pw, bh / ph)
-            dx = bx + (bw - pw * escala) / 2
-            dy = by + (bh - ph * escala) / 2
+            doc_w, doc_h = pw * escala, ph * escala
+            dx = bx + (bw - doc_w) / 2
+            dy = by + (bh - doc_h) / 2
+            # Fundo por página: timbrado + retângulo BRANCO opaco exatamente onde
+            # o documento vai. Assim o original fica "colado" (sem a marca d'água
+            # transparecendo por trás dele); a marca aparece só nas margens.
+            fpage = FPDF(format="A4")
+            fpage.set_auto_page_break(False)
+            fpage.add_page()
+            _desenhar_timbrado(fpage, rotulo)
+            fpage.set_fill_color(255, 255, 255)
+            fpage.rect(dx / mm, 297 - (dy + doc_h) / mm, doc_w / mm, doc_h / mm, style="F")
+            fundo_pg = PdfReader(io.BytesIO(bytes(fpage.output()))).pages[0]
+
             folha = PageObject.create_blank_page(width=a4_w, height=a4_h)
-            folha.merge_page(fundo)  # timbrado ao fundo
+            folha.merge_page(fundo_pg)
             folha.merge_transformed_page(
                 pagina, Transformation().scale(escala).translate(dx, dy))
             writer.add_page(folha)

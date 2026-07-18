@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
+import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
 import PdfViewer from '../PdfViewer.jsx'
 
@@ -107,6 +108,20 @@ function FichasStatus({ dados, setMsg }) {
                                 : 'Aguardando assinatura eletrônica do candidato'}>
             {f.assinado ? '✅' : '⏳'} {f.titulo}
             {f.assinado && <small> · {fmtData(f.assinado_em)}</small>}
+            <button className="btn-link" style={{ marginLeft: '.4rem' }}
+                    title={f.assinado ? 'Baixar a via assinada (PDF)' : 'Baixar a prévia atual (PDF) para envio manual'}
+                    onClick={async () => {
+                      setMsg(null)
+                      try {
+                        const blob = await api.baixarFicha(dados.id, f.documento)
+                        const a = document.createElement('a')
+                        a.href = URL.createObjectURL(blob)
+                        a.download = `${f.documento}-${dados.nome_completo}.pdf`
+                        a.click()
+                      } catch (e) {
+                        setMsg({ tipo: 'erro', texto: `Não foi possível baixar (${e.detail || e.message}).` })
+                      }
+                    }}>⬇ baixar</button>
           </li>
         ))}
       </ul>
@@ -431,7 +446,15 @@ export default function Detalhe({ id, aoVoltar }) {
         : 'Dossiê gerado! O candidato foi marcado como aprovado.' })
       await recarregar()
     } catch (e) {
-      setPendDossie(e.detail?.pendencias || [])
+      // 422 com lista de pendências → mostra a lista. Qualquer outro erro (500,
+      // arquivo faltando no storage, etc.) NÃO é "sem pendências": mostra o erro
+      // real, senão o RH vê um banner vazio e acha que "estava tudo certo".
+      if (Array.isArray(e.detail?.pendencias)) {
+        setPendDossie(e.detail.pendencias)
+      } else {
+        setMsg({ tipo: 'erro', texto: `O dossiê não pôde ser montado: ${e.detail || e.message}. `
+          + 'Abra o Diagnóstico deste colaborador para ver o motivo exato.' })
+      }
     }
   }
 
@@ -469,7 +492,8 @@ export default function Detalhe({ id, aoVoltar }) {
       </header>
       <p className="explica">
         <ContatoEditavel dados={dados} setMsg={setMsg} recarregar={recarregar} /> · status:
-        <strong> {dados.status}</strong>
+        <span className="chip" style={{ '--chip-cor': statusInfo(dados.status).cor }}>
+          {statusInfo(dados.status).icone} {statusInfo(dados.status).label}</span>
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}

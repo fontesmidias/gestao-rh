@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
+import { statusInfo } from '../status.js'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
@@ -8,18 +9,6 @@ import TalentosRH from './TalentosRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
-
-const STATUS_CHIP = {
-  convidado: ['Convidado', '#8896b3'],
-  preenchendo: ['Preenchendo', '#e9a63a'],
-  aguardando_assinatura: ['Assinando', '#e9a63a'],
-  docs_pendentes: ['Enviando docs', '#e9a63a'],
-  envio_concluido: ['Revisar! 📥', '#d9534f'],
-  em_revisao: ['Em revisão', '#5bc0de'],
-  aprovado: ['Aprovado ✓', '#4f9d3a'],
-  reprovado_pendencias: ['Pendências', '#d9534f'],
-  expurgado: ['Expurgado', '#999'],
-}
 
 export default function RHApp() {
   const [logado, setLogado] = useState(api.logado())
@@ -339,12 +328,13 @@ function Painel({ aoSair }) {
           </thead>
           <tbody>
             {candidatos.map((c) => {
-              const [rotulo, cor] = STATUS_CHIP[c.status] || [c.status, '#888']
+              const si = statusInfo(c.status)
               return (
                 <tr key={c.id}>
                   <td><strong>{c.nome_completo}</strong><br />
                     <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></td>
-                  <td><span className="chip" style={{ '--chip-cor': cor }}>{rotulo}</span></td>
+                  <td><span className="chip" style={{ '--chip-cor': si.cor }}>
+                    {si.icone} {si.label}</span></td>
                   <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
                   <td>{fmtData(c.criado_em)}</td>
                   <td className="acoes-candidato">

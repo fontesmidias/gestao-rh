@@ -169,10 +169,15 @@ export const rh = {
     req(`/rh/candidatos/${id}/contato`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   fichaCandidato: (id) => req(`/rh/candidatos/${id}/ficha`, { headers: authRH() }),
+  baixarFicha: (id, documento) =>
+    req(`/rh/candidatos/${id}/fichas/${documento}`, { headers: authRH() }),
   notificar: (id) =>
     req(`/rh/candidatos/${id}/notificar`, { method: 'POST', headers: authRH() }),
   enviarTeams: (id) =>
     req(`/rh/candidatos/${id}/teams`, { method: 'POST', headers: authRH() }),
+  verAvisos: () => req('/rh/config/avisos', { headers: authRH() }),
+  salvarAvisos: (dados) =>
+    req('/rh/config/avisos', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   verTeams: () => req('/rh/config/teams', { headers: authRH() }),
   salvarTeams: (dados) =>
     req('/rh/config/teams', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

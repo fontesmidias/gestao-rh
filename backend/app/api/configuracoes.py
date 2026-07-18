@@ -578,6 +578,34 @@ def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer
     return {"enviado_para": rh.email}
 
 
+# ---------- E-mail de avisos internos (ex.: "Dossiê pronto") ----------
+
+
+class AvisosIn(BaseModel):
+    email_avisos_internos: str | None = None
+
+
+@router.get("/rh/config/avisos")
+def ver_avisos(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.config_dinamica import ler_config
+    cfg = ler_config(db, ("email_avisos_internos",))
+    return {"email_avisos_internos": cfg.get("email_avisos_internos", ""),
+            "padrao": smtp_config(db)["from_"]}
+
+
+@router.put("/rh/config/avisos")
+def salvar_avisos(payload: AvisosIn, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    email = (payload.email_avisos_internos or "").strip()
+    if email and "@" not in email:
+        raise HTTPException(status_code=422, detail="email_invalido")
+    gravar_config(db, {"email_avisos_internos": email})
+    registrar(db, "email_avisos_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"destino": email or "(padrão: remetente)"})
+    db.commit()
+    return ver_avisos(db, rh)
+
+
 # ---------- Microsoft Teams (webhook + template) ----------
 
 from app.services import teams

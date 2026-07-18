@@ -90,6 +90,39 @@ def ficha_do_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -
     return montar_ficha(db, candidato)
 
 
+@router.get("/rh/candidatos/{candidato_id}/fichas/{documento}")
+def baixar_ficha_rh(candidato_id: uuid.UUID, documento: DocumentoAssinavel,
+                    db: Session = Depends(get_db)):
+    """PDF de qualquer ficha para o RH baixar e enviar manualmente se preciso:
+    a via assinada (com o bloco de assinatura), se existir; senão a prévia com
+    os dados atuais. Vale assinada OU não — é a rede de segurança para falhas."""
+    from fastapi import Response
+
+    from app.services import storage
+    from app.services.fichas import GERADORES
+
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    assinatura = db.scalar(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
+            Assinatura.assinado_em.isnot(None), Assinatura.invalidada_em.is_(None),
+        )
+    )
+    if assinatura is not None and assinatura.pdf_key:
+        pdf = storage.ler(assinatura.pdf_key)
+        sufixo = "-assinada"
+    else:
+        pdf = GERADORES[documento.value](db, candidato)
+        sufixo = "-previa"
+    nome = "".join(c for c in candidato.nome_completo if c.isalnum() or c in " -_").strip()[:40]
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{documento.value}{sufixo}-{nome}.pdf"'})
+
+
 @router.put("/rh/candidatos/{candidato_id}/ficha/{secao}")
 def editar_secao(
     candidato_id: uuid.UUID,
