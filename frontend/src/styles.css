@@ -660,11 +660,34 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-sidebar.fechada .rh-sidebar-rodape { flex-direction: column; }
 .rh-sidebar.fechada .rh-sidebar-titulo { display: none; }
 .rh-conteudo { flex: 1; min-width: 0; }
+/* Hambúrguer (só no celular) e fundo escurecido da gaveta */
+.rh-hamburguer {
+  display: none; position: fixed; top: .6rem; left: .6rem; z-index: 95;
+  width: 46px; height: 46px; border-radius: 12px; border: 1px solid var(--borda);
+  background: var(--cartao); color: var(--tinta); font-size: 1.35rem; cursor: pointer;
+  box-shadow: var(--sombra-cartao); align-items: center; justify-content: center;
+}
+.rh-sidebar-fundo {
+  display: none; position: fixed; inset: 0; z-index: 96;
+  background: rgba(10, 20, 12, .45); backdrop-filter: blur(1px);
+}
 @media (max-width: 760px) {
-  .rh-sidebar { position: fixed; z-index: 90; height: 100vh;
-                box-shadow: 8px 0 24px rgba(0, 0, 0, .12); }
-  .rh-sidebar.fechada { box-shadow: none; }
-  .rh-conteudo { margin-left: 64px; }
+  /* No celular só o hambúrguer aparece; a gaveta desliza por cima e RETRAI ao
+     escolher uma opção (comportamento no Sidebar do RHApp). */
+  .rh-hamburguer { display: flex; }
+  .rh-sidebar-fundo { display: block; }
+  .rh-sidebar {
+    position: fixed; z-index: 97; height: 100vh; height: 100dvh;
+    width: min(82vw, 300px); min-width: 0;
+    transform: translateX(-105%); transition: transform .2s ease;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, .18);
+  }
+  .rh-sidebar.fechada { width: min(82vw, 300px); min-width: 0; box-shadow: none; }
+  .rh-sidebar.movel-aberta { transform: none; }
+  /* na gaveta, os itens sempre mostram o rótulo (nunca o modo "trilho") */
+  .rh-sidebar.fechada .rh-sidebar-item,
+  .rh-sidebar.fechada .rh-sidebar-novo { justify-content: flex-start; padding: .6rem .7rem; }
+  .rh-conteudo { margin-left: 0; padding-top: 3.4rem; }
 }
 
 /* ---------- Feedback global do painel: barra + trava de botões ---------- */
@@ -820,12 +843,48 @@ body[data-rh-ocupado] { cursor: progress; }
 @media (max-width: 760px) {
   .rh-painel { padding: .8rem; }
   .rh-topo { flex-wrap: wrap; gap: .5rem; }
-  /* tabelas rolam dentro do próprio quadro, sem estourar a página */
-  .rh-tabela { display: block; overflow-x: auto; white-space: nowrap; }
+  /* ===== TABELAS VIRAM CARDS =====
+     Cada linha é um card; cada célula mostra o rótulo da sua coluna (carimbado
+     automaticamente em data-rotulo pelo responsivo.js). Vale para TODAS as
+     páginas do painel — Admissões, Colaboradores, Postos, Creche, Talentos… */
+  .rh-tabela { display: block; white-space: normal; }
+  .rh-tabela thead { display: none; }
+  .rh-tabela tbody { display: block; }
+  .rh-tabela tbody tr {
+    display: block; background: var(--cartao);
+    border: 1px solid var(--borda); border-radius: 14px;
+    padding: .65rem .9rem; margin-bottom: .7rem;
+    box-shadow: var(--sombra-cartao);
+  }
+  .rh-tabela tbody td {
+    display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap;
+    border: none !important; padding: .22rem 0; white-space: normal;
+  }
+  .rh-tabela tbody td[data-rotulo]::before {
+    content: attr(data-rotulo); flex-shrink: 0; min-width: 96px;
+    font-weight: 700; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .03em; color: var(--tinta-suave, #6a7a70);
+  }
+  .rh-tabela tbody td:empty { display: none; }
+  .rh-tabela tbody td[colspan] { display: block; }
+  /* linha em edição inline mantém o destaque como card */
+  .rh-tabela tr.linha-editando { border-color: var(--verde); }
+  .rh-tabela tr.linha-form-inline { padding: 0; overflow: hidden; }
+  /* ações ganham área de toque confortável e ocupam a largura */
+  .rh-tabela .acoes-candidato { gap: .4rem; }
+  .rh-tabela .acoes-candidato .btn-mini { flex: 1 1 auto; min-height: 44px; }
+  /* ===== fim tabelas-cards ===== */
   .rh-metricas { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
   .linha2, .linha3 { grid-template-columns: 1fr; display: grid; gap: .5rem; }
   .contato-editavel input { max-width: 100%; }
   .rh-lote { flex-wrap: wrap; }
+  .rh-lote > button, .rh-lote > .btn-mini { min-height: 44px; }
+  .rh-lote > input, .rh-lote > select { width: 100%; max-width: none !important; }
+  .rh-topo > div { display: flex; flex-wrap: wrap; gap: .4rem; width: 100%; }
+  .rh-topo h1 { font-size: 1.3rem; }
+  .navegacao { flex-wrap: wrap; gap: .5rem; }
+  .navegacao button { flex: 1 1 auto; min-height: 46px; }
+  .rh-abas { overflow-x: auto; flex-wrap: nowrap; }
   .toast-espera { left: 1rem; right: 1rem; max-width: none; text-align: center; }
 }
 
