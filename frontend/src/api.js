@@ -120,6 +120,20 @@ export const candidato = {
   excluirArquivo: (t, slotId) =>
     req(`/c/${t}/documentos/${slotId}/arquivo`, { method: 'DELETE' }),
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
+  // Reembolso-creche na admissão (só se o posto do candidato é elegível)
+  crecheStatus: (t) => req(`/c/${t}/creche`),
+  crecheAddCrianca: (t, dados) =>
+    req(`/c/${t}/creche/criancas`, { method: 'POST', body: JSON.stringify(dados) }),
+  crecheDelCrianca: (t, id) =>
+    req(`/c/${t}/creche/criancas/${id}`, { method: 'DELETE' }),
+  crecheSubirDoc: async (t, criancaId, tipo, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/c/${t}/creche/criancas/${criancaId}/documento?tipo=${tipo}`,
+                           { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
 }
 
 // --- Reembolso-Creche: link público de levantamento (sem token de sessão RH) ---
