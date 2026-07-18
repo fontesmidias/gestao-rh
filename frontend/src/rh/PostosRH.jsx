@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
+import { comAmpulheta } from '../Carregando.jsx'
 
 const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
   documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
 
-// Aba própria de Postos: CRUD, importador em massa da lista de lotações e
-// colunas dinâmicas (o RH cria colunas novas sem mexer no banco).
+// Aba própria de Postos: CRUD, importador da planilha do Tirvu, vínculo de
+// documentos em massa e colunas dinâmicas.
 export default function PostosRH() {
   const [postos, setPostos] = useState(null)
   const [colunas, setColunas] = useState([])
@@ -14,11 +15,45 @@ export default function PostosRH() {
   const [importar, setImportar] = useState(null) // texto colado
   const [gerColunas, setGerColunas] = useState(null) // string das colunas em edição
   const [msg, setMsg] = useState(null)
+  const [selecionados, setSelecionados] = useState(() => new Set())
+  const [massaKit, setMassaKit] = useState(null) // painel de vínculo em massa
+  const inputPlanilha = useRef(null)
 
   const recarregar = () => api.postos(true).then((r) => {
     setPostos(r.postos); setColunas(r.colunas || []); setDocsDisp(r.documentos_disponiveis || {}) })
   useEffect(() => { recarregar() }, [])
   if (!postos) return <main className="rh-painel"><p>Carregando…</p></main>
+
+  const importarPlanilha = async (arquivo) => {
+    if (!arquivo) return
+    setMsg(null)
+    try {
+      const r = await comAmpulheta('Importando a planilha de postos do Tirvu…',
+                                   () => api.importarPostosPlanilha(arquivo))
+      setMsg({ tipo: 'ok', texto: `Planilha importada: ${r.criados} novo(s), `
+        + `${r.atualizados} atualizado(s). Total: ${r.total} posto(s).` })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'sem_coluna_nome'
+        ? 'A planilha precisa ter a coluna "Nome / Apelido". Confira o export do Tirvu.'
+        : `Falha ao importar a planilha (${e.detail || e.message}).` })
+    } finally { if (inputPlanilha.current) inputPlanilha.current.value = '' }
+  }
+
+  const alternarSel = (id) => setSelecionados((s) => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  const aplicarMassa = async (payload) => {
+    setMsg(null)
+    try {
+      const r = await comAmpulheta('Aplicando aos postos selecionados…',
+        () => api.editarPostosMassa({ posto_ids: [...selecionados], ...payload }))
+      setMsg({ tipo: 'ok', texto: `${r.atualizados} posto(s) atualizado(s).` })
+      setSelecionados(new Set()); setMassaKit(null); await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Falha na edição em massa (${e.detail || e.message}).` })
+    }
+  }
 
   const salvar = async () => {
     if (!edit.nome.trim()) { setMsg({ tipo: 'erro', texto: 'Informe o nome do posto.' }); return }
@@ -44,17 +79,70 @@ export default function PostosRH() {
     <main className="rh-painel">
       <header className="rh-topo"><h1>🏢 Postos de serviço</h1><div /></header>
       <p className="explica">Lotações onde os colaboradores são alocados. Cada posto tem sigla,
-        CNPJ do tomador e contrato. Importe a lista de uma vez, edite pelo painel e crie colunas
-        próprias para oportunidades futuras. Postos com documentação específica (Presidência,
-        INFRAERO) terão o kit próprio na etapa de documentos por posto.</p>
+        CNPJ do tomador e contrato. <strong>Importe direto a planilha de Postos do Tirvu (.xlsx)</strong> —
+        o sistema casa por ID do Tirvu (não duplica), enriquece com razão social, CNPJ e endereço, e
+        desambigua apelidos repetidos. Marque documentos específicos por posto, em massa se quiser.</p>
 
       <div className="rh-card rh-lote">
         <button className="btn-principal btn-mini" onClick={() => setEdit({ ...VAZIO })}>+ Novo posto</button>
-        <button className="btn-secundario btn-mini" onClick={() => setImportar('')}>⬆ Importar lista</button>
+        <input ref={inputPlanilha} type="file" accept=".xlsx" hidden
+               onChange={(e) => importarPlanilha(e.target.files?.[0])} />
+        <button className="btn-secundario btn-mini"
+                onClick={() => inputPlanilha.current?.click()}>⬆ Importar planilha do Tirvu</button>
+        <button className="btn-secundario btn-mini" onClick={() => setImportar('')}>Colar lista</button>
         <button className="btn-secundario btn-mini"
                 onClick={() => setGerColunas(colunas.join(', '))}>⚙ Colunas ({colunas.length})</button>
         <span className="explica" style={{ margin: 0 }}>{postos.length} posto(s)</span>
       </div>
+
+      {selecionados.size > 0 && (
+        <div className="rh-card rh-lote" style={{ alignItems: 'center' }}>
+          <strong>{selecionados.size} posto(s) selecionado(s):</strong>
+          <button className="btn-secundario btn-mini" onClick={() => setMassaKit({})}>
+            🗂️ Vincular documentos / creche</button>
+          <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar seleção</button>
+        </div>
+      )}
+
+      {massaKit && (
+        <div className="rh-card">
+          <h3>Aplicar a {selecionados.size} posto(s)</h3>
+          <p className="explica">Marque o que aplicar aos postos selecionados. Só os campos que você
+            mexer são alterados; os demais ficam como estão em cada posto.</p>
+          <span className="rotulo">Documentos do kit</span>
+          <p className="explica" style={{ margin: '.2rem 0 .4rem' }}>Os documentos marcados são
+            <strong> adicionados</strong> ao kit de cada posto selecionado (não remove os que já têm).</p>
+          {Object.entries(docsDisp).map(([chave, rotulo]) => (
+            <label key={chave} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', marginBottom: '.25rem' }}>
+              <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                     checked={(massaKit.documentos_kit || []).includes(chave)}
+                     onChange={(e) => setMassaKit({ ...massaKit, documentos_kit: e.target.checked
+                       ? [...(massaKit.documentos_kit || []), chave]
+                       : (massaKit.documentos_kit || []).filter((k) => k !== chave) })} />
+              <span>{rotulo}</span>
+            </label>
+          ))}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.6rem 0 .3rem' }}>
+            <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                   checked={massaKit.marcar_creche || false}
+                   onChange={(e) => setMassaKit({ ...massaKit, marcar_creche: e.target.checked })} />
+            <span>Marcar como <strong>dá direito ao reembolso-creche</strong></span>
+          </label>
+          {massaKit.marcar_creche && (
+            <input placeholder="Valor do reembolso (ex.: R$ 526,64) — opcional"
+                   value={massaKit.valor_reembolso_creche || ''} style={{ maxWidth: 300 }}
+                   onChange={(e) => setMassaKit({ ...massaKit, valor_reembolso_creche: e.target.value })} />
+          )}
+          <div className="navegacao">
+            <button className="btn-secundario" onClick={() => setMassaKit(null)}>Cancelar</button>
+            <button className="btn-principal" onClick={() => aplicarMassa({
+              documentos_kit: massaKit.documentos_kit || [], modo_kit: 'adicionar',
+              ...(massaKit.marcar_creche ? { da_direito_creche: true,
+                    valor_reembolso_creche: massaKit.valor_reembolso_creche || null } : {}),
+            })}>Aplicar aos selecionados</button>
+          </div>
+        </div>
+      )}
 
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
@@ -112,7 +200,7 @@ export default function PostosRH() {
       )}
 
       <table className="rh-tabela">
-        <thead><tr><th>Sigla</th><th>Nome</th><th>CNPJ</th><th>Contrato</th>
+        <thead><tr><th style={{ width: 34 }}></th><th>Sigla</th><th>Nome</th><th>CNPJ</th><th>Contrato</th>
           {colunas.map((c) => <th key={c}>{c}</th>)}<th></th></tr></thead>
         <tbody>
           {postos.map((p) => {
@@ -121,6 +209,9 @@ export default function PostosRH() {
               <Fragment key={p.id}>
                 <tr style={p.ativo ? {} : { opacity: .5 }}
                     className={editando ? 'linha-editando' : ''}>
+                  <td><input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                             checked={selecionados.has(p.id)} onChange={() => alternarSel(p.id)}
+                             title="Selecionar para ação em massa" /></td>
                   <td><strong>{p.sigla || '—'}</strong></td>
                   <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}
                     {p.da_direito_creche ? <span title={`Reembolso-creche${p.valor_reembolso_creche ? ': ' + p.valor_reembolso_creche : ''}`}> 🍼</span> : ''}</td>
@@ -144,7 +235,7 @@ export default function PostosRH() {
                 </tr>
                 {editando && (
                   <tr className="linha-form-inline">
-                    <td colSpan={5 + colunas.length}>
+                    <td colSpan={6 + colunas.length}>
                       <CamposPosto edit={edit} setEdit={setEdit} docsDisp={docsDisp}
                                    colunas={colunas} salvar={salvar}
                                    onCancelar={() => setEdit(null)} />
