@@ -263,6 +263,9 @@ export const rh = {
     req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(), body: JSON.stringify({ status }) }),
   converterTalento: (id) =>
     req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
+  // Diagnóstico (investigação de incidentes)
+  diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
+  errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>

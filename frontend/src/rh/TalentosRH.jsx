@@ -42,6 +42,7 @@ export default function TalentosRH({ aoAbrir }) {
   }
 
   const mudarStatus = async (t, status) => {
+    if (status === 'arquivado' && !window.confirm(`Arquivar ${t.nome}? Ele sai da triagem ativa.`)) return
     try { await api.statusTalento(t.id, status); await recarregar() }
     catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
   }

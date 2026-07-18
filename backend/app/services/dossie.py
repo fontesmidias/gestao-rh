@@ -73,6 +73,31 @@ class DossieIncompleto(Exception):
         super().__init__(", ".join(pendencias))
 
 
+def pendencias_do_dossie(db: Session, candidato: Candidato) -> list[str]:
+    """O que ainda falta para o dossiê ficar completo — SEM gerar nada. Usado
+    pelo módulo de diagnóstico ('por que o dossiê não gerou?') e pela própria
+    geração. Fichas não assinadas viram 'ficha:<doc>'; slots obrigatórios não
+    aprovados/dispensados viram 'documento:<tipo>'."""
+    assinados = {
+        a.documento for a in db.scalars(
+            select(Assinatura).where(
+                Assinatura.candidato_id == candidato.id, Assinatura.assinado_em.isnot(None),
+                Assinatura.invalidada_em.is_(None),
+            )
+        )
+    }
+    slots = db.scalars(
+        select(SlotDocumento).where(SlotDocumento.candidato_id == candidato.id)
+    ).all()
+    pendencias = [f"ficha:{d.value}" for d in ORDEM_FICHAS if d not in assinados]
+    pendencias += [
+        f"documento:{s.tipo.value}"
+        for s in slots
+        if s.obrigatorio and s.status not in (StatusSlot.aprovado, StatusSlot.dispensado)
+    ]
+    return pendencias
+
+
 def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = False) -> str:
     """Monta e grava o PDF único; devolve a key no MinIO. Exige fichas assinadas e
     todos os slots obrigatórios aprovados (ou dispensados) — salvo se o RH optar
@@ -90,12 +115,7 @@ def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = F
         select(SlotDocumento).where(SlotDocumento.candidato_id == candidato.id)
     ).all()
 
-    pendencias = [f"ficha:{d.value}" for d in ORDEM_FICHAS if d not in assinaturas]
-    pendencias += [
-        f"documento:{s.tipo.value}"
-        for s in slots
-        if s.obrigatorio and s.status not in (StatusSlot.aprovado, StatusSlot.dispensado)
-    ]
+    pendencias = pendencias_do_dossie(db, candidato)
     if pendencias and not ignorar_pendencias:
         raise DossieIncompleto(pendencias)
 
