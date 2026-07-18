@@ -113,8 +113,15 @@ def _linha_completa(db: Session, c: Candidato) -> dict:
 
 
 def _filtrar(db: Session, status: str | None, busca: str | None,
-             situacao: str | None = None, posto_id: uuid.UUID | None = None) -> list[Candidato]:
+             situacao: str | None = None, posto_id: uuid.UUID | None = None,
+             so_colaboradores: bool = True) -> list[Candidato]:
     q = select(Candidato).order_by(Candidato.criado_em.desc())
+    # A página Colaboradores mostra APENAS quem já é colaborador de fato: quem
+    # foi importado do Tirvu ou efetivado (situacao preenchida). Quem ainda está
+    # no fluxo de admissão (situacao NULL) aparece só em Admissões — antes
+    # vazava para cá porque candidato e colaborador eram a mesma listagem.
+    if so_colaboradores:
+        q = q.where(Candidato.situacao.is_not(None))
     if status:
         q = q.where(Candidato.status == StatusCandidato(status))
     if situacao:
@@ -146,8 +153,12 @@ def _filtrar(db: Session, status: str | None, busca: str | None,
 @router.get("/rh/colaboradores")
 def listar(status: str | None = None, busca: str | None = None,
            situacao: str | None = None, posto_id: uuid.UUID | None = None,
+           incluir_admissao: bool = False,
            db: Session = Depends(get_db)) -> list[dict]:
-    candidatos = _filtrar(db, status, busca, situacao, posto_id)
+    # incluir_admissao=True traz também quem ainda está no fluxo de admissão
+    # (para o RH localizar e efetivar um aprovado, por ex.).
+    candidatos = _filtrar(db, status, busca, situacao, posto_id,
+                          so_colaboradores=not incluir_admissao)
     # nomes dos postos em um só lookup (evita N+1 na lista de 1.156)
     postos = {p.id: p.nome for p in db.scalars(select(PostoServico)).all()}
     saida = []
@@ -179,14 +190,18 @@ def listar(status: str | None = None, busca: str | None = None,
 
 @router.get("/rh/colaboradores/exportar")
 def exportar(status: str | None = None, busca: str | None = None,
+             situacao: str | None = None, posto_id: uuid.UUID | None = None,
+             incluir_admissao: bool = False,
              db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> Response:
-    """Excel com uma linha por colaborador e TODAS as respostas do formulário."""
+    """Excel com uma linha por colaborador e TODAS as respostas do formulário.
+    Respeita os mesmos filtros da tela (só-colaboradores por padrão)."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
-    candidatos = _filtrar(db, status, busca)
+    candidatos = _filtrar(db, status, busca, situacao, posto_id,
+                          so_colaboradores=not incluir_admissao)
     linhas = [_linha_completa(db, c) for c in candidatos]
 
     # União de todas as colunas na ordem em que aparecem (fichas incompletas
