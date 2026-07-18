@@ -342,3 +342,96 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
               candidato_id=col.id, detalhe={"criancas": len(ben.criancas)})
     db.commit()
     return {"status": ben.status}
+
+
+# ==========================================================================
+# Coleta de creche DENTRO da admissão: o candidato já autenticado pelo link
+# mágico informa as crianças, se o posto dele dá direito. Sem 2FA (a admissão
+# já autentica). Reaproveita BeneficioCreche/CriancaCreche.
+# ==========================================================================
+
+
+@router.get("/c/{token}/creche")
+def creche_admissao_status(token: str, db: Session = Depends(get_db)) -> dict:
+    """Diz ao wizard de admissão se o posto do candidato dá direito ao
+    reembolso-creche e devolve as crianças já informadas. Se o posto não é
+    elegível, o bloco nem aparece."""
+    from app.services.magic_link import resolver_token
+    cand = resolver_token(db, token)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    posto = db.get(PostoServico, cand.posto_servico_id) if cand.posto_servico_id else None
+    elegivel = bool(posto and posto.da_direito_creche)
+    ben = db.scalar(select(BeneficioCreche)
+                    .where(BeneficioCreche.candidato_id == cand.id)) if elegivel else None
+    return {
+        "posto_da_direito": elegivel,
+        "posto": posto.nome if posto else None,
+        "criancas": [_dump_crianca(c) for c in ben.criancas] if ben else [],
+    }
+
+
+@router.post("/c/{token}/creche/criancas", status_code=201)
+def creche_admissao_add(token: str, payload: CriancaIn, db: Session = Depends(get_db)) -> dict:
+    from app.services.magic_link import resolver_token
+    cand = resolver_token(db, token)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    posto = db.get(PostoServico, cand.posto_servico_id) if cand.posto_servico_id else None
+    if not (posto and posto.da_direito_creche):
+        raise HTTPException(status_code=409, detail="posto_nao_elegivel")
+    if payload.parentesco not in ("filho", "enteado", "guarda"):
+        raise HTTPException(status_code=422, detail="parentesco_invalido")
+    ben = db.scalar(select(BeneficioCreche).where(BeneficioCreche.candidato_id == cand.id))
+    if ben is None:
+        ben = BeneficioCreche(candidato_id=cand.id, email_confirmado=cand.email)
+        db.add(ben)
+        db.flush()
+    c = CriancaCreche(beneficio_id=ben.id, nome=payload.nome.strip(),
+                      data_nascimento=payload.data_nascimento.strip(),
+                      parentesco=payload.parentesco, tipo_comprovante=payload.tipo_comprovante)
+    db.add(c)
+    registrar(db, "creche_crianca_na_admissao", ator="candidato", candidato_id=cand.id)
+    db.commit()
+    return _dump_crianca(c)
+
+
+@router.delete("/c/{token}/creche/criancas/{crianca_id}", status_code=204)
+def creche_admissao_del(token: str, crianca_id: str, db: Session = Depends(get_db)) -> None:
+    from app.services.magic_link import resolver_token
+    cand = resolver_token(db, token)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    c = db.get(CriancaCreche, crianca_id)
+    ben = db.get(BeneficioCreche, c.beneficio_id) if c else None
+    if c is None or ben is None or ben.candidato_id != cand.id:
+        raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
+    db.delete(c)
+    db.commit()
+
+
+@router.post("/c/{token}/creche/criancas/{crianca_id}/documento")
+async def creche_admissao_doc(token: str, crianca_id: str, tipo: str, arquivo: UploadFile,
+                              db: Session = Depends(get_db)) -> dict:
+    from app.services.magic_link import resolver_token
+    cand = resolver_token(db, token)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    c = db.get(CriancaCreche, crianca_id)
+    ben = db.get(BeneficioCreche, c.beneficio_id) if c else None
+    if c is None or ben is None or ben.candidato_id != cand.id:
+        raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
+    if tipo not in ("certidao", "guarda"):
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    conteudo = await arquivo.read()
+    if not conteudo:
+        raise HTTPException(status_code=422, detail="arquivo_vazio")
+    ext = (arquivo.filename or "").rsplit(".", 1)[-1].lower()[:5] or "bin"
+    key = f"creche/{ben.id}/{crianca_id}/{tipo}.{ext}"
+    storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
+    if tipo == "certidao":
+        c.certidao_key = key
+    else:
+        c.guarda_key = key
+    db.commit()
+    return _dump_crianca(c)

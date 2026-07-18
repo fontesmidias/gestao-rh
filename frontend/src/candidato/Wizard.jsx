@@ -591,6 +591,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           ...d, dependentes: [...d.dependentes,
             { nome_completo: '', data_nascimento: '', cpf: '', parentesco: null, deduz_irrf: false }],
         }))}>+ Adicionar dependente</button>
+        <BlocoCreche token={token} />
       </>}
 
       {etapa === 5 && <>
@@ -707,4 +708,78 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       contatos: d.contatos.map((c, j) => (j === i ? { ...c, [campo]: valor } : c)),
     }))
   }
+}
+
+// Bloco opcional do Reembolso-Creche na admissão: só aparece se o posto do
+// candidato dá direito ao benefício (IN SEGES/MGI 147/2026). O candidato já
+// entra "certo", informando as crianças até 5 anos e 11 meses.
+function BlocoCreche({ token }) {
+  const [status, setStatus] = useState(null)
+  const [nova, setNova] = useState({ nome: '', data_nascimento: '', parentesco: 'filho' })
+  const [erro, setErro] = useState(null)
+
+  const recarregar = () => api.crecheStatus(token).then(setStatus).catch(() => setStatus({ posto_da_direito: false }))
+  useEffect(() => { recarregar() }, [])
+
+  if (!status || !status.posto_da_direito) return null
+
+  const add = async () => {
+    if (!nova.nome.trim() || !nova.data_nascimento.trim()) { setErro('Informe nome e data de nascimento.'); return }
+    setErro(null)
+    try { await api.crecheAddCrianca(token, nova); setNova({ nome: '', data_nascimento: '', parentesco: 'filho' }); recarregar() }
+    catch { setErro('Não foi possível adicionar. Tente de novo.') }
+  }
+  const subir = async (id, tipo, arquivo) => {
+    if (!arquivo) return
+    try { await api.crecheSubirDoc(token, id, tipo, arquivo); recarregar() }
+    catch (e) { setErro(`Falha ao enviar o arquivo (${e.detail || e.message}).`) }
+  }
+
+  return (
+    <div className="rh-card" style={{ marginTop: '1rem', borderColor: 'var(--verde)' }}>
+      <h3>🍼 Reembolso-Creche (opcional)</h3>
+      <p className="explica">Seu posto de trabalho <strong>{status.posto}</strong> pode dar direito ao
+        Reembolso-Creche (IN SEGES/MGI nº 147/2026). Se você tem filho(a), enteado(a) ou criança sob
+        guarda judicial com <strong>até 5 anos e 11 meses</strong>, informe aqui para já entrar com o
+        pedido — anexando a certidão de nascimento. A análise de elegibilidade é feita pelo RH.</p>
+
+      {(status.criancas || []).map((c) => (
+        <div key={c.id} className="creche-crianca">
+          <div className="creche-crianca-topo">
+            <strong>{c.nome}</strong>
+            <span className="explica" style={{ margin: 0 }}>{c.parentesco} · nasc. {c.data_nascimento}</span>
+            <button className="btn-link" onClick={() => api.crecheDelCrianca(token, c.id).then(recarregar)}>remover</button>
+          </div>
+          <div className="creche-docs">
+            <label className={`creche-doc ${c.tem_certidao ? 'ok' : ''}`}>
+              {c.tem_certidao ? '✅ Certidão enviada' : '📎 Certidão de nascimento'}
+              <input type="file" hidden accept="image/*,.pdf"
+                     onChange={(e) => subir(c.id, 'certidao', e.target.files?.[0])} />
+            </label>
+            <label className={`creche-doc ${c.tem_guarda ? 'ok' : ''}`}>
+              {c.tem_guarda ? '✅ Guarda enviada' : '📎 Guarda judicial (se aplicável)'}
+              <input type="file" hidden accept="image/*,.pdf"
+                     onChange={(e) => subir(c.id, 'guarda', e.target.files?.[0])} />
+            </label>
+          </div>
+        </div>
+      ))}
+
+      <div className="linha3" style={{ marginTop: '.6rem' }}>
+        <label className="campo"><span className="rotulo">Nome da criança</span>
+          <input value={nova.nome} onChange={(e) => setNova({ ...nova, nome: e.target.value })} /></label>
+        <label className="campo"><span className="rotulo">Data de nascimento</span>
+          <input placeholder="dd/mm/aaaa" value={nova.data_nascimento}
+                 onChange={(e) => setNova({ ...nova, data_nascimento: e.target.value })} /></label>
+        <label className="campo"><span className="rotulo">Vínculo</span>
+          <select value={nova.parentesco} onChange={(e) => setNova({ ...nova, parentesco: e.target.value })}>
+            <option value="filho">Filho(a)</option>
+            <option value="enteado">Enteado(a)</option>
+            <option value="guarda">Guarda judicial</option>
+          </select></label>
+      </div>
+      {erro && <div className="alerta">{erro}</div>}
+      <button className="btn-secundario" onClick={add}>+ Adicionar criança</button>
+    </div>
+  )
 }
