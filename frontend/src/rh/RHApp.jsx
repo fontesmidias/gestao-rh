@@ -188,18 +188,24 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
+  // Recolhe ao navegar/recolher mesmo com o mouse em cima: um "trinco" que
+  // suprime o hover por um instante (o mouse acaba saindo dali logo depois).
+  const suprimirHover = () => {
+    const el = asideRef.current
+    if (!el) return
+    el.classList.add('sem-hover')
+    clearTimeout(el._t)
+    el._t = setTimeout(() => el.classList.remove('sem-hover'), 600)
+  }
   const irPara = (fn) => {
     fn()
     setMovelAberto(false)
-    // Recolhe o menu ao navegar mesmo no desktop com o mouse ainda por cima:
-    // suprime o hover por um instante (o mouse acaba saindo dali logo depois).
-    const el = asideRef.current
-    if (el && !aberta) {
-      el.classList.add('sem-hover')
-      setTimeout(() => el.classList.remove('sem-hover'), 500)
-    }
+    if (!aberta) suprimirHover()
   }
-  const expandida = aberta || movelAberto
+  // Os rótulos ficam SEMPRE no DOM; quem decide mostrá-los é o CSS (aberta OU
+  // hover no desktop). Antes eles dependiam só do estado React `expandida`, e
+  // brigavam com o hover-CSS: a barra alargava mas os textos sumiam. Agora um
+  // mecanismo só (CSS) comanda largura e texto juntos — nunca discordam.
   return (
     <>
       <button className="rh-hamburguer" aria-label="Abrir menu"
@@ -207,22 +213,27 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
       {movelAberto && <div className="rh-sidebar-fundo" onClick={() => setMovelAberto(false)} />}
       <aside ref={asideRef} className={`rh-sidebar ${aberta ? '' : 'fechada'} ${movelAberto ? 'movel-aberta' : ''}`}>
         <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
-                onClick={() => (movelAberto ? setMovelAberto(false) : setAberta(!aberta))}>
+                onClick={() => {
+                  if (movelAberto) { setMovelAberto(false); return }
+                  if (aberta) suprimirHover()  // ao recolher, solta o hover atual
+                  setAberta(!aberta)
+                }}>
           {movelAberto ? '✕' : aberta ? '⟨' : '☰'}</button>
         <div className="rh-sidebar-logo">
           <img src={logo} alt="Green House" className="logo-topo" />
-          {expandida && <span className="rh-sidebar-titulo">Portal de Admissão</span>}
+          <span className="rh-sidebar-titulo rh-so-expandido">Portal de Admissão</span>
         </div>
         <button className="btn-principal rh-sidebar-novo" onClick={() => irPara(aoNovo)}
                 title="Novo candidato">
-          {expandida ? '+ Novo candidato' : '+'}
+          <span className="rh-so-recolhido">+</span>
+          <span className="rh-so-expandido">+ Novo candidato</span>
         </button>
         <nav>
           {ITENS.map(([id, icone, rotulo]) => (
             <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
                     title={rotulo} onClick={() => irPara(() => navegar(id))}>
               <span className="rh-sidebar-icone">{icone}</span>
-              {expandida && <span>{rotulo}</span>}
+              <span className="rh-so-expandido">{rotulo}</span>
             </button>
           ))}
         </nav>
@@ -230,10 +241,12 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
           <span className="rh-sidebar-user">
             <span className="rh-sidebar-avatar">
               {(localStorage.getItem('rh_nome') || '?').trim()[0]?.toUpperCase()}</span>
-            {expandida && <span className="rh-nome">{localStorage.getItem('rh_nome')}</span>}
+            <span className="rh-nome rh-so-expandido">{localStorage.getItem('rh_nome')}</span>
           </span>
           <button className="btn-link" title="Sair da conta" onClick={aoSair}>
-            {expandida ? 'Sair' : '⎋'}</button>
+            <span className="rh-so-recolhido">⎋</span>
+            <span className="rh-so-expandido">Sair</span>
+          </button>
         </div>
       </aside>
     </>

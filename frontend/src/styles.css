@@ -660,30 +660,40 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   background: var(--cartao); border-right: 1px solid var(--borda);
   transition: width .18s ease, min-width .18s ease;
 }
+/* Visibilidade de rótulos vs. ícones: comandada SÓ pelo CSS (largura), nunca
+   pelo estado React — assim hover e estado nunca discordam (bug de 2026-07-19:
+   a barra alargava no hover mas os textos, presos ao estado, sumiam). */
+.rh-so-recolhido { display: none; }          /* aparece só quando recolhido */
+.rh-sidebar.fechada .rh-so-expandido { display: none; }
+.rh-sidebar.fechada .rh-so-recolhido { display: inline; }
 .rh-sidebar.fechada { width: 64px; min-width: 64px; }
 .rh-sidebar.fechada .rh-sidebar-item,
 .rh-sidebar.fechada .rh-sidebar-novo { justify-content: center; padding: .6rem .2rem; }
 
 /* Menu recolhido: ao passar o mouse, EXPANDE por cima do conteúdo (padrão
    VS Code — não empurra a página), só no desktop. Abre rápido, fecha devagar
-   (assimétrico de propósito, feedback 2026-07-19). A classe .sem-hover suprime
-   isso por um instante logo após clicar num item, para o menu recolher mesmo
-   com o mouse ainda em cima. */
+   (assimétrico de propósito). A classe .sem-hover suprime isso por um instante
+   logo após clicar (navegar/recolher), para o menu recolher mesmo com o mouse
+   ainda em cima. No hover, os RÓTULOS reaparecem junto com a largura. */
 @media (hover: hover) and (pointer: fine) {
+  .rh-sidebar.fechada { transition-delay: 350ms; }   /* fechar devagar */
   .rh-sidebar.fechada:not(.sem-hover):hover {
     width: 232px; min-width: 232px;
     position: fixed; z-index: 60; height: 100vh;
     box-shadow: 6px 0 24px rgba(0,0,0,.16);
-    transition-delay: 100ms;               /* espera antes de abrir */
+    transition-delay: 100ms;                          /* abrir rápido */
   }
+  .rh-sidebar.fechada:not(.sem-hover):hover .rh-so-expandido { display: inline; }
+  .rh-sidebar.fechada:not(.sem-hover):hover .rh-so-recolhido { display: none; }
   .rh-sidebar.fechada:not(.sem-hover):hover .rh-sidebar-item,
   .rh-sidebar.fechada:not(.sem-hover):hover .rh-sidebar-novo {
     justify-content: flex-start; padding: .6rem .8rem;
   }
-  /* ao SAIR o mouse, o retorno ao estado recolhido demora mais (não fecha na
-     cara de quem desviou 2px) */
-  .rh-sidebar.fechada { transition-delay: 350ms; }
 }
+/* No mobile (gaveta) não há hover: quando a gaveta abre (.movel-aberta), os
+   rótulos precisam aparecer mesmo com .fechada presente. */
+.rh-sidebar.movel-aberta .rh-so-expandido { display: inline; }
+.rh-sidebar.movel-aberta .rh-so-recolhido { display: none; }
 .rh-sidebar-toggle {
   align-self: flex-end; border: 0; background: transparent; cursor: pointer;
   font-size: 1.05rem; color: var(--tinta); padding: .2rem .5rem; border-radius: 8px;
