@@ -131,6 +131,23 @@ def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
             etapa.assinatura_id = a.id
         db.add(etapa)
 
+    # Autorização da equipe: se o modelo tem representante(s) autorizado(s),
+    # injeta etapa(s) JÁ SATISFEITA(S) por autorização prévia (não é assinatura
+    # pessoal no ato — o método do manifesto deixa isso claro).
+    if payload.modelo_id:
+        from app.api.autorizacao_equipe import autorizacoes_ativas
+        prox_ordem = max((e.ordem for e in payload.etapas), default=0) + 1
+        for aut in autorizacoes_ativas(db, payload.modelo_id):
+            etapa = EtapaAssinatura(
+                id=uuid.uuid4(), solicitacao_id=sol.id, papel=aut.papel,
+                ordem=prox_ordem, tipo_signatario=TipoSignatario.externo,
+                externo_nome=aut.nome, externo_email=aut.email, externo_cpf=aut.cpf,
+                assinado_em=datetime.now(timezone.utc), assinante_nome=aut.nome,
+                assinante_cpf=aut.cpf, hash_sha256=aut.hash_sha256,
+                prova_metodo="autorizacao_previa")
+            db.add(etapa)
+            prox_ordem += 1
+
     registrar(db, "roteiro_assinatura_criado", ator="rh", ator_detalhe=rh.email,
               candidato_id=cand.id, detalhe={"titulo": titulo, "etapas": len(payload.etapas)})
     db.commit()
