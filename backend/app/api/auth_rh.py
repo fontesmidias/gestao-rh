@@ -6,12 +6,13 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import base_url_publica
+from app.core.config import base_url_publica, ip_do_cliente
 from app.core.db import get_db
 from app.core.security import (criar_token_reset, criar_token_sessao, hash_senha,
                                validar_token_reset, validar_token_sessao, verificar_senha)
 from app.services.auditoria import registrar
 from app.services.email import enviar_email, html_moderno
+from app.services.limite import exigir
 from app.models.usuario_rh import UsuarioRH
 
 router = APIRouter(tags=["auth-rh"])
@@ -30,7 +31,12 @@ class LoginOut(BaseModel):
 
 
 @router.post("/rh/auth/login", response_model=LoginOut)
-def login(payload: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
+def login(payload: LoginIn, request: Request, db: Session = Depends(get_db)) -> LoginOut:
+    # Anti-força-bruta: por IP e por conta (a chave por conta segura ataque
+    # distribuído numa mesma vítima; a por IP segura varredura de senhas).
+    ip = ip_do_cliente(request) or "?"
+    exigir(f"login:ip:{ip}", maximo=15, janela_s=300)
+    exigir(f"login:conta:{payload.email.lower()}", maximo=10, janela_s=900)
     usuario = db.scalar(select(UsuarioRH).where(UsuarioRH.email == payload.email.lower()))
     if usuario is None or not usuario.ativo or not verificar_senha(payload.senha, usuario.senha_hash):
         registrar(db, "login_falhou", ator="rh", ator_detalhe=payload.email)
@@ -51,6 +57,7 @@ def esqueci_senha(payload: EsqueciSenhaIn, request: Request,
                   db: Session = Depends(get_db)) -> None:
     """Sempre responde 204 (não revela se o e-mail existe). Se existir e estiver
     ativo, envia link de redefinição válido por 30 minutos."""
+    exigir(f"reset:ip:{ip_do_cliente(request) or '?'}", maximo=5, janela_s=900)
     usuario = db.scalar(select(UsuarioRH).where(UsuarioRH.email == payload.email.lower()))
     registrar(db, "reset_senha_solicitado", ator="rh", ator_detalhe=payload.email.lower())
     db.commit()
@@ -94,7 +101,9 @@ class RedefinirSenhaIn(BaseModel):
 
 
 @router.post("/rh/auth/redefinir-senha", status_code=204)
-def redefinir_senha(payload: RedefinirSenhaIn, db: Session = Depends(get_db)) -> None:
+def redefinir_senha(payload: RedefinirSenhaIn, request: Request,
+                    db: Session = Depends(get_db)) -> None:
+    exigir(f"redefinir:ip:{ip_do_cliente(request) or '?'}", maximo=10, janela_s=900)
     dados = validar_token_reset(payload.token)
     if dados is None:
         raise HTTPException(status_code=422, detail="link_invalido_ou_expirado")

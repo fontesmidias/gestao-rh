@@ -108,9 +108,14 @@ class IniciarIn(BaseModel):
 
 @router.post("/creche/iniciar")
 def iniciar(payload: IniciarIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    from app.core.config import ip_do_cliente
+    from app.services.limite import exigir
     cpf = _digitos(payload.cpf)
     if not cpf_valido(cpf):
         raise HTTPException(status_code=422, detail="cpf_invalido")
+    # anti-força-bruta e anti-spam de e-mail: por IP e por CPF
+    exigir(f"creche-ini:ip:{ip_do_cliente(request) or '?'}", maximo=10, janela_s=900)
+    exigir(f"creche-ini:cpf:{cpf}", maximo=5, janela_s=900)
 
     colaborador = _colaborador_por_cpf(db, cpf)
     # Resposta uniforme: mesmo se não achar, seguimos como se fôssemos enviar o
@@ -183,7 +188,10 @@ class ConfirmarIn(BaseModel):
 
 @router.post("/creche/confirmar")
 def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
+    from app.services.limite import exigir
     cpf = _digitos(payload.cpf)
+    # código de 6 dígitos: 10 tentativas por CPF na janela e acabou
+    exigir(f"creche-2fa:cpf:{cpf}", maximo=10, janela_s=900)
     colaborador = _colaborador_por_cpf(db, cpf)
     if colaborador is None:
         raise HTTPException(status_code=422, detail="codigo_invalido")

@@ -175,6 +175,20 @@ export const creche = {
   enviar: (t) => req(`/creche/sessao/${t}/enviar`, { method: 'POST' }),
 }
 
+// --- Testagem (link público /t/{token}: só o nome, resultado visível) ---
+export const testagem = {
+  info: (t) => req(`/t/${t}`),
+  participar: (t, nome) =>
+    req(`/t/${t}/participar`, { method: 'POST', body: JSON.stringify({ nome }) }),
+  sessao: (t, pid) => req(`/t/${t}/p/${pid}`),
+  iniciar: (t, pid, tipo) => req(`/t/${t}/p/${pid}/${tipo}/iniciar`, { method: 'POST' }),
+  questoes: (t, pid, tipo) => req(`/t/${t}/p/${pid}/${tipo}/questoes`),
+  responder: (t, pid, tipo, dados) =>
+    req(`/t/${t}/p/${pid}/${tipo}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
+  concluir: (t, pid, tipo) => req(`/t/${t}/p/${pid}/${tipo}/concluir`, { method: 'POST' }),
+  resultados: (t, pid) => req(`/t/${t}/p/${pid}/resultados`),
+}
+
 // --- Banco de Talentos (cadastro público, sem token) ---
 export const talentos = {
   opcoes: () => req('/talentos/opcoes'),
@@ -394,6 +408,19 @@ export const rh = {
   crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
   // Testes do candidato (resultado restrito ao RH)
   testesCandidato: (id) => req(`/rh/candidatos/${id}/testes`, { headers: authRH() }),
+  definirTestes: (id, fazer_disc, fazer_situacional) =>
+    req(`/rh/candidatos/${id}/testes`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ fazer_disc, fazer_situacional }) }),
+  // Links de testagem (aplicação avulsa dos testes, participante vê o resultado)
+  testagemLinks: () => req('/rh/testagem/links', { headers: authRH() }),
+  testagemCriarLink: (nome) =>
+    req('/rh/testagem/links', { method: 'POST', headers: authRH(),
+                                body: JSON.stringify({ nome }) }),
+  testagemEditarLink: (id, dados) =>
+    req(`/rh/testagem/links/${id}`, { method: 'PUT', headers: authRH(),
+                                      body: JSON.stringify(dados) }),
+  testagemParticipantes: (id) =>
+    req(`/rh/testagem/links/${id}/participantes`, { headers: authRH() }),
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

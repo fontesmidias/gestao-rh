@@ -36,6 +36,7 @@ from app.services.disc import (PERFIS_DISC, TEMPO_DISC_SEGUNDOS,
                                pontuar_situacional, questoes_disc_publicas,
                                questoes_situacional_publicas)
 from app.services.email import enviar_email, html_moderno
+from app.services.limite import exigir
 from app.services.magic_link import resolver_token
 
 router = APIRouter(tags=["testes"])
@@ -115,6 +116,8 @@ def identificar(token: str, payload: IdentificarIn, db: Session = Depends(get_db
     """Identificação mínima antes do teste. O código 2FA vai ao e-mail informado
     (que também atualiza o cadastro se o convite veio sem e-mail)."""
     from app.services.validacao import cpf_valido
+    # evita disparo de e-mails em série pelo mesmo link
+    exigir(f"teste-ident:{token[:16]}", maximo=5, janela_s=900)
     cand = _cand(token, db)
     cpf = "".join(c for c in payload.cpf if c.isdigit())
     if not cpf_valido(cpf):
@@ -164,6 +167,8 @@ class ConfirmarIn(BaseModel):
 
 @router.post("/c/{token}/testes/confirmar")
 def confirmar(token: str, payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
+    # código de 6 dígitos + 10 tentativas por janela: força bruta inviável no TTL
+    exigir(f"teste-2fa:{token[:16]}", maximo=10, janela_s=900)
     cand = _cand(token, db)
     testes = _testes(db, cand)
     agora = datetime.now(timezone.utc)
@@ -334,6 +339,49 @@ def concluir(token: str, tipo: str, db: Session = Depends(get_db)) -> dict:
 # ---------------------------------------------------------------------------
 # RH — resultado restrito
 # ---------------------------------------------------------------------------
+
+
+class DefinirTestesIn(BaseModel):
+    fazer_disc: bool
+    fazer_situacional: bool
+
+
+@router.put("/rh/candidatos/{candidato_id}/testes")
+def definir_testes_rh(candidato_id: uuid.UUID, payload: DefinirTestesIn,
+                      db: Session = Depends(get_db),
+                      _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """O RH liga/desliga os testes DEPOIS do convite (antes, só dava na criação).
+    Desmarcar só remove teste ainda PENDENTE (vai para a lixeira); teste já
+    iniciado/concluído é mantido — resultado não se apaga por engano."""
+    from app.services.lixeira import mandar_para_lixeira
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    desejo = {TipoTeste.disc: payload.fazer_disc,
+              TipoTeste.situacional: payload.fazer_situacional}
+    existentes = {t.tipo: t for t in _testes(db, cand)}
+    criados, removidos, mantidos = [], [], []
+    for tipo, quer in desejo.items():
+        t = existentes.get(tipo)
+        if quer and t is None:
+            db.add(TesteCandidato(candidato_id=cand.id, tipo=tipo))
+            criados.append(tipo.value)
+        elif not quer and t is not None:
+            if t.status == StatusTeste.pendente:
+                mandar_para_lixeira(db, t, "teste_candidato",
+                                    f"Teste {tipo.value} — {cand.nome_completo}",
+                                    _rh.email)
+                db.delete(t)
+                removidos.append(tipo.value)
+            else:
+                mantidos.append(tipo.value)  # já iniciado/concluído: não remove
+    registrar(db, "testes_editados", ator="rh", ator_detalhe=_rh.email,
+              candidato_id=cand.id,
+              detalhe={"criados": criados, "removidos": removidos, "mantidos": mantidos})
+    db.commit()
+    atuais = _testes(db, cand)
+    return {"criados": criados, "removidos": removidos, "mantidos": mantidos,
+            "testes": [{"tipo": t.tipo, "status": t.status} for t in atuais]}
 
 
 @router.get("/rh/candidatos/{candidato_id}/testes",

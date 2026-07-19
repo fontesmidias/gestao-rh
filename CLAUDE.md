@@ -10,7 +10,11 @@ imagem; as migrations rodam sozinhas no entrypoint).
 - **NUNCA** commitar conteúdo de `docs/` (planilhas de colaboradores, ofícios,
   contratos, CNPJs). O `.gitignore` ignora `docs/*` exceto `docs/planejamento/`.
 - O **gabarito do DISC nunca vai ao frontend** — pontuação só no servidor
-  (`backend/app/services/disc.py`); o candidato jamais vê o próprio resultado.
+  (`backend/app/services/disc.py`); o candidato da ADMISSÃO jamais vê o próprio
+  resultado. Exceção intencional: na **testagem avulsa** (`/t/{token}`,
+  `app/api/testagem.py`) o participante vê o resultado calculado — é ambiente
+  de testagem/validação, decisão do Bruno (2026-07-19); o gabarito continua
+  só no servidor.
 - LGPD: dados pessoais só aparecem após 2FA por código no e-mail; respostas de
   CPF são anti-enumeração ("Se este CPF constar...").
 

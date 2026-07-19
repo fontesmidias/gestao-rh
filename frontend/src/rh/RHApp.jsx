@@ -8,6 +8,7 @@ import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
 import Creche from './Creche.jsx'
+import TestagemRH from './TestagemRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -38,7 +39,11 @@ function Login({ aoEntrar }) {
   const entrar = async (e) => {
     e.preventDefault()
     try { await api.login(email, senha); aoEntrar() }
-    catch { setErro('E-mail ou senha incorretos.') }
+    catch (er) {
+      setErro(er.status === 429
+        ? 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.'
+        : 'E-mail ou senha incorretos.')
+    }
   }
   if (esqueci) return (
     <main className="cartao rh-login">
@@ -174,6 +179,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['colaboradores', '👥', 'Colaboradores'],
     ['postos', '🏢', 'Postos'],
     ['creche', '🍼', 'Reembolso-Creche'],
+    ['testagem', '🧪', 'Testes'],
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
@@ -265,6 +271,7 @@ function Painel({ aoSair }) {
         )}
         {pagina === 'postos' && <PostosRH />}
         {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
+        {pagina === 'testagem' && <TestagemRH />}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
