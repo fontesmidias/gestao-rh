@@ -672,10 +672,21 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   position: absolute; right: .4rem; top: .4rem; border: 0; background: transparent;
   font-size: 1.15rem; color: var(--tinta); cursor: pointer; padding: .2rem .4rem;
 }
-/* A nav é a parte rolável (o resto fica fixo). */
+/* A nav é a parte rolável (o resto fica fixo). Barra de rolagem discreta:
+   fina e translúcida, aparece só quando o cursor está no menu. */
 .rh-sidebar nav {
   flex: 1; min-height: 0; overflow-y: auto;
-  padding: .5rem .55rem; display: flex; flex-direction: column;
+  padding: .7rem .55rem; display: flex; flex-direction: column;
+  scrollbar-width: thin;                 /* Firefox */
+  scrollbar-color: transparent transparent;
+}
+.rh-sidebar nav:hover { scrollbar-color: var(--borda) transparent; }
+.rh-sidebar nav::-webkit-scrollbar { width: 6px; }
+.rh-sidebar nav::-webkit-scrollbar-thumb {
+  background: transparent; border-radius: 6px;
+}
+.rh-sidebar nav:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--tinta) 22%, transparent);
 }
 .rh-sidebar-grupo { display: flex; flex-direction: column; gap: 1px; margin-bottom: .3rem; }
 .rh-sidebar-grupo-titulo {
@@ -689,10 +700,6 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--verde-suave); color: var(--verde-escuro);
   font-weight: 800; font-size: var(--fs-apoio);
-}
-.rh-sidebar-novo {
-  display: flex; justify-content: center; flex-shrink: 0;
-  margin: .7rem .6rem 0;
 }
 .rh-sidebar-item {
   display: flex; align-items: center; gap: .65rem;

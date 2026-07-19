@@ -204,7 +204,7 @@ const GRUPOS = [
   ]],
 ]
 
-function Sidebar({ pagina, navegar, aoNovo, aoSair }) {
+function Sidebar({ pagina, navegar, aoSair }) {
   const [movelAberto, setMovelAberto] = useState(false)
   const irPara = (fn) => { fn(); setMovelAberto(false) }
   const nome = localStorage.getItem('rh_nome') || ''
@@ -221,8 +221,6 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair }) {
                     onClick={() => setMovelAberto(false)}>✕</button>
           )}
         </div>
-        <button className="btn-principal rh-sidebar-novo" onClick={() => irPara(aoNovo)}>
-          + Novo candidato</button>
         <nav>
           {GRUPOS.map(([titulo, itens]) => (
             <div className="rh-sidebar-grupo" key={titulo}>
@@ -281,8 +279,7 @@ function Painel({ aoSair }) {
 
   return (
     <div className="rh-layout">
-      <Sidebar pagina={pagina} navegar={navegar}
-               aoNovo={() => { navegar('inicio'); setNovo({}) }} aoSair={aoSair} />
+      <Sidebar pagina={pagina} navegar={navegar} aoSair={aoSair} />
       <div className="rh-conteudo">
         {pagina === 'config' && <Config aoVoltar={() => navegar('inicio')} />}
         {pagina === 'colaboradores' && (
@@ -308,7 +305,7 @@ function Painel({ aoSair }) {
     <main className="rh-painel">
       <header className="rh-topo">
         <h1>Admissões</h1>
-        <div />
+        <button className="btn-principal" onClick={() => setNovo({})}>+ Novo candidato</button>
       </header>
 
       <Metricas dados={metricas} />
