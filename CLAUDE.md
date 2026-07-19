@@ -41,8 +41,12 @@ Stack local completo (containers `deploy-*`): roda a partir do código-fonte e
 NÃO se atualiza sozinho — depois de commitar, reconstruir com
 
 ```bash
-docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml up -d --build
 ```
+
+(o `--env-file .env` é obrigatório: a interpolação de `${VAR}` do compose lê o
+.env do diretório do primeiro `-f`, que é `deploy/` — sem a flag, porta e
+REDIS_URL saem vazias.)
 
 Ambiente de teste efêmero (SEMPRE recriar limpo entre execuções — resíduo causa
 falsos erros):

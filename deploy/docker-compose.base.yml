@@ -25,7 +25,9 @@ services:
 
   worker:
     build: ../backend
-    command: rq worker --url ${REDIS_URL} default
+    # padrão evita URL vazia quando o compose não acha o .env da raiz
+    # (interpolação usa o diretório do primeiro -f; ver nota no ip.yml)
+    command: rq worker --url ${REDIS_URL:-redis://redis:6379/0} default
     env_file: ../.env
     depends_on:
       - redis
