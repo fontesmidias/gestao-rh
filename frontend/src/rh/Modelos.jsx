@@ -95,6 +95,7 @@ export default function Modelos() {
   const [busca, setBusca] = useState('')
   const [edit, setEdit] = useState(null)
   const [enviando, setEnviando] = useState(null) // modelo_id com o painel de envio aberto
+  const [assinaturas, setAssinaturas] = useState(null) // modelo_id com o painel de assinaturas
   const [msg, setMsg] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const pessoas = usePessoas()
@@ -221,6 +222,10 @@ export default function Modelos() {
                               onClick={() => setEnviando(enviando === m.id ? null : m.id)}>
                         📤 Enviar</button>
                       <button className="btn-secundario btn-mini"
+                              title="Autorizações da equipe e roteiro-padrão de assinatura"
+                              onClick={() => setAssinaturas(assinaturas === m.id ? null : m.id)}>
+                        🎭 Assinaturas</button>
+                      <button className="btn-secundario btn-mini"
                               onClick={() => editando ? setEdit(null) : setEdit({
                         id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
                         cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
@@ -254,6 +259,14 @@ export default function Modelos() {
                       </td>
                     </tr>
                   )}
+                  {assinaturas === m.id && (
+                    <tr className="linha-form-inline">
+                      <td colSpan={4}>
+                        <AssinaturasDoModelo modelo={m} papeis={papeis} setMsg={setMsg}
+                                             aoFechar={() => setAssinaturas(null)} />
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               )
             })}
@@ -261,6 +274,165 @@ export default function Modelos() {
         </table>
       )}
       <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Painel de assinaturas do modelo: autorizações da equipe (assinatura por
+// autorização prévia registrada) + roteiro-padrão de papéis.
+function AssinaturasDoModelo({ modelo, papeis, setMsg, aoFechar }) {
+  const [autos, setAutos] = useState(null)
+  const [rotinaPadrao, setRotinaPadrao] = useState(null)
+  const [nova, setNova] = useState(null) // {nome, cargo, email, cpf, papel}
+  const [confirmando, setConfirmando] = useState(null) // {id, codigo}
+
+  const recarregar = () => api.autorizacoesEquipe(modelo.id).then((r) => setAutos(r.autorizacoes))
+  const recarregarPadrao = () => api.roteiroPadrao(modelo.id)
+    .then((r) => setRotinaPadrao(r.etapas)).catch(() => setRotinaPadrao([]))
+  useEffect(() => { recarregar().catch(() => setAutos([])); recarregarPadrao() }, [modelo.id])
+
+  return (
+    <div className="form-inline-conteudo">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <strong>🎭 Assinaturas de "{modelo.titulo}"</strong>
+        <button className="btn-link" onClick={aoFechar}>fechar</button>
+      </div>
+
+      {/* --- Roteiro-padrão de papéis --- */}
+      <p className="explica" style={{ marginTop: '.5rem' }}><strong>Roteiro-padrão:</strong> papéis
+        que este documento pede por padrão (as pessoas você escolhe na hora de coletar). Deixe
+        vazio se cada envio tem um roteiro diferente.</p>
+      {rotinaPadrao && <RoteiroPadraoEditor modelo={modelo} papeis={papeis}
+        etapas={rotinaPadrao} setMsg={setMsg} recarregar={recarregarPadrao} />}
+
+      {/* --- Autorizações da equipe --- */}
+      <p className="explica" style={{ marginTop: '.8rem' }}><strong>Assinatura da equipe:</strong> um
+        representante autoriza <em>uma vez</em> (confirma por código no e-mail) que a assinatura dele
+        conste nos documentos deste modelo. Não é assinatura no ato — o documento diz "emitido sob
+        autorização de X". Revogável a qualquer momento.</p>
+      {!autos ? <p>Carregando…</p> : (
+        <table className="rh-tabela">
+          <thead><tr><th>Representante</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
+          <tbody>
+            {autos.map((a) => (
+              <tr key={a.id}>
+                <td><strong>{a.nome}</strong>{a.cargo ? ` — ${a.cargo}` : ''}<br /><small>{a.email}</small></td>
+                <td>{a.papel}</td>
+                <td>{a.revogada_em ? '⚪ revogada'
+                  : a.ativa ? '🟢 ativa'
+                  : a.autorizado_em ? '⏳ expirada' : '📧 aguardando confirmação'}</td>
+                <td className="acoes-candidato">
+                  {!a.autorizado_em && (
+                    confirmando?.id === a.id ? (
+                      <span className="rejeicao">
+                        <input inputMode="numeric" maxLength={6} placeholder="Código"
+                               value={confirmando.codigo} style={{ maxWidth: 90 }}
+                               onChange={(e) => setConfirmando({ ...confirmando, codigo: e.target.value.replace(/\D/g, '') })} />
+                        <button className="btn-principal btn-mini" onClick={async () => {
+                          setMsg(null)
+                          try {
+                            await api.confirmarAutorizacaoEquipe(a.id, confirmando.codigo)
+                            setConfirmando(null); await recarregar()
+                            setMsg({ tipo: 'ok', texto: `Autorização de ${a.nome} confirmada e ativa.` })
+                          } catch (e) {
+                            setMsg({ tipo: 'erro', texto: e.detail === 'codigo_incorreto'
+                              ? 'Código incorreto.' : `Não confirmou (${e.detail || e.message}).` })
+                          }
+                        }}>Confirmar</button>
+                        <button className="btn-link" onClick={() => setConfirmando(null)}>cancelar</button>
+                      </span>
+                    ) : (
+                      <button className="btn-secundario btn-mini"
+                              title="Digite aqui o código que o representante recebeu por e-mail"
+                              onClick={() => setConfirmando({ id: a.id, codigo: '' })}>Confirmar código</button>
+                    )
+                  )}
+                  {a.ativa && (
+                    <button className="btn-link" onClick={async () => {
+                      if (!window.confirm(`Revogar a autorização de ${a.nome}?`)) return
+                      await api.revogarAutorizacaoEquipe(a.id); await recarregar()
+                    }}>revogar</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {!nova ? (
+        <button className="btn-secundario btn-mini" style={{ marginTop: '.5rem' }}
+                onClick={() => setNova({ nome: '', cargo: '', email: '', cpf: '', papel: 'Contratante' })}>
+          + Autorizar representante</button>
+      ) : (
+        <div className="rh-lote" style={{ marginTop: '.5rem' }}>
+          <input placeholder="Nome" value={nova.nome} style={{ maxWidth: 160 }}
+                 onChange={(e) => setNova({ ...nova, nome: e.target.value })} />
+          <input placeholder="Cargo (opcional)" value={nova.cargo} style={{ maxWidth: 140 }}
+                 onChange={(e) => setNova({ ...nova, cargo: e.target.value })} />
+          <input placeholder="E-mail" value={nova.email} style={{ maxWidth: 180 }}
+                 onChange={(e) => setNova({ ...nova, email: e.target.value })} />
+          <select value={nova.papel} onChange={(e) => setNova({ ...nova, papel: e.target.value })}>
+            {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
+          </select>
+          <button className="btn-principal btn-mini" disabled={!nova.nome.trim() || !nova.email.trim()}
+                  onClick={async () => {
+                    setMsg(null)
+                    try {
+                      await api.criarAutorizacaoEquipe({ modelo_id: modelo.id, nome: nova.nome.trim(),
+                        cargo: nova.cargo.trim() || null, email: nova.email.trim(),
+                        cpf: nova.cpf.trim() || null, papel: nova.papel })
+                      setNova(null); await recarregar()
+                      setMsg({ tipo: 'ok', texto: 'Enviamos um código ao representante — quando ele passar, use "Confirmar código".' })
+                    } catch (e) {
+                      setMsg({ tipo: 'erro', texto: `Não foi possível (${e.detail || e.message}).` })
+                    }
+                  }}>Enviar código</button>
+          <button className="btn-link" onClick={() => setNova(null)}>cancelar</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Editor do roteiro-padrão de papéis do modelo (só papel/ordem/tipo — as
+// pessoas são escolhidas no disparo).
+function RoteiroPadraoEditor({ modelo, papeis, etapas, setMsg, recarregar }) {
+  const [linhas, setLinhas] = useState(etapas)
+  useEffect(() => { setLinhas(etapas) }, [etapas])
+  const set = (i, campo, v) => setLinhas(linhas.map((e, j) => j === i ? { ...e, [campo]: v } : e))
+  return (
+    <div>
+      {linhas.map((e, i) => (
+        <div key={i} className="rh-lote" style={{ padding: '.25rem 0' }}>
+          <input style={{ maxWidth: 55 }} inputMode="numeric" value={e.ordem}
+                 onChange={(ev) => set(i, 'ordem', parseInt(ev.target.value, 10) || 1)} />
+          <select value={e.papel} onChange={(ev) => set(i, 'papel', ev.target.value)}>
+            <option value="">— papel —</option>
+            {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
+          </select>
+          <select value={e.tipo_sugerido} onChange={(ev) => set(i, 'tipo_sugerido', ev.target.value)}>
+            <option value="candidato">O colaborador</option>
+            <option value="usuario_rh">Alguém do RH</option>
+            <option value="externo">Externo</option>
+          </select>
+          <button className="btn-link" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}>✕</button>
+        </div>
+      ))}
+      <div className="rh-lote">
+        <button className="btn-secundario btn-mini" onClick={() =>
+          setLinhas([...linhas, { papel: '', ordem: linhas.length + 1, tipo_sugerido: 'candidato' }])}>
+          + Papel</button>
+        <button className="btn-principal btn-mini" onClick={async () => {
+          setMsg(null)
+          try {
+            await api.salvarRoteiroPadrao(modelo.id,
+              linhas.filter((e) => e.papel).map((e) => ({ papel: e.papel, ordem: e.ordem, tipo_sugerido: e.tipo_sugerido })))
+            await recarregar()
+            setMsg({ tipo: 'ok', texto: 'Roteiro-padrão salvo.' })
+          } catch (e) { setMsg({ tipo: 'erro', texto: `Não salvou (${e.detail || e.message}).` }) }
+        }}>Salvar roteiro-padrão</button>
+      </div>
     </div>
   )
 }

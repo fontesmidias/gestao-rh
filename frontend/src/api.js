@@ -494,6 +494,11 @@ export const rh = {
         body: JSON.stringify({ autorizacao_id, codigo }) }),
   revogarAutorizacaoEquipe: (id) =>
     req(`/rh/autorizacoes-equipe/${id}/revogar`, { method: 'POST', headers: authRH() }),
+  roteiroPadrao: (modeloId) =>
+    req(`/rh/modelos/${modeloId}/roteiro-padrao`, { headers: authRH() }),
+  salvarRoteiroPadrao: (modeloId, etapas) =>
+    req(`/rh/modelos/${modeloId}/roteiro-padrao`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify(etapas) }),
   papeis: () => req('/rh/papeis-assinatura', { headers: authRH() }),
   criarPapel: (dados) =>
     req('/rh/papeis-assinatura', { method: 'POST', headers: authRH(),

@@ -70,7 +70,7 @@ services:
   expurgo:
     image: ghcr.io/fontesmidias/admissao-api:latest
     entrypoint: ["/bin/sh", "-c"]
-    command: ["while true; do python -m app.workers.expurgo; sleep 86400; done"]
+    command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; sleep 86400; done"]
     environment:
       SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}

@@ -93,10 +93,22 @@ def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
     cand = db.get(Candidato, cid)
     if cand is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
-    if not payload.etapas:
-        raise HTTPException(status_code=422, detail="roteiro_sem_etapas")
     if bool(payload.documento) == bool(payload.modelo_id):
         raise HTTPException(status_code=422, detail="informe_documento_ou_modelo")
+    # roteiro vazio + modelo com roteiro-padrão só de CANDIDATO → materializa
+    # direto (essas etapas não precisam de pessoa). Etapas de RH/externo do
+    # padrão exigem escolher a pessoa, então a UI pré-carrega o padrão e o RH
+    # completa — não materializamos etapa sem pessoa (correção M9).
+    etapas_in = list(payload.etapas)
+    if not etapas_in and payload.modelo_id:
+        from app.models.solicitacao_assinatura import ModeloEtapaPadrao
+        padrao = db.scalars(select(ModeloEtapaPadrao)
+                            .where(ModeloEtapaPadrao.modelo_id == payload.modelo_id)
+                            .order_by(ModeloEtapaPadrao.ordem)).all()
+        etapas_in = [EtapaIn(papel=p.papel, ordem=p.ordem, tipo=p.tipo_sugerido)
+                     for p in padrao if p.tipo_sugerido == TipoSignatario.candidato]
+    if not etapas_in:
+        raise HTTPException(status_code=422, detail="roteiro_sem_etapas")
 
     titulo, corpo = _titulo_corpo(db, payload)
     sol = SolicitacaoAssinatura(
@@ -106,7 +118,7 @@ def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
     db.add(sol)
     db.flush()
 
-    for e in payload.etapas:
+    for e in etapas_in:
         etapa = EtapaAssinatura(id=uuid.uuid4(), solicitacao_id=sol.id,
                                 papel=e.papel.strip()[:60],
                                 ordem=e.ordem, tipo_signatario=e.tipo)
@@ -136,7 +148,7 @@ def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
     # pessoal no ato — o método do manifesto deixa isso claro).
     if payload.modelo_id:
         from app.api.autorizacao_equipe import autorizacoes_ativas
-        prox_ordem = max((e.ordem for e in payload.etapas), default=0) + 1
+        prox_ordem = max((e.ordem for e in etapas_in), default=0) + 1
         for aut in autorizacoes_ativas(db, payload.modelo_id):
             etapa = EtapaAssinatura(
                 id=uuid.uuid4(), solicitacao_id=sol.id, papel=aut.papel,
@@ -149,7 +161,7 @@ def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
             prox_ordem += 1
 
     registrar(db, "roteiro_assinatura_criado", ator="rh", ator_detalhe=rh.email,
-              candidato_id=cand.id, detalhe={"titulo": titulo, "etapas": len(payload.etapas)})
+              candidato_id=cand.id, detalhe={"titulo": titulo, "etapas": len(etapas_in)})
     db.commit()
     return _dump_sol(db, sol)
 

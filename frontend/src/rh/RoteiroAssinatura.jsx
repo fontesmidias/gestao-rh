@@ -96,6 +96,19 @@ const ROTULO_STATUS = { rascunho: 'Rascunho', aguardando: 'Assinando', concluida
 
 function MontarRoteiro({ montando, setMontando, modelos, papeis, usuarios, id, setMsg, recarregar }) {
   const [salvando, setSalvando] = useState(false)
+  // Ao escolher um modelo com roteiro-padrão, pré-carrega as etapas dele (o RH
+  // completa as pessoas de RH/externo). Só faz isso uma vez por modelo.
+  const escolherModelo = async (modelo_id) => {
+    setMontando({ ...montando, modelo_id })
+    if (!modelo_id) return
+    try {
+      const r = await api.roteiroPadrao(modelo_id)
+      if (r.etapas && r.etapas.length) {
+        setMontando({ modelo_id, etapas: r.etapas.map((e) => ({
+          papel: e.papel, ordem: e.ordem, tipo: e.tipo_sugerido })) })
+      }
+    } catch { /* modelo sem padrão: mantém o que está */ }
+  }
   const setEtapa = (i, campo, v) => setMontando({
     ...montando, etapas: montando.etapas.map((e, j) => j === i ? { ...e, [campo]: v } : e) })
   const addEtapa = () => setMontando({ ...montando,
@@ -105,7 +118,7 @@ function MontarRoteiro({ montando, setMontando, modelos, papeis, usuarios, id, s
     <div className="form-inline-conteudo" style={{ border: '1px solid var(--borda)', borderRadius: 10, padding: '.7rem', margin: '.5rem 0' }}>
       <label className="campo"><span className="rotulo">Documento (modelo)</span>
         <select value={montando.modelo_id}
-                onChange={(e) => setMontando({ ...montando, modelo_id: e.target.value })}>
+                onChange={(e) => escolherModelo(e.target.value)}>
           <option value="">— escolha o modelo —</option>
           {modelos.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
         </select></label>

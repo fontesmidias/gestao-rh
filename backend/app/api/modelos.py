@@ -318,6 +318,52 @@ def editar_papel(papel_id: uuid.UUID, payload: PapelIn, db: Session = Depends(ge
     return _dump_papel(p)
 
 
+# --- Roteiro-padrão de papéis de um modelo -------------------------------
+# Só papel/ordem/tipo_sugerido — as PESSOAS são escolhidas no disparo
+# (correção M9: nunca congelar um usuário RH aqui).
+
+
+class EtapaPadraoIn(BaseModel):
+    papel: str
+    ordem: int
+    tipo_sugerido: str  # candidato | usuario_rh | externo
+
+
+@router.get("/rh/modelos/{modelo_id}/roteiro-padrao")
+def ver_roteiro_padrao(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    from app.models.solicitacao_assinatura import ModeloEtapaPadrao
+    etapas = db.scalars(select(ModeloEtapaPadrao)
+                        .where(ModeloEtapaPadrao.modelo_id == modelo_id)
+                        .order_by(ModeloEtapaPadrao.ordem)).all()
+    return {"etapas": [{"papel": e.papel, "ordem": e.ordem,
+                        "tipo_sugerido": e.tipo_sugerido.value} for e in etapas]}
+
+
+@router.put("/rh/modelos/{modelo_id}/roteiro-padrao")
+def salvar_roteiro_padrao(modelo_id: uuid.UUID, payload: list[EtapaPadraoIn],
+                          db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.models.solicitacao_assinatura import (ModeloEtapaPadrao,
+                                                   TipoSignatario)
+    if db.get(ModeloDocumento, modelo_id) is None:
+        raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
+    # substitui o roteiro-padrão inteiro
+    for e in db.scalars(select(ModeloEtapaPadrao)
+                        .where(ModeloEtapaPadrao.modelo_id == modelo_id)).all():
+        db.delete(e)
+    for it in payload:
+        try:
+            tipo = TipoSignatario(it.tipo_sugerido)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="tipo_sugerido_invalido")
+        db.add(ModeloEtapaPadrao(modelo_id=modelo_id, papel=it.papel.strip()[:60],
+                                 ordem=it.ordem, tipo_sugerido=tipo))
+    registrar(db, "roteiro_padrao_salvo", ator="rh", ator_detalhe=rh.email,
+              detalhe={"modelo": str(modelo_id), "etapas": len(payload)})
+    db.commit()
+    return {"etapas": len(payload)}
+
+
 @router.delete("/rh/papeis-assinatura/{papel_id}", status_code=204)
 def excluir_papel(papel_id: uuid.UUID, db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(requer_rh)) -> None:
