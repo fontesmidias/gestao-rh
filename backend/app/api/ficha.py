@@ -82,11 +82,22 @@ class SecaoPessoais(BaseModel):
     estado_civil: EstadoCivil | None = None
     escolaridade: Escolaridade | None = None
     pcd: bool | None = None
+    # Conteúdo do laudo (só para quem é PCD; opcionais — o laudo anexado é a
+    # prova, estes campos poupam o RH de transcrever).
+    pcd_cid: str | None = None
+    pcd_tipo: str | None = None
+    pcd_data_laudo: date | None = None
+    pcd_medico_crm: str | None = None
 
 
 class SecaoEndereco(BaseModel):
     cep: str | None = None
+    # Legado (string única) — segue aceito para quem começou a ficha antes; a
+    # coleta nova usa os três campos separados (layout do Tirvu).
     logradouro_numero_complemento: str | None = None
+    logradouro: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
     bairro: str | None = None
     cidade: str | None = None
     uf: str | None = None
@@ -214,7 +225,12 @@ def salvar_endereco(token: str, payload: SecaoEndereco, db: Session = Depends(ge
 @router.put("/c/{token}/ficha/documentos", status_code=204)
 def salvar_documentos(token: str, payload: SecaoDocumentos, db: Session = Depends(get_db)) -> None:
     candidato = _candidato_do_token(token, db)
-    _upsert(db, DocumentosIdentificacao, candidato.id, payload)
+    docs = _upsert(db, DocumentosIdentificacao, candidato.id, payload)
+    # CTPS Digital (eSocial): número = o próprio CPF, série = 0000. Derivada
+    # aqui, nunca perguntada ao candidato; quem assinou antes fica em branco.
+    if docs.cpf and not docs.ctps_numero:
+        from app.services.export_tirvu import ctps_do_cpf
+        docs.ctps_numero, docs.ctps_serie = ctps_do_cpf(docs.cpf)
     _marca_preenchendo(candidato)
     db.commit()
 
@@ -413,9 +429,17 @@ def pendencias_da_ficha(db: Session, candidato: Candidato) -> list[str]:
             pendencias.append(f"pessoais.{campo}")
 
     endereco = db.get(Endereco, candidato.id)
-    for campo in ("cep", "logradouro_numero_complemento", "bairro", "cidade", "uf"):
+    for campo in ("cep", "bairro", "cidade", "uf"):
         if endereco is None or getattr(endereco, campo) is None:
             pendencias.append(f"endereco.{campo}")
+    # Coleta nova exige logradouro + número separados (layout do Tirvu); quem
+    # começou a ficha antes e já tem a string única legada passa sem refazer.
+    tem_legado = endereco is not None and endereco.logradouro_numero_complemento
+    if not tem_legado:
+        if endereco is None or not endereco.logradouro:
+            pendencias.append("endereco.logradouro")
+        if endereco is None or not endereco.numero:
+            pendencias.append("endereco.numero")
 
     docs = db.get(DocumentosIdentificacao, candidato.id)
     for campo in _OBRIGATORIOS_DOCS:

@@ -200,7 +200,12 @@ async def importar_colaboradores(arquivo: UploadFile,
     A 'Lotação' é casada com um posto (criado se não existir)."""
     from openpyxl import load_workbook
 
-    conteudo = await arquivo.read()
+    try:
+        conteudo = await arquivo.read()
+    finally:
+        # descarta o spool em disco do Starlette — planilha com CPFs não
+        # persiste no container depois de processada (regra transversal)
+        await arquivo.close()
     try:
         wb = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
     except Exception:

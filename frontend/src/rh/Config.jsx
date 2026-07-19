@@ -155,6 +155,7 @@ const SUBMENUS = [
   ['geral', '👤 Geral'],
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
   ['identidade', '🎨 Identidade visual'],
+  ['organizacao', '🏢 Empresas e jornadas'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['sistema', '🛠️ Sistema'],
 ]
@@ -178,6 +179,10 @@ export default function Config({ aoVoltar }) {
       {aba === 'geral' && <div className="rh-grid-2"><Perfil /><Senha /></div>}
       {aba === 'equipe' && <Equipe />}
       {aba === 'identidade' && <IdentidadeVisual />}
+      {aba === 'organizacao' && <>
+        <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
+        <BackfillEnderecos />
+      </>}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
@@ -999,6 +1004,187 @@ function Auditoria() {
           </tbody>
         </table>
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Empresas e jornadas (integração Tirvu) + backfill assistido de endereços
+// ---------------------------------------------------------------------------
+
+function Empresas() {
+  const [empresas, setEmpresas] = useState(null)
+  const [nova, setNova] = useState({ razao_social: '', cnpj: '' })
+  const [msg, setMsg] = useState(null)
+  const carregar = () => api.empresas().then(setEmpresas)
+  useEffect(() => { carregar().catch(() => setEmpresas([])) }, [])
+  if (!empresas) return null
+  return (
+    <div className="rh-card">
+      <h3>🏢 Empresas</h3>
+      <p className="explica">Empregadoras que assinam a carteira — saem na coluna
+        "Empresa" da planilha de importação de admissões do Tirvu.</p>
+      {empresas.length > 0 && (
+        <table className="rh-tabela">
+          <thead><tr><th>Razão social</th><th>CNPJ</th></tr></thead>
+          <tbody>{empresas.map((e) => (
+            <tr key={e.id}><td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td></tr>
+          ))}</tbody>
+        </table>
+      )}
+      <div className="linha2" style={{ alignItems: 'end', marginTop: '.6rem' }}>
+        <label className="campo"><span className="rotulo">Razão social</span>
+          <input value={nova.razao_social}
+                 onChange={(e) => setNova({ ...nova, razao_social: e.target.value })} /></label>
+        <label className="campo"><span className="rotulo">CNPJ (opcional)</span>
+          <input value={nova.cnpj}
+                 onChange={(e) => setNova({ ...nova, cnpj: e.target.value })} /></label>
+      </div>
+      <button className="btn-secundario" onClick={async () => {
+        setMsg(null)
+        if (!nova.razao_social.trim()) { setMsg({ tipo: 'erro', texto: 'Informe a razão social.' }); return }
+        try {
+          await api.criarEmpresa({ razao_social: nova.razao_social.trim(),
+                                   cnpj: nova.cnpj.trim() || null })
+          setNova({ razao_social: '', cnpj: '' }); setMsg({ tipo: 'ok', texto: 'Empresa cadastrada.' })
+          carregar()
+        } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível criar (${e.detail || e.message}).` }) }
+      }}>+ Cadastrar empresa</button>
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+function JornadasConfig() {
+  const [jornadas, setJornadas] = useState(null)
+  const [busca, setBusca] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [relato, setRelato] = useState(null)
+  const carregar = () => api.jornadas().then(setJornadas)
+  useEffect(() => { carregar().catch(() => setJornadas([])) }, [])
+  if (!jornadas) return null
+  const termo = busca.trim().toLowerCase()
+  const visiveis = termo ? jornadas.filter((j) => j.descricao.toLowerCase().includes(termo)) : jornadas
+  return (
+    <div className="rh-card">
+      <h3>🕐 Jornadas de trabalho</h3>
+      <p className="explica">Importadas da planilha "Escala de Trabalho - Detalhado" do
+        Tirvu (cada aba é um posto) ou criadas na ficha do colaborador. O arquivo enviado
+        é processado e descartado — nada fica guardado.</p>
+      <label className="btn-secundario" style={{ cursor: 'pointer' }}>
+        📥 Importar planilha de escalas…
+        <input type="file" accept=".xlsx" style={{ display: 'none' }}
+               onChange={async (e) => {
+                 const f = e.target.files[0]; e.target.value = ''
+                 if (!f) return
+                 setMsg(null); setRelato(null)
+                 try {
+                   const r = await api.importarJornadas(f)
+                   setRelato(r); carregar()
+                 } catch (err) {
+                   setMsg({ tipo: 'erro', texto: err.detail === 'arquivo_invalido'
+                     ? 'O arquivo não parece um .xlsx válido.'
+                     : `Não foi possível importar (${err.detail || err.message}).` })
+                 }
+               }} />
+      </label>
+      {relato && (
+        <div className="sucesso">
+          {relato.jornadas_criadas} jornada(s) nova(s) de {relato.abas_processadas} abas —
+          {' '}{relato.abas_casadas_com_posto} abas casaram com postos.
+          {relato.abas_sem_posto.length > 0 && (
+            <> Sem posto correspondente: {relato.abas_sem_posto.join(', ')}.
+              As jornadas dessas abas entraram sem posto (valem para todos).</>
+          )}
+        </div>
+      )}
+      <p className="explica"><strong>{jornadas.length}</strong> jornada(s) cadastrada(s).</p>
+      {jornadas.length > 0 && (
+        <input placeholder="🔎 Filtrar jornadas…" value={busca}
+               onChange={(e) => setBusca(e.target.value)} />
+      )}
+      {termo && (
+        <ul>
+          {visiveis.slice(0, 30).map((j) => <li key={j.id}>{j.descricao}</li>)}
+          {visiveis.length > 30 && <li>…e mais {visiveis.length - 30}.</li>}
+          {visiveis.length === 0 && <li>Nenhuma jornada com esse texto.</li>}
+        </ul>
+      )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Backfill assistido: o parser propõe a separação do endereço antigo (string
+// única) em logradouro/número/complemento; NADA é gravado sem o RH confirmar.
+// Endereço de Brasília derruba heurística — o incerto fica para decidir à mão.
+function BackfillEnderecos() {
+  const [dados, setDados] = useState(null)
+  const [edits, setEdits] = useState({})
+  const [msg, setMsg] = useState(null)
+  const [aberto, setAberto] = useState(false)
+  const carregar = () => api.backfillEnderecos().then(setDados)
+  useEffect(() => { carregar().catch(() => setDados({ total: 0, com_proposta: 0, itens: [] })) }, [])
+  if (!dados || dados.total === 0) return null
+  const valor = (i, campo) => {
+    const e = edits[i.candidato_id]
+    if (e && campo in e) return e[campo]
+    return (i.proposta && i.proposta[campo]) || ''
+  }
+  const editar = (i, campo, v) =>
+    setEdits({ ...edits, [i.candidato_id]: { ...edits[i.candidato_id], [campo]: v } })
+  const aplicar = async (itens) => {
+    setMsg(null)
+    const payload = itens
+      .map((i) => ({ candidato_id: i.candidato_id,
+                     logradouro: valor(i, 'logradouro').trim(),
+                     numero: valor(i, 'numero').trim(),
+                     complemento: valor(i, 'complemento').trim() || null }))
+      .filter((p) => p.logradouro && p.numero)
+    if (!payload.length) { setMsg({ tipo: 'erro', texto: 'Nada para aplicar — confira logradouro e número.' }); return }
+    try {
+      const r = await api.aplicarBackfillEnderecos(payload)
+      setMsg({ tipo: 'ok', texto: `${r.aplicados} endereço(s) separado(s).` })
+      setEdits({}); carregar()
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível aplicar (${e.detail || e.message}).` }) }
+  }
+  const seguros = dados.itens.filter((i) => i.proposta && !edits[i.candidato_id])
+  return (
+    <div className="rh-card">
+      <h3>🏠 Endereços antigos — separar rua e número</h3>
+      <p className="explica">A planilha do Tirvu pede logradouro, número e complemento
+        separados; <strong>{dados.total}</strong> pessoa(s) ainda têm o endereço num campo só.
+        O sistema propõe a separação e <strong>você confirma</strong> — nada muda sozinho.
+        ({dados.com_proposta} com proposta automática; o resto precisa de ajuste manual.)</p>
+      {!aberto ? (
+        <button className="btn-secundario" onClick={() => setAberto(true)}>Revisar endereços…</button>
+      ) : (<>
+        {seguros.length > 0 && (
+          <button className="btn-principal btn-mini" style={{ marginBottom: '.5rem' }}
+                  onClick={() => aplicar(seguros)}>
+            ✓ Aplicar as {seguros.length} propostas não editadas</button>
+        )}
+        <table className="rh-tabela">
+          <thead><tr><th>Pessoa</th><th>Original</th><th>Logradouro</th><th>Nº</th><th>Compl.</th><th></th></tr></thead>
+          <tbody>
+            {dados.itens.map((i) => (
+              <tr key={i.candidato_id}>
+                <td><strong>{i.nome}</strong></td>
+                <td style={{ maxWidth: 220 }}>{i.original}</td>
+                <td><input value={valor(i, 'logradouro')} style={{ minWidth: 150 }}
+                           onChange={(e) => editar(i, 'logradouro', e.target.value)} /></td>
+                <td><input value={valor(i, 'numero')} style={{ width: 70 }}
+                           onChange={(e) => editar(i, 'numero', e.target.value)} /></td>
+                <td><input value={valor(i, 'complemento')} style={{ width: 100 }}
+                           onChange={(e) => editar(i, 'complemento', e.target.value)} /></td>
+                <td><button className="btn-secundario btn-mini"
+                            onClick={() => aplicar([i])}>✓ Aplicar</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>)}
+      <Msg msg={msg} />
     </div>
   )
 }

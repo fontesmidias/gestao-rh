@@ -102,6 +102,13 @@ class DadosPessoais(Base):
         Enum(Escolaridade, name="escolaridade")
     )
     pcd: Mapped[bool | None] = mapped_column(Boolean)
+    # Conteúdo do laudo médico (quem é PCD): os quatro campos que a fiscalização
+    # da cota (Lei 8.213/91) pede. Renderizam na ficha SÓ se preenchidos —
+    # fichas assinadas antes desta leva saem idênticas (hash intacto).
+    pcd_cid: Mapped[str | None] = mapped_column(String(20))
+    pcd_tipo: Mapped[str | None] = mapped_column(String(30))  # fisica/visual/auditiva/intelectual/multipla
+    pcd_data_laudo: Mapped[date | None] = mapped_column(Date)
+    pcd_medico_crm: Mapped[str | None] = mapped_column(String(120))
 
 
 class Endereco(Base):
@@ -109,7 +116,13 @@ class Endereco(Base):
 
     candidato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidato.id"), primary_key=True)
     cep: Mapped[str | None] = mapped_column(String(8))
+    # Campo legado (string única). Mantido para quem já preencheu/assinou; a
+    # coleta nova usa os três campos separados abaixo (layout do Tirvu). O
+    # backfill assistido migra os antigos COM confirmação do RH, nunca sozinho.
     logradouro_numero_complemento: Mapped[str | None] = mapped_column(String(300))
+    logradouro: Mapped[str | None] = mapped_column(String(200))
+    numero: Mapped[str | None] = mapped_column(String(20))
+    complemento: Mapped[str | None] = mapped_column(String(120))
     bairro: Mapped[str | None] = mapped_column(String(120))
     cidade: Mapped[str | None] = mapped_column(String(120))
     uf: Mapped[str | None] = mapped_column(String(2))
@@ -124,6 +137,11 @@ class DocumentosIdentificacao(Base):
     rg_data_expedicao: Mapped[date | None] = mapped_column(Date)
     cpf: Mapped[str | None] = mapped_column(String(11))
     pis_nis_pasep: Mapped[str | None] = mapped_column(String(14))
+    # CTPS Digital (padrão eSocial desde 2019): número = o próprio CPF (11
+    # dígitos), série = "0000". Calculada a partir do CPF — nunca perguntada ao
+    # candidato. Em branco para quem assinou antes desta leva (decisão do Bruno).
+    ctps_numero: Mapped[str | None] = mapped_column(String(11))
+    ctps_serie: Mapped[str | None] = mapped_column(String(5))
     cnh_numero: Mapped[str | None] = mapped_column(String(20))
     cnh_categoria: Mapped[str | None] = mapped_column(String(5))
     # CNH completa (feedback de campo 2026-07-18): demais campos do documento.

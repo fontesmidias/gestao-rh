@@ -427,7 +427,10 @@ async def importar_postos_planilha(arquivo: UploadFile, db: Session = Depends(ge
     (chave natural, à prova do truncamento do apelido). Enriquece cada posto com
     razão social, CNPJ e endereço. Colisões de apelido são desambiguadas pela
     razão social. Idempotente: reimportar atualiza, não duplica."""
-    conteudo = await arquivo.read()
+    try:
+        conteudo = await arquivo.read()
+    finally:
+        await arquivo.close()  # descarta o spool em disco (regra transversal)
     linhas = _ler_linhas_xlsx(conteudo)
     if linhas is None:
         raise HTTPException(status_code=422, detail="arquivo_invalido")
@@ -530,6 +533,10 @@ class PostoCandidatoIn(BaseModel):
     cargo_funcao: str | None = None
     salario_base: str | None = None
     adicionais: list[AdicionalIn] | None = None  # None = não mexe; [] = limpa
+    # Integração Tirvu: não aparecem em ficha assinada — mudar não reabre nada.
+    empresa_id: uuid.UUID | None = None
+    jornada_id: uuid.UUID | None = None
+    registra_ponto: bool | None = None
 
 
 @router.put("/rh/candidatos/{candidato_id}/posto")
@@ -554,6 +561,13 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
             candidato.salario_base = payload.salario_base.strip() or None
         if payload.adicionais is not None:
             candidato.adicionais = [a.model_dump() for a in payload.adicionais]
+        # só mexe no que veio no payload (chamadas antigas não zeram nada)
+        if "empresa_id" in payload.model_fields_set:
+            candidato.empresa_id = payload.empresa_id
+        if "jornada_id" in payload.model_fields_set:
+            candidato.jornada_id = payload.jornada_id
+        if "registra_ponto" in payload.model_fields_set:
+            candidato.registra_ponto = payload.registra_ponto
 
     if payload.posto_id is None:
         candidato.posto_servico_id = None
