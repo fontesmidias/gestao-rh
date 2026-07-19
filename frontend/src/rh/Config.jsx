@@ -86,9 +86,67 @@ export default function Config({ aoVoltar }) {
       <ModelosDocumento />
       <AvisosInternos />
       <Teams />
+      <Lixeira />
       <ErrosRecentes />
       <Auditoria />
     </main>
+  )
+}
+
+// Lixeira universal: tudo que o RH exclui (postos, modelos…) fica restaurável
+// aqui pelo prazo de retenção (padrão 60 dias, configurável abaixo).
+function Lixeira() {
+  const [dados, setDados] = useState(null)
+  const [dias, setDias] = useState('')
+  const [msg, setMsg] = useState(null)
+  const carregar = () => api.lixeira().then((d) => { setDados(d); setDias(String(d.dias_retencao)) })
+  useEffect(() => { carregar().catch(() => setDados({ itens: [], dias_retencao: 60 })) }, [])
+  if (!dados) return null
+
+  const ENTIDADES = { posto: 'Posto de serviço', modelo_documento: 'Modelo de documento' }
+  return (
+    <div className="rh-card">
+      <h3>🗑️ Lixeira</h3>
+      <p className="explica">Registros excluídos ficam aqui, restauráveis, por
+        <strong> {dados.dias_retencao} dias</strong> — depois o expurgo é definitivo (boa prática
+        de retenção de dados inativos).</p>
+      {dados.itens.length === 0
+        ? <p className="explica">A lixeira está vazia.</p>
+        : (
+          <table className="rh-tabela">
+            <thead><tr><th>Tipo</th><th>Registro</th><th>Excluído por</th><th>Quando</th><th>Ações</th></tr></thead>
+            <tbody>
+              {dados.itens.map((i) => (
+                <tr key={i.id}>
+                  <td>{ENTIDADES[i.entidade] || i.entidade}</td>
+                  <td><strong>{i.rotulo}</strong></td>
+                  <td>{i.ator || '—'}</td>
+                  <td>{new Date(i.apagado_em).toLocaleString('pt-BR')}</td>
+                  <td><button className="btn-secundario btn-mini" onClick={async () => {
+                    setMsg(null)
+                    try { await api.lixeiraRestaurar(i.id); setMsg({ tipo: 'ok', texto: `"${i.rotulo}" restaurado.` }); carregar() }
+                    catch (e) {
+                      setMsg({ tipo: 'erro', texto: e.detail === 'registro_ja_existe'
+                        ? 'Já existe um registro com esse identificador (talvez recriado à mão).'
+                        : 'Não foi possível restaurar.' })
+                    }
+                  }}>♻️ Restaurar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      <div className="linha2" style={{ alignItems: 'end', marginTop: '.6rem' }}>
+        <label className="campo"><span className="rotulo">Prazo de retenção (dias)</span>
+          <input inputMode="numeric" value={dias} onChange={(e) => setDias(e.target.value.replace(/\D/g, ''))} /></label>
+        <button className="btn-secundario" onClick={async () => {
+          setMsg(null)
+          try { await api.lixeiraConfig(parseInt(dias, 10)); setMsg({ tipo: 'ok', texto: 'Prazo atualizado.' }); carregar() }
+          catch { setMsg({ tipo: 'erro', texto: 'Informe um prazo entre 1 e 3650 dias.' }) }
+        }}>Salvar prazo</button>
+      </div>
+      <Msg msg={msg} />
+    </div>
   )
 }
 

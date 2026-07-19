@@ -21,6 +21,7 @@ from app.api.talentos import router as talentos_router
 from app.api.diagnostico import router as diagnostico_router
 from app.api.ficha import router as ficha_router
 from app.api.revisao import router as revisao_router
+from app.api.lixeira import router as lixeira_router
 from app.api.rh_ficha import router as rh_ficha_router
 from app.api.health import router as health_router
 from app.core.bootstrap import criar_admin_inicial
@@ -108,3 +109,4 @@ app.include_router(assinaturas_router, prefix="/api")
 app.include_router(revisao_router, prefix="/api")
 app.include_router(rh_ficha_router, prefix="/api")
 app.include_router(configuracoes_router, prefix="/api")
+app.include_router(lixeira_router, prefix="/api")
