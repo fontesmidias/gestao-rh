@@ -221,7 +221,8 @@ function Lixeira() {
   if (!dados) return null
 
   const ENTIDADES = { posto: 'Posto de serviço', modelo_documento: 'Modelo de documento',
-                      teste_candidato: 'Teste do candidato', papel_assinatura: 'Papel de assinatura' }
+                      teste_candidato: 'Teste do candidato', papel_assinatura: 'Papel de assinatura',
+                      candidato: 'Colaborador' }
   return (
     <div className="rh-card">
       <h3>🗑️ Lixeira</h3>
