@@ -941,6 +941,35 @@ body[data-rh-ocupado] { cursor: progress; }
 }
 .teste-rodape .btn-principal, .teste-rodape .btn-mini { margin-left: auto; }
 .teste-timer { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+/* Tooltip de nomenclatura ("?" com o significado do termo) */
+.ajuda-q {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; margin-left: .35rem; vertical-align: middle;
+  border-radius: 50%; border: 1px solid var(--borda, #cdd6cf);
+  background: #eef2ee; color: #5a6a60; font-size: .68rem; font-weight: 700;
+  cursor: help; position: relative; user-select: none; flex: none;
+}
+.ajuda-q:hover, .ajuda-q:focus { background: #dfe8e0; outline: none; }
+.ajuda-q:hover::after, .ajuda-q:focus::after {
+  content: attr(data-dica); position: absolute; z-index: 60;
+  top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: min(280px, 78vw); padding: .5rem .65rem;
+  background: #22302a; color: #fff; font-size: .74rem; font-weight: 400;
+  line-height: 1.4; text-align: left; text-transform: none; letter-spacing: 0;
+  border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+  white-space: normal; pointer-events: none;
+}
+/* perto da borda esquerda (sidebar, tabelas), o balão alinha à esquerda */
+.rh-sidebar .ajuda-q:hover::after, .rh-sidebar .ajuda-q:focus::after,
+td .ajuda-q:hover::after, td .ajuda-q:focus::after {
+  left: 0; transform: none;
+}
+
+.teste-aviso-suave {
+  margin: .2rem 1.1rem .6rem; padding: .45rem .7rem; font-size: .82rem;
+  color: #a63d36; background: #fdf1f0; border: 1px solid #f2d4d1;
+  border-radius: 8px; line-height: 1.35;
+}
 .teste-orientacoes { list-style: none; margin: 0; padding: 0; }
 .teste-orientacoes li { padding: .8rem 0; border-bottom: 1px solid var(--borda); line-height: 1.5; }
 .teste-orientacoes li:last-child { border-bottom: none; }

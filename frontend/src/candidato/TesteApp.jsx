@@ -148,6 +148,18 @@ function Instrucoes({ tipo, aoIniciar }) {
         <ul className="teste-orientacoes">
           <li>⏱️ Você terá <strong>{minutos} minutos</strong> para o preenchimento. Evite responder
             se estiver apressado(a). <strong>Você só pode preencher uma vez.</strong></li>
+          {tipo === 'disc' ? (
+            <li>📋 Em cada questão você verá <strong>4 palavras</strong>: marque na coluna da
+              esquerda a que <strong>MAIS</strong> tem a ver com você e, na coluna da direita, a
+              que <strong>MENOS</strong> tem a ver — sempre <strong>uma em cada coluna</strong>, e
+              nunca a mesma palavra nas duas.</li>
+          ) : (
+            <li>📋 Em cada situação apresentada, escolha a <strong>única alternativa</strong> que
+              melhor representa como você realmente agiria no dia a dia de trabalho.</li>
+          )}
+          <li>➡️ O botão <strong>Próximo</strong> só habilita quando a questão estiver completa; a
+            resposta é salva a cada questão e, ao final, basta tocar em
+            <strong> Concluir</strong>.</li>
           <li>🙋 Não peça ajuda para preencher, pois ninguém sabe mais sobre você do que você
             mesmo(a).</li>
           <li>🔕 Não divida sua atenção com outras atividades. Feche redes sociais e e-mail, e não
@@ -226,8 +238,7 @@ function Questionario({ token, tipo, aoConcluir }) {
         <>
           <div className="teste-instrucao">
             <span className="teste-tag">Mais a ver</span>
-            <span>Escolha duas opções, uma que <strong>MAIS</strong> e outra que
-              <strong> MENOS</strong> tem a ver com você</span>
+            <span>Marque <strong>uma palavra em cada coluna</strong></span>
             <span className="teste-tag">Menos a ver</span>
           </div>
           <div className="teste-opcoes">
@@ -243,6 +254,12 @@ function Questionario({ token, tipo, aoConcluir }) {
               </div>
             ))}
           </div>
+          {!completa && (r.mais || r.menos) && (
+            <div className="teste-aviso-suave">
+              Falta marcar {r.mais ? 'a palavra que MENOS tem a ver (coluna da direita)'
+                : 'a palavra que MAIS tem a ver (coluna da esquerda)'} para continuar.
+            </div>
+          )}
         </>
       ) : (
         <div className="teste-corpo">

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import CheckMestre from '../CheckMestre.jsx'
+import Ajuda from '../Ajuda.jsx'
 
 const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
   documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
@@ -145,7 +146,7 @@ export default function PostosRH() {
           <h3>Aplicar a {selecionados.size} posto(s)</h3>
           <p className="explica">Marque o que aplicar aos postos selecionados. Só os campos que você
             mexer são alterados; os demais ficam como estão em cada posto.</p>
-          <span className="rotulo">Documentos do kit</span>
+          <span className="rotulo">Documentos do kit<Ajuda termo="kit" /></span>
           <p className="explica" style={{ margin: '.2rem 0 .4rem' }}>Os documentos marcados são
             <strong> adicionados</strong> ao kit de cada posto selecionado (não remove os que já têm).</p>
           {Object.entries(docsDisp).map(([chave, rotulo]) => (

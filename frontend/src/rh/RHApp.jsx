@@ -147,8 +147,8 @@ function Metricas({ dados }) {
     ['Reenvios pendentes', dados.documentos_rejeitados_em_aberto,
      dados.documentos_rejeitados_em_aberto > 0 ? 'destaque' : ''],
     ['Dossiês gerados', dados.dossies_gerados, ''],
-    ['Tempo médio', dados.tempo_medio_dias_convite_ao_dossie == null
-      ? '—' : `${dados.tempo_medio_dias_convite_ao_dossie} dias`, ''],
+    ['Tempo médio', dados.tempo_medio_minutos_convite_ao_dossie == null
+      ? '—' : `${dados.tempo_medio_minutos_convite_ao_dossie.toLocaleString('pt-BR')} min`, ''],
   ]
   return (
     <div className="rh-metricas">

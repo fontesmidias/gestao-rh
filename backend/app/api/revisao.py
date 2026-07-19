@@ -60,10 +60,11 @@ def metricas(db: Session = Depends(get_db)) -> dict:
     rejeitados_abertos = sum(1 for s in slots if s.status == StatusSlot.rejeitado)
 
     concluidos = [c for c in candidatos if c.dossie_gerado_em is not None]
-    tempo_medio_dias = None
+    tempo_medio_min = None
     if concluidos:
         total = sum((c.dossie_gerado_em - c.criado_em).total_seconds() for c in concluidos)
-        tempo_medio_dias = round(total / len(concluidos) / 86400, 1)
+        # Em minutos (pedido do RH): a média real é curta demais para "dias".
+        tempo_medio_min = round(total / len(concluidos) / 60)
 
     return {
         "total_candidatos": len(candidatos),
@@ -71,7 +72,7 @@ def metricas(db: Session = Depends(get_db)) -> dict:
         "documentos_aguardando_revisao": aguardando_revisao,
         "documentos_rejeitados_em_aberto": rejeitados_abertos,
         "dossies_gerados": len(concluidos),
-        "tempo_medio_dias_convite_ao_dossie": tempo_medio_dias,
+        "tempo_medio_minutos_convite_ao_dossie": tempo_medio_min,
     }
 
 
