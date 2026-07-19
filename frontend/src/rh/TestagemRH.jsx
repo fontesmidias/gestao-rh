@@ -194,6 +194,8 @@ function DetalheTeste({ item, perfis }) {
 function Links() {
   const [links, setLinks] = useState(null)
   const [novoNome, setNovoNome] = useState('')
+  const [novoDisc, setNovoDisc] = useState(true)
+  const [novoSit, setNovoSit] = useState(true)
   const [criando, setCriando] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -211,7 +213,7 @@ function Links() {
   return (
     <>
       <p className="explica">Links de <strong>testagem avulsa</strong>: a pessoa entra só com o
-        nome (sem CPF/e-mail), responde ao DISC e ao Situacional e <strong>vê o próprio
+        nome (sem CPF/e-mail), responde aos testes que você escolher e <strong>vê o próprio
         resultado</strong>. Os resultados aparecem na aba 📊 Acompanhamento. Os testes da
         admissão continuam no convite/página do candidato, com resultado restrito ao RH.</p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
@@ -219,17 +221,28 @@ function Links() {
       <div className="rh-card rh-lote">
         <strong>Novo link:</strong>
         <input placeholder="Nome do link (ex.: Testagem interna julho)" value={novoNome}
-               style={{ maxWidth: 320 }} onChange={(e) => setNovoNome(e.target.value)} />
-        <button className="btn-principal btn-mini" disabled={criando || !novoNome.trim()}
+               style={{ maxWidth: 280 }} onChange={(e) => setNovoNome(e.target.value)} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+          <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={novoDisc}
+                 onChange={(e) => setNovoDisc(e.target.checked)} /><span>🧭 DISC</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+          <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={novoSit}
+                 onChange={(e) => setNovoSit(e.target.checked)} /><span>🧩 Situacional</span>
+        </label>
+        <button className="btn-principal btn-mini"
+                disabled={criando || !novoNome.trim() || (!novoDisc && !novoSit)}
                 onClick={async () => {
                   setCriando(true); setMsg(null)
                   try {
-                    await api.testagemCriarLink(novoNome.trim())
-                    setNovoNome('')
+                    await api.testagemCriarLink(novoNome.trim(), novoDisc, novoSit)
+                    setNovoNome(''); setNovoDisc(true); setNovoSit(true)
                     await recarregar()
                     setMsg({ tipo: 'ok', texto: 'Link criado — copie a URL e envie para quem for testar.' })
                   } catch (e) {
-                    setMsg({ tipo: 'erro', texto: `Não foi possível criar (${e.detail || e.message}).` })
+                    setMsg({ tipo: 'erro', texto: e.detail === 'escolha_ao_menos_um_teste'
+                      ? 'Escolha ao menos um teste para o link.'
+                      : `Não foi possível criar (${e.detail || e.message}).` })
                   } finally { setCriando(false) }
                 }}>{criando ? 'Criando…' : '+ Criar link'}</button>
       </div>
@@ -239,13 +252,15 @@ function Links() {
       ) : (
         <table className="rh-tabela">
           <thead>
-            <tr><th>Link</th><th>Situação</th><th>Participantes</th><th>Criado</th><th></th></tr>
+            <tr><th>Link</th><th>Testes</th><th>Situação</th><th>Participantes</th><th>Criado</th><th></th></tr>
           </thead>
           <tbody>
             {links.map((l) => (
               <tr key={l.id}>
                 <td><strong>{l.nome}</strong><br />
                   <small style={{ wordBreak: 'break-all' }}>{l.url}</small></td>
+                <td>{[l.tem_disc && '🧭 DISC', l.tem_situacional && '🧩 Situacional']
+                  .filter(Boolean).join(' + ')}</td>
                 <td><span className="chip" style={{ '--chip-cor': l.ativo ? '#0fb257' : '#889' }}>
                   {l.ativo ? '🟢 Ativo' : '⚪ Desativado'}</span></td>
                 <td>{l.participantes} ({l.concluidos} concluíram)</td>

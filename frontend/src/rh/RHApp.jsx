@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
-import { statusInfo } from '../status.js'
+import { STATUS_OPCOES, statusInfo } from '../status.js'
+import SelectBusca from '../SelectBusca.jsx'
+import { comAmpulheta } from '../Carregando.jsx'
 import Detalhe from './Detalhe.jsx'
 import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
@@ -175,6 +177,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
   // No celular o menu vira gaveta: só o hambúrguer aparece; ao tocar, a gaveta
   // abre por cima do conteúdo e RETRAI assim que uma opção é escolhida.
   const [movelAberto, setMovelAberto] = useState(false)
+  const asideRef = useRef(null)
   const ITENS = [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
@@ -185,14 +188,24 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
-  const irPara = (fn) => { fn(); setMovelAberto(false) }
+  const irPara = (fn) => {
+    fn()
+    setMovelAberto(false)
+    // Recolhe o menu ao navegar mesmo no desktop com o mouse ainda por cima:
+    // suprime o hover por um instante (o mouse acaba saindo dali logo depois).
+    const el = asideRef.current
+    if (el && !aberta) {
+      el.classList.add('sem-hover')
+      setTimeout(() => el.classList.remove('sem-hover'), 500)
+    }
+  }
   const expandida = aberta || movelAberto
   return (
     <>
       <button className="rh-hamburguer" aria-label="Abrir menu"
               onClick={() => setMovelAberto(true)}>☰</button>
       {movelAberto && <div className="rh-sidebar-fundo" onClick={() => setMovelAberto(false)} />}
-      <aside className={`rh-sidebar ${aberta ? '' : 'fechada'} ${movelAberto ? 'movel-aberta' : ''}`}>
+      <aside ref={asideRef} className={`rh-sidebar ${aberta ? '' : 'fechada'} ${movelAberto ? 'movel-aberta' : ''}`}>
         <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
                 onClick={() => (movelAberto ? setMovelAberto(false) : setAberta(!aberta))}>
           {movelAberto ? '✕' : aberta ? '⟨' : '☰'}</button>
@@ -237,11 +250,13 @@ function Painel({ aoSair }) {
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [pagina, setPagina] = useState('inicio') // inicio | colaboradores | config
+  const [filtros, setFiltros] = useState({ status: '', busca: '', posto_id: '' })
   const [menuAberto, setMenuAberto] = useState(
     localStorage.getItem('rh_menu') !== 'fechado')
 
-  const recarregar = () => {
-    api.candidatos().then(setCandidatos).catch((e) => {
+  const recarregar = (f = filtros) => {
+    const limpos = Object.fromEntries(Object.entries(f).filter(([, v]) => v))
+    api.candidatos(limpos).then(setCandidatos).catch((e) => {
       if (e.status === 401) aoSair()
     })
     api.metricas().then(setMetricas).catch(() => {})
@@ -415,9 +430,34 @@ function Painel({ aoSair }) {
         </div>
       )}
 
+      <div className="rh-card rh-lote">
+        <input placeholder="🔎 Nome, e-mail ou CPF" value={filtros.busca} style={{ maxWidth: 220 }}
+               onChange={(e) => { const f = { ...filtros, busca: e.target.value }; setFiltros(f); recarregar(f) }} />
+        <SelectBusca style={{ minWidth: 190 }} vazioRotulo="Status: todos" placeholder="Buscar status…"
+          valor={filtros.status} aoEscolher={(v) => { const f = { ...filtros, status: v }; setFiltros(f); recarregar(f) }}
+          opcoes={STATUS_OPCOES.filter(([v]) => v).map(([v, r]) => ({ valor: v, rotulo: r }))} />
+        <SelectBusca style={{ minWidth: 180 }} vazioRotulo="Posto: todos" placeholder="Buscar posto…"
+          valor={filtros.posto_id} aoEscolher={(v) => { const f = { ...filtros, posto_id: v }; setFiltros(f); recarregar(f) }}
+          opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.sigla || p.nome }))} />
+        {(filtros.busca || filtros.status || filtros.posto_id) && (
+          <button className="btn-link" onClick={() => { const f = { status: '', busca: '', posto_id: '' }; setFiltros(f); recarregar(f) }}>limpar</button>
+        )}
+        <span style={{ flex: 1 }} />
+        <button className="btn-secundario btn-mini" title="Baixa uma planilha das admissões que casam o filtro"
+                onClick={() => comAmpulheta('Gerando a planilha…', async () => {
+                  const blob = await api.exportarAdmissoes(Object.fromEntries(
+                    Object.entries(filtros).filter(([, v]) => v)))
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = `admissoes-${new Date().toISOString().slice(0, 10)}.xlsx`
+                  a.click()
+                })}>⬇ Exportar planilha</button>
+      </div>
+
       {!candidatos ? <p>Carregando…</p> : candidatos.length === 0 ? (
-        <p className="explica centro">Nenhum candidato ainda. Toque em "+ Novo candidato" para
-          enviar o primeiro convite.</p>
+        <p className="explica centro">{(filtros.busca || filtros.status || filtros.posto_id)
+          ? 'Nenhuma admissão com esses filtros.'
+          : 'Nenhum candidato ainda. Toque em "+ Novo candidato" para enviar o primeiro convite.'}</p>
       ) : (
         <table className="rh-tabela">
           <thead>

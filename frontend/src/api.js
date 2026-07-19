@@ -51,6 +51,15 @@ async function lancarErro(r) {
   const erro = new Error(detail)
   erro.status = r.status
   erro.detail = detail
+  // Mensagem amigável para códigos globais conhecidos (o call-site pode usar
+  // e.amigavel quando quiser, ou continua com e.detail). A trava de duplo-clique
+  // devolve 409 ja_em_processamento — o RH clicou de novo enquanto processava.
+  const AMIGAVEIS = {
+    ja_em_processamento: 'Esta ação já está sendo processada — aguarde um instante.',
+    muitas_tentativas: 'Muitas tentativas seguidas. Aguarde alguns minutos.',
+    sem_conexao: 'Sem conexão. Verifique a internet e tente de novo.',
+  }
+  erro.amigavel = AMIGAVEIS[detail] || null
   throw erro
 }
 
@@ -217,7 +226,14 @@ export const rh = {
   redefinirSenha: (token, senha_nova) =>
     req('/rh/auth/redefinir-senha', { method: 'POST',
                                       body: JSON.stringify({ token, senha_nova }) }),
-  candidatos: () => req('/rh/candidatos', { headers: authRH() }),
+  candidatos: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/candidatos${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  exportarAdmissoes: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/candidatos-exportar${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
   metricas: () => req('/rh/metricas', { headers: authRH() }),
   colaboradores: (filtros = {}) => {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
@@ -416,9 +432,9 @@ export const rh = {
         body: JSON.stringify({ fazer_disc, fazer_situacional }) }),
   // Links de testagem (aplicação avulsa dos testes, participante vê o resultado)
   testagemLinks: () => req('/rh/testagem/links', { headers: authRH() }),
-  testagemCriarLink: (nome) =>
+  testagemCriarLink: (nome, tem_disc = true, tem_situacional = true) =>
     req('/rh/testagem/links', { method: 'POST', headers: authRH(),
-                                body: JSON.stringify({ nome }) }),
+                                body: JSON.stringify({ nome, tem_disc, tem_situacional }) }),
   testagemEditarLink: (id, dados) =>
     req(`/rh/testagem/links/${id}`, { method: 'PUT', headers: authRH(),
                                       body: JSON.stringify(dados) }),

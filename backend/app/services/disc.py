@@ -80,10 +80,121 @@ QUESTOES_DISC: list[list[tuple[str, str]]] = [
 TEMPO_DISC_SEGUNDOS = 12 * 60  # 12 minutos, como no inventário de referência
 
 
+# Significado de cada adjetivo, para o tooltip do candidato (feedback
+# 2026-07-19: quem não sabe o que "Afetuoso" quer dizer não precisa sair da
+# plataforma para pesquisar). REGRA: são SINÔNIMOS CURTOS E NEUTROS — dão o
+# sentido da palavra, NUNCA descrevem um perfil/traço de personalidade. Uma
+# descrição que dissesse "pessoa calorosa, voltada a relacionamentos" entregaria
+# o eixo DISC do adjetivo e permitiria gamear o inventário. Por isso são
+# escritas à mão, uma a uma, e revisadas para não vazar o gabarito. Vão ao
+# lado PÚBLICO; o mapa de dimensões continua só no servidor.
+SIGNIFICADOS_DISC: dict[str, str] = {
+    "Bondoso": "que tem bondade; de bom coração",
+    "Persuasivo": "que convence com facilidade",
+    "Modesto": "sem exibição; simples",
+    "Original": "criativo; fora do comum",
+    "Envolvente": "que atrai e prende a atenção",
+    "Cooperativo": "que colabora; que ajuda",
+    "Teimoso": "que insiste na própria opinião",
+    "Afetuoso": "que demonstra carinho",
+    "Conformado": "que aceita as coisas como são",
+    "Pioneiro": "que faz algo pela primeira vez",
+    "Leal": "fiel; de confiança",
+    "Animado": "cheio de energia e disposição",
+    "Aberto": "receptivo a ideias e pessoas",
+    "Prestativo": "que gosta de ajudar",
+    "Determinado": "firme na decisão",
+    "Alegre": "de bom humor; contente",
+    "Corajoso": "que enfrenta o medo",
+    "Expressivo": "que se comunica com emoção",
+    "Calmo": "tranquilo; sem agitação",
+    "Meticuloso": "que cuida de cada detalhe",
+    "Competitivo": "que gosta de competir",
+    "Atencioso": "que presta atenção; cuidadoso",
+    "Feliz": "contente; satisfeito",
+    "Harmonioso": "que vive em harmonia; equilibrado",
+    "Preciso": "exato; sem erro",
+    "Obediente": "que segue o que é pedido",
+    "Dominante": "que costuma comandar",
+    "Divertido": "que gera diversão; engraçado",
+    "Destemido": "sem medo",
+    "Inspirador": "que motiva os outros",
+    "Submisso": "que se sujeita facilmente",
+    "Tímido": "acanhado; retraído",
+    "Sociável": "que gosta de conviver",
+    "Tolerante": "que aceita as diferenças",
+    "Autoconfiante": "que confia em si mesmo",
+    "Contido": "reservado; comedido",
+    "Arrojado": "ousado; que arrisca",
+    "Receptivo": "aberto a receber ideias",
+    "Amigável": "que faz amizade com facilidade",
+    "Moderado": "equilibrado; sem exageros",
+    "Comunicativo": "que fala e se expressa com facilidade",
+    "Reservado": "discreto; que fala pouco de si",
+    "Convencional": "que segue o comum; tradicional",
+    "Decidido": "que decide com firmeza",
+    "Polido": "educado; gentil",
+    "Audacioso": "atrevido; que ousa",
+    "Diplomático": "que lida bem com conflitos",
+    "Sereno": "calmo e equilibrado",
+    "Firme": "seguro; que não vacila",
+    "Carismático": "que atrai simpatia",
+    "Acolhedor": "que recebe bem as pessoas",
+    "Receoso": "que sente receio; cauteloso",
+    "Cuidadoso": "que age com cuidado",
+    "Resoluto": "decidido; sem hesitar",
+    "Influente": "que tem influência sobre os outros",
+    "Bom Temperamento": "de trato fácil e agradável",
+    "Solidário": "que apoia os outros",
+    "Entusiasmado": "muito animado; empolgado",
+    "Conciliador": "que busca o acordo",
+    "Dinâmico": "ativo; cheio de energia",
+    "Otimista": "que vê o lado positivo",
+    "Compreensivo": "que entende os outros",
+    "Paciente": "que espera com calma",
+    "Exigente": "que cobra muito; rigoroso",
+    "Disciplinado": "que segue regras e rotina",
+    "Generoso": "que dá com boa vontade",
+    "Convincente": "que convence",
+    "Ambicioso": "que busca conquistar mais",
+    "Admirável": "digno de admiração",
+    "Amável": "gentil; afável",
+    "Resignado": "que aceita sem reclamar",
+    "Enérgico": "cheio de energia; vigoroso",
+    "Ousado": "que ousa; corajoso",
+    "Espontâneo": "natural; sem forçar",
+    "Constante": "que se mantém igual ao longo do tempo",
+    "Perfeccionista": "que busca a perfeição",
+    "Agressivo": "que age com força ou dureza",
+    "Adaptável": "que se ajusta às situações",
+    "Tranquilo": "calmo; sossegado",
+    "Descontraído": "à vontade; relaxado",
+    "Crédulo": "que acredita com facilidade",
+    "Satisfeito": "contente com o que tem",
+    "Positivo": "que pensa de forma otimista",
+    "Pacífico": "que evita conflitos",
+    "Agradável": "que agrada; simpático",
+    "Culto": "que tem cultura e conhecimento",
+    "Vigoroso": "forte; cheio de vigor",
+    "Complacente": "que cede com facilidade",
+    "Bom Companheiro": "que é boa companhia",
+    "Exato": "preciso; correto",
+    "Franco": "sincero; direto",
+    "Cauteloso": "que age com cautela",
+    "Impaciente": "que não gosta de esperar",
+    "Bom vizinho": "cordial no convívio",
+    "Popular": "querido por muitos",
+    "Metódico": "que age com método e ordem",
+}
+
+
 def questoes_disc_publicas() -> list[dict]:
-    """Questões SEM o mapa de dimensões (o gabarito nunca vai ao front)."""
+    """Questões SEM o mapa de dimensões (o gabarito nunca vai ao front). Inclui
+    o significado neutro de cada adjetivo para o tooltip do candidato."""
     return [
-        {"numero": i + 1, "opcoes": [adj for adj, _dim in grupo]}
+        {"numero": i + 1,
+         "opcoes": [{"palavra": adj, "significado": SIGNIFICADOS_DISC.get(adj, "")}
+                    for adj, _dim in grupo]}
         for i, grupo in enumerate(QUESTOES_DISC)
     ]
 

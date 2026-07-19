@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 import CheckMestre from '../CheckMestre.jsx'
 import Espera from '../Espera.jsx'
 
@@ -206,11 +207,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
           <option value="ativo">Ativos</option>
           <option value="desligado">Desligados</option>
         </select>
-        <select value={postoId} style={{ maxWidth: 220 }}
-                onChange={(e) => { setPostoId(e.target.value); carregar({ posto_id: e.target.value }) }}>
-          <option value="">Todos os postos</option>
-          {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-        </select>
+        <SelectBusca style={{ minWidth: 200 }} vazioRotulo="Todos os postos" placeholder="Buscar posto…"
+          valor={postoId} aoEscolher={(v) => { setPostoId(v); carregar({ posto_id: v }) }}
+          opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.nome }))} />
         <input placeholder="Buscar por nome, e-mail ou CPF…" value={busca}
                style={{ flex: 1, minWidth: 200 }} onChange={(e) => aoBuscar(e.target.value)} />
         <span className="explica" style={{ margin: 0 }}>

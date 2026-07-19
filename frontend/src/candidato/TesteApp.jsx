@@ -193,6 +193,27 @@ export function Instrucoes({ tipo, aoIniciar, comTelemetria = true }) {
   )
 }
 
+// Tooltip do significado da palavra (feedback 2026-07-19): funciona no toque
+// (celular) e no hover. Definição é sinônimo neutro — não revela o perfil.
+function AjudaPalavra({ palavra, significado }) {
+  const [aberto, setAberto] = useState(false)
+  useEffect(() => {
+    if (!aberto) return
+    const fechar = () => setAberto(false)
+    // fecha ao tocar em qualquer lugar depois de abrir
+    const t = setTimeout(() => document.addEventListener('click', fechar, { once: true }), 0)
+    return () => { clearTimeout(t); document.removeEventListener('click', fechar) }
+  }, [aberto])
+  return (
+    <span className="teste-ajuda-wrap">
+      <button type="button" className="teste-ajuda" title={`${palavra}: ${significado}`}
+              aria-label={`Significado de ${palavra}`}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setAberto((v) => !v) }}>ⓘ</button>
+      {aberto && <span className="teste-ajuda-balao" role="tooltip">{significado}</span>}
+    </span>
+  )
+}
+
 // cli: { questoes(tipo), responder(tipo, dados), concluir(tipo), telemetria?(tipo) }
 export function Questionario({ cli, tipo, aoConcluir }) {
   const [dados, setDados] = useState(null) // {questoes, segundos_restantes}
@@ -259,17 +280,22 @@ export function Questionario({ cli, tipo, aoConcluir }) {
             <span className="teste-tag">Menos a ver</span>
           </div>
           <div className="teste-opcoes">
-            {q.opcoes.map((adj) => (
+            {q.opcoes.map((op) => {
+              // op pode ser string (formato antigo) ou {palavra, significado}
+              const adj = typeof op === 'string' ? op : op.palavra
+              const sig = typeof op === 'string' ? '' : op.significado
+              return (
               <div key={adj} className="teste-linha">
                 <input type="radio" name={`mais-${q.numero}`} checked={r.mais === adj}
                        onChange={() => setResp({ ...resp, [q.numero]: { ...r, mais: adj,
                          menos: r.menos === adj ? undefined : r.menos } })} />
-                <span className="teste-adjetivo">{adj}</span>
+                <span className="teste-adjetivo">{adj}
+                  {sig && <AjudaPalavra palavra={adj} significado={sig} />}</span>
                 <input type="radio" name={`menos-${q.numero}`} checked={r.menos === adj}
                        onChange={() => setResp({ ...resp, [q.numero]: { ...r, menos: adj,
                          mais: r.mais === adj ? undefined : r.mais } })} />
               </div>
-            ))}
+            )})}
           </div>
           {!completa && (r.mais || r.menos) && (
             <div className="teste-aviso-suave">

@@ -28,6 +28,7 @@ from app.models.documento import SlotDocumento, StatusSlot
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
 from app.services.email import enviar_email, html_moderno
+from app.services.idempotencia import travar_por
 from app.services.magic_link import emitir_link
 from app.services.normalizacao import ArquivoInvalido, normalizar_para_pdf
 
@@ -280,7 +281,8 @@ def inserir_arquivo_rh(
                               "origem_envio_obs": slot.origem_envio_obs}
 
 
-@router.post("/rh/candidatos/{candidato_id}/notificar")
+@router.post("/rh/candidatos/{candidato_id}/notificar",
+             dependencies=[Depends(travar_por("notificar"))])
 def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
                          db: Session = Depends(get_db),
                          rh: UsuarioRH = Depends(requer_rh)) -> dict:

@@ -123,7 +123,11 @@ def participar(token: str, payload: ParticiparIn, request: Request,
     p = ParticipanteTestagem(link_id=link.id, nome=nome[:200])
     db.add(p)
     db.flush()
-    for tipo in (TipoTeste.disc, TipoTeste.situacional):
+    # materializa SÓ os testes que o link oferece (a fonte é o banco, nunca um
+    # parâmetro do participante — ele não escolhe o que responde)
+    oferecidos = ([TipoTeste.disc] if link.tem_disc else []) + \
+                 ([TipoTeste.situacional] if link.tem_situacional else [])
+    for tipo in oferecidos:
         db.add(TesteTestagem(participante_id=p.id, tipo=tipo))
     registrar(db, "testagem_participante_criado", ator="participante",
               detalhe={"link": link.nome, "nome": nome[:200]})
@@ -288,6 +292,7 @@ def _dump_link(db: Session, link: LinkTestagem, base_url: str) -> dict:
                           for t in testes):
             concluidos += 1
     return {"id": link.id, "nome": link.nome, "ativo": link.ativo,
+            "tem_disc": link.tem_disc, "tem_situacional": link.tem_situacional,
             "criado_em": link.criado_em, "criado_por": link.criado_por,
             "url": f"{base_url}/t/{link.token}",
             "participantes": len(participantes), "concluidos": concluidos}
@@ -303,6 +308,8 @@ def listar_links(request: Request, db: Session = Depends(get_db),
 
 class NovoLinkIn(BaseModel):
     nome: str
+    tem_disc: bool = True
+    tem_situacional: bool = True
 
 
 @router.post("/rh/testagem/links", status_code=201)
@@ -311,11 +318,15 @@ def criar_link(payload: NovoLinkIn, request: Request, db: Session = Depends(get_
     nome = payload.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
+    if not payload.tem_disc and not payload.tem_situacional:
+        raise HTTPException(status_code=422, detail="escolha_ao_menos_um_teste")
     link = LinkTestagem(nome=nome[:120], token=secrets.token_urlsafe(16),
-                        criado_por=_rh.email)
+                        criado_por=_rh.email, tem_disc=payload.tem_disc,
+                        tem_situacional=payload.tem_situacional)
     db.add(link)
     registrar(db, "testagem_link_criado", ator="rh", ator_detalhe=_rh.email,
-              detalhe={"nome": nome[:120]})
+              detalhe={"nome": nome[:120], "disc": payload.tem_disc,
+                       "situacional": payload.tem_situacional})
     db.commit()
     return _dump_link(db, link, base_url_publica(request))
 
@@ -323,6 +334,8 @@ def criar_link(payload: NovoLinkIn, request: Request, db: Session = Depends(get_
 class EditarLinkIn(BaseModel):
     ativo: bool | None = None
     nome: str | None = None
+    tem_disc: bool | None = None
+    tem_situacional: bool | None = None
 
 
 @router.put("/rh/testagem/links/{link_id}")
@@ -336,8 +349,15 @@ def editar_link(link_id: uuid.UUID, payload: EditarLinkIn, request: Request,
         link.ativo = payload.ativo
     if payload.nome is not None and payload.nome.strip():
         link.nome = payload.nome.strip()[:120]
+    # editar quais testes o link oferece: não pode zerar os dois
+    novo_disc = link.tem_disc if payload.tem_disc is None else payload.tem_disc
+    novo_sit = link.tem_situacional if payload.tem_situacional is None else payload.tem_situacional
+    if not novo_disc and not novo_sit:
+        raise HTTPException(status_code=422, detail="escolha_ao_menos_um_teste")
+    link.tem_disc, link.tem_situacional = novo_disc, novo_sit
     registrar(db, "testagem_link_editado", ator="rh", ator_detalhe=_rh.email,
-              detalhe={"nome": link.nome, "ativo": link.ativo})
+              detalhe={"nome": link.nome, "ativo": link.ativo,
+                       "disc": link.tem_disc, "situacional": link.tem_situacional})
     db.commit()
     return _dump_link(db, link, base_url_publica(request))
 

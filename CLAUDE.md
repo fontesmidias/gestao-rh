@@ -75,6 +75,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 - **Nomes de arquivo/pasta em export**: SEMPRE via `export_planilha.slug()`
   (remove `/ \ . ..`, acentos; fallback se vazio/reservado do Windows) — nunca
   concatenar `titulo_doc` cru (é texto livre do RH → path traversal).
+- **Ações pesadas do RH** (dossiê, notificar, efetivar): protegidas por trava de
+  idempotência (`app/services/idempotencia.py`) — 2º clique concorrente recebe
+  409 `ja_em_processamento`. No front, o overlay (`Carregando.jsx`) só aparece
+  após 400ms (evita flicker) e o erro 409 vira `e.amigavel` no `api.js`.
+- **DISC — formato público das opções**: `questoes_disc_publicas()` devolve
+  `opcoes: [{palavra, significado}]` (o significado é sinônimo NEUTRO para o
+  tooltip; nunca descreve o traço, senão vaza o eixo DISC). O gabarito
+  (dimensão) continua só no servidor. O front lê `.palavra`; a pontuação
+  compara a palavra enviada. Definições em `SIGNIFICADOS_DISC` (disc.py),
+  escritas à mão.
+- **Select com busca**: `frontend/src/SelectBusca.jsx` para filtros suspensos
+  grandes (postos, cargos) — dados carregados 1x e filtrados em memória.
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).

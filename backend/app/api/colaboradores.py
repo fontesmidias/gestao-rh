@@ -22,6 +22,7 @@ from app.models.ficha import (ContatoEmergencia, DadosPessoais,
 from app.services.auditoria import registrar
 from app.services.export_planilha import linha_completa as _linha_completa
 from app.services.export_planilha import montar_workbook
+from app.services.idempotencia import travar_por
 from app.models.usuario_rh import UsuarioRH
 
 router = APIRouter(tags=["colaboradores-rh"], dependencies=[Depends(requer_rh)])
@@ -385,7 +386,8 @@ def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(ge
     return {"afetados": afetados, "pulados": pulados}
 
 
-@router.post("/rh/colaboradores/{cid}/efetivar")
+@router.post("/rh/colaboradores/{cid}/efetivar",
+             dependencies=[Depends(travar_por("efetivar"))])
 def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """Transforma um candidato aprovado em colaborador ativo (mesmo registro)."""

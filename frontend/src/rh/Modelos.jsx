@@ -16,6 +16,46 @@ const VAZIO = { titulo: '', corpo: '', escopo: 'avulso', cargo_alvo: '', posto_a
                 candidato_alvo_id: '', enviar_por_email: false, exige_assinatura: false,
                 papel_assinatura: '' }
 
+// Esqueletos de partida (feedback 2026-07-19): a pessoa escolhe um padrão e o
+// editor já vem preenchido com a estrutura e as {{variaveis}} nos lugares —
+// muito mais rápido que começar do zero. São TEXTO de partida, não modelos
+// salvos (não criam registro). Baseados no estilo dos ofícios já existentes.
+const PREDEFINICOES = [
+  { id: 'oficio', nome: '📄 Ofício', titulo: 'Ofício — {{nome}}',
+    corpo: 'Brasília/DF, {{data}}.\n\n'
+      + 'Ao(À) Senhor(a)\n{{nome}}\n\n'
+      + 'Assunto: [descreva o assunto]\n\n'
+      + 'Prezado(a) Senhor(a),\n\n'
+      + 'Vimos por meio deste ofício comunicar que [texto do ofício]. '
+      + 'O(A) colaborador(a) {{nome}}, inscrito(a) no CPF {{cpf}}, ocupante do cargo de '
+      + '{{cargo}} no posto {{posto}}, [complemente conforme a necessidade].\n\n'
+      + 'Sendo o que se apresenta para o momento, colocamo-nos à disposição para '
+      + 'eventuais esclarecimentos.\n\n'
+      + 'Atenciosamente,\n\n{{empresa}}' },
+  { id: 'comunicado', nome: '📢 Comunicado', titulo: 'Comunicado — {{nome}}',
+    corpo: 'COMUNICADO\n\nBrasília/DF, {{data}}.\n\n'
+      + 'Prezado(a) {{nome}},\n\n'
+      + 'Comunicamos que [conteúdo do comunicado]. '
+      + 'Solicitamos a devida ciência e, se aplicável, as providências cabíveis.\n\n'
+      + 'Atenciosamente,\n{{empresa}}' },
+  { id: 'contrato', nome: '📝 Contrato/Termo', titulo: 'Termo — {{nome}}',
+    corpo: 'TERMO\n\n'
+      + 'Pelo presente instrumento, {{empresa}}, e de outro lado {{nome}}, inscrito(a) '
+      + 'no CPF {{cpf}}, ocupante do cargo de {{cargo}} no posto {{posto}}, '
+      + 'ajustam entre si o seguinte:\n\n'
+      + 'CLÁUSULA 1ª — [objeto do termo].\n\n'
+      + 'CLÁUSULA 2ª — [obrigações].\n\n'
+      + 'E, por estarem assim justos e acordados, firmam o presente em via eletrônica.\n\n'
+      + 'Brasília/DF, {{data}}.' },
+  { id: 'declaracao', nome: '🖋️ Declaração', titulo: 'Declaração — {{nome}}',
+    corpo: 'DECLARAÇÃO\n\n'
+      + 'Declaramos, para os devidos fins, que {{nome}}, inscrito(a) no CPF {{cpf}}, '
+      + 'exerce o cargo de {{cargo}} no posto {{posto}}, [complemente: desde quando, '
+      + 'com que finalidade].\n\n'
+      + 'Por ser expressão da verdade, firmamos a presente declaração.\n\n'
+      + 'Brasília/DF, {{data}}.\n\n{{empresa}}' },
+]
+
 function Msg({ msg }) {
   if (!msg) return null
   return <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>
@@ -126,9 +166,16 @@ export default function Modelos() {
 
       <div className="rh-lote" style={{ margin: '.4rem 0 .6rem' }}>
         <input placeholder="🔎 Buscar modelo pelo título…" value={busca}
-               style={{ maxWidth: 320 }} onChange={(e) => setBusca(e.target.value)} />
+               style={{ maxWidth: 280 }} onChange={(e) => setBusca(e.target.value)} />
         <button className="btn-principal btn-mini" onClick={() => setEdit({ ...VAZIO })}>
-          + Novo modelo</button>
+          + Modelo em branco</button>
+        <span className="explica" style={{ margin: 0 }}>ou começar de um padrão:</span>
+        {PREDEFINICOES.map((p) => (
+          <button key={p.id} className="btn-secundario btn-mini"
+                  title={`Abre o editor já com a estrutura de ${p.nome}`}
+                  onClick={() => setEdit({ ...VAZIO, titulo: p.titulo, corpo: p.corpo })}>
+            {p.nome}</button>
+        ))}
       </div>
 
       {edit && !edit.id && (
