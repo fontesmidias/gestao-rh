@@ -999,21 +999,15 @@ def gerar_acordo_confidencialidade(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
-def carimbar_rubrica_lateral(pdf_bytes: bytes, assinatura: Assinatura) -> bytes:
-    """Rubrica digital em CADA página do PDF assinado: texto discreto na
-    lateral direita com o registro, o hash SHA-256 e o instante — quem tem
-    uma página avulsa em mãos consegue conferir a integridade da via.
-    Qualquer falha devolve o PDF original (a rubrica é reforço, não requisito)."""
+def carimbar_rubrica_texto(pdf_bytes: bytes, texto: str) -> bytes:
+    """Aplica um texto de rubrica na lateral direita de CADA página. Núcleo
+    reutilizável (o multi-signatário usa com um texto próprio). Qualquer falha
+    devolve o PDF original — a rubrica é reforço, não requisito."""
     import io
 
     try:
         from pypdf import PdfReader, PdfWriter
 
-        quando = assinatura.assinado_em.strftime("%d/%m/%Y %H:%M UTC") \
-            if assinatura.assinado_em else "-"
-        texto = (f"Assinatura eletronica (Lei 14.063/2020) | registro {assinatura.id} | "
-                 f"SHA-256 {assinatura.hash_sha256} | {quando} | "
-                 "confira em /verificar")
         ov = FPDF(format="A4")
         ov.set_auto_page_break(False)
         ov.add_page()
@@ -1033,6 +1027,15 @@ def carimbar_rubrica_lateral(pdf_bytes: bytes, assinatura: Assinatura) -> bytes:
         return saida.getvalue()
     except Exception:
         return pdf_bytes
+
+
+def carimbar_rubrica_lateral(pdf_bytes: bytes, assinatura: Assinatura) -> bytes:
+    """Rubrica digital em CADA página do PDF assinado (via legada de 1 assinante)."""
+    quando = assinatura.assinado_em.strftime("%d/%m/%Y %H:%M UTC") \
+        if assinatura.assinado_em else "-"
+    texto = (f"Assinatura eletronica (Lei 14.063/2020) | registro {assinatura.id} | "
+             f"SHA-256 {assinatura.hash_sha256} | {quando} | confira em /verificar")
+    return carimbar_rubrica_texto(pdf_bytes, texto)
 
 
 # ---------- Documentos criados pelo RH (modelos com variáveis) ----------
@@ -1112,6 +1115,156 @@ def gerar_documento_modelo(db: Session, titulo: str, corpo: str,
         pdf.bloco_assinatura(assinatura, candidato.nome_completo)
         pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
     return bytes(pdf.output())
+
+
+# ---------- Multi-signatário: um documento assinado por VÁRIAS pessoas --------
+
+from dataclasses import dataclass
+
+
+@dataclass
+class VistoAssinatura:
+    """Um assinante de um documento multi-signatário (o que vai no bloco e no
+    manifesto). Snapshot: os dados são os do MOMENTO da assinatura."""
+    nome: str
+    papel: str
+    cpf: str | None
+    assinado_em: datetime | None
+    ip: str | None
+    hash_sha256: str | None
+    id_verificacao: str          # id da etapa → /verificar-etapa/{id}
+    metodo: str                  # otp_email | senha_sessao_rh | autorizacao_previa
+
+
+def _texto_metodo(metodo: str) -> str:
+    return {
+        "otp_email": "Código de verificação de uso único, enviado ao e-mail do "
+                     "signatário e validado nesta plataforma.",
+        "senha_sessao_rh": "Autenticação da conta corporativa no painel + "
+                           "reautenticação por senha no ato da assinatura.",
+        "autorizacao_previa": "Autorização prévia registrada pelo representante "
+                              "da empresa (ato de vontade único, com validação por "
+                              "código), aposta automaticamente neste documento.",
+    }.get(metodo, "Assinatura eletrônica simples — art. 4º, I, da Lei nº 14.063/2020.")
+
+
+def _bloco_visto(pdf: "_FichaPDF", v: VistoAssinatura):
+    """Um bloco de assinatura por signatário — empilháveis (correção: quebra de
+    página entre eles)."""
+    pdf.ln(6)
+    if pdf.get_y() > pdf.h - 42:
+        pdf.add_page()
+    pdf.set_draw_color(*AZUL)
+    pdf.set_line_width(0.3)
+    y = pdf.get_y()
+    pdf.rect(10, y, 190, 30)
+    pdf.set_xy(14, y + 2.5)
+    pdf.set_font("helvetica", "B", 8.5)
+    quando = v.assinado_em.strftime("%d/%m/%Y %H:%M:%S UTC") if v.assinado_em else "-"
+    pdf.cell(0, 5, f"ASSINATURA ELETRÔNICA — {v.papel} (Lei nº 14.063/2020)",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(14)
+    pdf.set_font("helvetica", "", 7.5)
+    pdf.multi_cell(
+        182, 4.2,
+        f"Assinado por {v.nome}, na qualidade de {v.papel}, em {quando}. IP: {v.ip or '-'}\n"
+        f"Integridade da via (SHA-256): {v.hash_sha256}\n"
+        f"Verificação individual desta assinatura: /verificar-etapa/{v.id_verificacao}")
+
+
+def _pagina_manifesto_multi(pdf: "_FichaPDF", vistos: list[VistoAssinatura],
+                            titulo: str, sol_id: str, base_url: str | None):
+    """Manifesto que lista TODOS os signatários — um bloco 'Assinante N' por
+    visto, cada um com seu QR próprio para /verificar-etapa."""
+    pdf.add_page()
+    pdf.ln(2)
+    pdf.set_font("helvetica", "B", 13)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 8, "MANIFESTO DE ASSINATURA ELETRÔNICA", align="C",
+             new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(30, 30, 30)
+    pdf.ln(2)
+    pdf.secao("Documento")
+    pdf.campo("Documento assinado", titulo)
+    pdf.campo("ID da solicitação", sol_id)
+    pdf.campo("Total de assinaturas", str(len(vistos)))
+
+    for i, v in enumerate(vistos, start=1):
+        if pdf.get_y() > pdf.h - 60:
+            pdf.add_page()
+        pdf.secao(f"Assinante {i} — {v.papel}")
+        pdf.campo("Nome", v.nome)
+        if v.cpf:
+            pdf.campo("CPF", v.cpf)
+        brasilia = v.assinado_em.astimezone(_TZ_BRASILIA) if v.assinado_em else None
+        pdf.campo("Data e hora (Brasília)",
+                  brasilia.strftime("%d/%m/%Y %H:%M:%S (UTC-3)") if brasilia else "-")
+        pdf.campo("Endereço IP", v.ip)
+        pdf.campo("Integridade (SHA-256)", v.hash_sha256)
+        pdf.campo("Método", _texto_metodo(v.metodo))
+        if base_url:
+            url = f"{base_url}/verificar-etapa/{v.id_verificacao}"
+            try:
+                import qrcode
+                qr = qrcode.make(url, box_size=4, border=2)
+                y_qr = pdf.get_y() + 1
+                pdf.image(qr.get_image(), x=14, y=y_qr, w=24, h=24)
+                pdf.set_xy(42, y_qr + 2)
+                pdf.set_font("helvetica", "", 8)
+                pdf.multi_cell(150, 4.5,
+                               f"Confira esta assinatura individualmente em:\n{url}")
+                pdf.set_y(y_qr + 26)
+            except Exception:
+                pdf.set_font("helvetica", "", 8)
+                pdf.multi_cell(190, 4.5, f"Confira em: {url}")
+
+
+def gerar_documento_com_vistos(db: Session, sol, candidato: Candidato,
+                               vistos: list[VistoAssinatura],
+                               base_url: str | None = None) -> bytes:
+    """Renderiza o documento (fixo ou de modelo) com N blocos de assinatura
+    empilhados + manifesto multi-assinante. Usado na consolidação do PDF final
+    de um roteiro concluído."""
+    ctx = _contexto_modelo(db, candidato)
+    if sol.modelo_id or sol.corpo_doc:
+        titulo = aplicar_variaveis(sol.titulo_doc or "Documento", ctx)
+        pdf = _OficioPDF(titulo)
+        pdf.set_font("helvetica", "B", 13)
+        pdf.set_text_color(*AZUL)
+        pdf.multi_cell(0, 7, titulo, align="C")
+        pdf.set_text_color(30, 30, 30)
+        pdf.ln(3)
+        for paragrafo in aplicar_variaveis(sol.corpo_doc or "", ctx).split("\n"):
+            if paragrafo.strip():
+                pdf.paragrafo(paragrafo.strip())
+            else:
+                pdf.ln(2.5)
+    else:
+        # documento fixo: gera o corpo pelo GERADOR e reabre para empilhar blocos
+        # (raro no multi — a maioria dos multi é de modelo). Fallback simples:
+        titulo = NOMES_DOC_FALLBACK.get(sol.documento, sol.documento or "Documento")
+        pdf = _OficioPDF(titulo)
+        pdf.set_font("helvetica", "B", 13)
+        pdf.set_text_color(*AZUL)
+        pdf.multi_cell(0, 7, titulo, align="C")
+        pdf.set_text_color(30, 30, 30)
+        pdf.ln(3)
+        pdf.set_font("helvetica", "", 10)
+        pdf.multi_cell(0, 5, "Documento do sistema submetido a assinatura múltipla. "
+                             "As vias individuais de cada signatário e a íntegra do "
+                             "conteúdo constam da trilha de auditoria.")
+    for v in vistos:
+        _bloco_visto(pdf, v)
+    _pagina_manifesto_multi(pdf, vistos, titulo, str(sol.id), base_url)
+    return bytes(pdf.output())
+
+
+NOMES_DOC_FALLBACK = {
+    "ficha_cadastro": "Ficha Cadastral do Colaborador",
+    "ficha_emergencia": "Ficha de Emergência do Colaborador",
+    "termo_vt": "Termo de Opção pelo Vale-Transporte",
+    "acordo_confidencialidade": "Acordo de Confidencialidade",
+}
 
 
 def gerar_informativo_intermitente(db: Session, candidato: Candidato,
