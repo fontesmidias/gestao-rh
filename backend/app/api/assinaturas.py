@@ -33,12 +33,15 @@ def _candidato_do_token(token: str, db: Session) -> Candidato:
 
 
 def _registro(db: Session, candidato: Candidato, documento: DocumentoAssinavel) -> Assinatura:
-    # Só registros ATIVOS: uma assinatura invalidada fica para histórico e um
-    # novo registro pendente assume o lugar dela.
+    # Só registros ATIVOS de FLUXO LIVRE: uma assinatura invalidada fica para
+    # histórico; e as de ROTEIRO multi-signatário (solicitacao_etapa_id) são
+    # ignoradas aqui — elas têm caminho próprio e não podem brigar com o wizard
+    # (correção C1).
     assinatura = db.scalar(
         select(Assinatura).where(
             Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
             Assinatura.invalidada_em.is_(None),
+            Assinatura.solicitacao_etapa_id.is_(None),
         )
     )
     if assinatura is None:
@@ -50,12 +53,14 @@ def _registro(db: Session, candidato: Candidato, documento: DocumentoAssinavel) 
 
 def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel]:
     """As 3 fichas (sempre) + documentos extras que o RH gerou para o candidato
-    (registros de Assinatura já criados — ex.: documentos do posto INFRAERO)."""
+    (registros de Assinatura já criados — ex.: documentos do posto INFRAERO).
+    Exclui as Assinaturas de roteiro multi-signatário (têm fluxo próprio)."""
     extras = db.scalars(
         select(Assinatura).where(
             Assinatura.candidato_id == candidato.id,
             Assinatura.documento.notin_(FICHAS_BASE),
             Assinatura.invalidada_em.is_(None),
+            Assinatura.solicitacao_etapa_id.is_(None),
         )
     ).all()
     return list(FICHAS_BASE) + sorted({a.documento for a in extras}, key=lambda d: d.value)
@@ -72,8 +77,34 @@ def _assinaturas_modelo(db: Session, candidato: Candidato) -> list[Assinatura]:
             Assinatura.candidato_id == candidato.id,
             Assinatura.modelo_id.isnot(None),
             Assinatura.invalidada_em.is_(None),
+            Assinatura.solicitacao_etapa_id.is_(None),  # roteiro tem fluxo próprio
         ).order_by(Assinatura.criado_em)
     ).all()
+
+
+def _assinaturas_roteiro_na_vez(db: Session, candidato: Candidato) -> list[Assinatura]:
+    """Assinaturas de ROTEIRO multi-signatário cuja etapa do candidato está NA
+    VEZ (ordem corrente e solicitação aguardando). Só essas entram no fluxo do
+    candidato — as demais ficam bloqueadas até chegar a vez dele (gate de ordem,
+    correção C1)."""
+    from app.models.solicitacao_assinatura import (EtapaAssinatura,
+                                                   SolicitacaoAssinatura,
+                                                   StatusSolicitacao)
+    etapas = db.scalars(
+        select(EtapaAssinatura)
+        .join(SolicitacaoAssinatura,
+              EtapaAssinatura.solicitacao_id == SolicitacaoAssinatura.id)
+        .where(SolicitacaoAssinatura.candidato_id == candidato.id,
+               SolicitacaoAssinatura.status == StatusSolicitacao.aguardando,
+               EtapaAssinatura.ordem == SolicitacaoAssinatura.etapa_atual_ordem,
+               EtapaAssinatura.assinatura_id.isnot(None),
+               EtapaAssinatura.assinado_em.is_(None))).all()
+    saida = []
+    for e in etapas:
+        a = db.get(Assinatura, e.assinatura_id)
+        if a is not None and a.assinado_em is None:
+            saida.append(a)
+    return saida
 
 
 def chave_doc(a: Assinatura) -> str:
@@ -306,6 +337,7 @@ def assinar_todos(
     candidato = _candidato_do_token(token, db)
     registros = [_registro(db, candidato, d) for d in _docs_exigidos(db, candidato)]
     registros += _assinaturas_modelo(db, candidato)
+    registros += _assinaturas_roteiro_na_vez(db, candidato)  # multi-signatário
     pendentes = [a for a in registros if a.assinado_em is None]
     if not pendentes:
         raise HTTPException(status_code=409, detail="todos_ja_assinados")
@@ -354,6 +386,13 @@ def assinar_todos(
     if candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
     db.commit()
+
+    # Multi-signatário: promove as etapas de roteiro que o candidato acabou de
+    # assinar (libera o próximo signatário). Fora da transação principal.
+    from app.api.solicitacoes_assinatura import promover_etapa_do_candidato
+    for a in pendentes:
+        if a.solicitacao_etapa_id:
+            promover_etapa_do_candidato(db, a, base_url_publica(request))
 
     from app.services.email import html_moderno
 
