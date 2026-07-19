@@ -6,6 +6,84 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.44.0] — 2026-07-19
+
+### Adicionado
+- **Identidade visual configurável** (Configurações → Identidade visual): nome,
+  razão social, CNPJ, endereço, contato, **logo e favicon** editáveis pelo
+  painel. Aparecem nos PDFs, e-mails e no painel; os dados da Green House viram
+  só o valor-padrão inicial. Desvincula o sistema de uma empresa específica.
+- **Central de assinaturas** como menu próprio, com abas: documentos dos
+  candidatos (dashboard de **todas** as assinaturas sem entrar em cada admissão),
+  aguardando minha assinatura, já assinei, gerenciar roteiros, e papéis/
+  assinantes/ordem.
+- **Ordem das fichas de assinatura configurável** pelo RH (antes fixa no código).
+
+### Mudado
+- **Menu lateral reorganizado** por seções (Admissão, Documentos, Avaliação,
+  Benefícios, Recrutamento, Sistema), sempre expandido e rolável — removida a
+  versão hover/recolher que bugava. **Modelos** e **Assinaturas** saíram de
+  Configurações e viraram menus próprios. Botão "Novo candidato" movido para a
+  página de Admissões.
+
+## [1.42.0 – 1.43.0] — 2026-07-19
+
+### Adicionado
+- **Multi-signatário**: um documento pode exigir a assinatura de vários em
+  **ordem de papéis** — colaborador (link mágico), usuário do RH (assina logado,
+  com senha) e/ou externo (link próprio + código, token de uso único e PDF só
+  após 2FA). O PDF final consolida todas as assinaturas, com um manifesto
+  multi-assinante e QR por etapa. Verificação pública por etapa.
+- **Assinatura da equipe por autorização prévia registrada** (nunca carimbo
+  falso): o representante confirma uma vez por código; sua assinatura passa a
+  constar nos documentos daquele modelo, com validade e revogação.
+- **Roteiro-padrão** de papéis por modelo; worker de **expiração** de roteiros
+  vencidos + higienização LGPD de dados de externos não assinados.
+
+## [1.38.0 – 1.41.0] — 2026-07-18/19
+
+### Adicionado
+- **Menu Arquivo**: inventário com filtros, download individual e **backup em
+  lote** (ZIP por posto/pessoa + planilha XLSX), auditado com a lista de quem
+  foi exportado.
+- **Links de testagem avulsa** (`/t/{token}`): a pessoa entra só com o nome e vê
+  o próprio resultado; **dashboard unificado de testes** (admissão + testagem)
+  com reset e relatório de comportamento.
+- **Modelos de documento completos**: opções por modelo (enviar por e-mail,
+  exigir assinatura, papel do signatário), envio pontual para qualquer pessoa,
+  predefinições (Ofício, Comunicado, Contrato, Declaração), papéis de assinatura.
+- Testes do candidato editáveis após o convite; tooltip com o significado de
+  cada palavra do DISC.
+
+### Mudado
+- Configurações reorganizada em submenus; UX desktop em cards (grade de 2
+  colunas).
+
+### Corrigido / Segurança
+- **Rate limiting** em login (por IP e por conta), 2FA dos testes e da creche,
+  recuperação de senha e solicitação de código de assinatura.
+- **CPF sem máscara** nas telas internas do RH (máscara mantida no verificador
+  público, nos logs e no envio à IA).
+- **Trava anti-duplo-clique**: idempotência no servidor (dossiê, notificar,
+  efetivar) — o 2º clique concorrente recebe 409; overlay de "processando" no
+  cliente com atraso de 400 ms.
+
+## [1.22.0 – 1.37.0] — 2026-07-17/18
+
+### Adicionado
+- **Reembolso-Creche** (IN SEGES/MGI 147/2026): adesão na admissão + link
+  público de levantamento com 2FA e dossiê.
+- **Base colaborador-cêntrica**: importação idempotente do Tirvu (.xlsx),
+  colaboradores/postos, efetivar/desligar/transferir.
+- **Testes DISC e situacional** na admissão, com telemetria de comportamento.
+- **Lixeira universal** com restauração e retenção configurável.
+- **Modelos de documento** no papel timbrado com variáveis; kit da Presidência;
+  ficha do intermitente; campos de CNH/militar/dependentes.
+
+### Corrigido
+- Diversos feedbacks de campo: PDFs sem estouro de linha, DISC orientado, ficha
+  completa, sincronização de nomes do Tirvu.
+
 ## [1.16.0] — 2026-07-17
 
 ### Adicionado

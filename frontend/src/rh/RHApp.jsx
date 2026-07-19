@@ -215,7 +215,9 @@ function Sidebar({ pagina, navegar, aoSair }) {
       {movelAberto && <div className="rh-sidebar-fundo" onClick={() => setMovelAberto(false)} />}
       <aside className={`rh-sidebar ${movelAberto ? 'movel-aberta' : ''}`}>
         <div className="rh-sidebar-logo">
-          <img src={logo} alt="Green House" className="logo-topo" />
+          {/* logo customizada da empresa, com fallback para a padrão */}
+          <img src="/api/marca/logo" alt="Logo da empresa" className="logo-topo"
+               onError={(e) => { e.currentTarget.src = logo }} />
           {movelAberto && (
             <button className="rh-sidebar-fechar" aria-label="Fechar menu"
                     onClick={() => setMovelAberto(false)}>✕</button>
@@ -293,7 +295,9 @@ function Painel({ aoSair }) {
         )}
         {pagina === 'arquivo' && <Arquivo />}
         {pagina === 'modelos' && <Modelos />}
-        {pagina === 'assinaturas' && <Assinaturas />}
+        {pagina === 'assinaturas' && (
+          <Assinaturas aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
+        )}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}

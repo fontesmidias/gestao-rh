@@ -479,6 +479,14 @@ export const rh = {
   minhasAssinaturas: () => req('/rh/minhas-assinaturas', { headers: authRH() }),
   minhasAssinaturasFeitas: () => req('/rh/minhas-assinaturas/feitas', { headers: authRH() }),
   todasSolicitacoes: () => req('/rh/solicitacoes-assinatura', { headers: authRH() }),
+  assinaturasDash: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/assinaturas/dash${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  verOrdemAssinatura: () => req('/rh/ordem-assinatura', { headers: authRH() }),
+  salvarOrdemAssinatura: (ordem) =>
+    req('/rh/ordem-assinatura', { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ ordem }) }),
   assinarEtapaRh: (etapaId, senha) =>
     req(`/rh/etapas/${etapaId}/assinar`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ senha }) }),
@@ -501,6 +509,20 @@ export const rh = {
   salvarRoteiroPadrao: (modeloId, etapas) =>
     req(`/rh/modelos/${modeloId}/roteiro-padrao`, { method: 'PUT', headers: authRH(),
         body: JSON.stringify(etapas) }),
+  // Identidade visual da empresa
+  verMarca: () => req('/rh/marca', { headers: authRH() }),
+  salvarMarca: (dados) =>
+    req('/rh/marca', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  uploadMarcaLogo: async (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/marca/logo`, { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r); return r.json()
+  },
+  uploadMarcaFavicon: async (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/marca/favicon`, { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r); return r.json()
+  },
   papeis: () => req('/rh/papeis-assinatura', { headers: authRH() }),
   criarPapel: (dados) =>
     req('/rh/papeis-assinatura', { method: 'POST', headers: authRH(),

@@ -6,26 +6,132 @@ import { Papeis, Assinantes } from './Config.jsx'
 // Central de assinaturas (menu próprio): aguardando minha assinatura, o que já
 // assinei, e gerenciar todos os roteiros. Antes espalhado em "Minhas
 // assinaturas" e dentro de Configurações.
-export default function Assinaturas() {
-  const [aba, setAba] = useState('pendentes')
+export default function Assinaturas({ aoAbrirPessoa }) {
+  const [aba, setAba] = useState('candidatos')
   return (
     <main className="rh-painel">
       <header className="rh-topo"><h1>✍️ Assinaturas</h1><div /></header>
       <nav className="rh-subnav">
+        <button className={`rh-subnav-item ${aba === 'candidatos' ? 'ativo' : ''}`}
+                onClick={() => setAba('candidatos')}>📄 Documentos dos candidatos</button>
         <button className={`rh-subnav-item ${aba === 'pendentes' ? 'ativo' : ''}`}
                 onClick={() => setAba('pendentes')}>⏳ Aguardando minha assinatura</button>
         <button className={`rh-subnav-item ${aba === 'feitas' ? 'ativo' : ''}`}
                 onClick={() => setAba('feitas')}>✅ Já assinei</button>
         <button className={`rh-subnav-item ${aba === 'gerenciar' ? 'ativo' : ''}`}
-                onClick={() => setAba('gerenciar')}>📋 Gerenciar roteiros</button>
+                onClick={() => setAba('gerenciar')}>📋 Roteiros</button>
         <button className={`rh-subnav-item ${aba === 'configurar' ? 'ativo' : ''}`}
-                onClick={() => setAba('configurar')}>⚙️ Papéis e assinantes</button>
+                onClick={() => setAba('configurar')}>⚙️ Papéis, assinantes e ordem</button>
       </nav>
+      {aba === 'candidatos' && <DocsCandidatos aoAbrirPessoa={aoAbrirPessoa} />}
       {aba === 'pendentes' && <Pendentes />}
       {aba === 'feitas' && <Feitas />}
       {aba === 'gerenciar' && <Gerenciar />}
-      {aba === 'configurar' && <><Assinantes /><Papeis /></>}
+      {aba === 'configurar' && <><OrdemAssinatura /><Assinantes /><Papeis /></>}
     </main>
+  )
+}
+
+// Dash: assinaturas dos documentos de TODOS os candidatos, sem entrar em cada um.
+function DocsCandidatos({ aoAbrirPessoa }) {
+  const [dados, setDados] = useState(null)
+  const [filtros, setFiltros] = useState({ situacao: '', busca: '', pendentes: false })
+  const recarregar = (f = filtros) => {
+    const q = { ...f, pendentes: f.pendentes ? 'true' : '' }
+    api.assinaturasDash(q).then(setDados).catch(() => setDados({ pessoas: [], metricas: {} }))
+  }
+  useEffect(() => { recarregar() }, [])
+  const m = dados?.metricas || {}
+  return (
+    <>
+      <p className="explica">Situação das assinaturas de todos os candidatos e colaboradores.
+        Clique em uma pessoa para abrir a admissão dela e agir.</p>
+      <div className="rh-metricas">
+        {[['Pessoas', m.pessoas ?? '—'], ['Documentos assinados', m.docs_assinados ?? '—'],
+          ['Documentos pendentes', m.docs_pendentes ?? '—']].map(([r, v]) => (
+          <div className="rh-metrica" key={r}><strong>{v}</strong><span>{r}</span></div>))}
+      </div>
+      <div className="rh-card rh-lote">
+        <input placeholder="🔎 Nome ou e-mail" value={filtros.busca} style={{ maxWidth: 220 }}
+               onChange={(e) => { const f = { ...filtros, busca: e.target.value }; setFiltros(f); recarregar(f) }} />
+        <select value={filtros.situacao} onChange={(e) => { const f = { ...filtros, situacao: e.target.value }; setFiltros(f); recarregar(f) }}>
+          <option value="">Todas as situações</option>
+          <option value="em_admissao">Em admissão</option>
+          <option value="ativo">Ativos</option>
+          <option value="desligado">Desligados</option>
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+          <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={filtros.pendentes}
+                 onChange={(e) => { const f = { ...filtros, pendentes: e.target.checked }; setFiltros(f); recarregar(f) }} />
+          <span>Só com pendências</span>
+        </label>
+      </div>
+      {!dados ? <p>Carregando…</p> : dados.pessoas.length === 0 ? (
+        <p className="explica centro">Ninguém com esses filtros.</p>
+      ) : (
+        <table className="rh-tabela">
+          <thead><tr><th>Pessoa</th><th>Situação</th><th>Assinadas</th><th>Pendentes</th><th>Última</th><th></th></tr></thead>
+          <tbody>
+            {dados.pessoas.map((p) => (
+              <tr key={p.id}>
+                <td><strong>{p.nome_completo}</strong></td>
+                <td>{p.situacao}</td>
+                <td>{p.assinadas}/{p.total}</td>
+                <td>{p.pendentes > 0
+                  ? <span className="chip" style={{ '--chip-cor': '#f0ad4e' }}>⏳ {p.pendentes}</span>
+                  : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ em dia</span>}</td>
+                <td>{p.ultima_assinatura ? fmtData(p.ultima_assinatura) : '—'}</td>
+                <td className="acoes-candidato">
+                  {aoAbrirPessoa && (
+                    <button className="btn-secundario btn-mini" onClick={() => aoAbrirPessoa(p.id)}>Abrir</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  )
+}
+
+// Reordenar a ordem em que as fichas-base aparecem para assinar / no dossiê.
+function OrdemAssinatura() {
+  const [ordem, setOrdem] = useState(null)
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { api.verOrdemAssinatura().then((r) => setOrdem(r.ordem)).catch(() => setOrdem([])) }, [])
+  if (!ordem) return null
+  const mover = (i, delta) => {
+    const j = i + delta
+    if (j < 0 || j >= ordem.length) return
+    const nova = [...ordem]
+    ;[nova[i], nova[j]] = [nova[j], nova[i]]
+    setOrdem(nova)
+  }
+  return (
+    <div className="rh-card">
+      <h3>🔃 Ordem das fichas de assinatura</h3>
+      <p className="explica">A ordem em que as fichas-base aparecem para o candidato assinar e no
+        dossiê final. Use as setas para reordenar e salve.</p>
+      <ol style={{ paddingLeft: 0, listStyle: 'none', maxWidth: 460 }}>
+        {ordem.map((d, i) => (
+          <li key={d.documento} className="rh-lote"
+              style={{ padding: '.4rem .6rem', border: '1px solid var(--borda)', borderRadius: 8, marginBottom: '.3rem' }}>
+            <span style={{ flex: 1 }}><strong>{i + 1}.</strong> {d.titulo}</span>
+            <button className="btn-link" disabled={i === 0} onClick={() => mover(i, -1)}>↑</button>
+            <button className="btn-link" disabled={i === ordem.length - 1} onClick={() => mover(i, 1)}>↓</button>
+          </li>
+        ))}
+      </ol>
+      <button className="btn-principal btn-mini" onClick={async () => {
+        setMsg(null)
+        try {
+          await api.salvarOrdemAssinatura(ordem.map((d) => d.documento))
+          setMsg({ tipo: 'ok', texto: 'Ordem salva. Vale para os próximos documentos gerados.' })
+        } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` }) }
+      }}>Salvar ordem</button>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'} style={{ marginTop: '.5rem' }}>{msg.texto}</div>}
+    </div>
   )
 }
 

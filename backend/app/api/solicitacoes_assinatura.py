@@ -269,6 +269,85 @@ def minhas_assinaturas(db: Session = Depends(get_db),
     return {"pendentes": saida}
 
 
+@router.get("/rh/assinaturas/dash")
+def dash_assinaturas(situacao: str | None = None, busca: str | None = None,
+                     pendentes: bool = False,
+                     db: Session = Depends(get_db),
+                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Visão geral das assinaturas dos documentos de TODOS os candidatos, sem
+    precisar entrar em cada admissão. Uma linha por candidato com quantas fichas
+    assinou / faltam, e o alerta de pendências."""
+    from app.api.assinaturas import _assinaturas_modelo, _docs_exigidos, _registro
+
+    q = select(Candidato).order_by(Candidato.criado_em.desc())
+    if situacao == "em_admissao":
+        q = q.where(Candidato.situacao.is_(None))
+    elif situacao:
+        q = q.where(Candidato.situacao == situacao)
+    candidatos = db.scalars(q).all()
+    if busca:
+        termo = busca.strip().lower()
+        candidatos = [c for c in candidatos
+                      if termo in (c.nome_completo or "").lower()
+                      or termo in (c.email or "").lower()]
+
+    linhas = []
+    tot_assinadas = tot_pendentes = 0
+    for c in candidatos:
+        docs = _docs_exigidos(db, c)
+        registros = [_registro(db, c, d) for d in docs] + _assinaturas_modelo(db, c)
+        assinadas = sum(1 for a in registros if a.assinado_em is not None)
+        total = len(registros)
+        falta = total - assinadas
+        tot_assinadas += assinadas
+        tot_pendentes += falta
+        if pendentes and falta == 0:
+            continue
+        linhas.append({
+            "id": c.id, "nome_completo": c.nome_completo,
+            "situacao": c.situacao or "em admissão",
+            "status": c.status,
+            "assinadas": assinadas, "total": total, "pendentes": falta,
+            "ultima_assinatura": max((a.assinado_em for a in registros
+                                      if a.assinado_em), default=None),
+        })
+    return {
+        "metricas": {"pessoas": len(linhas),
+                     "docs_assinados": tot_assinadas,
+                     "docs_pendentes": tot_pendentes},
+        "pessoas": linhas,
+    }
+
+
+@router.get("/rh/ordem-assinatura")
+def ver_ordem_assinatura(db: Session = Depends(get_db),
+                         _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Ordem configurável em que as fichas-base aparecem para assinar/no dossiê."""
+    from app.api.assinaturas import NOMES_DOC
+    from app.models.assinatura import DocumentoAssinavel
+    from app.services.ordem_assinatura import ordem_fichas
+    return {"ordem": [{"documento": d.value, "titulo": NOMES_DOC[d]}
+                      for d in ordem_fichas(db)]}
+
+
+class OrdemIn(BaseModel):
+    ordem: list[str]
+
+
+@router.put("/rh/ordem-assinatura")
+def salvar_ordem_assinatura(payload: OrdemIn, db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.api.assinaturas import NOMES_DOC
+    from app.models.assinatura import DocumentoAssinavel
+    from app.services.ordem_assinatura import salvar_ordem
+    limpa = salvar_ordem(db, payload.ordem)
+    registrar(db, "ordem_assinatura_alterada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"ordem": limpa})
+    db.commit()
+    return {"ordem": [{"documento": v, "titulo": NOMES_DOC[DocumentoAssinavel(v)]}
+                      for v in limpa]}
+
+
 @router.get("/rh/minhas-assinaturas/feitas")
 def minhas_assinaturas_feitas(db: Session = Depends(get_db),
                               rh: UsuarioRH = Depends(requer_rh)) -> dict:
