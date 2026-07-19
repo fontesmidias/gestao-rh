@@ -48,8 +48,19 @@ def base_url_publica(request) -> str:
     if not host:
         return get_settings().base_url
     host = host.split(",")[0].strip()
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
-    return f"{proto.split(',')[0].strip()}://{host}"
+    encaminhado = request.headers.get("x-forwarded-proto")
+    if encaminhado:
+        proto = encaminhado.split(",")[0].strip()
+    else:
+        # Sem X-Forwarded-Proto (proxy que não o envia): um host que não é local
+        # é sempre acessado por HTTPS na prática — e o OAuth da Microsoft recusa
+        # redirect_uri http em domínio público. Só localhost/IP interno fica http.
+        so_host = host.split(":")[0]
+        local = (so_host in ("localhost", "127.0.0.1", "::1")
+                 or so_host.startswith(("10.", "192.168.", "172."))
+                 or request.url.scheme == "https")
+        proto = "http" if local and request.url.scheme != "https" else "https"
+    return f"{proto}://{host}"
 
 
 def ip_do_cliente(request) -> str | None:
