@@ -240,6 +240,9 @@ def acao_massa_postos(payload: AcaoMassaPostosIn, db: Session = Depends(get_db),
             if tem_vinculo:
                 bloqueados.append(p.nome)
                 continue
+            # snapshot restaurável antes do delete (lixeira, retenção configurável)
+            from app.services.lixeira import mandar_para_lixeira
+            mandar_para_lixeira(db, p, "posto", p.nome, rh.email)
             db.delete(p)
             afetados += 1
     registrar(db, "postos_acao_massa", ator="rh", ator_detalhe=rh.email,

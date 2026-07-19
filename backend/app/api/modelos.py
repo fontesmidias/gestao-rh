@@ -93,6 +93,9 @@ def excluir(modelo_id: uuid.UUID, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
     registrar(db, "modelo_documento_excluido", ator="rh", ator_detalhe=rh.email,
               detalhe={"titulo": m.titulo})
+    # snapshot restaurável antes do delete (lixeira, retenção configurável)
+    from app.services.lixeira import mandar_para_lixeira
+    mandar_para_lixeira(db, m, "modelo_documento", m.titulo, rh.email)
     db.delete(m)
     db.commit()
 

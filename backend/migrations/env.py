@@ -14,6 +14,7 @@ import app.models.configuracao  # noqa: F401
 import app.models.documento  # noqa: F401
 import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
+import app.models.lixeira  # noqa: F401
 import app.models.modelo_documento  # noqa: F401
 import app.models.talento  # noqa: F401
 import app.models.teste  # noqa: F401

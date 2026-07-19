@@ -316,6 +316,12 @@ export const rh = {
   },
   editarPostosMassa: (dados) =>
     req('/rh/postos/massa', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  lixeira: () => req('/rh/lixeira', { headers: authRH() }),
+  lixeiraRestaurar: (id) =>
+    req(`/rh/lixeira/${id}/restaurar`, { method: 'POST', headers: authRH() }),
+  lixeiraConfig: (dias) =>
+    req('/rh/lixeira/config', { method: 'PUT', headers: authRH(),
+                                body: JSON.stringify({ dias }) }),
   acaoMassaPostos: (posto_ids, acao) =>
     req('/rh/postos/massa/acao', { method: 'POST', headers: authRH(),
                                    body: JSON.stringify({ posto_ids, acao }) }),
