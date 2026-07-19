@@ -4,6 +4,7 @@ import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
 import { DiagnosticoColaborador } from './Diagnostico.jsx'
+import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 
 const MOTIVOS = [
@@ -288,7 +289,10 @@ const SECOES_FICHA = {
              'data_nascimento', 'naturalidade_cidade', 'naturalidade_uf'],
   endereco: ['cep', 'logradouro_numero_complemento', 'bairro', 'cidade', 'uf'],
   documentos: ['rg_numero', 'rg_orgao_emissor', 'rg_data_expedicao', 'cpf',
-               'pis_nis_pasep', 'cnh_numero', 'cnh_categoria',
+               'pis_nis_pasep', 'cnh_numero', 'cnh_categoria', 'cnh_orgao_emissor',
+               'cnh_uf', 'cnh_data_emissao', 'cnh_validade', 'cnh_primeira_habilitacao',
+               'militar_tipo', 'militar_numero', 'militar_serie', 'militar_categoria',
+               'militar_orgao', 'militar_data_emissao',
                'titulo_eleitor_numero', 'titulo_eleitor_zona', 'titulo_eleitor_secao'],
   'trabalho-banco': ['tamanho_calca', 'tamanho_camisa', 'tamanho_calcado',
                      'banco', 'pix_tipo', 'pix_chave'],
@@ -544,6 +548,7 @@ export default function Detalhe({ id, aoVoltar }) {
                     }
                   }}>💬 Enviar ao Teams</button>
           <button className="btn-secundario" onClick={() => gerarDossie(false)}>Gerar dossiê</button>
+          <Ajuda termo="dossie" />
           {dados.dossie_gerado_em && (
             <button className="btn-principal" onClick={baixarDossie}>⬇ Baixar dossiê</button>
           )}
@@ -553,9 +558,9 @@ export default function Detalhe({ id, aoVoltar }) {
                 ✅ Colaborador ativo</span>
             : dados.situacao === 'desligado'
             ? <span className="chip" style={{ '--chip-cor': '#889', marginLeft: '.4rem' }}>⚪ Desligado</span>
-            : <button className="btn-secundario" onClick={efetivar}
+            : <><button className="btn-secundario" onClick={efetivar}
                       title="Transforma este candidato em colaborador ativo (aparece em Colaboradores)">
-                ✅ Efetivar como colaborador</button>}
+                ✅ Efetivar como colaborador</button><Ajuda termo="efetivar" /></>}
         </div>
       </header>
       <p className="explica">

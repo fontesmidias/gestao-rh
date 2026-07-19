@@ -527,6 +527,48 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           <Campo rotulo="CNH — categoria"><input value={doc.cnh_categoria || ''}
             onChange={(e) => setSec('documentos', 'cnh_categoria', e.target.value.toUpperCase())} /></Campo>
         </div>
+        {doc.cnh_numero && <>
+          <div className="linha2">
+            <Campo rotulo="CNH — órgão emissor" dica="ex.: DETRAN"><input value={doc.cnh_orgao_emissor || ''}
+              onChange={(e) => setSec('documentos', 'cnh_orgao_emissor', e.target.value)} /></Campo>
+            <Campo rotulo="CNH — UF"><input maxLength={2} value={doc.cnh_uf || ''}
+              onChange={(e) => setSec('documentos', 'cnh_uf', e.target.value.toUpperCase())} /></Campo>
+          </div>
+          <div className="linha2">
+            <Campo rotulo="CNH — data de emissão"><InputData valor={doc.cnh_data_emissao || ''}
+              onChange={(v) => setSec('documentos', 'cnh_data_emissao', v)} /></Campo>
+            <Campo rotulo="CNH — validade"><InputData valor={doc.cnh_validade || ''}
+              onChange={(v) => setSec('documentos', 'cnh_validade', v)} /></Campo>
+          </div>
+          <Campo rotulo="CNH — 1ª habilitação"><InputData valor={doc.cnh_primeira_habilitacao || ''}
+            onChange={(v) => setSec('documentos', 'cnh_primeira_habilitacao', v)} /></Campo>
+        </>}
+        <Campo rotulo="Situação militar — documento (se tiver)"
+               ajuda="Obrigatório para homens de 18 a 45 anos: Certificado de Reservista, de Alistamento Militar (CAM) ou de Dispensa de Incorporação (CDI).">
+          <select value={doc.militar_tipo || ''}
+                  onChange={(e) => setSec('documentos', 'militar_tipo', e.target.value || null)}>
+            <option value="">Não se aplica</option>
+            <option value="reservista">Certificado de Reservista</option>
+            <option value="alistamento">Certificado de Alistamento Militar (CAM)</option>
+            <option value="dispensa">Certificado de Dispensa de Incorporação (CDI)</option>
+          </select></Campo>
+        {doc.militar_tipo && <>
+          <div className="linha2">
+            <Campo rotulo="Nº do certificado (RA)"><input value={doc.militar_numero || ''}
+              onChange={(e) => setSec('documentos', 'militar_numero', e.target.value)} /></Campo>
+            <Campo rotulo="Série"><input value={doc.militar_serie || ''}
+              onChange={(e) => setSec('documentos', 'militar_serie', e.target.value)} /></Campo>
+          </div>
+          <div className="linha2">
+            <Campo rotulo="Categoria" dica="ex.: 1ª, 2ª ou 3ª categoria"><input value={doc.militar_categoria || ''}
+              onChange={(e) => setSec('documentos', 'militar_categoria', e.target.value)} /></Campo>
+            <Campo rotulo="Data de expedição"><InputData valor={doc.militar_data_emissao || ''}
+              onChange={(v) => setSec('documentos', 'militar_data_emissao', v)} /></Campo>
+          </div>
+          <Campo rotulo="Órgão expedidor" dica="ex.: Junta de Serviço Militar / Ministério da Defesa">
+            <input value={doc.militar_orgao || ''}
+                   onChange={(e) => setSec('documentos', 'militar_orgao', e.target.value)} /></Campo>
+        </>}
         <Campo rotulo="Título de Eleitor — número"
                ajuda="O número, a zona e a seção aparecem no título físico ou no app e-Título. Não tem o título em mãos? Consulte grátis em tse.jus.br → Autoatendimento → Título de eleitor.">
           <input inputMode="numeric"

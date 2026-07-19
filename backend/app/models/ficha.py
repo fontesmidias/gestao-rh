@@ -126,6 +126,20 @@ class DocumentosIdentificacao(Base):
     pis_nis_pasep: Mapped[str | None] = mapped_column(String(14))
     cnh_numero: Mapped[str | None] = mapped_column(String(20))
     cnh_categoria: Mapped[str | None] = mapped_column(String(5))
+    # CNH completa (feedback de campo 2026-07-18): demais campos do documento.
+    cnh_orgao_emissor: Mapped[str | None] = mapped_column(String(40))
+    cnh_uf: Mapped[str | None] = mapped_column(String(2))
+    cnh_data_emissao: Mapped[date | None] = mapped_column(Date)
+    cnh_validade: Mapped[date | None] = mapped_column(Date)
+    cnh_primeira_habilitacao: Mapped[date | None] = mapped_column(Date)
+    # Situação militar: reservista OU certificado de alistamento (CAM) OU
+    # dispensa de incorporação (CDI) — todos os dados do documento.
+    militar_tipo: Mapped[str | None] = mapped_column(String(30))
+    militar_numero: Mapped[str | None] = mapped_column(String(30))
+    militar_serie: Mapped[str | None] = mapped_column(String(20))
+    militar_categoria: Mapped[str | None] = mapped_column(String(30))
+    militar_orgao: Mapped[str | None] = mapped_column(String(80))
+    militar_data_emissao: Mapped[date | None] = mapped_column(Date)
     titulo_eleitor_numero: Mapped[str | None] = mapped_column(String(14))
     titulo_eleitor_zona: Mapped[str | None] = mapped_column(String(6))
     titulo_eleitor_secao: Mapped[str | None] = mapped_column(String(6))

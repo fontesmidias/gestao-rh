@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import Ajuda from '../Ajuda.jsx'
 
 const fmtCpf = (c) => {
   const d = (c || '').replace(/\D/g, '')
@@ -37,9 +38,9 @@ export default function Creche({ aoVoltar }) {
 
       <div className="rh-abas">
         <button className={aba === 'levantamentos' ? 'ativa' : ''}
-                onClick={() => setAba('levantamentos')}>Levantamentos</button>
+                onClick={() => setAba('levantamentos')}>Levantamentos<Ajuda termo="levantamento" /></button>
         <button className={aba === 'postos' ? 'ativa' : ''}
-                onClick={() => setAba('postos')}>Elegibilidade por posto</button>
+                onClick={() => setAba('postos')}>Elegibilidade por posto<Ajuda termo="elegibilidade" /></button>
       </div>
 
       {aba === 'levantamentos' ? <Levantamentos /> : <PorPosto />}

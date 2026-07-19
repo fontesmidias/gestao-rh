@@ -113,21 +113,29 @@ class _FichaPDF(FPDF):
             valor = str(valor.value).replace("_", " ").title()
         valor = str(valor)
 
-        self.set_font("helvetica", "", 9)
         largura_valor = 190 - 62
-        linhas = max(1, len(self.multi_cell(largura_valor, 5.5, valor, dry_run=True,
-                                            output="LINES")))
-        altura = linhas * 5.5
+        self.set_font("helvetica", "", 9)
+        linhas_v = max(1, len(self.multi_cell(largura_valor - 2, 5.5, valor, dry_run=True,
+                                              output="LINES")))
+        # O rótulo também precisa quebrar linha: nomes longos ("Número do cartão
+        # DFTrans (de sua titularidade)") não podem invadir a célula do valor.
+        self.set_font("helvetica", "B", 8.5)
+        linhas_r = max(1, len(self.multi_cell(60, 4.4, rotulo, dry_run=True,
+                                              output="LINES")))
+        altura = max(linhas_v * 5.5, linhas_r * 4.4, 5.5)
         if self.get_y() + altura > self.h - 26:
             self.add_page()
         x, y = self.get_x(), self.get_y()
-        self.set_font("helvetica", "B", 8.5)
         self.set_fill_color(238, 242, 232)
-        self.cell(62, altura, f" {rotulo}", border=1, fill=True)
+        self.rect(x, y, 62, altura, style="DF")
+        self.rect(x + 62, y, largura_valor, altura)
+        self.set_font("helvetica", "B", 8.5)
+        self.set_xy(x + 1, y + (altura - linhas_r * 4.4) / 2)
+        self.multi_cell(60, 4.4, rotulo)
         self.set_font("helvetica", "", 9)
-        self.set_xy(x + 62, y)
-        self.multi_cell(largura_valor, 5.5, valor, border=1, new_x="LMARGIN", new_y="NEXT")
-        self.set_y(max(self.get_y(), y + altura))
+        self.set_xy(x + 62 + 1, y + (altura - linhas_v * 5.5) / 2)
+        self.multi_cell(largura_valor - 2, 5.5, valor)
+        self.set_xy(x, y + altura)
 
     def bloco_assinatura(self, assinatura: Assinatura, nome: str):
         self.ln(8)
@@ -309,7 +317,23 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
         pdf.campo("CPF", d.cpf)
         pdf.campo("PIS/NIS/PASEP", d.pis_nis_pasep)
         if d.cnh_numero:
-            pdf.campo("CNH", f"{d.cnh_numero} (cat. {d.cnh_categoria or '-'})")
+            pdf.campo("CNH — nº de registro", f"{d.cnh_numero} (cat. {d.cnh_categoria or '-'})")
+            pdf.campo("CNH — órgão emissor / UF",
+                      f"{d.cnh_orgao_emissor or '-'} / {d.cnh_uf or '-'}")
+            pdf.campo("CNH — emissão", d.cnh_data_emissao)
+            pdf.campo("CNH — validade", d.cnh_validade)
+            pdf.campo("CNH — 1ª habilitação", d.cnh_primeira_habilitacao)
+        if d.militar_numero or d.militar_tipo:
+            tipos = {"reservista": "Certificado de Reservista",
+                     "alistamento": "Certificado de Alistamento Militar (CAM)",
+                     "dispensa": "Certificado de Dispensa de Incorporação (CDI)"}
+            pdf.campo("Situação militar — documento",
+                      tipos.get(d.militar_tipo or "", d.militar_tipo or "-"))
+            pdf.campo("Situação militar — nº / série (RA)",
+                      f"{d.militar_numero or '-'} / {d.militar_serie or '-'}")
+            pdf.campo("Situação militar — categoria", d.militar_categoria)
+            pdf.campo("Situação militar — órgão expedidor", d.militar_orgao)
+            pdf.campo("Situação militar — data de expedição", d.militar_data_emissao)
         pdf.campo("Título de Eleitor",
                   f"{d.titulo_eleitor_numero or '-'} zona {d.titulo_eleitor_zona or '-'} "
                   f"seção {d.titulo_eleitor_secao or '-'}")
@@ -329,13 +353,18 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
         pdf.campo("Tipo de chave PIX", b.pix_tipo)
         pdf.campo("Chave PIX", b.pix_chave)
 
+    pdf.ln(2); pdf.secao("6. DEPENDENTES")
     if deps:
-        pdf.ln(2); pdf.secao("6. DEPENDENTES")
         for i, dep in enumerate(deps, 1):
             pdf.campo(f"Dependente {i}",
                       f"{dep.nome_completo} — {dep.data_nascimento.strftime('%d/%m/%Y')} — "
                       f"CPF {dep.cpf} — {dep.parentesco.value} — "
                       f"IRRF: {'sim' if dep.deduz_irrf else 'não'}")
+    else:
+        pdf.set_font("helvetica", "", 9)
+        pdf.multi_cell(0, 5.5,
+                       "O(a) colaborador(a) DECLARA NÃO POSSUIR DEPENDENTES, comprometendo-se a "
+                       "comunicar à empresa qualquer alteração nessa condição.")
 
     pdf.ln(2); pdf.secao("7. AUTORIZAÇÕES E TRATAMENTO DE DADOS")
     pdf.set_font("helvetica", "", 8)

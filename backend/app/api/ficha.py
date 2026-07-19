@@ -114,6 +114,17 @@ class SecaoDocumentos(BaseModel):
     pis_nis_pasep: str | None = None
     cnh_numero: str | None = None
     cnh_categoria: str | None = None
+    cnh_orgao_emissor: str | None = None
+    cnh_uf: str | None = None
+    cnh_data_emissao: date | None = None
+    cnh_validade: date | None = None
+    cnh_primeira_habilitacao: date | None = None
+    militar_tipo: str | None = None
+    militar_numero: str | None = None
+    militar_serie: str | None = None
+    militar_categoria: str | None = None
+    militar_orgao: str | None = None
+    militar_data_emissao: date | None = None
     titulo_eleitor_numero: str | None = None
     titulo_eleitor_zona: str | None = None
     titulo_eleitor_secao: str | None = None
