@@ -268,6 +268,39 @@ export const rh = {
       return r.json()
     } finally { saiuRH() }
   },
+  // ---- Integração Tirvu: empresas, jornadas e export de admissões ----
+  empresas: () => req('/rh/empresas', { headers: authRH() }),
+  criarEmpresa: (dados) =>
+    req('/rh/empresas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  jornadas: (postoId) =>
+    req(`/rh/jornadas${postoId ? `?posto_id=${postoId}` : ''}`, { headers: authRH() }),
+  criarJornada: (dados) =>
+    req('/rh/jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  importarJornadas: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/jornadas/importar`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
+  pendenciasTirvu: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/candidatos-tirvu-pendencias${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  exportarTirvu: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/candidatos-exportar-tirvu${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  exportarTirvuIndividual: (id) =>
+    req(`/rh/candidatos/${id}/exportar-tirvu`, { headers: authRH() }),
+  backfillEnderecos: () => req('/rh/enderecos-backfill', { headers: authRH() }),
+  aplicarBackfillEnderecos: (itens) =>
+    req('/rh/enderecos-backfill', { method: 'POST', headers: authRH(),
+                                    body: JSON.stringify(itens) }),
   efetivarColaborador: (id) =>
     req(`/rh/colaboradores/${id}/efetivar`, { method: 'POST', headers: authRH() }),
   efetivarLote: (ids) =>

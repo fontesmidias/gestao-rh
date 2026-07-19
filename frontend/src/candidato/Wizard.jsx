@@ -259,6 +259,7 @@ const PENDENCIAS = {
   'pessoais.estado_civil': [0, 'Estado civil'], 'pessoais.escolaridade': [0, 'Escolaridade'],
   'pessoais.pcd': [0, 'Pessoa com Deficiência (sim/não)'],
   'endereco.cep': [1, 'CEP'], 'endereco.logradouro_numero_complemento': [1, 'Rua e número'],
+  'endereco.logradouro': [1, 'Logradouro (rua/quadra)'], 'endereco.numero': [1, 'Número'],
   'endereco.bairro': [1, 'Bairro'], 'endereco.cidade': [1, 'Cidade'], 'endereco.uf': [1, 'UF'],
   'documentos.rg_numero': [2, 'Número do RG'], 'documentos.rg_orgao_emissor': [2, 'Órgão emissor do RG'],
   'documentos.rg_data_expedicao': [2, 'Data de expedição do RG'], 'documentos.cpf': [2, 'CPF'],
@@ -390,7 +391,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`).then((x) => x.json())
       if (!r.erro) setDados((d) => ({ ...d, endereco: {
         ...d.endereco, cep,
-        logradouro_numero_complemento: d.endereco.logradouro_numero_complemento || r.logradouro,
+        logradouro: d.endereco.logradouro || r.logradouro,
         bairro: r.bairro || d.endereco.bairro,
         cidade: r.localidade || d.endereco.cidade,
         uf: r.uf || d.endereco.uf,
@@ -473,6 +474,25 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           <Select valor={p.pcd == null ? null : String(p.pcd)}
                   opcoes={[['true', 'Sim'], ['false', 'Não']]}
                   onChange={(v) => setSec('pessoais', 'pcd', v == null ? null : v === 'true')} /></Campo>
+        {p.pcd === true && <>
+          {/* dados do laudo médico (Lei 8.213/91) — opcionais; o laudo anexado
+              é a prova, estes campos poupam transcrição do RH */}
+          <Campo rotulo="Tipo de deficiência (conforme o laudo)">
+            <Select valor={p.pcd_tipo}
+                    opcoes={[['fisica', 'Física'], ['visual', 'Visual'],
+                             ['auditiva', 'Auditiva'], ['intelectual', 'Intelectual'],
+                             ['multipla', 'Múltipla']]}
+                    onChange={(v) => setSec('pessoais', 'pcd_tipo', v)} /></Campo>
+          <div className="linha2">
+            <Campo rotulo="CID (do laudo)"><input value={p.pcd_cid || ''}
+              onChange={(e) => setSec('pessoais', 'pcd_cid', e.target.value.toUpperCase())} /></Campo>
+            <Campo rotulo="Data do laudo"><input type="date" value={p.pcd_data_laudo || ''}
+              onChange={(e) => setSec('pessoais', 'pcd_data_laudo', e.target.value || null)} /></Campo>
+          </div>
+          <Campo rotulo="Médico e CRM (do laudo)">
+            <input placeholder="Dr(a). Nome — CRM/DF 12345" value={p.pcd_medico_crm || ''}
+              onChange={(e) => setSec('pessoais', 'pcd_medico_crm', e.target.value)} /></Campo>
+        </>}
         <Campo rotulo="E-mail"><input type="email" value={p.email || ''}
           onChange={(e) => setSec('pessoais', 'email', e.target.value)} /></Campo>
         <Campo rotulo="Celular / WhatsApp (com DDD)">
@@ -486,9 +506,26 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
         <Campo rotulo="CEP" dica="informe o CEP exato da sua quadra/rua">
           <input value={en.cep || ''} onBlur={busca_cep} inputMode="numeric" maxLength={9}
                  onChange={(e) => setSec('endereco', 'cep', e.target.value.replace(/\D/g, ''))} /></Campo>
-        <Campo rotulo="Rua, número e complemento"><input
-          value={en.logradouro_numero_complemento || ''}
-          onChange={(e) => setSec('endereco', 'logradouro_numero_complemento', e.target.value)} /></Campo>
+        {en.logradouro_numero_complemento && !en.logradouro ? (
+          /* quem começou a ficha antes desta versão segue no campo único —
+             não obrigamos a redigitar o endereço no meio do caminho */
+          <Campo rotulo="Rua, número e complemento"><input
+            value={en.logradouro_numero_complemento || ''}
+            onChange={(e) => setSec('endereco', 'logradouro_numero_complemento', e.target.value)} /></Campo>
+        ) : (<>
+          <Campo rotulo="Logradouro (rua / quadra / conjunto)"
+                 dica="ex.: QN 7 Conjunto 5, ou Rua das Palmeiras">
+            <input value={en.logradouro || ''}
+              onChange={(e) => setSec('endereco', 'logradouro', e.target.value)} /></Campo>
+          <div className="linha2">
+            <Campo rotulo="Número" dica="nº da casa/lote; se não houver, S/N">
+              <input value={en.numero || ''}
+                onChange={(e) => setSec('endereco', 'numero', e.target.value)} /></Campo>
+            <Campo rotulo="Complemento (opcional)" dica="apto, bloco, casa...">
+              <input value={en.complemento || ''}
+                onChange={(e) => setSec('endereco', 'complemento', e.target.value)} /></Campo>
+          </div>
+        </>)}
         <Campo rotulo="Bairro"><input value={en.bairro || ''}
           onChange={(e) => setSec('endereco', 'bairro', e.target.value)} /></Campo>
         <div className="linha2">

@@ -99,6 +99,86 @@ def exportar_admissoes(status: str | None = None, busca: str | None = None,
         headers={"Content-Disposition": f'attachment; filename="admissoes-{agora}.xlsx"'})
 
 
+@router.get("/rh/candidatos-exportar-tirvu")
+def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
+                         posto_id: uuid.UUID | None = None,
+                         ids: str | None = None,
+                         db: Session = Depends(get_db),
+                         _rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Planilha no layout de importação de admissões do Tirvu (28 colunas em
+    ordem fixa) — mesmos filtros da tela, ou `ids` (CSV) para exportar uma
+    seleção. É o artefato mais sensível do sistema (CPF+PIS+salário em massa):
+    auditoria sempre, com quem baixou e quantas linhas."""
+    from app.services.export_planilha import montar_workbook
+    from app.services.export_tirvu import linha_tirvu
+
+    if ids:
+        alvo = [i for i in (x.strip() for x in ids.split(",")) if i]
+        candidatos = [c for i in alvo
+                      if (c := db.get(Candidato, uuid.UUID(i))) is not None]
+    else:
+        candidatos = _candidatos_admissao(db, status, busca, posto_id)
+    if not candidatos:
+        raise HTTPException(404, "Nenhuma admissão nos filtros escolhidos.")
+    linhas = [linha_tirvu(db, c) for c in candidatos]
+    conteudo = montar_workbook(linhas, titulo="Admissões")
+    registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
+              detalhe={"linhas": len(linhas),
+                       "postos": sorted({l["Posto de Serviço"] for l in linhas if l["Posto de Serviço"]})})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="importacao-tirvu-{agora}.xlsx"'})
+
+
+@router.get("/rh/candidatos-tirvu-pendencias")
+def pendencias_tirvu(status: str | None = None, busca: str | None = None,
+                     posto_id: uuid.UUID | None = None, ids: str | None = None,
+                     db: Session = Depends(get_db)) -> dict:
+    """Pré-checagem do export: quais linhas o Tirvu vai recusar (sem CTPS/PIS)
+    ou que sairiam inúteis. O front mostra ANTES do download."""
+    from app.services.export_tirvu import linha_tirvu, pendencias_linha
+
+    if ids:
+        alvo = [i for i in (x.strip() for x in ids.split(",")) if i]
+        candidatos = [c for i in alvo
+                      if (c := db.get(Candidato, uuid.UUID(i))) is not None]
+    else:
+        candidatos = _candidatos_admissao(db, status, busca, posto_id)
+    problemas = []
+    for c in candidatos:
+        faltas = pendencias_linha(linha_tirvu(db, c))
+        if faltas:
+            problemas.append({"id": c.id, "nome": c.nome_completo, "faltam": faltas})
+    return {"total": len(candidatos), "com_pendencia": problemas}
+
+
+@router.get("/rh/candidatos/{candidato_id}/exportar-tirvu")
+def exportar_tirvu_individual(candidato_id: uuid.UUID,
+                              db: Session = Depends(get_db),
+                              _rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Planilha do Tirvu com UMA admissão (botão na ficha do aprovado)."""
+    from app.services.export_planilha import montar_workbook, slug
+    from app.services.export_tirvu import linha_tirvu
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(404, "Candidato não encontrado")
+    conteudo = montar_workbook([linha_tirvu(db, cand)], titulo="Admissões")
+    registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
+              detalhe={"linhas": 1, "candidato": str(cand.id)})
+    db.commit()
+    nome = slug(cand.nome_completo, fallback="admissao")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="importacao-tirvu-{nome}.xlsx"'})
+
+
 @router.get("/rh/metricas")
 def metricas(db: Session = Depends(get_db)) -> dict:
     """Números do painel: funil de candidatos, fila de revisão e tempo médio."""
@@ -171,6 +251,9 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "cargo_funcao": cand.cargo_funcao,
         "salario_base": cand.salario_base,
         "adicionais": cand.adicionais or [],
+        "empresa_id": cand.empresa_id,
+        "jornada_id": cand.jornada_id,
+        "registra_ponto": cand.registra_ponto,
         "assinaturas": [
             {"documento": chave_doc(a), "titulo": titulo_doc(a),
              "assinado_em": a.assinado_em}

@@ -100,6 +100,29 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `AutorizacaoEquipe` — representante confirma 1x por código (ato de vontade);
   vira etapa já satisfeita por "autorização prévia" no roteiro do modelo; o
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
+- **Integração Tirvu (export de admissões)**: `export_tirvu.py` gera o layout
+  de 28 colunas em ORDEM FIXA (`COLUNAS_TIRVU`); o Tirvu recusa linha sem
+  CTPS/PIS (pré-checagem em `/rh/candidatos-tirvu-pendencias`). CTPS Digital =
+  padrão eSocial: número = o PRÓPRIO CPF (11 dígitos), série = "0000" — derivada
+  em `salvar_documentos`, nunca perguntada. Endereço: coleta nova é separada
+  (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
+  "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
+  heurística cega erra endereço de Brasília).
+- **Campo novo em ficha assinada**: ACRESCENTAR campo não invalida assinatura
+  (EDITAR invalida — regra de 2026-07-15). Tecnicamente: renderizar o campo novo
+  SÓ se preenchido (`if`, como CNH/CTPS/laudo PCD em `fichas.py`) — o PDF é
+  gerado sob demanda e a ficha antiga deve sair idêntica. O PDF assinado fica
+  persistido no MinIO com hash do ato, então reformatar seções não quebra vias
+  antigas.
+- **Jornadas**: tabela própria; import da planilha de escalas do Tirvu (96 abas,
+  1 aba = 1 posto, coluna "Jornada" achada pelo cabeçalho) em
+  `organizacao.py::_abas_com_jornadas` — zip+XML puro, multi-abas. NUNCA fundir
+  descrições parecidas (há ~40 erros de digitação nos dados reais; merge
+  silencioso cria associação errada invisível). No seletor, jornadas do posto
+  vêm PRIMEIRO (ordenação, nunca filtro).
+- **Uploads de planilha do RH**: sempre `await arquivo.close()` em `finally` —
+  o Starlette faz spool em disco acima de ~1MB e o temp file ficaria no
+  container com CPFs de mil pessoas.
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).

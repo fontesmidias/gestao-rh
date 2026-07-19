@@ -73,6 +73,36 @@ class PostoServico(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Empresa(Base):
+    """Empregadora que assina a carteira (coluna 'Empresa' do layout de
+    importação do Tirvu). Green House é a primeira, mas o grupo tem outras
+    (ex.: Nossa Cozinha) — o RH escolhe ou cria pelo painel."""
+
+    __tablename__ = "empresa"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    razao_social: Mapped[str] = mapped_column(String(200), unique=True)
+    cnpj: Mapped[str | None] = mapped_column(String(20))
+    ativa: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Jornada(Base):
+    """Jornada de trabalho como o Tirvu descreve (texto livre padronizado, ex.:
+    'INEP ADM - 2ª A 6ª - 08H - 12H - 13H - 17H'). Importada da planilha de
+    escalas ou criada pelo RH na hora. O posto é uma DICA de ordenação no
+    seletor (jornadas sem posto valem para todos), nunca um filtro."""
+
+    __tablename__ = "jornada"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    descricao: Mapped[str] = mapped_column(String(300), unique=True)
+    posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("posto_servico.id"), nullable=True)
+    ativa: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Candidato(Base):
     __tablename__ = "candidato"
 
@@ -80,6 +110,13 @@ class Candidato(Base):
     posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("posto_servico.id"), nullable=True)
     cargo_funcao: Mapped[str | None] = mapped_column(String(120))
+    # Integração com o Tirvu (leva 2026-07-19): empregadora, jornada e ponto —
+    # o RH escolhe/cria no convite ou depois; saem no export de admissões.
+    empresa_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("empresa.id"), nullable=True)
+    jornada_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("jornada.id"), nullable=True)
+    registra_ponto: Mapped[bool | None] = mapped_column(nullable=True)
     # Regime de contratação: "efetivo" (padrão) ou "intermitente". Decide qual
     # ficha de integração o colaborador assina.
     regime: Mapped[str] = mapped_column(String(20), default="efetivo")

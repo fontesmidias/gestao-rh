@@ -7,6 +7,7 @@ import { DiagnosticoColaborador } from './Diagnostico.jsx'
 import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 const MOTIVOS = [
   ['ilegivel', 'Ilegível'],
@@ -141,8 +142,19 @@ function PostoServico({ dados, setMsg, recarregar }) {
   const [adicionais, setAdicionais] = useState(dados.adicionais || [])
   const [salvando, setSalvando] = useState(false)
   const [novoPosto, setNovoPosto] = useState(null) // criar posto na hora
+  // Integração Tirvu: empregadora, jornada e ponto — saem no export de admissões
+  const [empresas, setEmpresas] = useState([])
+  const [jornadas, setJornadas] = useState([])
+  const [empresaId, setEmpresaId] = useState(dados.empresa_id || '')
+  const [jornadaId, setJornadaId] = useState(dados.jornada_id || '')
+  const [ponto, setPonto] = useState(dados.registra_ponto == null ? '' : String(dados.registra_ponto))
+  const [novaEmpresa, setNovaEmpresa] = useState(null)
+  const [novaJornada, setNovaJornada] = useState(null)
   const recarregarPostos = () => api.postos().then((r) => setPostos(r.postos))
   useEffect(() => { recarregarPostos() }, [])
+  useEffect(() => { api.empresas().then(setEmpresas).catch(() => {}) }, [])
+  // jornadas do posto escolhido vêm primeiro (ordenação, não filtro)
+  useEffect(() => { api.jornadas(postoId || null).then(setJornadas).catch(() => {}) }, [postoId])
   if (!postos) return null
   const extras = (dados.assinaturas || []).filter((a) =>
     !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
@@ -194,6 +206,60 @@ function PostoServico({ dados, setMsg, recarregar }) {
              style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
       <input placeholder="Salário base (ex.: R$ 1.500,00)" value={salario}
              style={{ maxWidth: 200 }} onChange={(e) => setSalario(e.target.value)} />
+      <select value={empresaId} style={{ maxWidth: 220 }}
+              title="Empregadora que assina a carteira — sai na planilha do Tirvu"
+              onChange={(e) => {
+                if (e.target.value === '__nova') { setNovaEmpresa({ razao_social: '', cnpj: '' }); return }
+                setEmpresaId(e.target.value)
+              }}>
+        <option value="">— empresa —</option>
+        {empresas.map((em) => <option key={em.id} value={em.id}>{em.razao_social}</option>)}
+        <option value="__nova">➕ Cadastrar empresa…</option>
+      </select>
+      {novaEmpresa && (
+        <div className="rh-adicional" style={{ width: '100%' }}>
+          <input placeholder="Razão social" value={novaEmpresa.razao_social}
+                 onChange={(e) => setNovaEmpresa({ ...novaEmpresa, razao_social: e.target.value })} />
+          <input placeholder="CNPJ (opcional)" style={{ maxWidth: 170 }} value={novaEmpresa.cnpj}
+                 onChange={(e) => setNovaEmpresa({ ...novaEmpresa, cnpj: e.target.value })} />
+          <button className="btn-principal btn-mini" onClick={async () => {
+            if (!novaEmpresa.razao_social.trim()) return
+            const em = await api.criarEmpresa({ razao_social: novaEmpresa.razao_social.trim(),
+                                                cnpj: novaEmpresa.cnpj.trim() || null })
+            setEmpresas(await api.empresas()); setEmpresaId(em.id); setNovaEmpresa(null)
+          }}>Criar</button>
+          <button className="btn-link" onClick={() => setNovaEmpresa(null)}>cancelar</button>
+        </div>
+      )}
+      <SelectBusca style={{ minWidth: 260 }} vazioRotulo="— jornada de trabalho —"
+        placeholder="Buscar jornada…" valor={jornadaId}
+        aoEscolher={(v) => {
+          if (v === '__nova') { setNovaJornada({ descricao: '' }); return }
+          setJornadaId(v || '')
+        }}
+        opcoes={[...jornadas.map((j) => ({ valor: j.id, rotulo: j.descricao })),
+                 { valor: '__nova', rotulo: '➕ Criar jornada…' }]} />
+      {novaJornada && (
+        <div className="rh-adicional" style={{ width: '100%' }}>
+          <input placeholder="Descrição (ex.: INEP ADM - 2ª A 6ª - 08H - 12H - 13H - 17H)"
+                 style={{ flex: 1, minWidth: 280 }} value={novaJornada.descricao}
+                 onChange={(e) => setNovaJornada({ ...novaJornada, descricao: e.target.value })} />
+          <button className="btn-principal btn-mini" onClick={async () => {
+            if (!novaJornada.descricao.trim()) return
+            const j = await api.criarJornada({ descricao: novaJornada.descricao.trim(),
+                                               posto_servico_id: postoId || null })
+            setJornadas(await api.jornadas(postoId || null)); setJornadaId(j.id); setNovaJornada(null)
+          }}>Criar</button>
+          <button className="btn-link" onClick={() => setNovaJornada(null)}>cancelar</button>
+        </div>
+      )}
+      <select value={ponto} style={{ maxWidth: 190 }}
+              title="Se o colaborador registra ponto — sai na planilha do Tirvu"
+              onChange={(e) => setPonto(e.target.value)}>
+        <option value="">— registra ponto? —</option>
+        <option value="true">Registra ponto: sim</option>
+        <option value="false">Registra ponto: não</option>
+      </select>
       <div className="rh-adicionais">
         <span className="explica" style={{ margin: 0, width: '100%' }}>Adicionais
           (entram na ficha junto com cargo e salário):</span>
@@ -223,6 +289,8 @@ function PostoServico({ dados, setMsg, recarregar }) {
           const r = await api.definirPosto(dados.id, {
             posto_id: postoId || null, cargo_funcao: cargo.trim() || null,
             salario_base: salario.trim() || null,
+            empresa_id: empresaId || null, jornada_id: jornadaId || null,
+            registra_ponto: ponto === '' ? null : ponto === 'true',
             adicionais: adicionais
               .filter((a) => (a.nome || '').trim())
               .map((a) => ({ nome: a.nome.trim(), valor: (a.valor || '').trim(), tipo: a.tipo || 'reais' })),
@@ -238,6 +306,19 @@ function PostoServico({ dados, setMsg, recarregar }) {
           setMsg({ tipo: 'erro', texto: `Não foi possível salvar o posto (${e.detail || e.message}).` })
         } finally { setSalvando(false) }
       }}>{salvando ? 'Salvando…' : 'Salvar posto'}</button>
+      <button className="btn-secundario btn-mini"
+              title="Baixa a planilha de importação de admissões do Tirvu com esta pessoa"
+              onClick={async () => {
+                try {
+                  const blob = await api.exportarTirvuIndividual(dados.id)
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = `importacao-tirvu-${(dados.nome_completo || 'admissao').replace(/[^\wÀ-ú -]/g, '').trim().replace(/\s+/g, '-')}.xlsx`
+                  a.click()
+                } catch (e) {
+                  setMsg({ tipo: 'erro', texto: `Não foi possível exportar (${e.detail || e.message}).` })
+                }
+              }}>⬆ Planilha p/ Tirvu</button>
       {extras.length > 0 && (
         <span className="explica" style={{ margin: 0, width: '100%' }}>
           {extras.map((a) => (

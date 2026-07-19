@@ -292,7 +292,6 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
     _dump_pessoais(pdf, candidato, p)
     if p:
         pdf.campo("Cor/raça (autodeclaração, IBGE)", p.cor_raca)
-
     contrato, cargo = _dados_posto(db, candidato)
     if (candidato.posto_servico_id or candidato.cargo_funcao
             or candidato.salario_base or candidato.adicionais):
@@ -306,9 +305,28 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
             pdf.campo(f"Adicional — {ad.get('nome', '-')}",
                       f"{prefixo}{ad.get('valor', '-')}{sufixo}")
 
+    if p and p.pcd and (p.pcd_cid or p.pcd_tipo or p.pcd_data_laudo or p.pcd_medico_crm):
+        # Dados do laudo (Lei 8.213/91 — fiscalização da cota). Só renderiza se
+        # algo foi informado: ficha assinada antes desta leva sai idêntica.
+        tipos_pcd = {"fisica": "Física", "visual": "Visual", "auditiva": "Auditiva",
+                     "intelectual": "Intelectual", "multipla": "Múltipla"}
+        pdf.ln(2); pdf.secao("1.2 PESSOA COM DEFICIÊNCIA — DADOS DO LAUDO")
+        pdf.campo("Tipo de deficiência",
+                  tipos_pcd.get(p.pcd_tipo or "", p.pcd_tipo) or "não informado")
+        pdf.campo("CID", p.pcd_cid or "não informado")
+        pdf.campo("Data do laudo", p.pcd_data_laudo or "não informado")
+        pdf.campo("Médico / CRM", p.pcd_medico_crm or "não informado")
+
     pdf.ln(2); pdf.secao("2. ENDEREÇO")
     if e:
-        pdf.campo("Endereço", e.logradouro_numero_complemento)
+        # Coleta nova (leva Tirvu) tem logradouro/número/complemento separados;
+        # a antiga fica na string única — cada ficha sai como foi preenchida.
+        if e.logradouro:
+            pdf.campo("Logradouro", e.logradouro)
+            pdf.campo("Número / complemento",
+                      f"{e.numero or '-'}{' — ' + e.complemento if e.complemento else ''}")
+        else:
+            pdf.campo("Endereço", e.logradouro_numero_complemento)
         pdf.campo("Bairro", e.bairro)
         pdf.campo("Cidade/UF", f"{e.cidade or '-'}/{e.uf or '-'}")
         pdf.campo("CEP", e.cep)
@@ -319,6 +337,11 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
         pdf.campo("RG — expedição", d.rg_data_expedicao)
         pdf.campo("CPF", d.cpf)
         pdf.campo("PIS/NIS/PASEP", d.pis_nis_pasep)
+        if d.ctps_numero:
+            # CTPS Digital (eSocial): derivada do CPF. Só renderiza se
+            # preenchida — ficha assinada antes desta leva sai idêntica.
+            pdf.campo("CTPS (digital) — nº / série",
+                      f"{d.ctps_numero} / {d.ctps_serie or '0000'}")
         if d.cnh_numero:
             pdf.campo("CNH — nº de registro", f"{d.cnh_numero} (cat. {d.cnh_categoria or '-'})")
             pdf.campo("CNH — órgão emissor / UF",
@@ -341,9 +364,13 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
                   f"{d.titulo_eleitor_numero or '-'} zona {d.titulo_eleitor_zona or '-'} "
                   f"seção {d.titulo_eleitor_secao or '-'}")
 
+        # Padrão eSocial (confirmado pelo Bruno 2026-07-19): número = o próprio
+        # CPF (11 dígitos), série = 0000 — a redação antiga ("7 primeiros + 4
+        # últimos") estava errada e contradizia o valor impresso acima.
         _nota(pdf, "Observação: a CTPS é utilizada exclusivamente em meio digital "
-                   "(Lei nº 13.874/2019). No formato digital, o número corresponde aos 7 "
-                   "primeiros dígitos do CPF e a série aos 4 últimos.")
+                   "(Lei nº 13.874/2019). No formato digital, o número corresponde ao "
+                   "próprio CPF (11 dígitos) e a série é 0000, conforme o padrão do "
+                   "eSocial.")
 
     pdf.ln(2); pdf.secao("4. UNIFORME")
     if b:
@@ -358,11 +385,21 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
 
     pdf.ln(2); pdf.secao("6. DEPENDENTES")
     if deps:
+        rotulos_par = {"conjuge": "Cônjuge", "filho": "Filho(a)",
+                       "menor_guarda": "Menor sob guarda"}
         for i, dep in enumerate(deps, 1):
-            pdf.campo(f"Dependente {i}",
-                      f"{dep.nome_completo} — {dep.data_nascimento.strftime('%d/%m/%Y')} — "
-                      f"CPF {dep.cpf} — {dep.parentesco.value} — "
-                      f"IRRF: {'sim' if dep.deduz_irrf else 'não'}")
+            ni = "não informado"
+            pdf.campo(f"Dependente {i} — nome", dep.nome_completo or ni)
+            pdf.campo("Data de nascimento",
+                      dep.data_nascimento.strftime("%d/%m/%Y")
+                      if dep.data_nascimento else ni)
+            pdf.campo("CPF", dep.cpf or ni)
+            pdf.campo("Parentesco",
+                      rotulos_par.get(dep.parentesco.value, dep.parentesco.value)
+                      if dep.parentesco else ni)
+            pdf.campo("Deduz no IRRF", "sim" if dep.deduz_irrf else "não")
+            if i < len(deps):
+                pdf.ln(1)
     else:
         pdf.set_font("helvetica", "", 9)
         pdf.multi_cell(0, 5.5,

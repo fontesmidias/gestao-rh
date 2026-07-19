@@ -6,6 +6,35 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.46.0] — 2026-07-19
+
+### Adicionado
+- **Exportação de admissões para o Tirvu** — planilha no layout oficial de
+  importação (28 colunas em ordem fixa), individual (botão na ficha) e em massa
+  (tela de Admissões, respeitando os filtros). Pré-checagem antes do download:
+  o Tirvu recusa linha sem CTPS/PIS, e o RH fica sabendo aqui, não lá. Toda
+  exportação é auditada (quem baixou, quantas linhas, quais postos).
+- **CTPS Digital calculada** — número = o próprio CPF (11 dígitos), série =
+  0000 (padrão eSocial). Preenchida sozinha quando o candidato informa o CPF;
+  aparece na ficha cadastral só para os novos (quem já assinou não é afetado).
+- **Empresas e Jornadas** como cadastros próprios (Configurações → Empresas e
+  jornadas): o RH escolhe ou cria na hora, na ficha do colaborador. Jornadas
+  importáveis da planilha de escalas do Tirvu (96 abas = 96 postos; as
+  descrições do posto escolhido aparecem primeiro no seletor). "Registra ponto"
+  por colaborador.
+- **Endereço separado** (logradouro / número / complemento) na coleta nova,
+  como o Tirvu pede. Endereços antigos migram por **backfill assistido**: o
+  sistema propõe a separação e o RH confirma — nada muda sozinho.
+- **Laudo PCD na ficha** — CID, tipo de deficiência, data do laudo e
+  médico/CRM (Lei 8.213/91), coletados no formulário de quem se declara PCD.
+- **Dependentes em bloco rotulado** na ficha cadastral (antes uma linha só).
+
+### Corrigido
+- Observação da CTPS na ficha dizia "7 primeiros dígitos + 4 últimos" —
+  contradizia o padrão eSocial usado; corrigida.
+- Planilhas enviadas ao RH (colaboradores, postos, jornadas) agora descartam o
+  arquivo temporário do servidor imediatamente após o processamento.
+
 ## [1.44.0] — 2026-07-19
 
 ### Adicionado
