@@ -55,6 +55,11 @@ class Assinatura(Base):
     # Papel do signatário no manifesto (Contratado(a), Testemunha…) — dos
     # papéis cadastrados em Configurações → Assinaturas.
     papel: Mapped[str | None] = mapped_column(String(60))
+    # Quando esta Assinatura é a via do candidato DENTRO de um roteiro
+    # multi-signatário, aponta para a etapa. As Assinatura de fluxo livre têm
+    # isto NULL — e o `_registro`/`_docs_exigidos`/`_assinaturas_modelo` filtram
+    # `solicitacao_etapa_id IS NULL` para não brigar com o roteiro (correção C1).
+    solicitacao_etapa_id: Mapped[uuid.UUID | None] = mapped_column(String(36), nullable=True)
     pdf_key: Mapped[str | None] = mapped_column(String(300))
     hash_sha256: Mapped[str | None] = mapped_column(String(64))
     otp_hash: Mapped[str | None] = mapped_column(String(64))
