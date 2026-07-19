@@ -48,19 +48,40 @@ def base_url_publica(request) -> str:
     if not host:
         return get_settings().base_url
     host = host.split(",")[0].strip()
+    so_host = host.split(":")[0]
+    local = (so_host in ("localhost", "127.0.0.1", "::1")
+             or so_host.startswith(("10.", "192.168.", "172.")))
+
+    proto = _protocolo_publico(request, local)
+    return f"{proto}://{host}"
+
+
+def _protocolo_publico(request, local: bool) -> str:
+    """http/https do acesso EXTERNO do cliente, atravessando os proxies.
+
+    Ordem: o header do Cloudflare (CF-Visitor) vence, porque quando ele está
+    em modo proxy o X-Forwarded-Proto que chega à app costuma ser o do último
+    salto interno (http) e mentiria. Depois X-Forwarded-Proto. Por fim, a
+    regra prática: host público é sempre HTTPS — e o OAuth da Microsoft recusa
+    redirect_uri http em domínio público (AADSTS50011); só local fica http."""
+    cf = request.headers.get("cf-visitor")
+    if cf and '"https"' in cf:
+        return "https"
+    if cf and '"http"' in cf:
+        return "https" if not local else "http"
+
     encaminhado = request.headers.get("x-forwarded-proto")
     if encaminhado:
         proto = encaminhado.split(",")[0].strip()
-    else:
-        # Sem X-Forwarded-Proto (proxy que não o envia): um host que não é local
-        # é sempre acessado por HTTPS na prática — e o OAuth da Microsoft recusa
-        # redirect_uri http em domínio público. Só localhost/IP interno fica http.
-        so_host = host.split(":")[0]
-        local = (so_host in ("localhost", "127.0.0.1", "::1")
-                 or so_host.startswith(("10.", "192.168.", "172."))
-                 or request.url.scheme == "https")
-        proto = "http" if local and request.url.scheme != "https" else "https"
-    return f"{proto}://{host}"
+        # header "http" num host público quase sempre é o salto interno atrás
+        # de um proxy TLS — não rebaixa para http nesse caso.
+        if proto == "http" and not local:
+            return "https"
+        return proto
+
+    if request.url.scheme == "https":
+        return "https"
+    return "http" if local else "https"
 
 
 def ip_do_cliente(request) -> str | None:
