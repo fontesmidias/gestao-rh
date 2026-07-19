@@ -61,6 +61,62 @@ def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel
     return list(FICHAS_BASE) + sorted({a.documento for a in extras}, key=lambda d: d.value)
 
 
+# --- Documentos de MODELO do RH enviados para assinatura -------------------
+# Convivem com os documentos fixos do enum: a chave pública deles nas rotas e
+# no payload é "modelo-<id do registro de assinatura>".
+
+
+def _assinaturas_modelo(db: Session, candidato: Candidato) -> list[Assinatura]:
+    return db.scalars(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id,
+            Assinatura.modelo_id.isnot(None),
+            Assinatura.invalidada_em.is_(None),
+        ).order_by(Assinatura.criado_em)
+    ).all()
+
+
+def chave_doc(a: Assinatura) -> str:
+    return a.documento.value if a.documento else f"modelo-{a.id}"
+
+
+def titulo_doc(a: Assinatura) -> str:
+    if a.documento:
+        return NOMES_DOC[a.documento]
+    return a.titulo_doc or "Documento"
+
+
+def _resolver_doc(db: Session, candidato: Candidato,
+                  chave: str) -> tuple[DocumentoAssinavel | None, Assinatura]:
+    """Resolve a chave da rota: valor do enum OU 'modelo-<uuid>'."""
+    if chave.startswith("modelo-"):
+        try:
+            a = db.get(Assinatura, uuid.UUID(chave.removeprefix("modelo-")))
+        except ValueError:
+            a = None
+        if (a is None or a.candidato_id != candidato.id or a.modelo_id is None
+                or a.invalidada_em is not None):
+            raise HTTPException(status_code=404, detail="documento_nao_encontrado")
+        return None, a
+    try:
+        doc = DocumentoAssinavel(chave)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="documento_nao_encontrado")
+    return doc, _registro(db, candidato, doc)
+
+
+def _gerar_pdf(db: Session, candidato: Candidato, a: Assinatura,
+               com_assinatura: bool = False, base_url: str | None = None) -> bytes:
+    """PDF do documento da assinatura `a` — fixo (enum) ou de modelo (snapshot)."""
+    from app.services.fichas import gerar_documento_modelo
+    if a.documento:
+        if com_assinatura:
+            return GERADORES[a.documento.value](db, candidato, a, base_url)
+        return GERADORES[a.documento.value](db, candidato)
+    return gerar_documento_modelo(db, a.titulo_doc or "Documento", a.corpo_doc or "",
+                                  candidato, a if com_assinatura else None, base_url)
+
+
 @router.get("/c/{token}/fichas")
 def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
     candidato = _candidato_do_token(token, db)
@@ -79,24 +135,29 @@ def status_fichas(token: str, db: Session = Depends(get_db)) -> dict:
                 "assinado_em": por_doc[doc].assinado_em if doc in por_doc else None,
             }
             for doc in _docs_exigidos(db, candidato)
+        ] + [
+            # documentos de modelo enviados pelo RH para assinatura
+            {
+                "documento": chave_doc(a),
+                "titulo": titulo_doc(a),
+                "assinado": a.assinado_em is not None,
+                "assinado_em": a.assinado_em,
+            }
+            for a in _assinaturas_modelo(db, candidato)
         ]
     }
 
 
 @router.get("/c/{token}/fichas/{documento}/preview")
-def preview(token: str, documento: DocumentoAssinavel, db: Session = Depends(get_db)) -> Response:
-    """PDF do documento: a via assinada, se existir; senão, prévia com os dados atuais."""
+def preview(token: str, documento: str, db: Session = Depends(get_db)) -> Response:
+    """PDF do documento (fixo ou de modelo): a via assinada, se existir; senão,
+    prévia com os dados atuais."""
     candidato = _candidato_do_token(token, db)
-    assinatura = db.scalar(
-        select(Assinatura).where(
-            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
-            Assinatura.assinado_em.isnot(None), Assinatura.invalidada_em.is_(None),
-        )
-    )
-    if assinatura is not None and assinatura.pdf_key:
+    _, assinatura = _resolver_doc(db, candidato, documento)
+    if assinatura.assinado_em is not None and assinatura.pdf_key:
         pdf = storage.ler(assinatura.pdf_key)
     else:
-        pdf = GERADORES[documento.value](db, candidato)
+        pdf = _gerar_pdf(db, candidato, assinatura)
     db.commit()
     return Response(content=pdf, media_type="application/pdf")
 
@@ -158,7 +219,7 @@ def verificar_assinatura(assinatura_id: uuid.UUID, db: Session = Depends(get_db)
         return {
             "valida": False,
             "substituida": True,
-            "documento": NOMES_DOC[assinatura.documento],
+            "documento": titulo_doc(assinatura),
             "assinante": _nome_mascarado(candidato.nome_completo),
             "cpf": _cpf_mascarado(doc_id.cpf if doc_id else None),
             "assinado_em": assinatura.assinado_em,
@@ -168,7 +229,8 @@ def verificar_assinatura(assinatura_id: uuid.UUID, db: Session = Depends(get_db)
         }
     return {
         "valida": True,
-        "documento": NOMES_DOC[assinatura.documento],
+        "documento": titulo_doc(assinatura),
+        "papel": assinatura.papel,
         "assinante": _nome_mascarado(candidato.nome_completo),
         "cpf": _cpf_mascarado(doc_id.cpf if doc_id else None),
         "assinado_em": assinatura.assinado_em,
@@ -185,18 +247,16 @@ def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
     from app.services.limite import exigir
     exigir(f"assin-codigo:{token[:16]}", maximo=5, janela_s=900)
     candidato = _candidato_do_token(token, db)
-    pendentes = [
-        d for d in _docs_exigidos(db, candidato)
-        if _registro(db, candidato, d).assinado_em is None
-    ]
+    registros = [_registro(db, candidato, d) for d in _docs_exigidos(db, candidato)]
+    registros += _assinaturas_modelo(db, candidato)
+    pendentes = [a for a in registros if a.assinado_em is None]
     if not pendentes:
         raise HTTPException(status_code=409, detail="todos_ja_assinados")
 
     codigo = f"{secrets.randbelow(1_000_000):06d}"
     otp_hash = hashlib.sha256(codigo.encode()).hexdigest()
     expira = datetime.now(timezone.utc) + timedelta(minutes=get_settings().otp_ttl_minutes)
-    for doc in pendentes:
-        assinatura = _registro(db, candidato, doc)
+    for assinatura in pendentes:
         assinatura.otp_hash = otp_hash
         assinatura.otp_expira_em = expira
         assinatura.otp_tentativas = 0
@@ -204,8 +264,8 @@ def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
 
     from app.services.email import html_moderno
 
-    docs = "\n".join(f"  - {NOMES_DOC[d]}" for d in pendentes)
-    docs_html = "".join(f"<li>{NOMES_DOC[d]}</li>" for d in pendentes)
+    docs = "\n".join(f"  - {titulo_doc(a)}" for a in pendentes)
+    docs_html = "".join(f"<li>{titulo_doc(a)}</li>" for a in pendentes)
     ttl = get_settings().otp_ttl_minutes
     enviar_email(
         candidato.email,
@@ -244,14 +304,13 @@ def assinar_todos(
 ) -> dict:
     """Valida o código único e assina todos os documentos pendentes."""
     candidato = _candidato_do_token(token, db)
-    pendentes = [
-        (d, _registro(db, candidato, d)) for d in _docs_exigidos(db, candidato)
-        if _registro(db, candidato, d).assinado_em is None
-    ]
+    registros = [_registro(db, candidato, d) for d in _docs_exigidos(db, candidato)]
+    registros += _assinaturas_modelo(db, candidato)
+    pendentes = [a for a in registros if a.assinado_em is None]
     if not pendentes:
         raise HTTPException(status_code=409, detail="todos_ja_assinados")
 
-    ref = pendentes[0][1]
+    ref = pendentes[0]
     if ref.otp_hash is None or ref.otp_expira_em is None:
         raise HTTPException(status_code=409, detail="codigo_nao_solicitado")
     if ref.otp_expira_em < datetime.now(timezone.utc):
@@ -259,7 +318,7 @@ def assinar_todos(
     if ref.otp_tentativas >= MAX_TENTATIVAS_OTP:
         raise HTTPException(status_code=429, detail="tentativas_excedidas")
     if hashlib.sha256(payload.codigo.encode()).hexdigest() != ref.otp_hash:
-        for _, a in pendentes:
+        for a in pendentes:
             a.otp_tentativas += 1
         db.commit()
         raise HTTPException(status_code=422, detail="codigo_incorreto")
@@ -267,29 +326,30 @@ def assinar_todos(
     agora = datetime.now(timezone.utc)
     anexos: list[tuple[str, bytes]] = []
     assinados = []
-    for doc, assinatura in pendentes:
-        pdf_sem_bloco = GERADORES[doc.value](db, candidato)
+    for assinatura in pendentes:
+        chave = chave_doc(assinatura)
+        pdf_sem_bloco = _gerar_pdf(db, candidato, assinatura)
         assinatura.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
         assinatura.assinado_em = agora
         assinatura.ip = ip_do_cliente(request)
         assinatura.user_agent = request.headers.get("user-agent", "")[:400]
         assinatura.otp_hash = None
         assinatura.otp_expira_em = None
-        pdf_assinado = GERADORES[doc.value](db, candidato, assinatura,
-                                            base_url_publica(request))
+        pdf_assinado = _gerar_pdf(db, candidato, assinatura, com_assinatura=True,
+                                  base_url=base_url_publica(request))
         # Rubrica digital em CADA página: registro + hash + instante na lateral.
         from app.services.fichas import carimbar_rubrica_lateral
         pdf_assinado = carimbar_rubrica_lateral(pdf_assinado, assinatura)
         # Key com o id da assinatura: uma re-assinatura (após invalidação)
         # nunca sobrescreve a via antiga — cada via assinada é preservada.
-        key = f"candidatos/{candidato.id}/fichas/{doc.value}-{assinatura.id}.pdf"
+        key = f"candidatos/{candidato.id}/fichas/{chave}-{assinatura.id}.pdf"
         storage.salvar(key, pdf_assinado, "application/pdf")
         assinatura.pdf_key = key
-        anexos.append((f"{doc.value}.pdf", pdf_assinado))
-        assinados.append({"documento": doc, "assinado_em": agora,
+        anexos.append((f"{chave}.pdf", pdf_assinado))
+        assinados.append({"documento": chave, "assinado_em": agora,
                           "hash_sha256": assinatura.hash_sha256})
         registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,
-                  detalhe={"documento": doc.value, "hash": assinatura.hash_sha256})
+                  detalhe={"documento": chave, "hash": assinatura.hash_sha256})
 
     if candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
@@ -297,14 +357,14 @@ def assinar_todos(
 
     from app.services.email import html_moderno
 
-    docs_html = "".join(f"<li>{NOMES_DOC[d]}</li>" for d, _ in pendentes)
+    docs_html = "".join(f"<li>{titulo_doc(a)}</li>" for a in pendentes)
     enviar_email(
         candidato.email,
         "Green House — Seus documentos assinados (vias do colaborador)",
         f"Prezado(a) {candidato.nome_completo},\n\n"
         "Confirmamos a assinatura eletrônica dos seus documentos admissionais, que seguem "
         "anexos a esta mensagem para sua guarda:\n"
-        + "\n".join(f"  - {NOMES_DOC[d]}" for d, _ in pendentes)
+        + "\n".join(f"  - {titulo_doc(a)}" for a in pendentes)
         + "\n\nPróximo passo obrigatório: envie a sua documentação pelo mesmo link da "
         "admissão. Sua contratação somente será efetivada após o envio completo.\n\n"
         "Atenciosamente,\nRH — Green House\n",
@@ -327,7 +387,7 @@ def assinar_todos(
 
 @router.post("/c/{token}/fichas/{documento}/solicitar-codigo", status_code=204)
 def solicitar_codigo(
-    token: str, documento: DocumentoAssinavel, db: Session = Depends(get_db)
+    token: str, documento: str, db: Session = Depends(get_db)
 ) -> None:
     from app.services.limite import exigir
     exigir(f"assin-codigo:{token[:16]}", maximo=5, janela_s=900)
@@ -339,7 +399,7 @@ def solicitar_codigo(
                                 StatusCandidato.envio_concluido,
                                 StatusCandidato.em_revisao):
         raise HTTPException(status_code=409, detail="fase_invalida_para_assinatura")
-    assinatura = _registro(db, candidato, documento)
+    _, assinatura = _resolver_doc(db, candidato, documento)
     if assinatura.assinado_em is not None:
         raise HTTPException(status_code=409, detail="documento_ja_assinado")
 
@@ -351,7 +411,7 @@ def solicitar_codigo(
     assinatura.otp_tentativas = 0
     db.commit()
 
-    nome_doc = documento.value.replace("_", " ").title()
+    nome_doc = titulo_doc(assinatura)
     enviar_email(
         candidato.email,
         f"🌱 Green House — seu código para assinar: {nome_doc}",
@@ -374,7 +434,7 @@ def assinar(
     db: Session = Depends(get_db),
 ) -> dict:
     candidato = _candidato_do_token(token, db)
-    assinatura = _registro(db, candidato, documento)
+    doc_enum, assinatura = _resolver_doc(db, candidato, documento)
     if assinatura.assinado_em is not None:
         raise HTTPException(status_code=409, detail="documento_ja_assinado")
     if assinatura.otp_hash is None or assinatura.otp_expira_em is None:
@@ -390,7 +450,7 @@ def assinar(
         raise HTTPException(status_code=422, detail="codigo_incorreto")
 
     # Evidências: hash do documento SEM o bloco de assinatura, IP, user-agent, instante.
-    pdf_sem_bloco = GERADORES[documento.value](db, candidato)
+    pdf_sem_bloco = _gerar_pdf(db, candidato, assinatura)
     assinatura.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
     assinatura.assinado_em = datetime.now(timezone.utc)
     assinatura.ip = ip_do_cliente(request)
@@ -398,11 +458,11 @@ def assinar(
     assinatura.otp_hash = None
     assinatura.otp_expira_em = None
 
-    pdf_assinado = GERADORES[documento.value](db, candidato, assinatura,
-                                              base_url_publica(request))
+    pdf_assinado = _gerar_pdf(db, candidato, assinatura, com_assinatura=True,
+                              base_url=base_url_publica(request))
     from app.services.fichas import carimbar_rubrica_lateral
     pdf_assinado = carimbar_rubrica_lateral(pdf_assinado, assinatura)
-    key = f"candidatos/{candidato.id}/fichas/{documento.value}-{assinatura.id}.pdf"
+    key = f"candidatos/{candidato.id}/fichas/{chave_doc(assinatura)}-{assinatura.id}.pdf"
     storage.salvar(key, pdf_assinado, "application/pdf")
     assinatura.pdf_key = key
 
@@ -413,16 +473,16 @@ def assinar(
             Assinatura.invalidada_em.is_(None),
         )
     ).all()
-    todas = {a.documento for a in assinadas} | {documento}
+    todas = {a.documento for a in assinadas if a.documento} | ({doc_enum} if doc_enum else set())
     if todas >= set(_docs_exigidos(db, candidato)) \
             and candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
 
     registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,
-              detalhe={"documento": documento.value, "hash": assinatura.hash_sha256})
+              detalhe={"documento": chave_doc(assinatura), "hash": assinatura.hash_sha256})
     db.commit()
     return {
-        "documento": documento,
+        "documento": chave_doc(assinatura),
         "assinado_em": assinatura.assinado_em,
         "hash_sha256": assinatura.hash_sha256,
     }

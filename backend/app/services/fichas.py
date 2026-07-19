@@ -152,9 +152,10 @@ class _FichaPDF(FPDF):
         self.set_x(14)
         self.set_font("helvetica", "", 8)
         quando = assinatura.assinado_em.strftime("%d/%m/%Y %H:%M:%S UTC")
+        papel = f", na qualidade de {assinatura.papel}" if assinatura.papel else ""
         self.multi_cell(
             182, 4.5,
-            f"Assinado por {nome} em {quando}, mediante código de verificação enviado ao "
+            f"Assinado por {nome}{papel} em {quando}, mediante código de verificação enviado ao "
             f"titular. IP: {assinatura.ip or '-'}\n"
             f"Integridade (SHA-256 do documento sem este bloco): {assinatura.hash_sha256}\n"
             f"O manifesto completo de assinatura, com todas as evidências, está na última "
@@ -183,6 +184,8 @@ class _FichaPDF(FPDF):
 
         self.secao("Assinante")
         self.campo("Nome", candidato.nome_completo)
+        if assinatura.papel:
+            self.campo("Assina na qualidade de", assinatura.papel)
         self.campo("CPF", cpf)
         self.campo("E-mail verificado", candidato.email or "—")
 
@@ -1085,10 +1088,13 @@ def aplicar_variaveis(texto: str, contexto: dict) -> str:
 
 
 def gerar_documento_modelo(db: Session, titulo: str, corpo: str,
-                           candidato: Candidato | None = None) -> bytes:
+                           candidato: Candidato | None = None,
+                           assinatura: Assinatura | None = None,
+                           base_url: str | None = None) -> bytes:
     """Renderiza um modelo do RH como PDF no papel timbrado padrão, com as
     variáveis preenchidas para o `candidato` (ou mantidas como {{...}} numa
-    prévia sem colaborador)."""
+    prévia sem colaborador). Com `assinatura` assinada, ganha o bloco de
+    assinatura e o manifesto — mesmo padrão das fichas do sistema."""
     ctx = _contexto_modelo(db, candidato)
     pdf = _OficioPDF(aplicar_variaveis(titulo, ctx))
     pdf.set_font("helvetica", "B", 13)
@@ -1101,6 +1107,10 @@ def gerar_documento_modelo(db: Session, titulo: str, corpo: str,
             pdf.paragrafo(paragrafo.strip())
         else:
             pdf.ln(2.5)
+    if assinatura is not None and candidato is not None and assinatura.assinado_em:
+        d = db.get(DocumentosIdentificacao, candidato.id)
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
     return bytes(pdf.output())
 
 

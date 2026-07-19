@@ -56,4 +56,6 @@ class TesteTestagem(Base):
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     respostas: Mapped[list] = mapped_column(JSON, default=list)
     resultado: Mapped[dict] = mapped_column(JSON, default=dict)
+    # telemetria de comportamento (mesmo formato do teste do candidato)
+    eventos: Mapped[list] = mapped_column(JSON, default=list)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

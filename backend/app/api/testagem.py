@@ -88,10 +88,13 @@ def _dump(t: TesteTestagem) -> dict:
 
 
 def _dump_resultado(t: TesteTestagem) -> dict:
+    from app.api.testes import _resumo_eventos
     return {"tipo": t.tipo, "status": t.status,
             "respondidas": len(t.respostas or []),
             "iniciado_em": t.iniciado_em, "concluido_em": t.concluido_em,
-            "resultado": t.resultado or None}
+            "resultado": t.resultado or None,
+            "comportamento": _resumo_eventos(t.eventos or []),
+            "eventos": t.eventos or []}
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +232,33 @@ def concluir(token: str, pid: uuid.UUID, tipo: str, db: Session = Depends(get_db
     return {"status": t.status}
 
 
+class EventosIn(BaseModel):
+    eventos: list[dict]
+
+
+_MAX_EVENTOS = 800  # mesmo teto do teste da admissão
+
+
+@router.post("/t/{token}/p/{pid}/{tipo}/eventos", status_code=204)
+def registrar_eventos(token: str, pid: uuid.UUID, tipo: str, payload: EventosIn,
+                      db: Session = Depends(get_db)) -> None:
+    """Telemetria de comportamento na testagem (mesmo formato da admissão)."""
+    link = _link(token, db)
+    p = _participante(link, pid, db)
+    t = _teste_do_tipo(db, p, tipo)
+    if t.status not in (StatusTeste.em_andamento, StatusTeste.concluido,
+                        StatusTeste.expirado):
+        return
+    atuais = list(t.eventos or [])
+    for ev in payload.eventos[: _MAX_EVENTOS - len(atuais)]:
+        if isinstance(ev, dict) and ev.get("e"):
+            atuais.append({"t": round(float(ev.get("t") or 0), 1),
+                           "e": str(ev["e"])[:40],
+                           **({"d": str(ev["d"])[:120]} if ev.get("d") else {})})
+    t.eventos = atuais
+    db.commit()
+
+
 @router.get("/t/{token}/p/{pid}/resultados")
 def resultados(token: str, pid: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """Na testagem o PARTICIPANTE vê o resultado (diferente da admissão)."""
@@ -310,6 +340,29 @@ def editar_link(link_id: uuid.UUID, payload: EditarLinkIn, request: Request,
               detalhe={"nome": link.nome, "ativo": link.ativo})
     db.commit()
     return _dump_link(db, link, base_url_publica(request))
+
+
+@router.post("/rh/testagem/participantes/{pid}/testes/{tipo}/resetar")
+def resetar_teste_testagem(pid: uuid.UUID, tipo: str, db: Session = Depends(get_db),
+                           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Zera o teste do participante para refazer (resultado antigo na auditoria)."""
+    p = db.get(ParticipanteTestagem, pid)
+    if p is None:
+        raise HTTPException(status_code=404, detail="participante_nao_encontrado")
+    t = _teste_do_tipo(db, p, tipo)
+    registrar(db, "testagem_teste_resetado", ator="rh", ator_detalhe=_rh.email,
+              detalhe={"participante": p.nome, "tipo": tipo,
+                       "status_anterior": t.status.value,
+                       "resultado_anterior": t.resultado or None})
+    t.status = StatusTeste.pendente
+    t.respostas = []
+    t.resultado = {}
+    t.eventos = []
+    t.iniciado_em = None
+    t.prazo_ate = None
+    t.concluido_em = None
+    db.commit()
+    return {"tipo": t.tipo, "status": t.status}
 
 
 @router.get("/rh/testagem/links/{link_id}/participantes")

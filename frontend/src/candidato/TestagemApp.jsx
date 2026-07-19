@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { testagem as api } from '../api.js'
+import { iniciarTelemetria } from './telemetria.js'
 import { Instrucoes, Questionario, NOMES_TESTE } from './TesteApp.jsx'
 import { ResultadoDisc, ResultadoSituacional } from '../ResultadoTeste.jsx'
 import logo from '../assets/logo.png'
@@ -73,6 +74,10 @@ export default function TestagemApp() {
     questoes: (tipo) => api.questoes(token, pid, tipo),
     responder: (tipo, dados) => api.responder(token, pid, tipo, dados),
     concluir: (tipo) => api.concluir(token, pid, tipo),
+    telemetria: (tipo) => iniciarTelemetria(token, tipo, {
+      postar: (lote) => api.eventos(token, pid, tipo, lote),
+      beaconUrl: () => api.eventosUrl(token, pid, tipo),
+    }),
   }
 
   if (fase === 'menu') {
@@ -83,7 +88,7 @@ export default function TestagemApp() {
       if (tipoAtual !== t.tipo) setTipoAtual(t.tipo)
       return caixa(<Questionario cli={cli} tipo={t.tipo} aoConcluir={() => recarregar()} />)
     }
-    return caixa(<Instrucoes tipo={t.tipo} comTelemetria={false} aoIniciar={async () => {
+    return caixa(<Instrucoes tipo={t.tipo} aoIniciar={async () => {
       await api.iniciar(token, pid, t.tipo)
       setTipoAtual(t.tipo)
       setFase('teste')

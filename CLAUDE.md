@@ -37,6 +37,13 @@ PYTHONPATH=. .venv/Scripts/python.exe tests/smoke_test.py   # 15 etapas, precisa
 cd frontend && npm run build                                # valida JSX/CSS
 ```
 
+Stack local completo (containers `deploy-*`): roda a partir do código-fonte e
+NÃO se atualiza sozinho — depois de commitar, reconstruir com
+
+```bash
+docker compose -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml up -d --build
+```
+
 Ambiente de teste efêmero (SEMPRE recriar limpo entre execuções — resíduo causa
 falsos erros):
 
@@ -51,6 +58,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 - **Rotas FastAPI**: declarar rotas específicas (`/lote/...`, `/massa/...`)
   ANTES das paramétricas (`/{id}`), senão o literal vira UUID inválido (422).
+- **Assinaturas**: documentos fixos usam o enum `DocumentoAssinavel`; documentos
+  de MODELO do RH usam a chave `modelo-<assinatura_id>` nas rotas, com SNAPSHOT
+  de título/corpo no registro `Assinatura` (editar o modelo não muda o que a
+  pessoa assina). Resolver chaves com `_resolver_doc`/`_gerar_pdf` de
+  `app/api/assinaturas.py` — nunca `GERADORES[...]` direto em código novo.
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).

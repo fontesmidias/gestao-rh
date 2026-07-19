@@ -91,36 +91,31 @@ def ficha_do_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -
 
 
 @router.get("/rh/candidatos/{candidato_id}/fichas/{documento}")
-def baixar_ficha_rh(candidato_id: uuid.UUID, documento: DocumentoAssinavel,
+def baixar_ficha_rh(candidato_id: uuid.UUID, documento: str,
                     db: Session = Depends(get_db)):
-    """PDF de qualquer ficha para o RH baixar e enviar manualmente se preciso:
-    a via assinada (com o bloco de assinatura), se existir; senão a prévia com
-    os dados atuais. Vale assinada OU não — é a rede de segurança para falhas."""
+    """PDF de qualquer ficha (fixa ou de modelo) para o RH baixar e enviar
+    manualmente se preciso: a via assinada (com o bloco), se existir; senão a
+    prévia com os dados atuais. Vale assinada OU não — rede de segurança."""
     from fastapi import Response
 
+    from app.api.assinaturas import _gerar_pdf, _resolver_doc
     from app.services import storage
-    from app.services.fichas import GERADORES
 
     candidato = db.get(Candidato, candidato_id)
     if candidato is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
-    assinatura = db.scalar(
-        select(Assinatura).where(
-            Assinatura.candidato_id == candidato.id, Assinatura.documento == documento,
-            Assinatura.assinado_em.isnot(None), Assinatura.invalidada_em.is_(None),
-        )
-    )
-    if assinatura is not None and assinatura.pdf_key:
+    _, assinatura = _resolver_doc(db, candidato, documento)
+    if assinatura.assinado_em is not None and assinatura.pdf_key:
         pdf = storage.ler(assinatura.pdf_key)
         sufixo = "-assinada"
     else:
-        pdf = GERADORES[documento.value](db, candidato)
+        pdf = _gerar_pdf(db, candidato, assinatura)
         sufixo = "-previa"
     nome = "".join(c for c in candidato.nome_completo if c.isalnum() or c in " -_").strip()[:40]
     return Response(
         content=pdf, media_type="application/pdf",
         headers={"Content-Disposition":
-                 f'attachment; filename="{documento.value}{sufixo}-{nome}.pdf"'})
+                 f'attachment; filename="{documento}{sufixo}-{nome}.pdf"'})
 
 
 @router.put("/rh/candidatos/{candidato_id}/ficha/{secao}")
@@ -293,7 +288,8 @@ def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
     incompleta, fichas aguardando assinatura e/ou documentos pendentes — com
     um link novo. Nasceu do incidente real: e-mail cadastrado depois, e a
     pessoa nunca soube que havia fichas para preencher e assinar."""
-    from app.api.assinaturas import NOMES_DOC, _docs_exigidos, _registro
+    from app.api.assinaturas import (NOMES_DOC, _assinaturas_modelo, _docs_exigidos,
+                                     _registro, titulo_doc)
     from app.api.ficha import pendencias_da_ficha
 
     candidato = db.get(Candidato, candidato_id)
@@ -305,6 +301,8 @@ def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
     pend_ficha = pendencias_da_ficha(db, candidato)
     fichas_pendentes = [NOMES_DOC[d] for d in _docs_exigidos(db, candidato)
                         if _registro(db, candidato, d).assinado_em is None]
+    fichas_pendentes += [titulo_doc(a) for a in _assinaturas_modelo(db, candidato)
+                         if a.assinado_em is None]
     slots = db.scalars(select(SlotDocumento).where(
         SlotDocumento.candidato_id == candidato.id)).all()
     docs_pendentes = [s.tipo.value.replace("_", " ")

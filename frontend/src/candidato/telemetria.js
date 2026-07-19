@@ -4,7 +4,13 @@
 // RH os lê — servem para entender o comportamento e melhorar o sistema.
 import { candidato as api } from '../api.js'
 
-export function iniciarTelemetria(token, tipo) {
+// `transporte` opcional adapta o destino (padrão: teste do candidato; a
+// testagem avulsa passa o dela): { postar(lote), beaconUrl() }
+export function iniciarTelemetria(token, tipo, transporte) {
+  const t = transporte || {
+    postar: (lote) => api.testeEventos(token, tipo, lote),
+    beaconUrl: () => api.testeEventosUrl(token, tipo),
+  }
   const inicio = Date.now()
   let fila = []
   const anota = (e, d) => {
@@ -15,13 +21,13 @@ export function iniciarTelemetria(token, tipo) {
     if (!fila.length) return
     const lote = fila
     fila = []
-    api.testeEventos(token, tipo, lote).catch(() => { fila = lote.concat(fila) })
+    t.postar(lote).catch(() => { fila = lote.concat(fila) })
   }
   const descarga = () => {
     // ao fechar/sair da página, o fetch normal pode ser cancelado — beacon não
     anota('saida_pagina')
     if (navigator.sendBeacon) {
-      navigator.sendBeacon(api.testeEventosUrl(token, tipo),
+      navigator.sendBeacon(t.beaconUrl(),
         new Blob([JSON.stringify({ eventos: fila })], { type: 'application/json' }))
       fila = []
     } else enviar()
