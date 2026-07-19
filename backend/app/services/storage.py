@@ -46,3 +46,33 @@ def listar(prefixo: str) -> list[str]:
     return [obj.object_name for obj in
             _cliente().list_objects(get_settings().minio_bucket,
                                     prefix=prefixo, recursive=True)]
+
+
+def listar_detalhado(prefixo: str) -> list[tuple[str, int]]:
+    """(key, tamanho em bytes) de cada objeto sob o prefixo — para estimar o
+    tamanho de um lote antes de montá-lo, sem baixar nada."""
+    return [(obj.object_name, obj.size or 0) for obj in
+            _cliente().list_objects(get_settings().minio_bucket,
+                                    prefix=prefixo, recursive=True)]
+
+
+def stat(key: str) -> int | None:
+    """Tamanho do objeto em bytes, ou None se não existir — verificação barata
+    de existência (usada para saber o que falta ANTES de montar um ZIP)."""
+    from minio.error import S3Error
+    try:
+        return _cliente().stat_object(get_settings().minio_bucket, key).size
+    except S3Error:
+        return None
+
+
+def abrir_em_blocos(key: str, tamanho_bloco: int = 65536):
+    """Gera os bytes do objeto em blocos, sem materializá-lo inteiro em RAM
+    (para montar ZIPs grandes em streaming). Fecha a conexão no finally mesmo
+    que o consumidor aborte no meio."""
+    resp = _cliente().get_object(get_settings().minio_bucket, key)
+    try:
+        yield from resp.stream(tamanho_bloco)
+    finally:
+        resp.close()
+        resp.release_conn()

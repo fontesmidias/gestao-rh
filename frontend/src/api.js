@@ -445,6 +445,32 @@ export const rh = {
                                          body: JSON.stringify(dados) }),
   excluirPapel: (id) =>
     req(`/rh/papeis-assinatura/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Arquivo/backup: inventário, download individual e lote (ZIP+XLSX)
+  arquivoInventario: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/arquivo/inventario${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  arquivoEstimativa: (pedido) =>
+    req('/rh/arquivo/lote/estimativa', { method: 'POST', headers: authRH(),
+                                         body: JSON.stringify(pedido) }),
+  arquivoDossie: (cid) =>
+    req(`/rh/arquivo/pessoa/${cid}/dossie`, { headers: authRH() }),
+  arquivoAssinatura: (cid, id) =>
+    req(`/rh/arquivo/pessoa/${cid}/assinatura/${id}`, { headers: authRH() }),
+  arquivoSlot: (cid, id) =>
+    req(`/rh/arquivo/pessoa/${cid}/slot/${id}`, { headers: authRH() }),
+  // ZIP em lote: fetch + blob (o corpo é JSON; a resposta é binária/stream)
+  arquivoLote: async (pedido) => {
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/arquivo/lote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authRH() },
+        body: JSON.stringify(pedido),
+      })
+      if (!r.ok) await lancarErro(r)
+      return r.blob()
+    } finally { saiuRH() }
+  },
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

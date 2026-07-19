@@ -67,6 +67,14 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   de título/corpo no registro `Assinatura` (editar o modelo não muda o que a
   pessoa assina). Resolver chaves com `_resolver_doc`/`_gerar_pdf` de
   `app/api/assinaturas.py` — nunca `GERADORES[...]` direto em código novo.
+- **StreamingResponse + `Depends(get_db)`**: a sessão fecha quando a rota
+  retorna, ANTES de o gerador streamar → `DetachedInstanceError`. Resolver todos
+  os dados do banco ANTES de montar a resposta; o gerador só toca o MinIO
+  (ver `app/api/arquivo.py`, export em lote). ZIP em streaming real via
+  `app/services/zip_stream.py` (stdlib, `ZIP_STORED`) + `storage.abrir_em_blocos`.
+- **Nomes de arquivo/pasta em export**: SEMPRE via `export_planilha.slug()`
+  (remove `/ \ . ..`, acentos; fallback se vazio/reservado do Windows) — nunca
+  concatenar `titulo_doc` cru (é texto livre do RH → path traversal).
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).
