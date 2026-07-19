@@ -87,6 +87,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   escritas à mão.
 - **Select com busca**: `frontend/src/SelectBusca.jsx` para filtros suspensos
   grandes (postos, cargos) — dados carregados 1x e filtrados em memória.
+- **Multi-signatário** (`solicitacao_assinatura`/`etapa_assinatura`): documento
+  assinado por vários em ordem de papéis. A via do candidato dentro de um roteiro
+  é uma `Assinatura` DEDICADA marcada com `solicitacao_etapa_id` — o
+  `_registro`/`_docs_exigidos`/`_assinaturas_modelo` filtram `IS NULL` para não
+  brigar com o wizard. `avancar_solicitacao` é serializado (`SELECT FOR UPDATE`).
+  Externo: token single-use, PDF só após OTP validado. `/verificar-etapa` mostra
+  só o assinante daquela etapa + "X de N" (sem coassinantes nominais). PDF final
+  consolidado via `gerar_documento_com_vistos` (blocos empilhados + manifesto
+  multi com QR por etapa). Rubrica/manifesto legado de 1 assinante intactos.
+- **Assinatura da equipe**: NUNCA PNG/carimbo fingindo assinatura pessoal. É
+  `AutorizacaoEquipe` — representante confirma 1x por código (ato de vontade);
+  vira etapa já satisfeita por "autorização prévia" no roteiro do modelo; o
+  manifesto diz "emitido sob autorização permanente de X", não "X assinou".
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).

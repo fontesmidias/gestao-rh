@@ -4,6 +4,7 @@ import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
 import { DiagnosticoColaborador } from './Diagnostico.jsx'
+import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 
@@ -580,6 +581,7 @@ export default function Detalhe({ id, aoVoltar }) {
         <TestesDoCandidato id={id} />
       </div>
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
+      <RoteiroAssinatura id={id} />
       <div className="rh-grid-2">
         <ModelosDoColaborador id={id} setMsg={setMsg} />
         <FichaRH id={id} setMsg={setMsg} />

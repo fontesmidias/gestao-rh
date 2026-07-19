@@ -12,6 +12,7 @@ import PostosRH from './PostosRH.jsx'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
+import MinhasAssinaturas from './MinhasAssinaturas.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -185,6 +186,7 @@ function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
     ['creche', '🍼', 'Reembolso-Creche'],
     ['testagem', '🧪', 'Testes'],
     ['arquivo', '🗄️', 'Arquivo'],
+    ['minhas-assinaturas', '✍️', 'Minhas assinaturas'],
     ['talentos', '🎯', 'Banco de Talentos'],
     ['config', '⚙️', 'Configurações'],
   ]
@@ -305,6 +307,7 @@ function Painel({ aoSair }) {
           <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
         {pagina === 'arquivo' && <Arquivo />}
+        {pagina === 'minhas-assinaturas' && <MinhasAssinaturas />}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
