@@ -98,6 +98,41 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     } finally { setExportando(false) }
   }
 
+  // Planilha de importação de admissões do TIRVU (28 colunas). Só colaborador
+  // vai para lá — quem ainda está em admissão não tem vínculo a criar. Por
+  // padrão exclui os importados do próprio Tirvu (já existem lá).
+  const exportarTirvu = async () => {
+    setErro(null)
+    const filtros = { status, busca, situacao, posto_id: postoId }
+    try {
+      const p = await comAmpulheta('Conferindo as admissões…',
+                                   () => api.pendenciasTirvu(filtros))
+      if (p.total === 0) {
+        setErro('Nenhum colaborador vindo da admissão nos filtros atuais. '
+                + 'Quem foi importado do Tirvu já existe lá e não precisa ser reenviado.')
+        return
+      }
+      if (p.com_pendencia.length) {
+        const nomes = p.com_pendencia.slice(0, 8)
+          .map((x) => `• ${x.nome} (falta: ${x.faltam.join(', ')})`).join('\n')
+        const extra = p.com_pendencia.length > 8
+          ? `\n…e mais ${p.com_pendencia.length - 8}.` : ''
+        if (!window.confirm(`${p.com_pendencia.length} de ${p.total} colaborador(es) têm campos que o Tirvu recusa:\n\n${nomes}${extra}\n\nExportar mesmo assim?`)) return
+      }
+      const blob = await comAmpulheta('Gerando a planilha do Tirvu…',
+                                      () => api.exportarTirvu(filtros))
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `importacao-tirvu-${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e) {
+      setErro(e.detail === 'nenhum_colaborador'
+        ? 'Nenhum colaborador nos filtros escolhidos.'
+        : 'Não foi possível gerar a planilha do Tirvu. Tente novamente.')
+    }
+  }
+
   // --- controles de vínculo (com confirmação, padrão da casa) ---
   const efetivar = async (c) => {
     if (!window.confirm(`Efetivar ${c.nome_completo} como colaborador ativo?`)) return
@@ -186,6 +221,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                  onChange={(e) => importar(e.target.files?.[0])} />
           <button className="btn-secundario btn-mini"
                   onClick={() => inputArquivo.current?.click()}>⬆ Importar base</button>
+          <button className="btn-secundario btn-mini" disabled={!lista?.length}
+                  title="Planilha no layout de importação de admissões do Tirvu (28 colunas), com quem veio da admissão"
+                  onClick={exportarTirvu}>⬆ Exportar p/ Tirvu</button>
           <button className="btn-principal btn-mini" disabled={exportando || !lista?.length}
                   onClick={exportar}>
             {exportando ? 'Gerando…' : '⬇ Exportar Excel'}</button>
@@ -195,6 +233,10 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         importação é <strong>por CPF</strong>: rodar de novo atualiza, não duplica. A
         exportação traz <strong>uma linha por colaborador com todas as respostas</strong>,
         respeitando os filtros. Atenção: contém dados pessoais e de saúde — trate conforme a LGPD.</p>
+      <p className="explica"><strong>⬆ Exportar p/ Tirvu</strong> gera a planilha de
+        <strong> importação de admissões</strong> (28 colunas) para você subir lá — apenas
+        com quem <strong>veio da admissão</strong> e já foi efetivado. Quem foi importado
+        do Tirvu já existe lá e fica de fora. O Tirvu ignora cadastros repetidos.</p>
 
       <div className="rh-card rh-lote">
         <select value={status} style={{ maxWidth: 200 }}

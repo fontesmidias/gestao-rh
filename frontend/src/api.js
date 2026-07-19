@@ -287,13 +287,15 @@ export const rh = {
       return r.json()
     } finally { saiuRH() }
   },
+  // Export em massa vive em Colaboradores: só vai para o Tirvu quem já foi
+  // efetivado. Por padrão exclui os importados (já existem lá).
   pendenciasTirvu: (filtros = {}) => {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
-    return req(`/rh/candidatos-tirvu-pendencias${q ? `?${q}` : ''}`, { headers: authRH() })
+    return req(`/rh/colaboradores/tirvu-pendencias${q ? `?${q}` : ''}`, { headers: authRH() })
   },
   exportarTirvu: (filtros = {}) => {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
-    return req(`/rh/candidatos-exportar-tirvu${q ? `?${q}` : ''}`, { headers: authRH() })
+    return req(`/rh/colaboradores/exportar-tirvu${q ? `?${q}` : ''}`, { headers: authRH() })
   },
   exportarTirvuIndividual: (id) =>
     req(`/rh/candidatos/${id}/exportar-tirvu`, { headers: authRH() }),

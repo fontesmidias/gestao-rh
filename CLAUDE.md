@@ -102,7 +102,12 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
 - **Integração Tirvu (export de admissões)**: `export_tirvu.py` gera o layout
   de 28 colunas em ORDEM FIXA (`COLUNAS_TIRVU`); o Tirvu recusa linha sem
-  CTPS/PIS (pré-checagem em `/rh/candidatos-tirvu-pendencias`). CTPS Digital =
+  CTPS/PIS (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). O export EM
+  MASSA vive em **Colaboradores**, não em Admissões: só se manda para o Tirvu
+  quem já foi EFETIVADO (quem está em admissão não tem vínculo a criar lá). Por
+  padrão exclui `origem == "importacao"` — quem veio do Tirvu já existe lá
+  (`incluir_importados=true` força). O export individual (botão na ficha) fica
+  em `revisao.py` e serve candidato ou colaborador. CTPS Digital =
   padrão eSocial: número = o PRÓPRIO CPF (11 dígitos), série = "0000" — derivada
   em `salvar_documentos`, nunca perguntada. Endereço: coleta nova é separada
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna

@@ -129,6 +129,78 @@ def exportar(status: str | None = None, busca: str | None = None,
 
 
 # ======================================================================
+# Exportação para o Tirvu (layout de importação de admissões)
+# ======================================================================
+#
+# Só se exporta COLABORADOR: a pessoa nasce aqui como candidata e só passa a
+# existir no Tirvu quando é efetivada (decisão do Bruno, 2026-07-19). Por
+# padrão saem apenas os que vieram da admissão — os importados do Tirvu já
+# existem lá e seriam ignorados por ele de qualquer forma.
+
+
+def _colaboradores_para_tirvu(db: Session, status: str | None, busca: str | None,
+                              situacao: str | None, posto_id: uuid.UUID | None,
+                              ids: str | None, incluir_importados: bool) -> list[Candidato]:
+    if ids:
+        alvo = [i for i in (x.strip() for x in ids.split(",")) if i]
+        return [c for i in alvo if (c := db.get(Candidato, uuid.UUID(i))) is not None]
+    candidatos = _filtrar(db, status, busca, situacao, posto_id, so_colaboradores=True)
+    if not incluir_importados:
+        candidatos = [c for c in candidatos if c.origem != "importacao"]
+    return candidatos
+
+
+# ATENÇÃO: rotas literais ANTES da paramétrica /{cid} (senão vira UUID inválido).
+@router.get("/rh/colaboradores/tirvu-pendencias")
+def pendencias_tirvu(status: str | None = None, busca: str | None = None,
+                     situacao: str | None = None, posto_id: uuid.UUID | None = None,
+                     ids: str | None = None, incluir_importados: bool = False,
+                     db: Session = Depends(get_db)) -> dict:
+    """Pré-checagem do export: o Tirvu RECUSA linha sem CTPS/PIS. O front avisa
+    ANTES do download — melhor saber aqui do que descobrir lá."""
+    from app.services.export_tirvu import linha_tirvu, pendencias_linha
+
+    candidatos = _colaboradores_para_tirvu(db, status, busca, situacao, posto_id,
+                                           ids, incluir_importados)
+    problemas = []
+    for c in candidatos:
+        faltas = pendencias_linha(linha_tirvu(db, c))
+        if faltas:
+            problemas.append({"id": c.id, "nome": c.nome_completo, "faltam": faltas})
+    return {"total": len(candidatos), "com_pendencia": problemas}
+
+
+@router.get("/rh/colaboradores/exportar-tirvu")
+def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
+                         situacao: str | None = None, posto_id: uuid.UUID | None = None,
+                         ids: str | None = None, incluir_importados: bool = False,
+                         db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Planilha no layout de importação de admissões do Tirvu (28 colunas em
+    ordem fixa). É o artefato mais sensível do sistema (CPF+PIS+salário em
+    massa): auditoria sempre, com quem baixou, quantas linhas e quais postos."""
+    from app.services.export_tirvu import linha_tirvu
+
+    candidatos = _colaboradores_para_tirvu(db, status, busca, situacao, posto_id,
+                                           ids, incluir_importados)
+    if not candidatos:
+        raise HTTPException(status_code=404, detail="nenhum_colaborador")
+    linhas = [linha_tirvu(db, c) for c in candidatos]
+    conteudo = montar_workbook(linhas, titulo="Admissões")
+    registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"linhas": len(linhas), "incluiu_importados": incluir_importados,
+                       "postos": sorted({l["Posto de Serviço"] for l in linhas
+                                         if l["Posto de Serviço"]})})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="importacao-tirvu-{agora}.xlsx"'})
+
+
+# ======================================================================
 # Importação em massa da base do Tirvu
 # ======================================================================
 #

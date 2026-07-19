@@ -99,61 +99,10 @@ def exportar_admissoes(status: str | None = None, busca: str | None = None,
         headers={"Content-Disposition": f'attachment; filename="admissoes-{agora}.xlsx"'})
 
 
-@router.get("/rh/candidatos-exportar-tirvu")
-def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
-                         posto_id: uuid.UUID | None = None,
-                         ids: str | None = None,
-                         db: Session = Depends(get_db),
-                         _rh: UsuarioRH = Depends(requer_rh)) -> Response:
-    """Planilha no layout de importação de admissões do Tirvu (28 colunas em
-    ordem fixa) — mesmos filtros da tela, ou `ids` (CSV) para exportar uma
-    seleção. É o artefato mais sensível do sistema (CPF+PIS+salário em massa):
-    auditoria sempre, com quem baixou e quantas linhas."""
-    from app.services.export_planilha import montar_workbook
-    from app.services.export_tirvu import linha_tirvu
-
-    if ids:
-        alvo = [i for i in (x.strip() for x in ids.split(",")) if i]
-        candidatos = [c for i in alvo
-                      if (c := db.get(Candidato, uuid.UUID(i))) is not None]
-    else:
-        candidatos = _candidatos_admissao(db, status, busca, posto_id)
-    if not candidatos:
-        raise HTTPException(404, "Nenhuma admissão nos filtros escolhidos.")
-    linhas = [linha_tirvu(db, c) for c in candidatos]
-    conteudo = montar_workbook(linhas, titulo="Admissões")
-    registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
-              detalhe={"linhas": len(linhas),
-                       "postos": sorted({l["Posto de Serviço"] for l in linhas if l["Posto de Serviço"]})})
-    db.commit()
-    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return Response(
-        content=conteudo,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition":
-                 f'attachment; filename="importacao-tirvu-{agora}.xlsx"'})
-
-
-@router.get("/rh/candidatos-tirvu-pendencias")
-def pendencias_tirvu(status: str | None = None, busca: str | None = None,
-                     posto_id: uuid.UUID | None = None, ids: str | None = None,
-                     db: Session = Depends(get_db)) -> dict:
-    """Pré-checagem do export: quais linhas o Tirvu vai recusar (sem CTPS/PIS)
-    ou que sairiam inúteis. O front mostra ANTES do download."""
-    from app.services.export_tirvu import linha_tirvu, pendencias_linha
-
-    if ids:
-        alvo = [i for i in (x.strip() for x in ids.split(",")) if i]
-        candidatos = [c for i in alvo
-                      if (c := db.get(Candidato, uuid.UUID(i))) is not None]
-    else:
-        candidatos = _candidatos_admissao(db, status, busca, posto_id)
-    problemas = []
-    for c in candidatos:
-        faltas = pendencias_linha(linha_tirvu(db, c))
-        if faltas:
-            problemas.append({"id": c.id, "nome": c.nome_completo, "faltam": faltas})
-    return {"total": len(candidatos), "com_pendencia": problemas}
+# O export EM MASSA para o Tirvu vive em `colaboradores.py`: só se manda para
+# lá quem já virou colaborador (efetivado) — quem ainda está em admissão não
+# tem vínculo para criar no Tirvu. Aqui fica apenas o export individual, usado
+# pelo botão na ficha da pessoa.
 
 
 @router.get("/rh/candidatos/{candidato_id}/exportar-tirvu")

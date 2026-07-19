@@ -6,12 +6,21 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+## [1.47.0] — 2026-07-19
+
+### Mudado
+- **"Exportar p/ Tirvu" saiu de Admissões e foi para Colaboradores**: só se
+  manda para o Tirvu quem já virou colaborador (foi efetivado) — quem ainda
+  está preenchendo a ficha não tem vínculo a criar lá. A planilha traz apenas
+  quem **veio da admissão**; os importados do próprio Tirvu ficam de fora
+  (já existem lá e seriam ignorados por ele).
+
 ## [1.46.0] — 2026-07-19
 
 ### Adicionado
 - **Exportação de admissões para o Tirvu** — planilha no layout oficial de
   importação (28 colunas em ordem fixa), individual (botão na ficha) e em massa
-  (tela de Admissões, respeitando os filtros). Pré-checagem antes do download:
+  (respeitando os filtros da tela). Pré-checagem antes do download:
   o Tirvu recusa linha sem CTPS/PIS, e o RH fica sabendo aqui, não lá. Toda
   exportação é auditada (quem baixou, quantas linhas, quais postos).
 - **CTPS Digital calculada** — número = o próprio CPF (11 dígitos), série =

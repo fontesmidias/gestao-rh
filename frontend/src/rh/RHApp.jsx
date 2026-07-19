@@ -458,25 +458,6 @@ function Painel({ aoSair }) {
                   a.download = `admissoes-${new Date().toISOString().slice(0, 10)}.xlsx`
                   a.click()
                 })}>⬇ Exportar planilha</button>
-        <button className="btn-secundario btn-mini"
-                title="Planilha no layout de importação de admissões do Tirvu (28 colunas) — só as admissões que casam o filtro"
-                onClick={() => comAmpulheta('Conferindo e gerando a planilha…', async () => {
-                  const f = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v))
-                  // pré-checagem: o Tirvu recusa linha sem CTPS/PIS — melhor
-                  // avisar aqui do que descobrir lá
-                  const p = await api.pendenciasTirvu(f)
-                  if (p.com_pendencia.length) {
-                    const nomes = p.com_pendencia.slice(0, 8)
-                      .map((x) => `• ${x.nome} (falta: ${x.faltam.join(', ')})`).join('\n')
-                    const extra = p.com_pendencia.length > 8 ? `\n…e mais ${p.com_pendencia.length - 8}.` : ''
-                    if (!window.confirm(`${p.com_pendencia.length} de ${p.total} admissões têm campos que o Tirvu pode recusar:\n\n${nomes}${extra}\n\nExportar mesmo assim?`)) return
-                  }
-                  const blob = await api.exportarTirvu(f)
-                  const a = document.createElement('a')
-                  a.href = URL.createObjectURL(blob)
-                  a.download = `importacao-tirvu-${new Date().toISOString().slice(0, 10)}.xlsx`
-                  a.click()
-                })}>⬆ Exportar p/ Tirvu</button>
       </div>
 
       {!candidatos ? <p>Carregando…</p> : candidatos.length === 0 ? (
