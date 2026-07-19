@@ -477,6 +477,8 @@ export const rh = {
     req(`/rh/solicitacoes-assinatura/${id}/cancelar`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ motivo }) }),
   minhasAssinaturas: () => req('/rh/minhas-assinaturas', { headers: authRH() }),
+  minhasAssinaturasFeitas: () => req('/rh/minhas-assinaturas/feitas', { headers: authRH() }),
+  todasSolicitacoes: () => req('/rh/solicitacoes-assinatura', { headers: authRH() }),
   assinarEtapaRh: (etapaId, senha) =>
     req(`/rh/etapas/${etapaId}/assinar`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ senha }) }),

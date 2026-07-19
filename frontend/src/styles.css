@@ -652,63 +652,36 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 
 /* ---------- Sidebar do painel RH ---------- */
 .rh-layout { display: flex; min-height: 100vh; }
+/* Menu por SEÇÕES, sempre expandido (feedback 2026-07-19: a versão hover/
+   recolher ficou bugada). Largura fixa; a NAV rola sozinha quando não cabe —
+   logo e rodapé ficam fixos. */
 .rh-sidebar {
   position: sticky; top: 0; align-self: flex-start;
-  display: flex; flex-direction: column; gap: .4rem;
-  width: 232px; min-width: 232px; height: 100vh;
-  padding: .9rem .7rem;
+  display: flex; flex-direction: column;
+  width: 236px; min-width: 236px; height: 100vh;
   background: var(--cartao); border-right: 1px solid var(--borda);
-  transition: width .18s ease, min-width .18s ease;
 }
-/* Visibilidade de rótulos vs. ícones: comandada SÓ pelo CSS (largura), nunca
-   pelo estado React — assim hover e estado nunca discordam (bug de 2026-07-19:
-   a barra alargava no hover mas os textos, presos ao estado, sumiam). */
-.rh-so-recolhido { display: none; }          /* aparece só quando recolhido */
-.rh-sidebar.fechada .rh-so-expandido { display: none; }
-.rh-sidebar.fechada .rh-so-recolhido { display: inline; }
-.rh-sidebar.fechada { width: 64px; min-width: 64px; }
-.rh-sidebar.fechada .rh-sidebar-item,
-.rh-sidebar.fechada .rh-sidebar-novo { justify-content: center; padding: .6rem .2rem; }
-
-/* Menu recolhido: ao passar o mouse, EXPANDE por cima do conteúdo (padrão
-   VS Code — não empurra a página), só no desktop. Abre rápido, fecha devagar
-   (assimétrico de propósito). A classe .sem-hover suprime isso por um instante
-   logo após clicar (navegar/recolher), para o menu recolher mesmo com o mouse
-   ainda em cima. No hover, os RÓTULOS reaparecem junto com a largura. */
-@media (hover: hover) and (pointer: fine) {
-  .rh-sidebar.fechada { transition-delay: 350ms; }   /* fechar devagar */
-  .rh-sidebar.fechada:not(.sem-hover):hover {
-    width: 232px; min-width: 232px;
-    position: fixed; z-index: 60; height: 100vh;
-    box-shadow: 6px 0 24px rgba(0,0,0,.16);
-    transition-delay: 100ms;                          /* abrir rápido */
-  }
-  .rh-sidebar.fechada:not(.sem-hover):hover .rh-so-expandido { display: inline; }
-  .rh-sidebar.fechada:not(.sem-hover):hover .rh-so-recolhido { display: none; }
-  .rh-sidebar.fechada:not(.sem-hover):hover .rh-sidebar-item,
-  .rh-sidebar.fechada:not(.sem-hover):hover .rh-sidebar-novo {
-    justify-content: flex-start; padding: .6rem .8rem;
-  }
-}
-/* No mobile (gaveta) não há hover: quando a gaveta abre (.movel-aberta), os
-   rótulos precisam aparecer mesmo com .fechada presente. */
-.rh-sidebar.movel-aberta .rh-so-expandido { display: inline; }
-.rh-sidebar.movel-aberta .rh-so-recolhido { display: none; }
-.rh-sidebar-toggle {
-  align-self: flex-end; border: 0; background: transparent; cursor: pointer;
-  font-size: 1.05rem; color: var(--tinta); padding: .2rem .5rem; border-radius: 8px;
-}
-.rh-sidebar-toggle:hover { background: var(--verde-suave); }
-/* Logo em cima, nome do portal embaixo — nada de texto cortado. */
+/* Logo no topo — altura fixa, nunca cortada. */
 .rh-sidebar-logo {
-  display: flex; flex-direction: column; align-items: center; gap: var(--esp-2);
-  padding: var(--esp-1) var(--esp-1) var(--esp-3); text-align: center;
-  border-bottom: 1px solid var(--borda); margin-bottom: var(--esp-2);
-  overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: var(--esp-2);
+  padding: var(--esp-3) var(--esp-1); position: relative; flex-shrink: 0;
+  border-bottom: 1px solid var(--borda);
 }
-.rh-sidebar-logo .logo-topo { height: 36px; }
-.rh-sidebar-titulo { font-size: var(--fs-apoio); font-weight: 700; color: var(--tinta);
-                     line-height: 1.2; }
+.rh-sidebar-logo .logo-topo { height: 34px; width: auto; }
+.rh-sidebar-fechar {
+  position: absolute; right: .4rem; top: .4rem; border: 0; background: transparent;
+  font-size: 1.15rem; color: var(--tinta); cursor: pointer; padding: .2rem .4rem;
+}
+/* A nav é a parte rolável (o resto fica fixo). */
+.rh-sidebar nav {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: .5rem .55rem; display: flex; flex-direction: column;
+}
+.rh-sidebar-grupo { display: flex; flex-direction: column; gap: 1px; margin-bottom: .3rem; }
+.rh-sidebar-grupo-titulo {
+  font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--cinza-txt); padding: .55rem .6rem .22rem;
+}
 .rh-sidebar-user { display: flex; align-items: center; gap: var(--esp-2); min-width: 0; }
 .rh-sidebar-user .rh-nome { overflow: hidden; text-overflow: ellipsis; }
 .rh-sidebar-avatar {
@@ -717,26 +690,25 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   background: var(--verde-suave); color: var(--verde-escuro);
   font-weight: 800; font-size: var(--fs-apoio);
 }
-.rh-sidebar-novo { display: flex; justify-content: center; margin-bottom: .4rem; }
-.rh-sidebar nav { display: flex; flex-direction: column; gap: .25rem; }
+.rh-sidebar-novo {
+  display: flex; justify-content: center; flex-shrink: 0;
+  margin: .7rem .6rem 0;
+}
 .rh-sidebar-item {
   display: flex; align-items: center; gap: .65rem;
-  width: 100%; padding: .6rem .7rem; border: 0; border-radius: 12px;
-  background: transparent; color: var(--tinta); font-size: .95rem;
+  width: 100%; padding: .55rem .65rem; border: 0; border-radius: 10px;
+  background: transparent; color: var(--tinta); font-size: .93rem;
   cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden;
 }
 .rh-sidebar-item:hover { background: var(--verde-suave); }
 .rh-sidebar-item.ativo { background: var(--verde-suave); font-weight: 700;
                          box-shadow: inset 3px 0 0 var(--verde); }
-.rh-sidebar-icone { font-size: 1.15rem; width: 1.5rem; text-align: center; }
+.rh-sidebar-icone { font-size: 1.1rem; width: 1.4rem; text-align: center; flex-shrink: 0; }
 .rh-sidebar-rodape {
-  margin-top: auto; display: flex; align-items: center; gap: var(--esp-2);
-  justify-content: space-between;
-  padding-top: .6rem; border-top: 1px solid var(--borda);
-  overflow: hidden; white-space: nowrap;
+  flex-shrink: 0; display: flex; align-items: center; gap: var(--esp-2);
+  justify-content: space-between; padding: .6rem .8rem;
+  border-top: 1px solid var(--borda); overflow: hidden; white-space: nowrap;
 }
-.rh-sidebar.fechada .rh-sidebar-rodape { flex-direction: column; }
-.rh-sidebar.fechada .rh-sidebar-titulo { display: none; }
 .rh-conteudo { flex: 1; min-width: 0; }
 /* Hambúrguer (só no celular) e fundo escurecido da gaveta */
 .rh-hamburguer {
@@ -760,11 +732,7 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
     transform: translateX(-105%); transition: transform .2s ease;
     box-shadow: 8px 0 24px rgba(0, 0, 0, .18);
   }
-  .rh-sidebar.fechada { width: min(82vw, 300px); min-width: 0; box-shadow: none; }
   .rh-sidebar.movel-aberta { transform: none; }
-  /* na gaveta, os itens sempre mostram o rótulo (nunca o modo "trilho") */
-  .rh-sidebar.fechada .rh-sidebar-item,
-  .rh-sidebar.fechada .rh-sidebar-novo { justify-content: flex-start; padding: .6rem .7rem; }
   .rh-conteudo { margin-left: 0; padding-top: 3.4rem; }
 }
 

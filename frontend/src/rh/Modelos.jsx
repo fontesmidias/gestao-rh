@@ -152,8 +152,9 @@ export default function Modelos() {
   }
 
   return (
-    <div className="rh-card">
-      <h3>📝 Modelos de documento</h3>
+    <main className="rh-painel">
+      <header className="rh-topo"><h1>📝 Modelos de documento</h1><div /></header>
+      <div className="rh-card">
       <p className="explica">Crie documentos do zero já no papel timbrado da empresa, com
         variáveis entre chaves duplas preenchidas na hora de gerar. Um modelo pode ser só para
         <strong> baixar</strong>, para <strong>enviar por e-mail</strong> e/ou para
@@ -274,7 +275,8 @@ export default function Modelos() {
         </table>
       )}
       <Msg msg={msg} />
-    </div>
+      </div>
+    </main>
   )
 }
 

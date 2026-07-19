@@ -269,6 +269,51 @@ def minhas_assinaturas(db: Session = Depends(get_db),
     return {"pendentes": saida}
 
 
+@router.get("/rh/minhas-assinaturas/feitas")
+def minhas_assinaturas_feitas(db: Session = Depends(get_db),
+                              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """O que EU já assinei (etapas usuario_rh minhas com assinado_em)."""
+    etapas = db.scalars(
+        select(EtapaAssinatura)
+        .where(EtapaAssinatura.tipo_signatario == TipoSignatario.usuario_rh,
+               EtapaAssinatura.usuario_rh_id == rh.id,
+               EtapaAssinatura.assinado_em.isnot(None))
+        .order_by(EtapaAssinatura.assinado_em.desc())).all()
+    saida = []
+    for e in etapas:
+        sol = db.get(SolicitacaoAssinatura, e.solicitacao_id)
+        cand = db.get(Candidato, sol.candidato_id) if sol else None
+        saida.append({
+            "etapa_id": e.id, "papel": e.papel,
+            "titulo": sol.titulo_doc or sol.documento if sol else "-",
+            "colaborador": cand.nome_completo if cand else "-",
+            "assinado_em": e.assinado_em,
+            "documento_concluido": sol.status == StatusSolicitacao.concluida if sol else False,
+        })
+    return {"feitas": saida}
+
+
+@router.get("/rh/solicitacoes-assinatura")
+def listar_todas(db: Session = Depends(get_db),
+                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Todos os roteiros (para a aba Gerenciar) — visão geral do RH."""
+    sols = db.scalars(select(SolicitacaoAssinatura)
+                      .order_by(SolicitacaoAssinatura.criado_em.desc())).all()
+    saida = []
+    for s in sols:
+        cand = db.get(Candidato, s.candidato_id)
+        etapas = db.scalars(select(EtapaAssinatura)
+                            .where(EtapaAssinatura.solicitacao_id == s.id)).all()
+        assinadas = sum(1 for e in etapas if e.assinado_em is not None)
+        saida.append({
+            "id": s.id, "titulo": s.titulo_doc or s.documento, "status": s.status,
+            "colaborador": cand.nome_completo if cand else "-",
+            "criado_em": s.criado_em, "progresso": f"{assinadas}/{len(etapas)}",
+            "pdf_final": bool(s.pdf_final_key), "candidato_id": s.candidato_id,
+        })
+    return {"solicitacoes": saida}
+
+
 class AssinarRhIn(BaseModel):
     senha: str
 

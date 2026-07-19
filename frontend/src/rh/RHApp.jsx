@@ -12,7 +12,8 @@ import PostosRH from './PostosRH.jsx'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
-import MinhasAssinaturas from './MinhasAssinaturas.jsx'
+import Modelos from './Modelos.jsx'
+import Assinaturas from './Assinaturas.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -174,81 +175,74 @@ function Metricas({ dados }) {
 
 // Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos
 // rótulos de antes, novo lugar (feedback de campo, 2026-07-15).
-function Sidebar({ pagina, navegar, aoNovo, aoSair, aberta, setAberta }) {
-  // No celular o menu vira gaveta: só o hambúrguer aparece; ao tocar, a gaveta
-  // abre por cima do conteúdo e RETRAI assim que uma opção é escolhida.
-  const [movelAberto, setMovelAberto] = useState(false)
-  const asideRef = useRef(null)
-  const ITENS = [
+// Menu por SEÇÕES, sempre expandido e rolável (feedback 2026-07-19: a versão
+// hover/recolher ficou bugada — logo cortada, sem rolagem, itens demais soltos).
+// Cada grupo tem um título curto; a <nav> rola sozinha quando não cabe. No
+// celular vira gaveta pelo hambúrguer, retraindo ao escolher uma opção.
+const GRUPOS = [
+  ['Admissão', [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
     ['postos', '🏢', 'Postos'],
-    ['creche', '🍼', 'Reembolso-Creche'],
-    ['testagem', '🧪', 'Testes'],
+  ]],
+  ['Documentos', [
+    ['modelos', '📝', 'Modelos'],
+    ['assinaturas', '✍️', 'Assinaturas'],
     ['arquivo', '🗄️', 'Arquivo'],
-    ['minhas-assinaturas', '✍️', 'Minhas assinaturas'],
+  ]],
+  ['Avaliação', [
+    ['testagem', '🧪', 'Testes'],
+  ]],
+  ['Benefícios', [
+    ['creche', '🍼', 'Reembolso-Creche'],
+  ]],
+  ['Recrutamento', [
     ['talentos', '🎯', 'Banco de Talentos'],
+  ]],
+  ['Sistema', [
     ['config', '⚙️', 'Configurações'],
-  ]
-  // Recolhe ao navegar/recolher mesmo com o mouse em cima: um "trinco" que
-  // suprime o hover por um instante (o mouse acaba saindo dali logo depois).
-  const suprimirHover = () => {
-    const el = asideRef.current
-    if (!el) return
-    el.classList.add('sem-hover')
-    clearTimeout(el._t)
-    el._t = setTimeout(() => el.classList.remove('sem-hover'), 600)
-  }
-  const irPara = (fn) => {
-    fn()
-    setMovelAberto(false)
-    if (!aberta) suprimirHover()
-  }
-  // Os rótulos ficam SEMPRE no DOM; quem decide mostrá-los é o CSS (aberta OU
-  // hover no desktop). Antes eles dependiam só do estado React `expandida`, e
-  // brigavam com o hover-CSS: a barra alargava mas os textos sumiam. Agora um
-  // mecanismo só (CSS) comanda largura e texto juntos — nunca discordam.
+  ]],
+]
+
+function Sidebar({ pagina, navegar, aoNovo, aoSair }) {
+  const [movelAberto, setMovelAberto] = useState(false)
+  const irPara = (fn) => { fn(); setMovelAberto(false) }
+  const nome = localStorage.getItem('rh_nome') || ''
   return (
     <>
       <button className="rh-hamburguer" aria-label="Abrir menu"
               onClick={() => setMovelAberto(true)}>☰</button>
       {movelAberto && <div className="rh-sidebar-fundo" onClick={() => setMovelAberto(false)} />}
-      <aside ref={asideRef} className={`rh-sidebar ${aberta ? '' : 'fechada'} ${movelAberto ? 'movel-aberta' : ''}`}>
-        <button className="rh-sidebar-toggle" title={aberta ? 'Recolher menu' : 'Abrir menu'}
-                onClick={() => {
-                  if (movelAberto) { setMovelAberto(false); return }
-                  if (aberta) suprimirHover()  // ao recolher, solta o hover atual
-                  setAberta(!aberta)
-                }}>
-          {movelAberto ? '✕' : aberta ? '⟨' : '☰'}</button>
+      <aside className={`rh-sidebar ${movelAberto ? 'movel-aberta' : ''}`}>
         <div className="rh-sidebar-logo">
           <img src={logo} alt="Green House" className="logo-topo" />
-          <span className="rh-sidebar-titulo rh-so-expandido">Portal de Admissão</span>
+          {movelAberto && (
+            <button className="rh-sidebar-fechar" aria-label="Fechar menu"
+                    onClick={() => setMovelAberto(false)}>✕</button>
+          )}
         </div>
-        <button className="btn-principal rh-sidebar-novo" onClick={() => irPara(aoNovo)}
-                title="Novo candidato">
-          <span className="rh-so-recolhido">+</span>
-          <span className="rh-so-expandido">+ Novo candidato</span>
-        </button>
+        <button className="btn-principal rh-sidebar-novo" onClick={() => irPara(aoNovo)}>
+          + Novo candidato</button>
         <nav>
-          {ITENS.map(([id, icone, rotulo]) => (
-            <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
-                    title={rotulo} onClick={() => irPara(() => navegar(id))}>
-              <span className="rh-sidebar-icone">{icone}</span>
-              <span className="rh-so-expandido">{rotulo}</span>
-            </button>
+          {GRUPOS.map(([titulo, itens]) => (
+            <div className="rh-sidebar-grupo" key={titulo}>
+              <span className="rh-sidebar-grupo-titulo">{titulo}</span>
+              {itens.map(([id, icone, rotulo]) => (
+                <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
+                        onClick={() => irPara(() => navegar(id))}>
+                  <span className="rh-sidebar-icone">{icone}</span>
+                  <span>{rotulo}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
-        <div className="rh-sidebar-rodape" title={`Conectado(a) como ${localStorage.getItem('rh_nome') || ''}`}>
-          <span className="rh-sidebar-user">
-            <span className="rh-sidebar-avatar">
-              {(localStorage.getItem('rh_nome') || '?').trim()[0]?.toUpperCase()}</span>
-            <span className="rh-nome rh-so-expandido">{localStorage.getItem('rh_nome')}</span>
+        <div className="rh-sidebar-rodape">
+          <span className="rh-sidebar-user" title={`Conectado(a) como ${nome}`}>
+            <span className="rh-sidebar-avatar">{(nome || '?').trim()[0]?.toUpperCase()}</span>
+            <span className="rh-nome">{nome}</span>
           </span>
-          <button className="btn-link" title="Sair da conta" onClick={aoSair}>
-            <span className="rh-so-recolhido">⎋</span>
-            <span className="rh-so-expandido">Sair</span>
-          </button>
+          <button className="btn-link" title="Sair da conta" onClick={aoSair}>Sair</button>
         </div>
       </aside>
     </>
@@ -264,10 +258,8 @@ function Painel({ aoSair }) {
   const [convite, setConvite] = useState(null)
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
-  const [pagina, setPagina] = useState('inicio') // inicio | colaboradores | config
+  const [pagina, setPagina] = useState('inicio') // inicio | colaboradores | config…
   const [filtros, setFiltros] = useState({ status: '', busca: '', posto_id: '' })
-  const [menuAberto, setMenuAberto] = useState(
-    localStorage.getItem('rh_menu') !== 'fechado')
 
   const recarregar = (f = filtros) => {
     const limpos = Object.fromEntries(Object.entries(f).filter(([, v]) => v))
@@ -286,14 +278,10 @@ function Painel({ aoSair }) {
     setSelecionado(null)
     if (destino === 'inicio') recarregar()
   }
-  const setAberta = (v) => {
-    setMenuAberto(v)
-    localStorage.setItem('rh_menu', v ? 'aberto' : 'fechado')
-  }
 
   return (
     <div className="rh-layout">
-      <Sidebar pagina={pagina} navegar={navegar} aberta={menuAberto} setAberta={setAberta}
+      <Sidebar pagina={pagina} navegar={navegar}
                aoNovo={() => { navegar('inicio'); setNovo({}) }} aoSair={aoSair} />
       <div className="rh-conteudo">
         {pagina === 'config' && <Config aoVoltar={() => navegar('inicio')} />}
@@ -307,7 +295,8 @@ function Painel({ aoSair }) {
           <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
         {pagina === 'arquivo' && <Arquivo />}
-        {pagina === 'minhas-assinaturas' && <MinhasAssinaturas />}
+        {pagina === 'modelos' && <Modelos />}
+        {pagina === 'assinaturas' && <Assinaturas />}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}

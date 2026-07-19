@@ -3,7 +3,6 @@ import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
-import Modelos from './Modelos.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -69,11 +68,11 @@ function Msg({ msg }) {
 
 // Submenus: cada assunto numa aba própria — acabou a rolagem infinita
 // (feedback de campo, 2026-07-19). O último submenu aberto fica lembrado.
+// Modelos e Assinaturas saíram para menus próprios (2026-07-19). Aqui ficam só
+// as configurações do sistema.
 const SUBMENUS = [
   ['geral', '👤 Geral'],
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
-  ['modelos', '📝 Modelos de documento'],
-  ['assinaturas', '✍️ Assinaturas'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['sistema', '🛠️ Sistema'],
 ]
@@ -96,8 +95,6 @@ export default function Config({ aoVoltar }) {
       </nav>
       {aba === 'geral' && <div className="rh-grid-2"><Perfil /><Senha /></div>}
       {aba === 'equipe' && <Equipe />}
-      {aba === 'modelos' && <Modelos />}
-      {aba === 'assinaturas' && <><Assinantes /><Papeis /></>}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
@@ -112,7 +109,7 @@ export default function Config({ aoVoltar }) {
 // Papéis com que alguém assina um documento (Contratado(a), Contratante,
 // Testemunha, Validador(a)…) — aparecem no manifesto de assinatura dos
 // modelos. A ordem prepara fluxos futuros com vários signatários.
-function Papeis() {
+export function Papeis() {
   const [papeis, setPapeis] = useState(null)
   const [novo, setNovo] = useState(null) // {nome, descricao, ordem}
   const [editando, setEditando] = useState(null)
@@ -333,7 +330,7 @@ function Senha() {
   )
 }
 
-function Assinantes() {
+export function Assinantes() {
   const [dados, setDados] = useState(null)
   const [msg, setMsg] = useState(null)
   useEffect(() => { api.verAssinantes().then(setDados) }, [])
