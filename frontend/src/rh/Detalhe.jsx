@@ -728,20 +728,23 @@ const STATUS_TESTE = {
 function TestesDoCandidato({ id }) {
   const [dados, setDados] = useState(null)
 
-  useEffect(() => {
+  const recarregar = () =>
     api.testesCandidato(id).then(setDados).catch(() => setDados({ testes: [] }))
-  }, [id])
+  useEffect(() => { recarregar() }, [id])
 
-  if (!dados || !dados.testes.length) return null
+  if (!dados) return null
   const disc = dados.testes.find((t) => t.tipo === 'disc')
   const sit = dados.testes.find((t) => t.tipo === 'situacional')
 
   return (
     <div className="rh-card">
       <h3>🧭 Testes do candidato</h3>
+      <EditarTestes id={id} disc={disc} sit={sit} recarregar={recarregar} />
+      {dados.testes.length > 0 && (
       <p className="explica">Resultado restrito ao RH — use como <strong>apoio</strong> à decisão,
         nunca como critério único (inventário comportamental de gestão; não substitui avaliação
         psicológica).</p>
+      )}
 
       {disc && (
         <div className="disc-bloco">
@@ -807,6 +810,64 @@ function TestesDoCandidato({ id }) {
       {dados.testes.filter((t) => t.comportamento).map((t) => (
         <ComportamentoTeste key={t.tipo} teste={t} />
       ))}
+    </div>
+  )
+}
+
+// Liga/desliga os testes DEPOIS do convite (antes só dava na criação) e copia
+// o link para o candidato responder. Desmarcar só remove teste ainda pendente
+// — teste iniciado/concluído fica (o resultado não se apaga por engano).
+function EditarTestes({ id, disc, sit, recarregar }) {
+  const [querDisc, setQuerDisc] = useState(!!disc)
+  const [querSit, setQuerSit] = useState(!!sit)
+  const [salvando, setSalvando] = useState(false)
+  const [msg, setMsg] = useState(null)
+  useEffect(() => { setQuerDisc(!!disc); setQuerSit(!!sit) }, [!!disc, !!sit])
+  const mudou = querDisc !== !!disc || querSit !== !!sit
+
+  return (
+    <div className="rh-lote" style={{ marginBottom: '.6rem' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+        <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={querDisc}
+               onChange={(e) => setQuerDisc(e.target.checked)} />
+        <span>🧭 Inventário DISC</span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+        <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={querSit}
+               onChange={(e) => setQuerSit(e.target.checked)} />
+        <span>🧩 Teste Situacional</span>
+      </label>
+      {mudou && (
+        <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+          setSalvando(true); setMsg(null)
+          try {
+            const r = await api.definirTestes(id, querDisc, querSit)
+            const partes = []
+            if (r.criados.length) partes.push(`${r.criados.length} teste(s) adicionado(s)`)
+            if (r.removidos.length) partes.push(`${r.removidos.length} removido(s) (foram para a lixeira)`)
+            if (r.mantidos.length) partes.push('teste já iniciado/concluído não foi removido')
+            setMsg({ tipo: 'ok', texto: `${partes.join(' · ') || 'Nada a mudar'}. `
+              + (r.criados.length ? 'Use "📋 Copiar link dos testes" e envie ao candidato.' : '') })
+            await recarregar()
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+          } finally { setSalvando(false) }
+        }}>{salvando ? 'Salvando…' : 'Salvar testes'}</button>
+      )}
+      {(disc || sit) && (
+        <button className="btn-secundario btn-mini"
+                title="Copia um link novo do candidato — ao abrir, ele responde primeiro aos testes pendentes"
+                onClick={async (e) => {
+                  const btn = e.currentTarget
+                  const r = await api.gerarLink(id)
+                  await navigator.clipboard.writeText(r.link_magico)
+                  const original = btn.textContent
+                  btn.textContent = '✓ Copiado!'
+                  setTimeout(() => { btn.textContent = original }, 2000)
+                }}>📋 Copiar link dos testes</button>
+      )}
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}
+                   style={{ width: '100%' }}>{msg.texto}</div>}
     </div>
   )
 }

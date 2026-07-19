@@ -182,6 +182,8 @@ def verificar_assinatura(assinatura_id: uuid.UUID, db: Session = Depends(get_db)
 @router.post("/c/{token}/fichas/solicitar-codigo", status_code=204)
 def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
     """Um único código para assinar todos os documentos pendentes de uma vez."""
+    from app.services.limite import exigir
+    exigir(f"assin-codigo:{token[:16]}", maximo=5, janela_s=900)
     candidato = _candidato_do_token(token, db)
     pendentes = [
         d for d in _docs_exigidos(db, candidato)
@@ -327,6 +329,8 @@ def assinar_todos(
 def solicitar_codigo(
     token: str, documento: DocumentoAssinavel, db: Session = Depends(get_db)
 ) -> None:
+    from app.services.limite import exigir
+    exigir(f"assin-codigo:{token[:16]}", maximo=5, janela_s=900)
     candidato = _candidato_do_token(token, db)
     if candidato.status not in (StatusCandidato.aguardando_assinatura,
                                 StatusCandidato.docs_pendentes,

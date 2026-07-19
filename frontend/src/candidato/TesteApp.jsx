@@ -32,6 +32,13 @@ export default function TesteApp({ token, aoConcluirTudo }) {
   if (fase === 'codigo') return (
     <Codigo token={token} aoConfirmar={recarregar} aoVoltar={() => setFase('identificar')} />
   )
+  // adaptador de API: o mesmo Questionario atende candidato e testagem avulsa
+  const cli = {
+    questoes: (tipo) => api.testeQuestoes(token, tipo),
+    responder: (tipo, dados) => api.testeResponder(token, tipo, dados),
+    concluir: (tipo) => api.testeConcluir(token, tipo),
+    telemetria: (tipo) => iniciarTelemetria(token, tipo),
+  }
   if (fase === 'menu') {
     const proximos = info.pendentes || []
     if (!proximos.length) { setFase('fim'); return null }
@@ -39,7 +46,7 @@ export default function TesteApp({ token, aoConcluirTudo }) {
     // retomada: se já estava em andamento, vai direto pro teste
     if (t.status === 'em_andamento') {
       if (tipoAtual !== t.tipo) setTipoAtual(t.tipo)
-      return <Questionario token={token} tipo={t.tipo} aoConcluir={recarregar} />
+      return <Questionario cli={cli} tipo={t.tipo} aoConcluir={recarregar} />
     }
     return <Instrucoes tipo={t.tipo} aoIniciar={async () => {
       await api.testeIniciar(token, t.tipo)
@@ -48,7 +55,7 @@ export default function TesteApp({ token, aoConcluirTudo }) {
     }} />
   }
   if (fase === 'teste' && tipoAtual) return (
-    <Questionario token={token} tipo={tipoAtual} aoConcluir={async () => {
+    <Questionario cli={cli} tipo={tipoAtual} aoConcluir={async () => {
       const s = await recarregar()
       if (!s.todos_concluidos) setFase('menu')
     }} />
@@ -78,6 +85,7 @@ function Identificacao({ token, nome, email, aoEnviar }) {
     } catch (err) {
       setErro(err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
         : err.detail === 'email_invalido' ? 'Informe um e-mail válido.'
+        : err.status === 429 ? 'Muitos envios seguidos. Aguarde alguns minutos e tente de novo.'
         : 'Não foi possível enviar. Tente novamente.')
     } finally { setEnviando(false) }
   }
@@ -137,9 +145,9 @@ function Codigo({ token, aoConfirmar, aoVoltar }) {
   )
 }
 
-const NOMES_TESTE = { disc: 'Inventário Comportamental', situacional: 'Teste Situacional' }
+export const NOMES_TESTE = { disc: 'Inventário Comportamental', situacional: 'Teste Situacional' }
 
-function Instrucoes({ tipo, aoIniciar }) {
+export function Instrucoes({ tipo, aoIniciar, comTelemetria = true }) {
   const [iniciando, setIniciando] = useState(false)
   const minutos = tipo === 'disc' ? 12 : 15
   return (
@@ -165,9 +173,11 @@ function Instrucoes({ tipo, aoIniciar }) {
             mesmo(a).</li>
           <li>🔕 Não divida sua atenção com outras atividades. Feche redes sociais e e-mail, e não
             converse ao telefone.</li>
-          <li>🖥️ Durante o preenchimento, registramos eventos de navegação (saídas da tela, trocas
-            de aba/janela e tentativas de captura), para garantir a integridade do processo
-            seletivo — conforme a LGPD.</li>
+          {comTelemetria && (
+            <li>🖥️ Durante o preenchimento, registramos eventos de navegação (saídas da tela, trocas
+              de aba/janela e tentativas de captura), para garantir a integridade do processo
+              seletivo — conforme a LGPD.</li>
+          )}
         </ul>
         <p className="explica" style={{ marginTop: '.8rem' }}>Ao responder, você declara que as
           questões serão respondidas de acordo com as orientações recebidas, assumindo total
@@ -183,7 +193,8 @@ function Instrucoes({ tipo, aoIniciar }) {
   )
 }
 
-function Questionario({ token, tipo, aoConcluir }) {
+// cli: { questoes(tipo), responder(tipo, dados), concluir(tipo), telemetria?(tipo) }
+export function Questionario({ cli, tipo, aoConcluir }) {
   const [dados, setDados] = useState(null) // {questoes, segundos_restantes}
   const [idx, setIdx] = useState(0)
   const [resp, setResp] = useState({})     // questao -> {mais, menos} | {escolha}
@@ -192,10 +203,10 @@ function Questionario({ token, tipo, aoConcluir }) {
   const [enviando, setEnviando] = useState(false)
   const timerRef = useRef(null)
 
-  useEffect(() => iniciarTelemetria(token, tipo), [tipo])
+  useEffect(() => (cli.telemetria ? cli.telemetria(tipo) : undefined), [tipo])
 
   useEffect(() => {
-    api.testeQuestoes(token, tipo).then((d) => {
+    cli.questoes(tipo).then((d) => {
       setDados(d)
       setIdx(Math.min(d.respondidas || 0, d.questoes.length - 1))
       setRestante(d.segundos_restantes)
@@ -210,7 +221,7 @@ function Questionario({ token, tipo, aoConcluir }) {
 
   useEffect(() => {
     // tempo esgotado: conclui com o que foi respondido
-    if (restante === 0 && dados) { api.testeConcluir(token, tipo).then(aoConcluir) }
+    if (restante === 0 && dados) { cli.concluir(tipo).then(aoConcluir) }
   }, [restante])
 
   if (erro) return <div className="teste-caixa"><div className="teste-corpo"><div className="alerta">{erro}</div></div></div>
@@ -227,8 +238,8 @@ function Questionario({ token, tipo, aoConcluir }) {
   const proximo = async () => {
     setErro(null); setEnviando(true)
     try {
-      await api.testeResponder(token, tipo, { questao: q.numero, ...r })
-      if (ultima) { await api.testeConcluir(token, tipo); await aoConcluir() }
+      await cli.responder(tipo, { questao: q.numero, ...r })
+      if (ultima) { await cli.concluir(tipo); await aoConcluir() }
       else setIdx(idx + 1)
     } catch (e) {
       setErro(e.detail === 'marque_mais_e_menos_diferentes'
