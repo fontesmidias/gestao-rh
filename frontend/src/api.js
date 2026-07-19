@@ -201,6 +201,19 @@ export const testagem = {
   eventosUrl: (t, pid, tipo) => `${BASE}/t/${t}/p/${pid}/${tipo}/eventos`,
 }
 
+// --- Assinatura de signatário externo (link público /assinar/{token}) ---
+export const assinaturaExterna = {
+  info: (t) => req(`/assinar/${t}`),
+  solicitarCodigo: (t) => req(`/assinar/${t}/solicitar-codigo`, { method: 'POST' }),
+  confirmar: (t, codigo) =>
+    req(`/assinar/${t}/confirmar`, { method: 'POST', body: JSON.stringify({ codigo }) }),
+  previewUrl: (t) => `${BASE}/assinar/${t}/preview`,
+  assinar: (t) => req(`/assinar/${t}/assinar`, { method: 'POST' }),
+}
+
+// Verificação pública de uma etapa de assinatura (QR do manifesto multi)
+export const verificarEtapa = (id) => req(`/verificar-etapa/${id}`)
+
 // --- Banco de Talentos (cadastro público, sem token) ---
 export const talentos = {
   opcoes: () => req('/talentos/opcoes'),
@@ -452,6 +465,35 @@ export const rh = {
   enviarModelo: (candidatoId, modeloId, opcoes = {}) =>
     req(`/rh/candidatos/${candidatoId}/modelos/${modeloId}/enviar`,
         { method: 'POST', headers: authRH(), body: JSON.stringify(opcoes) }),
+  // Multi-signatário: roteiro de assinatura
+  montarRoteiro: (cid, dados) =>
+    req(`/rh/candidatos/${cid}/solicitacoes-assinatura`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify(dados) }),
+  dispararRoteiro: (id) =>
+    req(`/rh/solicitacoes-assinatura/${id}/disparar`, { method: 'POST', headers: authRH() }),
+  roteirosDoCandidato: (cid) =>
+    req(`/rh/candidatos/${cid}/solicitacoes-assinatura`, { headers: authRH() }),
+  cancelarRoteiro: (id, motivo) =>
+    req(`/rh/solicitacoes-assinatura/${id}/cancelar`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ motivo }) }),
+  minhasAssinaturas: () => req('/rh/minhas-assinaturas', { headers: authRH() }),
+  assinarEtapaRh: (etapaId, senha) =>
+    req(`/rh/etapas/${etapaId}/assinar`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ senha }) }),
+  recusarEtapaRh: (etapaId, motivo) =>
+    req(`/rh/etapas/${etapaId}/recusar`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ motivo }) }),
+  // Autorização da equipe (assinatura por autorização prévia)
+  autorizacoesEquipe: (modeloId) =>
+    req(`/rh/modelos/${modeloId}/autorizacoes-equipe`, { headers: authRH() }),
+  criarAutorizacaoEquipe: (dados) =>
+    req('/rh/autorizacoes-equipe', { method: 'POST', headers: authRH(),
+        body: JSON.stringify(dados) }),
+  confirmarAutorizacaoEquipe: (autorizacao_id, codigo) =>
+    req('/rh/autorizacoes-equipe/confirmar', { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ autorizacao_id, codigo }) }),
+  revogarAutorizacaoEquipe: (id) =>
+    req(`/rh/autorizacoes-equipe/${id}/revogar`, { method: 'POST', headers: authRH() }),
   papeis: () => req('/rh/papeis-assinatura', { headers: authRH() }),
   criarPapel: (dados) =>
     req('/rh/papeis-assinatura', { method: 'POST', headers: authRH(),

@@ -124,6 +124,19 @@ def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = F
         if doc in assinaturas:
             _adicionar_em_a4(writer, storage.ler(assinaturas[doc].pdf_key))
 
+    # Documentos de roteiro multi-signatário concluídos: inclui o PDF final
+    # consolidado (com todas as assinaturas) logo após as fichas.
+    from app.models.solicitacao_assinatura import (SolicitacaoAssinatura,
+                                                   StatusSolicitacao)
+    for sol in db.scalars(select(SolicitacaoAssinatura).where(
+            SolicitacaoAssinatura.candidato_id == candidato.id,
+            SolicitacaoAssinatura.status == StatusSolicitacao.concluida,
+            SolicitacaoAssinatura.pdf_final_key.isnot(None))).all():
+        try:
+            _adicionar_em_a4(writer, storage.ler(sol.pdf_final_key))
+        except Exception:
+            pass
+
     ordem = {tipo: i for i, tipo in enumerate(ORDEM_DOCUMENTOS)}
     aprovados = sorted(
         (s for s in slots if s.status == StatusSlot.aprovado and s.arquivo_pdf_key),

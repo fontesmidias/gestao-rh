@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import CandidatoApp from './candidato/CandidatoApp.jsx'
 import TestagemApp from './candidato/TestagemApp.jsx'
+import AssinarExterno from './AssinarExterno.jsx'
 import RHApp from './rh/RHApp.jsx'
 import Verificar, { VerificarEntrada } from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/c/:token/*" element={<CandidatoApp />} />
       <Route path="/t/:token" element={<TestagemApp />} />
+      <Route path="/assinar/:token" element={<AssinarExterno />} />
       <Route path="/rh/*" element={<RHApp />} />
       <Route path="/verificar" element={<VerificarEntrada />} />
       <Route path="/verificar/:id" element={<Verificar />} />
