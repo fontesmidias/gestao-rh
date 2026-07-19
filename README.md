@@ -4,7 +4,7 @@
 
 *Self-hosted HR platform for Brazilian outsourcing companies: passwordless onboarding, workforce base, behavioral tests, document templates, multi-party electronic signatures (Brazilian Law 14.063/2020) with public QR verification, and a full audit trail. [English summary below](#-english-summary).*
 
-[![CI](https://github.com/fontesmidias/admissao/actions/workflows/ci.yml/badge.svg)](https://github.com/fontesmidias/admissao/actions/workflows/ci.yml)
+[![CI](https://github.com/fontesmidias/gestao-rh/actions/workflows/ci.yml/badge.svg)](https://github.com/fontesmidias/gestao-rh/actions/workflows/ci.yml)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green.svg)](LICENSE)
 
 > **Marca configurável.** O sistema nasceu para a Green House (Brasília/DF), mas o nome, a razão social, o CNPJ, o endereço, a logo e o favicon da empresa são **editáveis pelo painel** (Configurações → Identidade visual). Os valores da Green House são apenas o padrão inicial.
@@ -71,7 +71,7 @@ Estrutura do código: `backend/app/` (`api/` rotas, `models/` SQLAlchemy, `servi
 1. Portainer → *Stacks* → *Add stack* → cole [deploy/portainer-stack.yml](deploy/portainer-stack.yml).
 2. Defina as variáveis de ambiente na tela do Portainer (o modo avançado aceita colar o `.env`).
 
-As imagens (`ghcr.io/fontesmidias/admissao-api|frontend`) são **públicas**, publicadas pelo CI a cada push na `main` e a cada tag `v*`.
+As imagens (`ghcr.io/fontesmidias/gestao-rh-api|frontend`) são **públicas**, publicadas pelo CI a cada push na `main` e a cada tag `v*`.
 
 ### Docker Compose (a partir do código-fonte)
 

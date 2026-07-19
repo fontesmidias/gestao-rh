@@ -1,4 +1,17 @@
-# Renomear o repositório (de "admissao" para o novo nome)
+# Renomear o repositório (de "admissao" para "gestao-rh") — CONCLUÍDO
+
+**Feito em 2026-07-19:** repo renomeado para `fontesmidias/gestao-rh`. Código
+ajustado: `portainer-stack.yml` (imagens `gestao-rh-api|frontend`), `git remote`,
+badges e imagem no README. O CI já deriva o nome da imagem de `github.repository`,
+então publica automaticamente em `ghcr.io/fontesmidias/gestao-rh-*`.
+
+**No Portainer (VPS), quando for atualizar:** a stack aponta para as imagens
+novas — faça *Re-pull image* após o primeiro CI verde no nome novo. As imagens
+antigas (`admissao-*`) seguem no GHCR para rollback durante a transição.
+
+---
+
+## Histórico do plano original (de "admissao" para o novo nome)
 
 O sistema virou uma plataforma de RH, não só admissão. Renomear o repo é seguro
 se feito na ordem abaixo. **Me passe o novo nome** que eu ajusto todas as

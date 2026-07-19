@@ -1,5 +1,5 @@
 # ============================================================================
-# Portal de Admissão Green House — STACK COMPLETA PARA PORTAINER (arquivo único)
+# Portal de RH (gestao-rh) — STACK COMPLETA PARA PORTAINER (arquivo único)
 #
 # Usa as imagens prontas publicadas pelo CI no GitHub Container Registry —
 # nada de build: cole este arquivo no Portainer (Stacks → Add stack) e defina
@@ -18,7 +18,7 @@
 
 services:
   api:
-    image: ghcr.io/fontesmidias/admissao-api:latest
+    image: ghcr.io/fontesmidias/gestao-rh-api:latest
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       SECRET_KEY: ${SECRET_KEY}
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ghcr.io/fontesmidias/admissao-api:latest
+    image: ghcr.io/fontesmidias/gestao-rh-api:latest
     entrypoint: ["rq"]
     command: ["worker", "--url", "redis://redis:6379/0", "default"]
     environment:
@@ -68,7 +68,7 @@ services:
     restart: unless-stopped
 
   expurgo:
-    image: ghcr.io/fontesmidias/admissao-api:latest
+    image: ghcr.io/fontesmidias/gestao-rh-api:latest
     entrypoint: ["/bin/sh", "-c"]
     command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; sleep 86400; done"]
     environment:
@@ -86,7 +86,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/fontesmidias/admissao-frontend:latest
+    image: ghcr.io/fontesmidias/gestao-rh-frontend:latest
     ports:
       - "${FRONTEND_PORT:-8090}:80"
     depends_on:
