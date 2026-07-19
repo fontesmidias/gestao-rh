@@ -5,7 +5,10 @@
 #    candidatos reais neste modo — o tráfego não é criptografado.
 #    Acesso: http://SEU_IP:${FRONTEND_PORT}
 
+# O padrão 8090 protege quem roda `-f deploy/...` da raiz sem --env-file:
+# a interpolação do compose lê o .env do diretório do PRIMEIRO -f (deploy/),
+# não o da raiz — sem o padrão, a porta sairia vazia e o bind quebraria.
 services:
   frontend:
     ports:
-      - "${FRONTEND_PORT}:80"
+      - "${FRONTEND_PORT:-8090}:80"
