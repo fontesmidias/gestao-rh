@@ -27,6 +27,7 @@ from app.api.arquivo import router as arquivo_router
 from app.api.solicitacoes_assinatura import router as solicitacoes_router
 from app.api.solicitacoes_externo import router as solicitacoes_externo_router
 from app.api.autorizacao_equipe import router as autorizacao_equipe_router
+from app.api.marca import router as marca_router
 from app.api.rh_ficha import router as rh_ficha_router
 from app.api.health import router as health_router
 from app.core.bootstrap import criar_admin_inicial
@@ -120,3 +121,4 @@ app.include_router(arquivo_router, prefix="/api")
 app.include_router(solicitacoes_router, prefix="/api")
 app.include_router(solicitacoes_externo_router, prefix="/api")
 app.include_router(autorizacao_equipe_router, prefix="/api")
+app.include_router(marca_router, prefix="/api")

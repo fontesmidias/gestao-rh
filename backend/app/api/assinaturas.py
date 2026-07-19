@@ -63,7 +63,8 @@ def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel
             Assinatura.solicitacao_etapa_id.is_(None),
         )
     ).all()
-    return list(FICHAS_BASE) + sorted({a.documento for a in extras}, key=lambda d: d.value)
+    from app.services.ordem_assinatura import ordem_fichas
+    return ordem_fichas(db) + sorted({a.documento for a in extras}, key=lambda d: d.value)
 
 
 # --- Documentos de MODELO do RH enviados para assinatura -------------------

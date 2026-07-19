@@ -119,8 +119,9 @@ def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = F
     if pendencias and not ignorar_pendencias:
         raise DossieIncompleto(pendencias)
 
+    from app.services.ordem_assinatura import ordem_fichas
     writer = PdfWriter()
-    for doc in ORDEM_FICHAS:
+    for doc in ordem_fichas(db):
         if doc in assinaturas:
             _adicionar_em_a4(writer, storage.ler(assinaturas[doc].pdf_key))
 

@@ -66,6 +66,87 @@ function Msg({ msg }) {
   return <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>
 }
 
+// Identidade visual da empresa: desvincula o sistema de uma empresa específica.
+// Os dados aparecem nos documentos (PDFs), e-mails e no painel. Padrão inicial:
+// os dados que estavam chumbados no código.
+function IdentidadeVisual() {
+  const [dados, setDados] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [ver, setVer] = useState(0) // cache-buster das imagens
+  const carregar = () => api.verMarca().then(setDados)
+  useEffect(() => { carregar().catch(() => {}) }, [])
+  if (!dados) return null
+
+  const campo = (chave, rotulo, textarea) => (
+    <label className="campo"><span className="rotulo">{rotulo}</span>
+      {textarea
+        ? <textarea rows={2} value={dados[chave] || ''} onChange={(e) => setDados({ ...dados, [chave]: e.target.value })} />
+        : <input value={dados[chave] || ''} onChange={(e) => setDados({ ...dados, [chave]: e.target.value })} />}
+    </label>
+  )
+  const subir = (fn, arquivo) => {
+    setMsg(null)
+    fn(arquivo).then(() => { setVer((v) => v + 1); carregar()
+      setMsg({ tipo: 'ok', texto: 'Imagem atualizada.' }) })
+      .catch((e) => setMsg({ tipo: 'erro', texto: e.detail === 'formato_invalido'
+        ? 'Formato inválido (use PNG, JPG, WEBP, SVG ou ICO).'
+        : e.detail === 'arquivo_grande_demais' ? 'Imagem grande demais (máx. 2 MB).'
+        : `Não foi possível enviar (${e.detail || e.message}).` }))
+  }
+  const escolher = (fn) => {
+    const inp = document.createElement('input')
+    inp.type = 'file'; inp.accept = 'image/*'
+    inp.onchange = () => { if (inp.files[0]) subir(fn, inp.files[0]) }
+    inp.click()
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>🎨 Identidade visual da empresa</h3>
+      <p className="explica">Nome, dados e marca que aparecem nos documentos gerados, nos e-mails
+        e no painel. O sistema começa com os dados da Green House — altere para a sua empresa.</p>
+      <div className="linha2">
+        {campo('empresa_nome', 'Nome curto (ex.: Green House)')}
+        {campo('empresa_cnpj', 'CNPJ')}
+      </div>
+      {campo('empresa_razao', 'Razão social')}
+      {campo('empresa_endereco', 'Endereço completo', true)}
+      {campo('empresa_contato', 'Contato (telefone | site)')}
+      <button className="btn-secundario" onClick={async () => {
+        setMsg(null)
+        try {
+          await api.salvarMarca({
+            empresa_nome: dados.empresa_nome, empresa_razao: dados.empresa_razao,
+            empresa_cnpj: dados.empresa_cnpj, empresa_endereco: dados.empresa_endereco,
+            empresa_contato: dados.empresa_contato,
+          })
+          setMsg({ tipo: 'ok', texto: 'Dados da empresa salvos. Valem para os próximos documentos.' })
+        } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` }) }
+      }}>Salvar dados</button>
+
+      <div className="linha2" style={{ marginTop: '1rem', alignItems: 'center' }}>
+        <div>
+          <span className="rotulo">Logo</span><br />
+          {dados.tem_logo
+            ? <img src={`/api/marca/logo?v=${ver}`} alt="logo" style={{ height: 44, marginTop: 4 }} />
+            : <span className="explica">Usando a logo padrão.</span>}
+          <br /><button className="btn-secundario btn-mini" style={{ marginTop: 6 }}
+                        onClick={() => escolher(api.uploadMarcaLogo)}>⬆ Enviar logo</button>
+        </div>
+        <div>
+          <span className="rotulo">Favicon (ícone da aba)</span><br />
+          {dados.tem_favicon
+            ? <img src={`/api/marca/favicon?v=${ver}`} alt="favicon" style={{ height: 28, marginTop: 4 }} />
+            : <span className="explica">Usando o favicon padrão.</span>}
+          <br /><button className="btn-secundario btn-mini" style={{ marginTop: 6 }}
+                        onClick={() => escolher(api.uploadMarcaFavicon)}>⬆ Enviar favicon</button>
+        </div>
+      </div>
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
 // Submenus: cada assunto numa aba própria — acabou a rolagem infinita
 // (feedback de campo, 2026-07-19). O último submenu aberto fica lembrado.
 // Modelos e Assinaturas saíram para menus próprios (2026-07-19). Aqui ficam só
@@ -73,6 +154,7 @@ function Msg({ msg }) {
 const SUBMENUS = [
   ['geral', '👤 Geral'],
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
+  ['identidade', '🎨 Identidade visual'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['sistema', '🛠️ Sistema'],
 ]
@@ -95,6 +177,7 @@ export default function Config({ aoVoltar }) {
       </nav>
       {aba === 'geral' && <div className="rh-grid-2"><Perfil /><Senha /></div>}
       {aba === 'equipe' && <Equipe />}
+      {aba === 'identidade' && <IdentidadeVisual />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>

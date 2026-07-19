@@ -528,13 +528,29 @@ def gerar_termo_vt(db: Session, candidato: Candidato,
 # Documentos por posto de serviço (layout de ofício oficial)
 # ============================================================
 
-# Dados institucionais dos documentos oficiais (conferidos com os modelos).
-# TODO v1.4: editáveis pelo painel (config dinâmica).
+# Dados institucionais dos documentos oficiais. São o VALOR-PADRÃO; o painel
+# (Configurações → Identidade visual) pode sobrepô-los pela config dinâmica.
+# `aplicar_marca(db)` sincroniza estas globais com o que o RH salvou, e é
+# chamada no início de cada geração de PDF.
 EMPRESA_RAZAO = "GREEN HOUSE SERVIÇOS DE LOCAÇÃO DE MÃO DE OBRA LTDA"
 EMPRESA_CNPJ = "12.531.678/0001-80"
 EMPRESA_RODAPE = ("SCIA Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará), "
                   "Brasília, DF, CEP: 71.250-015\n"
                   "+55 61 3346-8812 | www.greenhousedf.com.br")
+
+
+def aplicar_marca(db) -> None:
+    """Atualiza as globais EMPRESA_* com os dados salvos pelo RH (ou mantém os
+    padrões). Chamada no começo de cada gerador de PDF."""
+    global EMPRESA_RAZAO, EMPRESA_CNPJ, EMPRESA_RODAPE
+    try:
+        from app.services.marca import dados_empresa
+        d = dados_empresa(db)
+        EMPRESA_RAZAO = d["empresa_razao"]
+        EMPRESA_CNPJ = d["empresa_cnpj"]
+        EMPRESA_RODAPE = f"{d['empresa_endereco']}\n{d['empresa_contato']}"
+    except Exception:
+        pass  # config indisponível: mantém os padrões
 # Assinantes-padrão; podem ser trocados pelo painel (Configurações → Assinantes).
 EMPRESA_ASSINANTES = (("Leandro de Sá", "CEO", "026.030.441-76"),
                       ("Láysa Beatriz", "Assistente de RH", "113.900.916-86"))
@@ -1061,6 +1077,7 @@ def _cpf_formatado(cpf: str | None) -> str:
 
 def _contexto_modelo(db: Session, candidato: Candidato | None) -> dict:
     from app.models.candidato import PostoServico
+    aplicar_marca(db)  # a variável {{empresa}} e o timbrado usam a marca atual
     if candidato is None:
         return {k: f"{{{{{k}}}}}" for k in VARIAVEIS_MODELO} | {
             "data": date.today().strftime("%d/%m/%Y"), "empresa": EMPRESA_RAZAO}
@@ -1453,15 +1470,26 @@ def gerar_oficio_apresentacao_presidencia(db: Session, candidato: Candidato,
     return bytes(pdf.output())
 
 
+def _com_marca(gerador):
+    """Envolve um gerador para sincronizar a marca da empresa (config dinâmica)
+    antes de montar o PDF — o primeiro argumento é sempre `db`."""
+    def _wrap(db, *args, **kwargs):
+        aplicar_marca(db)
+        return gerador(db, *args, **kwargs)
+    return _wrap
+
+
 GERADORES = {
-    "ficha_cadastro": gerar_ficha_cadastro,
-    "ficha_emergencia": gerar_ficha_emergencia,
-    "termo_vt": gerar_termo_vt,
-    "acordo_confidencialidade": gerar_acordo_confidencialidade,
-    "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
-    "informacoes_trabalhador": gerar_informacoes_trabalhador,
-    "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
-    "informativo_intermitente": gerar_informativo_intermitente,
-    "ficha_cadastral_terceirizado": gerar_ficha_cadastral_terceirizado,
-    "oficio_apresentacao_presidencia": gerar_oficio_apresentacao_presidencia,
+    nome: _com_marca(g) for nome, g in {
+        "ficha_cadastro": gerar_ficha_cadastro,
+        "ficha_emergencia": gerar_ficha_emergencia,
+        "termo_vt": gerar_termo_vt,
+        "acordo_confidencialidade": gerar_acordo_confidencialidade,
+        "oficio_cartao_cidadao": gerar_oficio_cartao_cidadao,
+        "informacoes_trabalhador": gerar_informacoes_trabalhador,
+        "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
+        "informativo_intermitente": gerar_informativo_intermitente,
+        "ficha_cadastral_terceirizado": gerar_ficha_cadastral_terceirizado,
+        "oficio_apresentacao_presidencia": gerar_oficio_apresentacao_presidencia,
+    }.items()
 }
