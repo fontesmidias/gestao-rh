@@ -182,6 +182,7 @@ def listar(status: str | None = None, busca: str | None = None,
             "posto_nome": postos.get(c.posto_servico_id),
             "data_admissao": c.data_admissao,
             "data_desligamento": c.data_desligamento,
+            "na_dominio_em": c.na_dominio_em,
             "criado_em": c.criado_em,
             "dossie_gerado_em": c.dossie_gerado_em,
         })
@@ -456,7 +457,7 @@ def efetivar_lote(payload: LoteEfetivarIn, db: Session = Depends(get_db),
 
 class AcaoMassaColabIn(BaseModel):
     ids: list[uuid.UUID]
-    acao: str  # "desligar" | "reativar"
+    acao: str  # "desligar" | "reativar" | "marcar_dominio" | "desmarcar_dominio"
     data_desligamento: str | None = None  # obrigatória para "desligar"
 
 
@@ -466,14 +467,23 @@ def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(ge
     """Ação em massa nos colaboradores selecionados: desligar (com data) ou
     reativar. Não há exclusão — registro trabalhista não se apaga; desligar é o
     correto. Só age sobre quem já é colaborador (tem situação)."""
-    if payload.acao not in ("desligar", "reativar"):
+    if payload.acao not in ("desligar", "reativar", "marcar_dominio", "desmarcar_dominio"):
         raise HTTPException(status_code=422, detail="acao_invalida")
     if payload.acao == "desligar" and not (payload.data_desligamento or "").strip():
         raise HTTPException(status_code=422, detail="data_desligamento_obrigatoria")
     afetados, pulados = 0, 0
     for cid in payload.ids:
         c = db.get(Candidato, cid)
-        if c is None or not c.situacao:  # ignora candidatos em admissão
+        if c is None:
+            pulados += 1
+            continue
+        # conciliação com a Domínio vale para qualquer admissão (mesmo em curso)
+        if payload.acao in ("marcar_dominio", "desmarcar_dominio"):
+            c.na_dominio_em = (datetime.now(timezone.utc)
+                               if payload.acao == "marcar_dominio" else None)
+            afetados += 1
+            continue
+        if not c.situacao:  # desligar/reativar: ignora candidatos em admissão
             pulados += 1
             continue
         if payload.acao == "desligar":

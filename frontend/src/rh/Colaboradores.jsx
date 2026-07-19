@@ -127,18 +127,23 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     const ids = [...selecionados]
     if (!ids.length) return
     let data = null
+    const rotulos = {
+      desligar: 'desligado(s)', reativar: 'reativado(s)',
+      marcar_dominio: 'marcado(s) como lançado(s) na Domínio',
+      desmarcar_dominio: 'desmarcado(s) da Domínio',
+    }
     if (acao === 'desligar') {
       data = window.prompt(`Desligar ${ids.length} colaborador(es) selecionado(s).`
         + '\nInforme a data de desligamento (dd/mm/aaaa):', new Date().toLocaleDateString('pt-BR'))
       if (!data) return
     } else {
-      if (!window.confirm(`Reativar ${ids.length} colaborador(es) selecionado(s)?`)) return
+      if (!window.confirm(`Confirmar: ${ids.length} registro(s) ${rotulos[acao]}?`)) return
     }
     setErro(null); setAviso(null)
     try {
-      const r = await comAmpulheta(acao === 'desligar' ? 'Desligando selecionados…' : 'Reativando selecionados…',
+      const r = await comAmpulheta('Aplicando ação nos selecionados…',
         () => api.acaoMassaColaboradores(ids, acao, data?.trim()))
-      setAviso(`${r.afetados} ${acao === 'desligar' ? 'desligado(s)' : 'reativado(s)'}`
+      setAviso(`${r.afetados} ${rotulos[acao]}`
         + (r.pulados ? `, ${r.pulados} ignorado(s) (não eram colaboradores).` : '.'))
       setSelecionados(new Set()); carregar()
     } catch (e) {
@@ -231,6 +236,12 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
           {selDesligados > 0 && (
             <button className="btn-secundario btn-mini" onClick={() => acaoMassa('reativar')}>
               ♻️ Reativar ({selDesligados})</button>)}
+          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('marcar_dominio')}
+                  title="Marca que estas admissões já foram lançadas no sistema Domínio (contabilidade)">
+            🧾 Na Domínio ({selecionados.size})</button>
+          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('desmarcar_dominio')}
+                  title="Desfaz a marcação de lançado na Domínio">
+            ↩ Tirar da Domínio</button>
           <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar seleção</button>
         </div>
       )}
@@ -277,6 +288,10 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                       </span>
                     : <span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
                         {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>}
+                  {c.na_dominio_em && (
+                    <span className="chip" style={{ '--chip-cor': '#3b7dd8', marginLeft: '.3rem' }}
+                          title={`Lançada no sistema Domínio em ${new Date(c.na_dominio_em).toLocaleDateString('pt-BR')}`}>
+                      🧾 Domínio</span>)}
                 </td>
                 <td className="acoes-candidato">
                   <button className="btn-secundario btn-mini" onClick={() => aoAbrir(c.id)}>Abrir</button>

@@ -101,6 +101,9 @@ class Candidato(Base):
     situacao: Mapped[str | None] = mapped_column(String(20), nullable=True)
     data_admissao: Mapped[str | None] = mapped_column(String(10))
     data_desligamento: Mapped[str | None] = mapped_column(String(10))
+    # Conciliação com a contabilidade: quando esta admissão foi lançada no
+    # sistema Domínio (marcado pelo RH, individual ou em massa).
+    na_dominio_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Como o registro entrou na base: "admissao" (fluxo normal) ou "importacao"
     # (planilha do Tirvu). Ajuda o diagnóstico e evita reprocessar convites.
     origem: Mapped[str] = mapped_column(String(20), default="admissao")

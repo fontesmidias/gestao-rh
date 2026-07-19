@@ -485,6 +485,17 @@ async def importar_postos_planilha(arquivo: UploadFile, db: Session = Depends(ge
             criados += 1
         else:
             atualizados += 1
+            # O RH padroniza os nomes no Tirvu → a reimportação sincroniza o
+            # nome aqui. A identidade é o tirvu_id; o nome só acompanha se o
+            # novo nome não colidir com OUTRO posto existente.
+            if tirvu_id and alvo.tirvu_id == tirvu_id and apelido:
+                novo = apelido.strip()
+                dono = por_nome.get(novo.lower())
+                if novo and novo != alvo.nome and (dono is None or dono is alvo):
+                    por_nome.pop(alvo.nome.strip().lower(), None)
+                    alvo.nome = novo
+                    por_nome[novo.lower()] = alvo
+                    usados.add(novo.lower())
         # enriquece (não apaga o que já houver com vazio)
         alvo.razao_social = razao or alvo.razao_social
         alvo.sigla = alvo.sigla or (apelido or None)

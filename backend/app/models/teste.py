@@ -45,5 +45,10 @@ class TesteCandidato(Base):
     # respostas cruas + resultado calculado (só o RH lê o resultado)
     respostas: Mapped[list] = mapped_column(JSON, default=list)
     resultado: Mapped[dict] = mapped_column(JSON, default=dict)
+    # telemetria de comportamento durante o teste (saídas de tela, troca de
+    # aba/janela, tentativa de print, cópia/cola, queda de conexão) — eventos
+    # crus para o RH ler ou mandar para uma IA analisar. Informado ao
+    # candidato nas instruções (LGPD: transparência, art. 9º).
+    eventos: Mapped[list] = mapped_column(JSON, default=list)
     aceite_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

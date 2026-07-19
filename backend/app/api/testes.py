@@ -254,6 +254,63 @@ def responder(token: str, tipo: str, payload: RespostaIn, db: Session = Depends(
     return {"respondidas": len(respostas)}
 
 
+class EventosIn(BaseModel):
+    # cada evento: {"t": segundos desde o início, "e": tipo, "d": detalhe?}
+    eventos: list[dict]
+
+
+_MAX_EVENTOS = 800  # teto de segurança por teste
+
+
+@router.post("/c/{token}/testes/{tipo}/eventos", status_code=204)
+def registrar_eventos(token: str, tipo: str, payload: EventosIn,
+                      db: Session = Depends(get_db)) -> None:
+    """Telemetria de comportamento durante o teste (informada ao candidato nas
+    instruções): saídas de tela, troca de aba/janela, tentativa de print,
+    copiar/colar, queda de conexão. Servem para o RH entender o comportamento
+    e melhorar o sistema — nunca para o candidato ver o resultado."""
+    cand = _cand(token, db)
+    t = _teste_do_tipo(db, cand, tipo)
+    if t.status not in (StatusTeste.em_andamento, StatusTeste.concluido,
+                        StatusTeste.expirado):
+        return
+    atuais = list(t.eventos or [])
+    for ev in payload.eventos[: _MAX_EVENTOS - len(atuais)]:
+        if isinstance(ev, dict) and ev.get("e"):
+            atuais.append({"t": round(float(ev.get("t") or 0), 1),
+                           "e": str(ev["e"])[:40],
+                           **({"d": str(ev["d"])[:120]} if ev.get("d") else {})})
+    t.eventos = atuais
+    db.commit()
+
+
+def _resumo_eventos(eventos: list) -> dict | None:
+    """Síntese legível (e pronta para mandar a uma IA) da telemetria."""
+    if not eventos:
+        return None
+    cont: dict[str, int] = {}
+    fora = 0.0
+    inicio_fora = None
+    for ev in eventos:
+        e = ev.get("e")
+        cont[e] = cont.get(e, 0) + 1
+        if e in ("oculto", "desfocou") and inicio_fora is None:
+            inicio_fora = ev.get("t") or 0
+        elif e in ("visivel", "focou") and inicio_fora is not None:
+            fora += max(0.0, (ev.get("t") or 0) - inicio_fora)
+            inicio_fora = None
+    return {
+        "total_eventos": len(eventos),
+        "por_tipo": cont,
+        "saidas_da_tela": cont.get("oculto", 0) + cont.get("desfocou", 0),
+        "segundos_fora_da_tela": round(fora, 1),
+        "tentativas_print": cont.get("print", 0),
+        "copiar_colar": (cont.get("copiou", 0) + cont.get("colou", 0)
+                         + cont.get("recortou", 0)),
+        "quedas_de_conexao": cont.get("offline", 0),
+    }
+
+
 @router.post("/c/{token}/testes/{tipo}/concluir")
 def concluir(token: str, tipo: str, db: Session = Depends(get_db)) -> dict:
     """Calcula e guarda o resultado (só o RH o verá) e conclui o teste."""
@@ -293,6 +350,8 @@ def resultados_rh(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dic
             "iniciado_em": t.iniciado_em, "concluido_em": t.concluido_em,
             "respondidas": len(t.respostas or []),
             "resultado": t.resultado or None,
+            "comportamento": _resumo_eventos(t.eventos or []),
+            "eventos": t.eventos or [],
         }
         if t.tipo == TipoTeste.disc and t.resultado:
             item["perfis"] = PERFIS_DISC  # textos de todos + o do candidato

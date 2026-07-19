@@ -803,6 +803,65 @@ function TestesDoCandidato({ id }) {
           )}
         </div>
       )}
+
+      {dados.testes.filter((t) => t.comportamento).map((t) => (
+        <ComportamentoTeste key={t.tipo} teste={t} />
+      ))}
+    </div>
+  )
+}
+
+const NOMES_EVENTO = {
+  teste_aberto: 'abriu o teste', oculto: 'saiu da tela (aba oculta/tela desligada)',
+  visivel: 'voltou à tela', desfocou: 'trocou de janela/aplicativo', focou: 'voltou à janela',
+  print: 'apertou PrintScreen', copiou: 'copiou texto', recortou: 'recortou texto',
+  colou: 'colou texto', menu_contexto: 'abriu o menu do botão direito',
+  offline: 'perdeu a conexão', online: 'conexão voltou', saida_pagina: 'fechou/saiu da página',
+}
+const mmssEvento = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.round(s % 60)).padStart(2, '0')}`
+
+// Telemetria de comportamento durante o teste — para o RH ler ou copiar e
+// mandar a uma IA em busca de oportunidades de melhoria do sistema.
+function ComportamentoTeste({ teste }) {
+  const [copiado, setCopiado] = useState(false)
+  const c = teste.comportamento
+  const nomeTeste = teste.tipo === 'disc' ? 'Inventário DISC' : 'Teste Situacional'
+
+  const relatorio = () => {
+    const linhas = (teste.eventos || []).map((e) =>
+      `${mmssEvento(e.t)}  ${NOMES_EVENTO[e.e] || e.e}${e.d ? ` (${e.d})` : ''}`)
+    return [
+      `RELATÓRIO DE COMPORTAMENTO — ${nomeTeste}`,
+      `Início: ${fmtData(teste.iniciado_em)} · Conclusão: ${fmtData(teste.concluido_em)}`,
+      `Saídas da tela: ${c.saidas_da_tela} · Tempo fora da tela: ${c.segundos_fora_da_tela}s`,
+      `PrintScreen: ${c.tentativas_print} · Copiar/colar: ${c.copiar_colar} · Quedas de conexão: ${c.quedas_de_conexao}`,
+      '', 'LINHA DO TEMPO (mm:ss desde o início):', ...linhas,
+    ].join('\n')
+  }
+
+  return (
+    <div className="disc-bloco">
+      <strong>🖥️ Comportamento — {nomeTeste}</strong>
+      <p style={{ margin: '.4rem 0' }}>
+        Saídas da tela: <strong>{c.saidas_da_tela}</strong> ·
+        tempo fora: <strong>{Math.round(c.segundos_fora_da_tela)}s</strong> ·
+        PrintScreen: <strong>{c.tentativas_print}</strong> ·
+        copiar/colar: <strong>{c.copiar_colar}</strong> ·
+        quedas de conexão: <strong>{c.quedas_de_conexao}</strong></p>
+      <details>
+        <summary className="btn-link" style={{ cursor: 'pointer' }}>
+          Linha do tempo ({c.total_eventos} eventos)</summary>
+        <ul style={{ margin: '.4rem 0 0', paddingLeft: '1.2rem', fontSize: '.85rem' }}>
+          {(teste.eventos || []).map((e, i) => (
+            <li key={i}><code>{mmssEvento(e.t)}</code> {NOMES_EVENTO[e.e] || e.e}
+              {e.d ? ` (${e.d})` : ''}</li>
+          ))}
+        </ul>
+      </details>
+      <button className="btn-secundario btn-mini" style={{ marginTop: '.4rem' }}
+              onClick={() => { navigator.clipboard?.writeText(relatorio()); setCopiado(true)
+                setTimeout(() => setCopiado(false), 2000) }}>
+        {copiado ? '✓ Copiado' : '📋 Copiar relatório (para análise ou IA)'}</button>
     </div>
   )
 }

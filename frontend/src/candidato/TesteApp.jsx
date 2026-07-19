@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
+import { iniciarTelemetria } from './telemetria.js'
 
 // Testes do candidato (inventário DISC + situacional), no formato do material
 // de referência do RH: identificação mínima -> código por e-mail (2FA) ->
@@ -164,6 +165,9 @@ function Instrucoes({ tipo, aoIniciar }) {
             mesmo(a).</li>
           <li>🔕 Não divida sua atenção com outras atividades. Feche redes sociais e e-mail, e não
             converse ao telefone.</li>
+          <li>🖥️ Durante o preenchimento, registramos eventos de navegação (saídas da tela, trocas
+            de aba/janela e tentativas de captura), para garantir a integridade do processo
+            seletivo — conforme a LGPD.</li>
         </ul>
         <p className="explica" style={{ marginTop: '.8rem' }}>Ao responder, você declara que as
           questões serão respondidas de acordo com as orientações recebidas, assumindo total
@@ -187,6 +191,8 @@ function Questionario({ token, tipo, aoConcluir }) {
   const [erro, setErro] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const timerRef = useRef(null)
+
+  useEffect(() => iniciarTelemetria(token, tipo), [tipo])
 
   useEffect(() => {
     api.testeQuestoes(token, tipo).then((d) => {

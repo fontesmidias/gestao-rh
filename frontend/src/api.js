@@ -131,6 +131,10 @@ export const candidato = {
   testeResponder: (t, tipo, dados) =>
     req(`/c/${t}/testes/${tipo}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
   testeConcluir: (t, tipo) => req(`/c/${t}/testes/${tipo}/concluir`, { method: 'POST' }),
+  testeEventos: (t, tipo, eventos) =>
+    req(`/c/${t}/testes/${tipo}/eventos`, { method: 'POST', body: JSON.stringify({ eventos }) }),
+  // URL crua para navigator.sendBeacon (descarrega a telemetria ao fechar a página)
+  testeEventosUrl: (t, tipo) => `${BASE}/c/${t}/testes/${tipo}/eventos`,
   // Reembolso-creche na admissão (só se o posto do candidato é elegível)
   crecheStatus: (t) => req(`/c/${t}/creche`),
   crecheAddCrianca: (t, dados) =>
