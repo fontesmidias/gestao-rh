@@ -271,7 +271,9 @@ function Painel({ aoSair }) {
         )}
         {pagina === 'postos' && <PostosRH />}
         {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
-        {pagina === 'testagem' && <TestagemRH />}
+        {pagina === 'testagem' && (
+          <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
+        )}
         {pagina === 'talentos' && (
           <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}

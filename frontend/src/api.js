@@ -187,6 +187,9 @@ export const testagem = {
     req(`/t/${t}/p/${pid}/${tipo}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
   concluir: (t, pid, tipo) => req(`/t/${t}/p/${pid}/${tipo}/concluir`, { method: 'POST' }),
   resultados: (t, pid) => req(`/t/${t}/p/${pid}/resultados`),
+  eventos: (t, pid, tipo, eventos) =>
+    req(`/t/${t}/p/${pid}/${tipo}/eventos`, { method: 'POST', body: JSON.stringify({ eventos }) }),
+  eventosUrl: (t, pid, tipo) => `${BASE}/t/${t}/p/${pid}/${tipo}/eventos`,
 }
 
 // --- Banco de Talentos (cadastro público, sem token) ---
@@ -421,6 +424,27 @@ export const rh = {
                                       body: JSON.stringify(dados) }),
   testagemParticipantes: (id) =>
     req(`/rh/testagem/links/${id}/participantes`, { headers: authRH() }),
+  // Dash unificado de testes + reset (admissão e testagem)
+  testesDash: () => req('/rh/testes/dash', { headers: authRH() }),
+  resetarTeste: (candidatoId, tipo) =>
+    req(`/rh/candidatos/${candidatoId}/testes/${tipo}/resetar`,
+        { method: 'POST', headers: authRH() }),
+  resetarTesteTestagem: (participanteId, tipo) =>
+    req(`/rh/testagem/participantes/${participanteId}/testes/${tipo}/resetar`,
+        { method: 'POST', headers: authRH() }),
+  // Modelos: envio pontual para uma pessoa + papéis de assinatura
+  enviarModelo: (candidatoId, modeloId, opcoes = {}) =>
+    req(`/rh/candidatos/${candidatoId}/modelos/${modeloId}/enviar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(opcoes) }),
+  papeis: () => req('/rh/papeis-assinatura', { headers: authRH() }),
+  criarPapel: (dados) =>
+    req('/rh/papeis-assinatura', { method: 'POST', headers: authRH(),
+                                   body: JSON.stringify(dados) }),
+  editarPapel: (id, dados) =>
+    req(`/rh/papeis-assinatura/${id}`, { method: 'PUT', headers: authRH(),
+                                         body: JSON.stringify(dados) }),
+  excluirPapel: (id) =>
+    req(`/rh/papeis-assinatura/${id}`, { method: 'DELETE', headers: authRH() }),
   // Diagnóstico (investigação de incidentes)
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),

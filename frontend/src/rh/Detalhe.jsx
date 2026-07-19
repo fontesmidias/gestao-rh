@@ -571,11 +571,17 @@ export default function Detalhe({ id, aoVoltar }) {
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
-      <FichasStatus dados={dados} setMsg={setMsg} />
-      <TestesDoCandidato id={id} />
+      {/* No desktop, os cards de informação dividem a largura em 2 colunas
+          (menos rolagem); no celular continuam empilhados. */}
+      <div className="rh-grid-2">
+        <FichasStatus dados={dados} setMsg={setMsg} />
+        <TestesDoCandidato id={id} />
+      </div>
       <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
-      <ModelosDoColaborador id={id} setMsg={setMsg} />
-      <FichaRH id={id} setMsg={setMsg} />
+      <div className="rh-grid-2">
+        <ModelosDoColaborador id={id} setMsg={setMsg} />
+        <FichaRH id={id} setMsg={setMsg} />
+      </div>
       <DiagnosticoColaborador id={id} />
 
       {pendDossie && (
@@ -751,6 +757,10 @@ function TestesDoCandidato({ id }) {
           <strong>Inventário DISC</strong>{' '}
           <span className="explica" style={{ margin: 0 }}>
             — {STATUS_TESTE[disc.status]}{disc.respondidas ? ` · ${disc.respondidas}/24 respondidas` : ''}</span>
+          {disc.status !== 'pendente' && (
+            <BotaoResetarTeste id={id} tipo="disc" nomeTeste="Inventário DISC"
+                               recarregar={recarregar} />
+          )}
           {disc.resultado && disc.resultado.percentuais && (
             <>
               <div className="disc-grafico">
@@ -798,6 +808,10 @@ function TestesDoCandidato({ id }) {
         <div className="disc-bloco">
           <strong>Teste Situacional</strong>{' '}
           <span className="explica" style={{ margin: 0 }}>— {STATUS_TESTE[sit.status]}</span>
+          {sit.status !== 'pendente' && (
+            <BotaoResetarTeste id={id} tipo="situacional" nomeTeste="Teste Situacional"
+                               recarregar={recarregar} />
+          )}
           {sit.resultado && sit.resultado.percentual != null && (
             <p style={{ margin: '.4rem 0 0' }}>
               Conduta profissional: <strong>{sit.resultado.percentual}%</strong>{' '}
@@ -811,6 +825,22 @@ function TestesDoCandidato({ id }) {
         <ComportamentoTeste key={t.tipo} teste={t} />
       ))}
     </div>
+  )
+}
+
+// Zera o teste para o candidato refazer pelo mesmo link (o resultado anterior
+// fica preservado na auditoria).
+function BotaoResetarTeste({ id, tipo, nomeTeste, recarregar }) {
+  const [ocupado, setOcupado] = useState(false)
+  return (
+    <button className="btn-link" disabled={ocupado} style={{ marginLeft: '.5rem' }}
+            title="Zera respostas e resultado para a pessoa refazer (o anterior fica na auditoria)"
+            onClick={async () => {
+              if (!window.confirm(`Resetar o ${nomeTeste}?\n\nAs respostas e o resultado atuais serão zerados (ficam na auditoria) e o candidato poderá refazer pelo link dele.`)) return
+              setOcupado(true)
+              try { await api.resetarTeste(id, tipo); await recarregar() }
+              finally { setOcupado(false) }
+            }}>{ocupado ? 'resetando…' : '🔁 resetar'}</button>
   )
 }
 
@@ -883,7 +913,8 @@ const mmssEvento = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${Stri
 
 // Telemetria de comportamento durante o teste — para o RH ler ou copiar e
 // mandar a uma IA em busca de oportunidades de melhoria do sistema.
-function ComportamentoTeste({ teste }) {
+// (exportado: o dash de Testes reusa este relatório)
+export function ComportamentoTeste({ teste }) {
   const [copiado, setCopiado] = useState(false)
   const c = teste.comportamento
   const nomeTeste = teste.tipo === 'disc' ? 'Inventário DISC' : 'Teste Situacional'

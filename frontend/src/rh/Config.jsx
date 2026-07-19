@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
+import Modelos from './Modelos.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -66,7 +67,20 @@ function Msg({ msg }) {
   return <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>
 }
 
+// Submenus: cada assunto numa aba própria — acabou a rolagem infinita
+// (feedback de campo, 2026-07-19). O último submenu aberto fica lembrado.
+const SUBMENUS = [
+  ['geral', '👤 Geral'],
+  ['equipe', '🧑‍🤝‍🧑 Equipe'],
+  ['modelos', '📝 Modelos de documento'],
+  ['assinaturas', '✍️ Assinaturas'],
+  ['integracoes', '🔌 E-mail e integrações'],
+  ['sistema', '🛠️ Sistema'],
+]
+
 export default function Config({ aoVoltar }) {
+  const [aba, setAba] = useState(localStorage.getItem('rh_config_aba') || 'geral')
+  const trocar = (id) => { setAba(id); localStorage.setItem('rh_config_aba', id) }
   return (
     <main className="rh-painel">
       <header className="rh-topo">
@@ -74,22 +88,125 @@ export default function Config({ aoVoltar }) {
         <h1>⚙️ Configurações</h1>
         <span />
       </header>
-      <Perfil />
-      <Senha />
-      <Equipe />
-      <Assinantes />
-      <M365 />
-      <Gmail />
-      <WebhookEmail />
-      <Smtp />
-      <OcrIA />
-      <ModelosDocumento />
-      <AvisosInternos />
-      <Teams />
-      <Lixeira />
-      <ErrosRecentes />
-      <Auditoria />
+      <nav className="rh-subnav">
+        {SUBMENUS.map(([id, rotulo]) => (
+          <button key={id} className={`rh-subnav-item ${aba === id ? 'ativo' : ''}`}
+                  onClick={() => trocar(id)}>{rotulo}</button>
+        ))}
+      </nav>
+      {aba === 'geral' && <div className="rh-grid-2"><Perfil /><Senha /></div>}
+      {aba === 'equipe' && <Equipe />}
+      {aba === 'modelos' && <Modelos />}
+      {aba === 'assinaturas' && <><Assinantes /><Papeis /></>}
+      {aba === 'integracoes' && <>
+        <div className="rh-grid-2"><M365 /><Gmail /></div>
+        <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
+        <div className="rh-grid-2"><OcrIA /><AvisosInternos /></div>
+        <Teams />
+      </>}
+      {aba === 'sistema' && <><Lixeira /><ErrosRecentes /><Auditoria /></>}
     </main>
+  )
+}
+
+// Papéis com que alguém assina um documento (Contratado(a), Contratante,
+// Testemunha, Validador(a)…) — aparecem no manifesto de assinatura dos
+// modelos. A ordem prepara fluxos futuros com vários signatários.
+function Papeis() {
+  const [papeis, setPapeis] = useState(null)
+  const [novo, setNovo] = useState(null) // {nome, descricao, ordem}
+  const [editando, setEditando] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const recarregar = () => api.papeis().then((r) => setPapeis(r.papeis))
+  useEffect(() => { recarregar().catch(() => setPapeis([])) }, [])
+  if (!papeis) return null
+
+  const salvarNovo = async () => {
+    setMsg(null)
+    try {
+      await api.criarPapel({ nome: novo.nome.trim(), descricao: novo.descricao.trim() || null,
+                             ordem: parseInt(novo.ordem, 10) || 0 })
+      setNovo(null); await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'papel_ja_existe'
+        ? 'Já existe um papel com esse nome.' : `Não foi possível criar (${e.detail || e.message}).` })
+    }
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>🎭 Papéis de assinatura</h3>
+      <p className="explica">A "qualidade" com que alguém assina — vai para o bloco de
+        assinatura e o manifesto do documento (ex.: <em>assina na qualidade de Testemunha</em>).
+        Escolha o papel de cada modelo em Modelos de documento. A <strong>ordem</strong> define
+        a sequência quando houver mais de um signatário.</p>
+      <table className="rh-tabela">
+        <thead><tr><th>Ordem</th><th>Papel</th><th>Descrição</th><th></th></tr></thead>
+        <tbody>
+          {papeis.map((p) => (
+            <tr key={p.id}>
+              {editando?.id === p.id ? (
+                <>
+                  <td><input style={{ maxWidth: 70 }} inputMode="numeric" value={editando.ordem}
+                             onChange={(e) => setEditando({ ...editando, ordem: e.target.value })} /></td>
+                  <td><input value={editando.nome}
+                             onChange={(e) => setEditando({ ...editando, nome: e.target.value })} /></td>
+                  <td><input value={editando.descricao}
+                             onChange={(e) => setEditando({ ...editando, descricao: e.target.value })} /></td>
+                  <td>
+                    <button className="btn-principal btn-mini" onClick={async () => {
+                      setMsg(null)
+                      try {
+                        await api.editarPapel(p.id, { nome: editando.nome.trim(),
+                          descricao: editando.descricao.trim() || null,
+                          ordem: parseInt(editando.ordem, 10) || 0 })
+                        setEditando(null); await recarregar()
+                      } catch (e) {
+                        setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+                      }
+                    }}>Salvar</button>
+                    <button className="btn-link" onClick={() => setEditando(null)}>cancelar</button>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td>{p.ordem}</td>
+                  <td><strong>{p.nome}</strong></td>
+                  <td><small>{p.descricao || '—'}</small></td>
+                  <td>
+                    <button className="btn-secundario btn-mini"
+                            onClick={() => setEditando({ id: p.id, nome: p.nome,
+                              descricao: p.descricao || '', ordem: String(p.ordem) })}>Editar</button>
+                    <button className="btn-link" onClick={async () => {
+                      if (!window.confirm(`Excluir o papel "${p.nome}"? Ele vai para a lixeira.`)) return
+                      await api.excluirPapel(p.id); await recarregar()
+                    }}>excluir</button>
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!novo ? (
+        <button className="btn-secundario" style={{ marginTop: '.75rem' }}
+                onClick={() => setNovo({ nome: '', descricao: '', ordem: String(papeis.length + 1) })}>
+          + Novo papel</button>
+      ) : (
+        <div className="rh-lote" style={{ marginTop: '.75rem' }}>
+          <input placeholder="Nome (ex.: Fiador)" value={novo.nome} style={{ maxWidth: 200 }}
+                 onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+          <input placeholder="Descrição (opcional)" value={novo.descricao}
+                 onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} />
+          <input placeholder="Ordem" inputMode="numeric" value={novo.ordem} style={{ maxWidth: 80 }}
+                 onChange={(e) => setNovo({ ...novo, ordem: e.target.value })} />
+          <button className="btn-principal btn-mini" disabled={!novo.nome.trim()}
+                  onClick={salvarNovo}>Criar</button>
+          <button className="btn-link" onClick={() => setNovo(null)}>cancelar</button>
+        </div>
+      )}
+      <Msg msg={msg} />
+    </div>
   )
 }
 
@@ -103,7 +220,8 @@ function Lixeira() {
   useEffect(() => { carregar().catch(() => setDados({ itens: [], dias_retencao: 60 })) }, [])
   if (!dados) return null
 
-  const ENTIDADES = { posto: 'Posto de serviço', modelo_documento: 'Modelo de documento' }
+  const ENTIDADES = { posto: 'Posto de serviço', modelo_documento: 'Modelo de documento',
+                      teste_candidato: 'Teste do candidato', papel_assinatura: 'Papel de assinatura' }
   return (
     <div className="rh-card">
       <h3>🗑️ Lixeira</h3>
@@ -677,167 +795,6 @@ function Smtp() {
         }}>{testando ? 'Testando…' : 'Salvar acima e testar envio'}</button>
       </div>
       <Msg msg={msg} />
-    </div>
-  )
-}
-
-const ESCOPOS = [
-  ['avulso', 'Qualquer colaborador'],
-  ['cargo', 'Colaboradores de um cargo'],
-  ['posto', 'Colaboradores de um posto'],
-]
-const VAZIO = { titulo: '', corpo: '', escopo: 'avulso', cargo_alvo: '', posto_alvo_id: '' }
-
-// Abre um PDF (blob autenticado) em nova aba.
-async function abrirBlob(promessaBlob, setMsg) {
-  try {
-    const blob = await promessaBlob
-    window.open(URL.createObjectURL(blob), '_blank')
-  } catch (e) {
-    setMsg?.({ tipo: 'erro', texto: `Não foi possível gerar o PDF (${e.detail || e.message}).` })
-  }
-}
-
-function ModelosDocumento() {
-  const [dados, setDados] = useState(null) // {modelos, variaveis}
-  const [postos, setPostos] = useState([])
-  const [edit, setEdit] = useState(null) // {id?, titulo, corpo, escopo, cargo_alvo, posto_alvo_id}
-  const [msg, setMsg] = useState(null)
-  const [salvando, setSalvando] = useState(false)
-  const recarregar = () => api.modelos().then(setDados).catch(() => {})
-  useEffect(() => { recarregar(); api.postos().then((r) => setPostos(r.postos)).catch(() => {}) }, [])
-  if (!dados) return null
-
-  const salvar = async () => {
-    if (!edit.titulo.trim() || !edit.corpo.trim()) {
-      setMsg({ tipo: 'erro', texto: 'Preencha o título e o corpo do documento.' }); return
-    }
-    setSalvando(true); setMsg(null)
-    const corpo = {
-      titulo: edit.titulo.trim(), corpo: edit.corpo, escopo: edit.escopo,
-      cargo_alvo: edit.escopo === 'cargo' ? edit.cargo_alvo.trim() : null,
-      posto_alvo_id: edit.escopo === 'posto' ? (edit.posto_alvo_id || null) : null,
-    }
-    try {
-      if (edit.id) await api.editarModelo(edit.id, corpo)
-      else await api.criarModelo(corpo)
-      setEdit(null); setMsg({ tipo: 'ok', texto: 'Modelo salvo.' })
-      await recarregar()
-    } catch (e) {
-      setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
-    } finally { setSalvando(false) }
-  }
-
-  return (
-    <div className="rh-card">
-      <h3>📝 Modelos de documento</h3>
-      <p className="explica">Crie documentos do zero já no papel timbrado da empresa. Use
-        variáveis entre chaves duplas — na hora de gerar para um colaborador, elas são
-        preenchidas automaticamente. Depois, na tela do colaborador, é só clicar em
-        <strong> Gerar</strong>.</p>
-      <p className="explica" style={{ marginTop: '-.4rem' }}>Variáveis disponíveis:{' '}
-        {Object.entries(dados.variaveis).map(([k, desc]) => (
-          <code key={k} title={desc} style={{ marginRight: '.4rem' }}>{`{{${k}}}`}</code>
-        ))}</p>
-
-      {dados.modelos.length > 0 && (
-        <table className="rh-tabela">
-          <thead><tr><th>Título</th><th>Aplica-se a</th><th></th></tr></thead>
-          <tbody>
-            {dados.modelos.map((m) => {
-              const editando = edit?.id === m.id
-              return (
-                <Fragment key={m.id}>
-                  <tr className={editando ? 'linha-editando' : ''}>
-                    <td><strong>{m.titulo}</strong></td>
-                    <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
-                      {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}</td>
-                    <td>
-                      <button className="btn-secundario btn-mini"
-                              onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
-                      <button className="btn-secundario btn-mini"
-                              onClick={() => editando ? setEdit(null) : setEdit({
-                        id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
-                        cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
-                      })}>{editando ? 'Fechar' : 'Editar'}</button>
-                      <button className="btn-link" onClick={async () => {
-                        if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
-                        await api.excluirModelo(m.id); await recarregar()
-                      }}>excluir</button>
-                    </td>
-                  </tr>
-                  {editando && (
-                    <tr className="linha-form-inline">
-                      <td colSpan={3}>
-                        <CamposModelo edit={edit} setEdit={setEdit} postos={postos} inline
-                                      salvar={salvar} salvando={salvando}
-                                      onCancelar={() => setEdit(null)} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-
-      {(!edit || edit.id) ? (
-        <button className="btn-secundario" style={{ marginTop: '.75rem' }}
-                onClick={() => setEdit({ ...VAZIO })}>+ Novo modelo</button>
-      ) : (
-        <div style={{ marginTop: '.75rem' }}>
-          <CamposModelo edit={edit} setEdit={setEdit} postos={postos}
-                        salvar={salvar} salvando={salvando}
-                        onCancelar={() => setEdit(null)} />
-        </div>
-      )}
-      <Msg msg={msg} />
-    </div>
-  )
-}
-
-// Campos do modelo de documento — no card de criação (embaixo) e inline na
-// linha (edição). Inline: rola a si mesmo ao centro para o RH não se perder.
-function CamposModelo({ edit, setEdit, postos, salvar, salvando, onCancelar, inline }) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (inline && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [])
-  return (
-    <div ref={ref} className={inline ? 'form-inline-conteudo' : ''}>
-      <label className="campo"><span className="rotulo">Título (aceita variáveis)</span>
-        <input value={edit.titulo} placeholder="Ex.: Declaração de vínculo — {{nome}}" autoFocus
-               onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} /></label>
-      <label className="campo"><span className="rotulo">Corpo do documento</span>
-        <textarea rows={7} value={edit.corpo}
-                  placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…"
-                  onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
-      <div className="linha2">
-        <label className="campo"><span className="rotulo">Aplica-se a</span>
-          <select value={edit.escopo}
-                  onChange={(e) => setEdit({ ...edit, escopo: e.target.value })}>
-            {ESCOPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-          </select></label>
-        {edit.escopo === 'cargo' && (
-          <label className="campo"><span className="rotulo">Cargo</span>
-            <input value={edit.cargo_alvo} placeholder="Ex.: Recepcionista"
-                   onChange={(e) => setEdit({ ...edit, cargo_alvo: e.target.value })} /></label>
-        )}
-        {edit.escopo === 'posto' && (
-          <label className="campo"><span className="rotulo">Posto</span>
-            <select value={edit.posto_alvo_id}
-                    onChange={(e) => setEdit({ ...edit, posto_alvo_id: e.target.value })}>
-              <option value="">— escolha —</option>
-              {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select></label>
-        )}
-      </div>
-      <div className="navegacao">
-        <button className="btn-secundario" onClick={onCancelar}>Cancelar</button>
-        <button className="btn-principal" disabled={salvando} onClick={salvar}>
-          {salvando ? 'Salvando…' : 'Salvar modelo'}</button>
-      </div>
     </div>
   )
 }

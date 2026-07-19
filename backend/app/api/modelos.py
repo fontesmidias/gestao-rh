@@ -4,7 +4,7 @@ e geração do PDF preenchido para um colaborador."""
 import io
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import or_, select
@@ -16,6 +16,7 @@ from app.models.candidato import Candidato
 from app.models.modelo_documento import EscopoModelo, ModeloDocumento
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
+from app.services.email import enviar_email
 from app.services.fichas import (VARIAVEIS_MODELO, gerar_documento_modelo)
 
 router = APIRouter(tags=["modelos-documento"], dependencies=[Depends(requer_rh)])
@@ -28,6 +29,10 @@ class ModeloIn(BaseModel):
     cargo_alvo: str | None = None
     posto_alvo_id: uuid.UUID | None = None
     candidato_alvo_id: uuid.UUID | None = None
+    # Comportamento ao enviar para uma pessoa
+    enviar_por_email: bool = False
+    exige_assinatura: bool = False
+    papel_assinatura: str | None = None
 
 
 def _dump(m: ModeloDocumento) -> dict:
@@ -36,6 +41,9 @@ def _dump(m: ModeloDocumento) -> dict:
         "cargo_alvo": m.cargo_alvo, "posto_alvo_id": m.posto_alvo_id,
         "candidato_alvo_id": m.candidato_alvo_id, "criado_em": m.criado_em,
         "atualizado_em": m.atualizado_em,
+        "enviar_por_email": m.enviar_por_email,
+        "exige_assinatura": m.exige_assinatura,
+        "papel_assinatura": m.papel_assinatura,
     }
 
 
@@ -49,6 +57,9 @@ def _aplicar(m: ModeloDocumento, payload: ModeloIn) -> None:
     m.posto_alvo_id = payload.posto_alvo_id if payload.escopo == EscopoModelo.posto else None
     m.candidato_alvo_id = (payload.candidato_alvo_id
                            if payload.escopo == EscopoModelo.colaborador else None)
+    m.enviar_por_email = payload.enviar_por_email
+    m.exige_assinatura = payload.exige_assinatura
+    m.papel_assinatura = (payload.papel_assinatura or "").strip() or None
 
 
 @router.get("/rh/modelos-documento")
@@ -147,3 +158,176 @@ def gerar(candidato_id: uuid.UUID, modelo_id: uuid.UUID, db: Session = Depends(g
     return StreamingResponse(
         io.BytesIO(pdf), media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{nome}.pdf"'})
+
+
+class EnviarModeloIn(BaseModel):
+    # None = seguir o que está configurado no modelo
+    enviar_email: bool | None = None
+    para_assinatura: bool | None = None
+
+
+@router.post("/rh/candidatos/{candidato_id}/modelos/{modelo_id}/enviar")
+def enviar_para_pessoa(candidato_id: uuid.UUID, modelo_id: uuid.UUID,
+                       payload: EnviarModeloIn, request: Request,
+                       db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Envia o documento do modelo para UMA pessoa (antiga ou nova):
+
+    - com assinatura: cria o registro pendente com SNAPSHOT do título/corpo
+      (edições futuras do modelo não mudam o que a pessoa assina) e o papel do
+      signatário; a pessoa assina pelo link mágico, no mesmo fluxo 2FA das
+      fichas, com bloco de assinatura, manifesto e verificação pública.
+    - por e-mail sem assinatura: manda o PDF pronto anexado.
+    """
+    from app.core.config import base_url_publica
+    from app.models.assinatura import Assinatura
+    from app.services.email import html_moderno
+    from app.services.magic_link import emitir_link
+
+    candidato = db.get(Candidato, candidato_id)
+    m = db.get(ModeloDocumento, modelo_id)
+    if candidato is None or m is None:
+        raise HTTPException(status_code=404, detail="nao_encontrado")
+    enviar_email_ = m.enviar_por_email if payload.enviar_email is None else payload.enviar_email
+    para_assinatura = (m.exige_assinatura if payload.para_assinatura is None
+                       else payload.para_assinatura)
+
+    assinatura = None
+    link = None
+    if para_assinatura:
+        # evita duplicar: reaproveita pendência ativa do mesmo modelo
+        assinatura = db.scalar(select(Assinatura).where(
+            Assinatura.candidato_id == candidato.id,
+            Assinatura.modelo_id == m.id,
+            Assinatura.assinado_em.is_(None),
+            Assinatura.invalidada_em.is_(None)))
+        if assinatura is None:
+            assinatura = Assinatura(
+                candidato_id=candidato.id, modelo_id=m.id,
+                titulo_doc=m.titulo[:200], corpo_doc=m.corpo,
+                papel=m.papel_assinatura or "Contratado(a)")
+            db.add(assinatura)
+            db.flush()
+        link = emitir_link(db, candidato, base_url_publica(request))
+
+    registrar(db, "modelo_documento_enviado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato.id,
+              detalhe={"titulo": m.titulo, "assinatura": para_assinatura,
+                       "email": bool(enviar_email_)})
+    db.commit()
+
+    email_enviado = False
+    if enviar_email_ and candidato.email:
+        if para_assinatura:
+            email_enviado = enviar_email(
+                candidato.email,
+                f"Green House — documento aguarda sua assinatura: {m.titulo}",
+                f"Prezado(a) {candidato.nome_completo},\n\n"
+                f"O documento \"{m.titulo}\" foi disponibilizado e aguarda a sua "
+                f"assinatura eletrônica.\n\nAcesse: {link}\n\n"
+                "A assinatura leva menos de um minuto.\n\nAtenciosamente,\nRH — Green House\n",
+                html_moderno(
+                    "Documento aguarda sua assinatura",
+                    [
+                        f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                        f"O documento <strong>{m.titulo}</strong> foi disponibilizado "
+                        "e aguarda a sua assinatura eletrônica.",
+                        f"<a href='{link}'>Toque aqui para conferir e assinar</a> — "
+                        "leva menos de um minuto.",
+                    ],
+                ),
+            )
+        else:
+            pdf = gerar_documento_modelo(db, m.titulo, m.corpo, candidato)
+            nome_arq = "".join(c for c in m.titulo if c.isalnum() or c in " -_").strip()[:60] \
+                or "documento"
+            email_enviado = enviar_email(
+                candidato.email,
+                f"Green House — {m.titulo}",
+                f"Prezado(a) {candidato.nome_completo},\n\n"
+                f"Segue anexo o documento \"{m.titulo}\".\n\n"
+                "Atenciosamente,\nRH — Green House\n",
+                html_moderno(
+                    m.titulo,
+                    [f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
+                     f"Segue anexo o documento <strong>{m.titulo}</strong>."],
+                ),
+                anexos=[(f"{nome_arq}.pdf", pdf)],
+            )
+
+    return {"assinatura_criada": para_assinatura,
+            "assinatura_id": str(assinatura.id) if assinatura else None,
+            "email_enviado": email_enviado, "link_magico": link}
+
+
+# --- Papéis de assinatura (Contratado(a), Contratante, Testemunha…) --------
+
+
+class PapelIn(BaseModel):
+    nome: str
+    descricao: str | None = None
+    ordem: int = 0
+
+
+def _dump_papel(p) -> dict:
+    return {"id": p.id, "nome": p.nome, "descricao": p.descricao, "ordem": p.ordem}
+
+
+@router.get("/rh/papeis-assinatura")
+def listar_papeis(db: Session = Depends(get_db)) -> dict:
+    from app.models.modelo_documento import PapelAssinatura
+    papeis = db.scalars(select(PapelAssinatura)
+                        .order_by(PapelAssinatura.ordem, PapelAssinatura.nome)).all()
+    return {"papeis": [_dump_papel(p) for p in papeis]}
+
+
+@router.post("/rh/papeis-assinatura", status_code=201)
+def criar_papel(payload: PapelIn, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.models.modelo_documento import PapelAssinatura
+    nome = payload.nome.strip()
+    if not nome:
+        raise HTTPException(status_code=422, detail="nome_obrigatorio")
+    if db.scalar(select(PapelAssinatura).where(PapelAssinatura.nome == nome)):
+        raise HTTPException(status_code=409, detail="papel_ja_existe")
+    p = PapelAssinatura(nome=nome[:60], descricao=(payload.descricao or "").strip()[:300] or None,
+                        ordem=payload.ordem)
+    db.add(p)
+    registrar(db, "papel_assinatura_criado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": nome})
+    db.commit()
+    return _dump_papel(p)
+
+
+@router.put("/rh/papeis-assinatura/{papel_id}")
+def editar_papel(papel_id: uuid.UUID, payload: PapelIn, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.models.modelo_documento import PapelAssinatura
+    p = db.get(PapelAssinatura, papel_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="papel_nao_encontrado")
+    nome = payload.nome.strip()
+    if not nome:
+        raise HTTPException(status_code=422, detail="nome_obrigatorio")
+    p.nome = nome[:60]
+    p.descricao = (payload.descricao or "").strip()[:300] or None
+    p.ordem = payload.ordem
+    registrar(db, "papel_assinatura_editado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": p.nome})
+    db.commit()
+    return _dump_papel(p)
+
+
+@router.delete("/rh/papeis-assinatura/{papel_id}", status_code=204)
+def excluir_papel(papel_id: uuid.UUID, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+    from app.models.modelo_documento import PapelAssinatura
+    from app.services.lixeira import mandar_para_lixeira
+    p = db.get(PapelAssinatura, papel_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="papel_nao_encontrado")
+    registrar(db, "papel_assinatura_excluido", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": p.nome})
+    mandar_para_lixeira(db, p, "papel_assinatura", p.nome, rh.email)
+    db.delete(p)
+    db.commit()

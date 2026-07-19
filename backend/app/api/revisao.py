@@ -86,18 +86,23 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         .where(SlotDocumento.candidato_id == cand.id)
         .order_by(SlotDocumento.criado_em)
     ).all()
-    from app.api.assinaturas import NOMES_DOC, _docs_exigidos
+    from app.api.assinaturas import NOMES_DOC, _docs_exigidos, chave_doc, titulo_doc
     from app.api.ficha import pendencias_da_ficha
     from app.models.assinatura import Assinatura
     assinaturas = db.scalars(
         select(Assinatura).where(Assinatura.candidato_id == cand.id,
                                  Assinatura.invalidada_em.is_(None))).all()
-    por_doc = {a.documento: a for a in assinaturas}
+    por_doc = {a.documento: a for a in assinaturas if a.documento}
     fichas = [
         {"documento": doc, "titulo": NOMES_DOC[doc],
          "assinado": doc in por_doc and por_doc[doc].assinado_em is not None,
          "assinado_em": por_doc[doc].assinado_em if doc in por_doc else None}
         for doc in _docs_exigidos(db, cand)
+    ] + [
+        # documentos de modelo enviados para assinatura deste colaborador
+        {"documento": chave_doc(a), "titulo": titulo_doc(a),
+         "assinado": a.assinado_em is not None, "assinado_em": a.assinado_em}
+        for a in assinaturas if a.modelo_id is not None
     ]
     return {
         "id": cand.id,
@@ -114,7 +119,7 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "salario_base": cand.salario_base,
         "adicionais": cand.adicionais or [],
         "assinaturas": [
-            {"documento": a.documento, "titulo": NOMES_DOC[a.documento],
+            {"documento": chave_doc(a), "titulo": titulo_doc(a),
              "assinado_em": a.assinado_em}
             for a in assinaturas
         ],

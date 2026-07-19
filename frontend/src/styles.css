@@ -345,6 +345,25 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 /* Direção "plano e sutil" (validada com o Bruno, 2026-07-16): no painel do
    RH, seções planas com borda fina, sem sombras grandes; cor só onde há
    significado. O portal do candidato mantém o estilo acolhedor. */
+/* Submenu horizontal (Configurações, Testes): um assunto por aba, sem
+   rolagem infinita (feedback de campo 2026-07-19). */
+.rh-subnav { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: var(--esp-3); }
+.rh-subnav-item {
+  border: 1px solid var(--borda); background: var(--cartao); color: var(--tinta-suave);
+  padding: .45rem .85rem; border-radius: 999px; font-size: .88rem; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.rh-subnav-item:hover { border-color: var(--verde-escuro); color: var(--tinta); }
+.rh-subnav-item.ativo { background: var(--verde-escuro); border-color: var(--verde-escuro);
+                        color: #fff; }
+
+/* Grade de 2 colunas para cards no desktop: aproveita a largura em vez de
+   empilhar tudo (a tela deixa de ser um pergaminho). No celular vira 1 coluna. */
+.rh-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--esp-3);
+             align-items: start; margin-bottom: var(--esp-3); }
+.rh-grid-2 > .rh-card, .rh-grid-2 > section.rh-card { margin-bottom: 0; }
+@media (max-width: 1000px) { .rh-grid-2 { grid-template-columns: 1fr; } }
+
 .rh-card {
   background: var(--cartao);
   border: 1px solid var(--borda);

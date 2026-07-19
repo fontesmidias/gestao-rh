@@ -341,6 +341,117 @@ def concluir(token: str, tipo: str, db: Session = Depends(get_db)) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _resumo_resultado(tipo: TipoTeste, resultado: dict | None) -> dict | None:
+    """Resumo compacto do resultado para o dash (o completo fica no detalhe)."""
+    r = resultado or None
+    if not r:
+        return None
+    if tipo == TipoTeste.disc:
+        return {"perfil": r.get("perfil"), "principal": r.get("principal"),
+                "percentuais": r.get("percentuais")}
+    return {"percentual": r.get("percentual"), "faixa": r.get("faixa")}
+
+
+def _duracao_s(iniciado, concluido) -> int | None:
+    if iniciado and concluido:
+        return max(0, int((concluido - iniciado).total_seconds()))
+    return None
+
+
+@router.get("/rh/testes/dash", dependencies=[Depends(requer_rh)])
+def dash_testes(db: Session = Depends(get_db)) -> dict:
+    """Visão unificada de TODOS os testes — da admissão e da testagem avulsa —
+    com status, duração, resultado resumido e comportamento (telemetria)."""
+    from app.models.testagem import LinkTestagem, ParticipanteTestagem, TesteTestagem
+
+    itens = []
+    admissao = db.execute(
+        select(TesteCandidato, Candidato)
+        .join(Candidato, TesteCandidato.candidato_id == Candidato.id)
+        .order_by(TesteCandidato.criado_em.desc())).all()
+    for t, cand in admissao:
+        _expira_se_estourou(db, t)
+        itens.append({
+            "origem": "admissao", "pessoa_id": t.candidato_id, "teste_id": t.id,
+            "nome": cand.nome_completo, "contexto": cand.cargo_funcao or "admissão",
+            "tipo": t.tipo, "status": t.status,
+            "iniciado_em": t.iniciado_em, "concluido_em": t.concluido_em,
+            "duracao_s": _duracao_s(t.iniciado_em, t.concluido_em),
+            "respondidas": len(t.respostas or []),
+            "resumo": _resumo_resultado(t.tipo, t.resultado),
+            "resultado": t.resultado or None,
+            "comportamento": _resumo_eventos(t.eventos or []),
+            "eventos": t.eventos or [],
+        })
+
+    testagem = db.execute(
+        select(TesteTestagem, ParticipanteTestagem, LinkTestagem)
+        .join(ParticipanteTestagem, TesteTestagem.participante_id == ParticipanteTestagem.id)
+        .join(LinkTestagem, ParticipanteTestagem.link_id == LinkTestagem.id)
+        .order_by(TesteTestagem.criado_em.desc())).all()
+    for t, p, link in testagem:
+        itens.append({
+            "origem": "testagem", "pessoa_id": p.id, "teste_id": t.id,
+            "nome": p.nome, "contexto": link.nome,
+            "tipo": t.tipo, "status": t.status,
+            "iniciado_em": t.iniciado_em, "concluido_em": t.concluido_em,
+            "duracao_s": _duracao_s(t.iniciado_em, t.concluido_em),
+            "respondidas": len(t.respostas or []),
+            "resumo": _resumo_resultado(t.tipo, t.resultado),
+            "resultado": t.resultado or None,
+            "comportamento": _resumo_eventos(t.eventos or []),
+            "eventos": t.eventos or [],
+        })
+
+    concluidos = [i for i in itens if i["status"] in (StatusTeste.concluido,
+                                                      StatusTeste.expirado)]
+    duracoes = [i["duracao_s"] for i in concluidos if i["duracao_s"]]
+    metricas = {
+        "total": len(itens),
+        "concluidos": len(concluidos),
+        "em_andamento": sum(1 for i in itens if i["status"] == StatusTeste.em_andamento),
+        "pendentes": sum(1 for i in itens if i["status"] == StatusTeste.pendente),
+        "tempo_medio_s": round(sum(duracoes) / len(duracoes)) if duracoes else None,
+        "com_alerta": sum(1 for i in itens if (i["comportamento"] or {}).get(
+            "saidas_da_tela", 0) > 0),
+    }
+    return {"metricas": metricas, "itens": itens, "perfis": PERFIS_DISC}
+
+
+@router.post("/rh/candidatos/{candidato_id}/testes/{tipo}/resetar")
+def resetar_teste_rh(candidato_id: uuid.UUID, tipo: str,
+                     db: Session = Depends(get_db),
+                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Zera o teste para a pessoa refazer: volta a pendente e limpa respostas,
+    resultado e telemetria. O resultado anterior fica preservado na auditoria."""
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    try:
+        tipo_enum = TipoTeste(tipo)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    t = db.scalar(select(TesteCandidato).where(
+        TesteCandidato.candidato_id == cand.id, TesteCandidato.tipo == tipo_enum))
+    if t is None:
+        raise HTTPException(status_code=404, detail="teste_nao_encontrado")
+    registrar(db, "teste_resetado", ator="rh", ator_detalhe=_rh.email,
+              candidato_id=cand.id,
+              detalhe={"tipo": tipo, "status_anterior": t.status.value,
+                       "resultado_anterior": t.resultado or None,
+                       "respondidas": len(t.respostas or [])})
+    t.status = StatusTeste.pendente
+    t.respostas = []
+    t.resultado = {}
+    t.eventos = []
+    t.iniciado_em = None
+    t.prazo_ate = None
+    t.concluido_em = None
+    t.aceite_em = None
+    db.commit()
+    return {"tipo": t.tipo, "status": t.status}
+
+
 class DefinirTestesIn(BaseModel):
     fazer_disc: bool
     fazer_situacional: bool

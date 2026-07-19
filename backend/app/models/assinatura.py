@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,9 +41,20 @@ class Assinatura(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     candidato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidato.id"), index=True)
-    documento: Mapped[DocumentoAssinavel] = mapped_column(
-        Enum(DocumentoAssinavel, name="documento_assinavel")
+    # Documento fixo do sistema (enum) OU documento de modelo do RH (modelo_id).
+    # Exatamente um dos dois é preenchido.
+    documento: Mapped[DocumentoAssinavel | None] = mapped_column(
+        Enum(DocumentoAssinavel, name="documento_assinavel"), nullable=True
     )
+    modelo_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("modelo_documento.id"), nullable=True)
+    # Snapshot do modelo no momento do envio para assinatura: edições/exclusões
+    # posteriores do modelo NÃO mudam o que a pessoa assina.
+    titulo_doc: Mapped[str | None] = mapped_column(String(200))
+    corpo_doc: Mapped[str | None] = mapped_column(Text)
+    # Papel do signatário no manifesto (Contratado(a), Testemunha…) — dos
+    # papéis cadastrados em Configurações → Assinaturas.
+    papel: Mapped[str | None] = mapped_column(String(60))
     pdf_key: Mapped[str | None] = mapped_column(String(300))
     hash_sha256: Mapped[str | None] = mapped_column(String(64))
     otp_hash: Mapped[str | None] = mapped_column(String(64))
