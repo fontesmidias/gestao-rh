@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Overlay de carregamento com AMPULHETA (pedido do Bruno, 2026-07-17): para
 // ações que o RH dispara de propósito e precisa aguardar — importar a base,
@@ -25,16 +25,32 @@ export async function comAmpulheta(texto, fn) {
   }
 }
 
+// O overlay só APARECE se a ação passar de ATRASO_MS (feedback da revisão de
+// 2026-07-19): abaixo disso o usuário nem vê, e mostrar/esconder instantâneo em
+// toda ação de 1s vira um flicker que dá dor de cabeça. Acima disso, ele entende
+// que está processando e para de clicar de novo.
+const ATRASO_MS = 400
+
 export default function Carregando() {
   const [estado, setEstado] = useState({ ativo: false, texto: '' })
+  const [visivel, setVisivel] = useState(false)
+  const timerRef = useRef(null)
 
   useEffect(() => {
-    const aoMudar = (e) => setEstado(e.detail)
+    const aoMudar = (e) => {
+      setEstado(e.detail)
+      clearTimeout(timerRef.current)
+      if (e.detail.ativo) {
+        timerRef.current = setTimeout(() => setVisivel(true), ATRASO_MS)
+      } else {
+        setVisivel(false)
+      }
+    }
     window.addEventListener('rh-ampulheta', aoMudar)
-    return () => window.removeEventListener('rh-ampulheta', aoMudar)
+    return () => { window.removeEventListener('rh-ampulheta', aoMudar); clearTimeout(timerRef.current) }
   }, [])
 
-  if (!estado.ativo) return null
+  if (!estado.ativo || !visivel) return null
   return (
     <div className="ampulheta-overlay" role="status" aria-live="polite" aria-busy="true">
       <div className="ampulheta-caixa">

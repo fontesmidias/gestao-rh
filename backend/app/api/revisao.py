@@ -23,9 +23,40 @@ from app.services.email import enviar_email, html_moderno
 router = APIRouter(tags=["revisao-rh"], dependencies=[Depends(requer_rh)])
 
 
+def _candidatos_admissao(db: Session, status: str | None, busca: str | None,
+                         posto_id: uuid.UUID | None) -> list[Candidato]:
+    """Filtra a lista de Admissões. Com o uso, serão muitos admitidos — daí os
+    filtros (feedback 2026-07-19)."""
+    q = select(Candidato).order_by(Candidato.criado_em.desc())
+    if status:
+        try:
+            q = q.where(Candidato.status == StatusCandidato(status))
+        except ValueError:
+            pass
+    if posto_id:
+        q = q.where(Candidato.posto_servico_id == posto_id)
+    candidatos = db.scalars(q).all()
+    if busca:
+        from app.models.ficha import DocumentosIdentificacao
+        termo = busca.strip().lower()
+        digitos = "".join(c for c in termo if c.isdigit())
+        cpfs = {}
+        if digitos:
+            for d in db.scalars(select(DocumentosIdentificacao)).all():
+                cpfs[d.candidato_id] = d.cpf or ""
+        candidatos = [c for c in candidatos
+                      if termo in (c.nome_completo or "").lower()
+                      or termo in (c.email or "").lower()
+                      or (digitos and (digitos in "".join(x for x in (c.cpf or "") if x.isdigit())
+                                       or digitos in cpfs.get(c.id, "")))]
+    return candidatos
+
+
 @router.get("/rh/candidatos")
-def listar_candidatos(db: Session = Depends(get_db)) -> list[dict]:
-    candidatos = db.scalars(select(Candidato).order_by(Candidato.criado_em.desc())).all()
+def listar_candidatos(status: str | None = None, busca: str | None = None,
+                      posto_id: uuid.UUID | None = None,
+                      db: Session = Depends(get_db)) -> list[dict]:
+    candidatos = _candidatos_admissao(db, status, busca, posto_id)
     slots = db.scalars(select(SlotDocumento)).all()
     por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
     for s in slots:
@@ -44,6 +75,28 @@ def listar_candidatos(db: Session = Depends(get_db)) -> list[dict]:
             "dossie_gerado_em": cand.dossie_gerado_em,
         })
     return saida
+
+
+@router.get("/rh/candidatos-exportar")
+def exportar_admissoes(status: str | None = None, busca: str | None = None,
+                       posto_id: uuid.UUID | None = None,
+                       db: Session = Depends(get_db),
+                       _rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Planilha das admissões (mesmos filtros da tela), reusando o service de
+    export compartilhado."""
+    from datetime import datetime, timezone
+
+    from app.services.export_planilha import linha_completa, montar_workbook
+    candidatos = _candidatos_admissao(db, status, busca, posto_id)
+    conteudo = montar_workbook([linha_completa(db, c) for c in candidatos])
+    registrar(db, "admissoes_exportadas", ator="rh", ator_detalhe=_rh.email,
+              detalhe={"linhas": len(candidatos), "status": status or "todos"})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="admissoes-{agora}.xlsx"'})
 
 
 @router.get("/rh/metricas")
@@ -356,44 +409,47 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
                           db: Session = Depends(get_db)) -> dict:
     """forcar=true gera o dossiê parcial mesmo com pendências (decisão do RH,
     registrada em auditoria); o status só vira 'aprovado' quando completo."""
+    from app.services.idempotencia import trava
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
-    try:
-        gerar_dossie(db, cand, ignorar_pendencias=forcar)
-        completo = True
-    except DossieIncompleto as exc:
-        raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
-    except Exception as exc:
-        # Erro REAL (arquivo faltando no storage, PDF corrompido…): registra com
-        # detalhe e devolve mensagem legível. Antes virava um 500 genérico que o
-        # painel exibia como "sem pendências" — o RH achava que estava tudo certo.
-        import logging
-        logging.getLogger(__name__).exception("Falha ao montar o dossiê de %s", cand.id)
-        registrar(db, "dossie_falhou", ator="rh", candidato_id=cand.id,
-                  detalhe={"erro": f"{type(exc).__name__}: {exc}"[:300]})
+    # trava de idempotência: dois cliques em "Gerar dossiê" não geram dois PDFs
+    # nem dois e-mails; a 2ª chamada concorrente recebe 409 ja_em_processamento.
+    with trava(f"dossie:{cand.id}"):
+        try:
+            gerar_dossie(db, cand, ignorar_pendencias=forcar)
+        except DossieIncompleto as exc:
+            raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
+        except Exception as exc:
+            # Erro REAL (arquivo faltando no storage, PDF corrompido…): registra com
+            # detalhe e devolve mensagem legível. Antes virava um 500 genérico que o
+            # painel exibia como "sem pendências" — o RH achava que estava tudo certo.
+            import logging
+            logging.getLogger(__name__).exception("Falha ao montar o dossiê de %s", cand.id)
+            registrar(db, "dossie_falhou", ator="rh", candidato_id=cand.id,
+                      detalhe={"erro": f"{type(exc).__name__}: {exc}"[:300]})
+            db.commit()
+            raise HTTPException(status_code=422,
+                                detail=f"erro_ao_montar_dossie: {type(exc).__name__}") from exc
+        if not forcar:
+            cand.status = StatusCandidato.aprovado
+        registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id,
+                  detalhe={"parcial": forcar})
         db.commit()
-        raise HTTPException(status_code=422,
-                            detail=f"erro_ao_montar_dossie: {type(exc).__name__}") from exc
-    if completo and not forcar:
-        cand.status = StatusCandidato.aprovado
-    registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id,
-              detalhe={"parcial": forcar})
-    db.commit()
 
-    # Aviso interno "Dossiê pronto": vai para o e-mail configurado no painel
-    # (Configurações → E-mail de avisos internos), com fallback ao remetente.
-    from app.services.config_dinamica import ler_config
-    destino = (ler_config(db, ("email_avisos_internos",)).get("email_avisos_internos")
-               or get_settings().smtp_from)
-    if destino:
-        enviar_email(
-            destino,
-            f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
-            f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
-            f"Baixe no painel: {base_url_publica(request)}/rh\n",
-        )
-    return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
+        # Aviso interno "Dossiê pronto": vai para o e-mail configurado no painel
+        # (Configurações → E-mail de avisos internos), com fallback ao remetente.
+        from app.services.config_dinamica import ler_config
+        destino = (ler_config(db, ("email_avisos_internos",)).get("email_avisos_internos")
+                   or get_settings().smtp_from)
+        if destino:
+            enviar_email(
+                destino,
+                f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
+                f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
+                f"Baixe no painel: {base_url_publica(request)}/rh\n",
+            )
+        return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
 
 
 @router.get("/rh/candidatos/{candidato_id}/dossie")

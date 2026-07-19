@@ -26,6 +26,10 @@ class LinkTestagem(Base):
     # testagem anônima (nenhum dado pessoal por trás dele)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Quais testes o link aplica (o RH escolhe; ao menos um). Default True nos
+    # dois = retrocompat com links criados antes desta opção.
+    tem_disc: Mapped[bool] = mapped_column(Boolean, default=True)
+    tem_situacional: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_por: Mapped[str | None] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

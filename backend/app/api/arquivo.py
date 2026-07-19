@@ -34,9 +34,12 @@ TETO_PESSOAS_LOTE = 500  # protege memória/tempo; acima disso, refinar o filtro
 # ---------------------------------------------------------------------------
 
 
-def _cpf_mascarado(cpf: str | None) -> str:
+def _cpf_fmt(cpf: str | None) -> str:
+    # Tela INTERNA do RH autenticado: mostra o CPF completo (decisão do Bruno,
+    # 2026-07-19 — a equipe vê tudo). A máscara é mantida só no /verificar
+    # público, nos logs e no envio à IA, que são bordas para fora da empresa.
     n = "".join(c for c in (cpf or "") if c.isdigit())
-    return f"***.{n[3:6]}.{n[6:9]}-**" if len(n) == 11 else "—"
+    return f"{n[:3]}.{n[3:6]}.{n[6:9]}-{n[9:]}" if len(n) == 11 else "—"
 
 
 def _filtrar_pessoas(db: Session, *, posto_id=None, cargo=None, situacao=None,
@@ -139,7 +142,7 @@ def inventario(posto_id: uuid.UUID | None = None, cargo: str | None = None,
     for c in pessoas:
         linhas.append({
             "id": c.id, "nome_completo": c.nome_completo,
-            "cpf_mascarado": _cpf_mascarado(c.cpf or cpf_ficha.get(c.id)),
+            "cpf": _cpf_fmt(c.cpf or cpf_ficha.get(c.id)),
             "posto_nome": postos.get(c.posto_servico_id),
             "cargo_funcao": c.cargo_funcao,
             "situacao": c.situacao or "em admissão",

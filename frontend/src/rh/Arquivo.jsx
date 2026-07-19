@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
+import SelectBusca from '../SelectBusca.jsx'
 
 // 🗄️ Arquivo: inventário do que o sistema guarda (dossiês, vias assinadas,
 // documentos aprovados, dados) com filtros; download individual e backup em
@@ -112,14 +113,12 @@ export default function Arquivo() {
       <div className="rh-card rh-lote">
         <input placeholder="🔎 Nome, CPF ou e-mail" value={filtros.busca} style={{ maxWidth: 200 }}
                onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })} />
-        <select value={filtros.posto_id} onChange={(e) => setFiltros({ ...filtros, posto_id: e.target.value })}>
-          <option value="">Posto: todos</option>
-          {postos.map((p) => <option key={p.id} value={p.id}>{p.sigla || p.nome}</option>)}
-        </select>
-        <select value={filtros.cargo} onChange={(e) => setFiltros({ ...filtros, cargo: e.target.value })}>
-          <option value="">Cargo: todos</option>
-          {(dados?.cargos || []).map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <SelectBusca style={{ minWidth: 170 }} vazioRotulo="Posto: todos" placeholder="Buscar posto…"
+          valor={filtros.posto_id} aoEscolher={(v) => setFiltros({ ...filtros, posto_id: v })}
+          opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.sigla || p.nome }))} />
+        <SelectBusca style={{ minWidth: 160 }} vazioRotulo="Cargo: todos" placeholder="Buscar cargo…"
+          valor={filtros.cargo} aoEscolher={(v) => setFiltros({ ...filtros, cargo: v })}
+          opcoes={(dados?.cargos || []).map((c) => ({ valor: c, rotulo: c }))} />
         <select value={filtros.situacao} onChange={(e) => setFiltros({ ...filtros, situacao: e.target.value })}>
           <option value="">Situação: todas</option>
           <option value="em_admissao">Em admissão</option>
@@ -178,7 +177,7 @@ export default function Arquivo() {
                            onChange={(e) => setSel((s) => {
                              const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n
                            })} /></td>
-                <td><strong>{p.nome_completo}</strong><br /><small>{p.cpf_mascarado}</small></td>
+                <td><strong>{p.nome_completo}</strong><br /><small>{p.cpf}</small></td>
                 <td>{p.posto_nome || '—'}</td>
                 <td>{p.cargo_funcao || '—'}</td>
                 <td>{p.situacao}</td>

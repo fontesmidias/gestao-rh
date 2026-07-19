@@ -82,7 +82,7 @@ function FichasStatus({ dados, setMsg }) {
       setMsg({ tipo: 'erro', texto: e.detail === 'candidato_sem_email'
         ? 'Este candidato não tem e-mail — cadastre em "editar contato" ou cobre pelo WhatsApp com 📋 Copiar link.'
         : e.detail === 'sem_pendencias' ? 'Nada a cobrar: está tudo em dia. 🎉'
-        : `Não foi possível notificar (${e.detail || e.message}).` })
+        : e.amigavel || `Não foi possível notificar (${e.detail || e.message}).` })
     } finally { setNotificando(false) }
   }
 
@@ -496,6 +496,8 @@ export default function Detalhe({ id, aoVoltar }) {
       // real, senão o RH vê um banner vazio e acha que "estava tudo certo".
       if (Array.isArray(e.detail?.pendencias)) {
         setPendDossie(e.detail.pendencias)
+      } else if (e.amigavel) {
+        setMsg({ tipo: 'erro', texto: e.amigavel })
       } else {
         setMsg({ tipo: 'erro', texto: `O dossiê não pôde ser montado: ${e.detail || e.message}. `
           + 'Abra o Diagnóstico deste colaborador para ver o motivo exato.' })
@@ -524,7 +526,7 @@ export default function Detalhe({ id, aoVoltar }) {
       setMsg({ tipo: 'ok', texto: `${dados.nome_completo} agora é colaborador ativo.` })
       await recarregar()
     } catch (e) {
-      setMsg({ tipo: 'erro', texto: `Não foi possível efetivar (${e.detail || e.message}).` })
+      setMsg({ tipo: 'erro', texto: e.amigavel || `Não foi possível efetivar (${e.detail || e.message}).` })
     }
   }
 
