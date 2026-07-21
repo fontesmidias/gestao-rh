@@ -18,10 +18,10 @@ preenchem; o RH decide.
 
 import hashlib
 import secrets
-import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from itsdangerous import BadSignature
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,7 +32,7 @@ from app.models.beneficio import (AcessoCreche, BeneficioCreche, CriancaCreche,
                                   StatusBeneficio)
 from app.models.candidato import Candidato, PostoServico
 from app.models.ficha import DadosPessoais, Endereco
-from app.services import storage
+from app.services import kba, storage
 from app.services.auditoria import registrar
 from app.services.email import enviar_email, html_moderno
 from app.services.validacao import cpf_valido
@@ -41,6 +41,7 @@ router = APIRouter(tags=["creche-publico"])
 
 CODIGO_TTL_MIN = 15
 SESSAO_TTL_H = 6
+KBA_SALT = "creche-kba"
 
 
 def _digitos(v: str) -> str:
@@ -101,54 +102,148 @@ def _requer_sessao(token: str, db: Session) -> tuple[AcessoCreche, BeneficioCrec
 # --------------------------------------------------------------------------
 
 
+def _gerar_e_enviar_codigo(db: Session, colaborador: Candidato,
+                           ben: BeneficioCreche, email_destino: str) -> None:
+    """Cria um AcessoCreche pendente e envia o código 2FA ao e-mail. O e-mail é
+    disparado APÓS o commit (SMTP fora não desfaz o registro)."""
+    codigo = f"{secrets.randbelow(10**6):06d}"
+    ac = AcessoCreche(
+        beneficio_id=ben.id,
+        token_hash=_hash(secrets.token_urlsafe(32)),  # placeholder até confirmar
+        codigo_hash=_hash(codigo),
+        codigo_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
+        expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H),
+    )
+    db.add(ac)
+    registrar(db, "creche_codigo_enviado", ator="colaborador",
+              candidato_id=colaborador.id, detalhe={"cpf_final": _digitos(colaborador.cpf or "")[-4:]})
+    db.commit()
+    _enviar_codigo(email_destino, colaborador.nome_completo, codigo)
+
+
 class IniciarIn(BaseModel):
     cpf: str
-    email: str | None = None  # usado quando a base não tem e-mail do colaborador
 
 
 @router.post("/creche/iniciar")
 def iniciar(payload: IniciarIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    from app.core.config import ip_do_cliente
+    """CPF -> se o colaborador existe E tem e-mail, envia o código 2FA. Caso
+    contrário (sem e-mail OU CPF fora da base), responde EXATAMENTE o mesmo — sem
+    revelar nada (anti-enumeração). Quem não recebeu o código usa o fluxo de
+    verificação de identidade (KBA) para cadastrar/atualizar o e-mail."""
     from app.services.limite import exigir
     cpf = _digitos(payload.cpf)
     if not cpf_valido(cpf):
         raise HTTPException(status_code=422, detail="cpf_invalido")
-    # anti-força-bruta e anti-spam de e-mail: por IP e por CPF
     exigir(f"creche-ini:ip:{ip_do_cliente(request) or '?'}", maximo=10, janela_s=900)
     exigir(f"creche-ini:cpf:{cpf}", maximo=5, janela_s=900)
 
     colaborador = _colaborador_por_cpf(db, cpf)
-    # Resposta uniforme: mesmo se não achar, seguimos como se fôssemos enviar o
-    # código, sem revelar se o CPF existe. Só enviamos de fato quando há e-mail.
-    email_destino = None
-    precisa_email = False
-    if colaborador is not None:
+    if colaborador is not None and colaborador.email:
         ben = _beneficio(db, colaborador)
-        email_destino = (payload.email or "").strip() or colaborador.email
-        if not email_destino:
-            precisa_email = True
-        else:
-            codigo = f"{secrets.randbelow(10**6):06d}"
-            ac = AcessoCreche(
-                beneficio_id=ben.id,
-                token_hash=_hash(secrets.token_urlsafe(32)),  # placeholder até confirmar
-                codigo_hash=_hash(codigo),
-                codigo_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
-                expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H),
-            )
-            db.add(ac)
-            registrar(db, "creche_codigo_enviado", ator="colaborador",
-                      candidato_id=colaborador.id, detalhe={"cpf_final": cpf[-4:]})
-            db.commit()
-            _enviar_codigo(email_destino, colaborador.nome_completo, codigo)
+        db.commit()
+        _gerar_e_enviar_codigo(db, colaborador, ben, colaborador.email)
 
+    # Resposta SEMPRE idêntica — não distingue base-com-email, base-sem-email nem
+    # fora-da-base. `pode_verificar_identidade` está sempre disponível.
     return {
-        "precisa_email": precisa_email,
-        # não revelamos existência: sempre dizemos que, se houver cadastro, o
-        # código foi enviado
-        "mensagem": "Se este CPF constar em nossa base, enviamos um código de "
-                    "confirmação ao e-mail. Verifique também a caixa de spam.",
+        "pode_verificar_identidade": True,
+        "mensagem": "Se este CPF constar em nossa base e houver e-mail cadastrado, "
+                    "enviamos um código de confirmação. Verifique também a caixa de "
+                    "spam. Não recebeu? Você pode confirmar sua identidade.",
     }
+
+
+# --------------------------------------------------------------------------
+# 1b) verificação de identidade (KBA) para quem não tem e-mail cadastrado:
+#     CPF -> perguntas -> respostas -> cadastrar/atualizar e-mail -> código.
+#     Reaproveita a KBA da entrada de admissão (app/services/kba.py).
+# --------------------------------------------------------------------------
+
+
+class KbaIniciarIn(BaseModel):
+    cpf: str
+
+
+@router.post("/creche/kba/iniciar")
+def kba_iniciar(payload: KbaIniciarIn, request: Request,
+                db: Session = Depends(get_db)) -> dict:
+    from app.services.limite import exigir
+    cpf = _digitos(payload.cpf)
+    if not cpf_valido(cpf):
+        raise HTTPException(status_code=422, detail="cpf_invalido")
+    ip = ip_do_cliente(request) or "-"
+    exigir(f"creche-kba:ip:{ip}", maximo=10, janela_s=900)
+    if kba.bloqueado(f"creche:cpf:{cpf}") or kba.bloqueado(f"creche:ip:{ip}"):
+        raise HTTPException(status_code=429, detail="muitas_tentativas")
+    colaborador = _colaborador_por_cpf(db, cpf)
+    # CPF fora da base / sem dados suficientes -> pool genérico (gabarito
+    # impossível): resposta uniforme, nada revela.
+    return kba.montar_desafio(db, colaborador, KBA_SALT, extra_payload={"cpf": cpf})
+
+
+class KbaResponderIn(BaseModel):
+    desafio: str
+    respostas: dict[str, str]
+
+
+@router.post("/creche/kba/responder")
+def kba_responder(payload: KbaResponderIn, request: Request,
+                  db: Session = Depends(get_db)) -> dict:
+    ip = ip_do_cliente(request) or "-"
+    try:
+        dados = kba.serializer(KBA_SALT).loads(payload.desafio, max_age=kba.DESAFIO_TTL_S)
+    except BadSignature:
+        raise HTTPException(status_code=422, detail="desafio_expirado")
+    cpf = dados["cpf"]
+    if kba.bloqueado(f"creche:cpf:{cpf}") or kba.bloqueado(f"creche:ip:{ip}"):
+        raise HTTPException(status_code=429, detail="muitas_tentativas")
+    if not kba.conferir_respostas(dados["gabarito"], payload.respostas):
+        kba.registrar_falha(f"creche:cpf:{cpf}", f"creche:ip:{ip}")
+        registrar(db, "creche_kba_falhou", ator="colaborador",
+                  detalhe={"cpf_final": cpf[-4:], "ip": ip})
+        db.commit()
+        raise HTTPException(status_code=422, detail="nao_confirmado")
+    colaborador = _colaborador_por_cpf(db, cpf)
+    registrar(db, "creche_kba_ok", ator="colaborador",
+              candidato_id=colaborador.id if colaborador else None, detalhe={"ip": ip})
+    db.commit()
+    # token curto que autoriza cadastrar/atualizar o e-mail
+    autorizacao = kba.serializer(KBA_SALT).dumps({"cpf": cpf, "kba_ok": True})
+    return {"autorizacao": autorizacao}
+
+
+class KbaDefinirEmailIn(BaseModel):
+    autorizacao: str
+    email: str
+
+
+@router.post("/creche/kba/definir-email")
+def kba_definir_email(payload: KbaDefinirEmailIn, request: Request,
+                      db: Session = Depends(get_db)) -> dict:
+    ip = ip_do_cliente(request) or "-"
+    try:
+        dados = kba.serializer(KBA_SALT).loads(payload.autorizacao, max_age=kba.DESAFIO_TTL_S)
+    except BadSignature:
+        raise HTTPException(status_code=422, detail="autorizacao_expirada")
+    if not dados.get("kba_ok"):
+        raise HTTPException(status_code=422, detail="autorizacao_invalida")
+    email = (payload.email or "").strip()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=422, detail="email_invalido")
+    colaborador = _colaborador_por_cpf(db, dados["cpf"])
+    if colaborador is None:
+        # KBA só passa para CPF real; guarda de segurança adicional.
+        raise HTTPException(status_code=422, detail="nao_confirmado")
+    ben = _beneficio(db, colaborador)
+    # atualiza o e-mail do cadastro (identidade já confirmada pela KBA)
+    colaborador.email = email
+    ben.email_confirmado = email
+    registrar(db, "creche_email_atualizado_kba", ator="colaborador",
+              candidato_id=colaborador.id, detalhe={"ip": ip})
+    db.commit()
+    _gerar_e_enviar_codigo(db, colaborador, ben, email)
+    return {"ok": True}
 
 
 def _enviar_codigo(email: str, nome: str, codigo: str) -> None:
@@ -212,10 +307,10 @@ def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
     ac.token_hash = _hash(token)
     ac.confirmado_em = datetime.now(timezone.utc)
     ac.expira_em = datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H)
-    ben.email_confirmado = (payload.email or "").strip() or colaborador.email
+    # o e-mail já foi cadastrado no /iniciar (com e-mail) ou na KBA; o campo do
+    # payload permanece só como fallback de compatibilidade.
+    ben.email_confirmado = colaborador.email or (payload.email or "").strip() or ben.email_confirmado
     ben.email_confirmado_em = datetime.now(timezone.utc)
-    if ben.status == StatusBeneficio.levantamento:
-        pass  # mantém
     registrar(db, "creche_2fa_confirmado", ator="colaborador",
               candidato_id=colaborador.id)
     db.commit()
@@ -350,6 +445,83 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
               candidato_id=col.id, detalhe={"criancas": len(ben.criancas)})
     db.commit()
     return {"status": ben.status}
+
+
+# --------------------------------------------------------------------------
+# Assinatura do requerimento pela plataforma (após aprovação do RH). O
+# colaborador assina na PRÓPRIA sessão de creche (já autenticada por 2FA);
+# depois o RH contra-assina pela fila /rh/minhas-assinaturas.
+# --------------------------------------------------------------------------
+
+
+def _etapa_colaborador(db: Session, ben: BeneficioCreche):
+    """A etapa (ordem 1) do colaborador no roteiro do requerimento, se houver."""
+    from app.models.solicitacao_assinatura import (EtapaAssinatura,
+                                                   SolicitacaoAssinatura)
+    from app.services.roteiro_assinatura import tem_roteiro
+    sol = tem_roteiro(db, ben.candidato_id)
+    if sol is None or sol.origem != "creche_requerimento":
+        return None, None
+    etapa = db.scalar(select(EtapaAssinatura)
+                      .where(EtapaAssinatura.solicitacao_id == sol.id,
+                             EtapaAssinatura.ordem == 1))
+    return sol, etapa
+
+
+@router.get("/creche/sessao/{token}/requerimento")
+def status_requerimento(token: str, db: Session = Depends(get_db)) -> dict:
+    """Diz à sessão se há requerimento a assinar (benefício aprovado), se o
+    colaborador já assinou e se o documento foi concluído."""
+    from app.models.solicitacao_assinatura import StatusSolicitacao
+    _, ben = _requer_sessao(token, db)
+    sol, etapa = _etapa_colaborador(db, ben)
+    if sol is None or etapa is None:
+        return {"disponivel": False}
+    return {
+        "disponivel": True,
+        "assinado": etapa.assinado_em is not None,
+        "na_vez": etapa.ordem == sol.etapa_atual_ordem
+                  and sol.status == StatusSolicitacao.aguardando,
+        "concluido": sol.status == StatusSolicitacao.concluida,
+    }
+
+
+@router.post("/creche/sessao/{token}/assinar-requerimento")
+def assinar_requerimento(token: str, request: Request,
+                         db: Session = Depends(get_db)) -> dict:
+    """Registra a assinatura do colaborador no requerimento — a sessão de creche
+    já é o 2º fator (2FA por código no e-mail). Idempotente e serializado pelo
+    avancar_solicitacao (correções C3/C7 do multi-signatário)."""
+    import hashlib
+
+    from app.models.solicitacao_assinatura import StatusSolicitacao
+    from app.services.creche_pdf import gerar_requerimento_creche
+    from app.services.roteiro_assinatura import avancar_solicitacao
+    _, ben = _requer_sessao(token, db)
+    sol, etapa = _etapa_colaborador(db, ben)
+    if sol is None or etapa is None:
+        raise HTTPException(status_code=404, detail="requerimento_indisponivel")
+    if etapa.assinado_em is not None:
+        raise HTTPException(status_code=409, detail="ja_assinado")
+    if sol.status != StatusSolicitacao.aguardando or etapa.ordem != sol.etapa_atual_ordem:
+        raise HTTPException(status_code=409, detail="fora_da_vez")
+    col = db.get(Candidato, ben.candidato_id)
+    # hash do documento SEM blocos (evidência) — mesmo critério do fluxo do wizard
+    pdf_sem_bloco = gerar_requerimento_creche(db, ben)
+    agora = datetime.now(timezone.utc)
+    etapa.assinado_em = agora
+    etapa.assinante_nome = col.nome_completo
+    etapa.assinante_cpf = col.cpf
+    etapa.ip = ip_do_cliente(request)
+    etapa.user_agent = request.headers.get("user-agent", "")[:400]
+    etapa.prova_metodo = "otp_creche"
+    etapa.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
+    registrar(db, "creche_requerimento_assinado", ator="colaborador",
+              candidato_id=col.id, detalhe={"solicitacao": str(sol.id)})
+    db.commit()
+    resultado = avancar_solicitacao(db, sol.id)
+    db.commit()
+    return {"assinado": True, "concluido": resultado["concluida"]}
 
 
 # ==========================================================================

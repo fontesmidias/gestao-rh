@@ -252,6 +252,13 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
     else:
         ben.status = StatusBeneficio.ativo
         ben.ativado_em = datetime.now(timezone.utc)
+        # roteiro de assinatura do requerimento: colaborador (na sessão de creche)
+        # → RH que aprovou. Só após a aprovação é que o colaborador pode assinar.
+        from app.services.roteiro_assinatura import criar_roteiro_creche
+        try:
+            criar_roteiro_creche(db, ben, rh)
+        except Exception:
+            pass  # a assinatura é reproduzível; não trava a ativação do benefício
         _email_orientacoes_mensais(ben, col)
     registrar(db, "creche_beneficio_ativado", ator="rh", ator_detalhe=rh.email,
               candidato_id=col.id,
@@ -366,6 +373,41 @@ def baixar_dossie(beneficio_id: uuid.UUID, db: Session = Depends(get_db)) -> Res
     return Response(content=dados, media_type="application/pdf",
                     headers={"Content-Disposition":
                              f'inline; filename="dossie-creche-{nome}.pdf"'})
+
+
+_CT_POR_EXT = {
+    "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "gif": "image/gif", "webp": "image/webp", "heic": "image/heic",
+}
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}/crianca/{crianca_id}/documento/{tipo}")
+def baixar_doc_crianca(beneficio_id: uuid.UUID, crianca_id: uuid.UUID, tipo: str,
+                       db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Serve o documento (certidão/guarda) enviado para uma criança, para o RH
+    conferir individualmente — aos moldes dos documentos cadastrais."""
+    if tipo not in ("certidao", "guarda"):
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    c = db.get(CriancaCreche, crianca_id)
+    if c is None or c.beneficio_id != beneficio_id:
+        raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
+    key = c.certidao_key if tipo == "certidao" else c.guarda_key
+    if not key:
+        raise HTTPException(status_code=404, detail="documento_nao_encontrado")
+    # resolve TUDO do banco antes de tocar o storage (evita DetachedInstanceError)
+    ext = key.rsplit(".", 1)[-1].lower()
+    content_type = _CT_POR_EXT.get(ext, "application/octet-stream")
+    nome = f"{tipo}-{c.nome.replace(' ', '-').lower()}.{ext}"
+    registrar(db, "creche_doc_crianca_visto", ator="rh", ator_detalhe=rh.email,
+              candidato_id=None, detalhe={"beneficio": str(beneficio_id), "tipo": tipo})
+    db.commit()
+    try:
+        dados = storage.ler(key)
+    except Exception:
+        raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
+    return Response(content=dados, media_type=content_type,
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
 
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}/documento/{tipo}")

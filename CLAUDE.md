@@ -113,6 +113,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Reembolso-Creche (módulo)**: elegibilidade é POR POSTO
+  (`PostoServico.da_direito_creche` + `valor_reembolso_creche`); intermitente não
+  vê o benefício (o bloco só aparece se o posto dá direito) e passa a ver sozinho
+  ao virar efetivo em posto elegível. O link público (`/creche`, `creche_publico.py`)
+  NUNCA revela se o CPF é da base: `/creche/iniciar` responde IDÊNTICO para
+  base-com-email, base-sem-email e fora-da-base. Quem não tem e-mail passa pela
+  **KBA** (`app/services/kba.py`, a MESMA da entrada de admissão — extraída p/
+  serviço compartilhado) antes de cadastrar/atualizar o e-mail e receber o 2FA.
+  A **assinatura do requerimento** usa o multi-signatário: roteiro colaborador→RH
+  criado e disparado no `ativar_beneficio` (`criar_roteiro_creche`), com
+  `origem="creche_requerimento"` na `solicitacao_assinatura` — o colaborador
+  assina na PRÓPRIA sessão de creche (já 2FA; etapa `candidato` SEM `assinatura_id`,
+  por isso não aparece no wizard), o RH contra-assina pela fila. Na consolidação,
+  `_consolidar_pdf_final` desvia p/ `gerar_requerimento_creche(vistos=...)` (mantém
+  o layout oficial do DOCX e empilha os blocos+manifesto por cima — decisão do
+  Bruno: manter o PDF gerado, não virar modelo de texto). Datas dos PDFs de creche
+  são CENTRALIZADAS. RH abre cada doc de criança individualmente
+  (`/rh/creche/.../crianca/{id}/documento/{tipo}`, serve do MinIO com Content-Type
+  pela extensão — pode ser imagem, não só PDF).
+- **Incidência de Benefícios** (`incidencia_beneficios.py`): a planilha do RH
+  (abas PÚBLICO/PRIVADO) normaliza os postos no padrão `CLIENTE - Nº CONTRATO -
+  OBJETO` e define a elegibilidade creche pela coluna "Reembolso creche/Mês". Lê
+  as DUAS abas via zip+XML próprio (`_ler_abas` — o `_ler_linhas_xlsx` de
+  `postos.py` lê só a 1ª). Equivalência com o Tirvu é ASSISTIDA: o sistema PROPÕE
+  por similaridade (Cliente vs nome/sigla), o RH CONFIRMA cada linha (nunca merge
+  cego — regra dos ~40 erros de digitação). Valores compostos (dois sindicatos
+  numa célula) ficam como texto p/ decisão humana. `await arquivo.close()` no
+  `finally`. Export normalizado p/ carga futura no Tirvu ficou p/ a próxima leva.
 - **Campo novo em ficha assinada**: ACRESCENTAR campo não invalida assinatura
   (EDITAR invalida — regra de 2026-07-15). Tecnicamente: renderizar o campo novo
   SÓ se preenchido (`if`, como CNH/CTPS/laudo PCD em `fichas.py`) — o PDF é

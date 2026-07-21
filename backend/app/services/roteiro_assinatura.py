@@ -43,6 +43,35 @@ def _etapas(db: Session, sol: SolicitacaoAssinatura) -> list[EtapaAssinatura]:
                       .order_by(EtapaAssinatura.ordem, EtapaAssinatura.criado_em)).all()
 
 
+def criar_roteiro_creche(db: Session, beneficio, rh) -> SolicitacaoAssinatura:
+    """Cria e JÁ DISPARA o roteiro de assinatura do requerimento de creche:
+    ordem 1 = colaborador (assina na própria sessão de creche, já 2FA — a etapa
+    não aponta para Assinatura do wizard, `assinatura_id=None`), ordem 2 = o
+    usuário RH que aprovou (contra-assina pela fila /rh/minhas-assinaturas).
+
+    Idempotente: se já existe roteiro de creche ativo para o colaborador, devolve
+    o existente (não recria a cada re-ativação)."""
+    existente = tem_roteiro(db, beneficio.candidato_id)
+    if existente is not None and existente.origem == "creche_requerimento":
+        return existente
+    sol = SolicitacaoAssinatura(
+        candidato_id=beneficio.candidato_id,
+        titulo_doc="Requerimento de Reembolso-Creche",
+        origem="creche_requerimento",
+        criada_por=getattr(rh, "email", None),
+        status=StatusSolicitacao.aguardando,
+        etapa_atual_ordem=1)
+    db.add(sol)
+    db.flush()
+    db.add(EtapaAssinatura(
+        id=uuid.uuid4(), solicitacao_id=sol.id, papel="Colaborador(a)",
+        ordem=1, tipo_signatario="candidato"))
+    db.add(EtapaAssinatura(
+        id=uuid.uuid4(), solicitacao_id=sol.id, papel="Green House (RH)",
+        ordem=2, tipo_signatario="usuario_rh", usuario_rh_id=rh.id))
+    return sol
+
+
 def avancar_solicitacao(db: Session, sol_id: uuid.UUID) -> dict:
     """Recalcula o estado do roteiro após uma etapa concluir, de forma
     SERIALIZADA e IDEMPOTENTE. Sobe `etapa_atual_ordem` quando todas as etapas
@@ -96,7 +125,16 @@ def _consolidar_pdf_final(db: Session, sol: SolicitacaoAssinatura,
             metodo=e.prova_metodo or "")
         for e in etapas if e.assinado_em is not None
     ]
-    pdf = gerar_documento_com_vistos(db, sol, candidato, vistos)
+    if sol.origem == "creche_requerimento":
+        # requerimento de creche: mantém o layout oficial (gerado por
+        # creche_pdf) e empilha os blocos de visto + manifesto por cima.
+        from app.models.beneficio import BeneficioCreche
+        from app.services.creche_pdf import gerar_requerimento_creche
+        ben = db.scalar(select(BeneficioCreche)
+                        .where(BeneficioCreche.candidato_id == sol.candidato_id))
+        pdf = gerar_requerimento_creche(db, ben, vistos=vistos, sol=sol)
+    else:
+        pdf = gerar_documento_com_vistos(db, sol, candidato, vistos)
     pdf = carimbar_rubrica_lateral_final(pdf, sol)
     key = f"candidatos/{sol.candidato_id}/assinaturas/{sol.id}/final.pdf"
     storage.salvar(key, pdf, "application/pdf")
