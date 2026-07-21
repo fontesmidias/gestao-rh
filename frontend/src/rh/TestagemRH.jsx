@@ -3,6 +3,7 @@ import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { ResultadoDisc, ResultadoSituacional } from '../ResultadoTeste.jsx'
 import { ComportamentoTeste } from './Detalhe.jsx'
+import ProvasRH from './ProvasRH.jsx'
 
 // Página de TESTES: dash unificado (admissão + testagem avulsa) com status,
 // duração, resultado e comportamento (telemetria), reset para refazer, e a
@@ -20,8 +21,11 @@ export default function TestagemRH({ aoAbrirPessoa }) {
                 onClick={() => setAba('dash')}>📊 Acompanhamento</button>
         <button className={`rh-subnav-item ${aba === 'links' ? 'ativo' : ''}`}
                 onClick={() => setAba('links')}>🔗 Links de testagem</button>
+        <button className={`rh-subnav-item ${aba === 'provas' ? 'ativo' : ''}`}
+                onClick={() => setAba('provas')}>📝 Provas por cargo</button>
       </nav>
-      {aba === 'dash' ? <Dash aoAbrirPessoa={aoAbrirPessoa} /> : <Links />}
+      {aba === 'dash' ? <Dash aoAbrirPessoa={aoAbrirPessoa} />
+        : aba === 'links' ? <Links /> : <ProvasRH />}
     </main>
   )
 }

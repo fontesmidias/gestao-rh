@@ -18,6 +18,7 @@ from app.api.creche import router as creche_router
 from app.api.creche_publico import router as creche_publico_router
 from app.api.testes import router as testes_router
 from app.api.testagem import router as testagem_router
+from app.api.provas import router as provas_router
 from app.api.modelos import router as modelos_router
 from app.api.talentos import router as talentos_router
 from app.api.diagnostico import router as diagnostico_router
@@ -112,6 +113,7 @@ app.include_router(creche_router, prefix="/api")
 app.include_router(creche_publico_router, prefix="/api")
 app.include_router(testes_router, prefix="/api")
 app.include_router(testagem_router, prefix="/api")
+app.include_router(provas_router, prefix="/api")
 app.include_router(modelos_router, prefix="/api")
 app.include_router(talentos_router, prefix="/api")
 app.include_router(diagnostico_router, prefix="/api")

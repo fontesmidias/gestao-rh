@@ -542,6 +542,20 @@ export const rh = {
                                       body: JSON.stringify(dados) }),
   testagemParticipantes: (id) =>
     req(`/rh/testagem/links/${id}/participantes`, { headers: authRH() }),
+  // Provas por cargo (banco de provas configurável)
+  provas: () => req('/rh/provas', { headers: authRH() }),
+  provaDetalhe: (id) => req(`/rh/provas/${id}`, { headers: authRH() }),
+  criarProva: (dados) =>
+    req('/rh/provas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarProva: (id, dados) =>
+    req(`/rh/provas/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirProva: (id) => req(`/rh/provas/${id}`, { method: 'DELETE', headers: authRH() }),
+  criarQuestao: (provaId, dados) =>
+    req(`/rh/provas/${provaId}/questoes`, { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarQuestao: (provaId, qid, dados) =>
+    req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirQuestao: (provaId, qid) =>
+    req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'DELETE', headers: authRH() }),
   // Dash unificado de testes + reset (admissão e testagem)
   testesDash: () => req('/rh/testes/dash', { headers: authRH() }),
   resetarTeste: (candidatoId, tipo) =>
