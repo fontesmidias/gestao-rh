@@ -94,7 +94,12 @@ docker compose --env-file .env \
 > meio pela variante que você já usa. O add-on só acrescenta portas+console ao
 > serviço `minio` existente.
 
-Teste local: `curl -I http://127.0.0.1:9001` (console) e `http://127.0.0.1:9000/minio/health/live` (API).
+Teste local: `curl -I http://127.0.0.1:9101` (console) e `http://127.0.0.1:9100/minio/health/live` (API).
+
+> **Portas 91xx, não 9000/9001:** na VPS o **Portainer já usa a 9000** do host.
+> O add-on publica em `127.0.0.1:9100` (API) e `:9101` (console) para não colidir
+> — o container do MinIO segue interno em 9000/9001, muda só o número externo.
+> Ajustável por `MINIO_API_PORT`/`MINIO_CONSOLE_PORT` no `.env`.
 
 ### 2.2. Nginx + TLS (dois subdomínios)
 ```bash
@@ -119,9 +124,10 @@ funciona sem eles) e a API S3 já vem com `client_max_body_size 0` e
 
 ## 3. Segurança (checklist)
 
-- [ ] As portas de admin (`5050`, `9000`, `9001`) estão publicadas **só em
-      `127.0.0.1`** — confirme com `sudo ss -tlnp | grep -E '5050|9001|9000'`
-      (devem aparecer como `127.0.0.1:`, nunca `0.0.0.0:`).
+- [ ] As portas de admin (`5050`, `9100`, `9101`) estão publicadas **só em
+      `127.0.0.1`** — confirme com `sudo ss -tlnp | grep -E '5050|9100|9101'`
+      (devem aparecer como `127.0.0.1:`, nunca `0.0.0.0:`). A 9000 continua sendo
+      do Portainer.
 - [ ] **Firewall** (ufw) libera só 80/443 (e 22): `sudo ufw allow 'Nginx Full'`.
 - [ ] Senhas **fortes e distintas** para pgAdmin e MinIO; nunca reaproveitar a do banco.
 - [ ] Os `.env` (`deploy/pgadmin/.env` e o `.env` raiz) **não** vão ao git

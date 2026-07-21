@@ -26,5 +26,8 @@ services:
     command: server /data --console-address ":9001"
     ports:
       # publica SÓ no loopback; o Nginx faz o proxy externo com TLS.
-      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"     # API S3 (SDK/boto/mc)
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001" # console web (admin)
+      # ⚠️ Portas de HOST em 91xx (não 9000/9001) para NÃO colidir com o
+      #    Portainer, que ocupa a 9000 (e às vezes 9443) na VPS. O container
+      #    segue interno em 9000/9001; muda só o número do lado de fora.
+      - "127.0.0.1:${MINIO_API_PORT:-9100}:9000"     # API S3 (SDK/boto/mc)
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9101}:9001" # console web (admin)
