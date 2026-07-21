@@ -179,14 +179,15 @@ def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
     """Planilha no layout de importação de admissões do Tirvu (28 colunas em
     ordem fixa). É o artefato mais sensível do sistema (CPF+PIS+salário em
     massa): auditoria sempre, com quem baixou, quantas linhas e quais postos."""
-    from app.services.export_tirvu import linha_tirvu
+    from app.services.export_tirvu import linha_tirvu, montar_workbook_tirvu
 
     candidatos = _colaboradores_para_tirvu(db, status, busca, situacao, posto_id,
                                            ids, incluir_importados)
     if not candidatos:
         raise HTTPException(status_code=404, detail="nenhum_colaborador")
     linhas = [linha_tirvu(db, c) for c in candidatos]
-    conteudo = montar_workbook(linhas, titulo="Admissões")
+    # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze)
+    conteudo = montar_workbook_tirvu(linhas)
     registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=rh.email,
               detalhe={"linhas": len(linhas), "incluiu_importados": incluir_importados,
                        "postos": sorted({l["Posto de Serviço"] for l in linhas

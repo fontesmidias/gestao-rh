@@ -110,13 +110,14 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
                               db: Session = Depends(get_db),
                               _rh: UsuarioRH = Depends(requer_rh)) -> Response:
     """Planilha do Tirvu com UMA admissão (botão na ficha do aprovado)."""
-    from app.services.export_planilha import montar_workbook, slug
-    from app.services.export_tirvu import linha_tirvu
+    from app.services.export_planilha import slug
+    from app.services.export_tirvu import linha_tirvu, montar_workbook_tirvu
 
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(404, "Candidato não encontrado")
-    conteudo = montar_workbook([linha_tirvu(db, cand)], titulo="Admissões")
+    # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze)
+    conteudo = montar_workbook_tirvu([linha_tirvu(db, cand)])
     registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
               detalhe={"linhas": 1, "candidato": str(cand.id)})
     db.commit()
