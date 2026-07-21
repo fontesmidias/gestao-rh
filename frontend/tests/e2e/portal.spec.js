@@ -48,12 +48,18 @@ test('/entrar valida o CPF na hora', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Continuar' })).toBeEnabled()
 })
 
-test('banco de talentos: formulário público envia e confirma', async ({ page }) => {
+test('banco de talentos: formulário público (3 passos) envia e confirma', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: /Banco de Talentos/ }).click()
   await expect(page.getByRole('heading', { name: 'Banco de Talentos' })).toBeVisible()
+  // passo 1 — nome
   await page.getByLabel(/Nome completo/).fill('Fulano de Teste')
-  await page.getByLabel(/Cargo de interesse/).fill('Recepcionista')
+  await page.getByRole('button', { name: /Avançar/ }).click()
+  // passo 2 — escolhe um cargo (chip) e avança
+  await page.getByRole('button', { name: 'Recepcionista', exact: true }).click()
+  await page.getByRole('button', { name: /Avançar/ }).click()
+  // passo 3 — aceita LGPD e envia
+  await page.getByRole('checkbox').check()
   await page.getByRole('button', { name: /Entrar para o Banco de Talentos/ }).click()
   await expect(page.getByRole('heading', { name: /Cadastro recebido/ })).toBeVisible()
 })
