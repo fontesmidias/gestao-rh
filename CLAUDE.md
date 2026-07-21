@@ -132,8 +132,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
+  — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
+  em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em
+  `localStorage` por `id` do módulo) e export CSV (BOM UTF-8, abre no Excel-BR) do
+  que está filtrado/ordenado. Dirigido por config de colunas
+  (`{chave,rotulo,valor,ordenavel,filtro,opcoes,render,sempreVisivel}`). PILOTO no
+  Banco de Talentos (`TalentosRH.jsx`); a mesma config serve os outros módulos
+  depois (Colaboradores/Admissões). Sort/filtro são EM MEMÓRIA (volumes baixos).
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
-  = wizard de 3 passos que substituiu o Microsoft Forms. `models/talento.py` tem
+  = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
+  `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado
+  (`talento_id`+`email_destino`) e manda o link `/t/` ao e-mail — SEM converter o
+  talento; o resultado volta ao dash (`teste_status` no `_dump`, via
+  `_resumo_teste_talento`). Ao mexer no form público, ATUALIZE o teste E2E
+  `portal.spec.js` (o de 3 passos) — mudou de campo único p/ chips. `models/talento.py` tem
   `cargos_interesse`/`regioes` (JSON, múltipla escolha) além do `cargo_interesse`
   string legado, que é SEMPRE sincronizado com o 1º cargo (o `converter`
   talento→candidato usa a string). Consentimento LGPD é obrigatório no cadastro

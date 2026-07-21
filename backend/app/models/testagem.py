@@ -31,6 +31,11 @@ class LinkTestagem(Base):
     tem_disc: Mapped[bool] = mapped_column(Boolean, default=True)
     tem_situacional: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_por: Mapped[str | None] = mapped_column(String(200))
+    # quando o link foi disparado para um talento do Banco de Talentos (envio de
+    # teste avulso antes de converter em candidato): o resultado volta ao dash.
+    talento_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("talento.id"), nullable=True, index=True)
+    email_destino: Mapped[str | None] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

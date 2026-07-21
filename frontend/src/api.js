@@ -487,6 +487,9 @@ export const rh = {
     req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
   baixarCurriculoTalento: (id) =>
     req(`/rh/talentos/${id}/curriculo`, { headers: authRH() }),  // devolve blob
+  enviarTesteTalento: (id, { tem_disc = true, tem_situacional = true } = {}) =>
+    req(`/rh/talentos/${id}/enviar-teste`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ tem_disc, tem_situacional }) }),
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),
