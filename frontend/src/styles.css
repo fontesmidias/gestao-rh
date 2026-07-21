@@ -226,6 +226,20 @@ a { color: var(--verde-escuro); }
 
 .talento-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1.4rem; }
 .talento-nav .btn-principal, .talento-nav .btn-secundario { min-width: 130px; }
+
+/* Dash-planilha reutilizável (RH) */
+.dash-filtros { flex-wrap: wrap; align-items: center; }
+.dash-filtros .dash-espaco { flex: 1; }
+.dash-tabela th.dash-ord { cursor: pointer; user-select: none; white-space: nowrap; }
+.dash-tabela th.dash-ord:hover { color: var(--verde-escuro); }
+.dash-check { width: 34px; text-align: center; }
+.dash-colunas { display: flex; flex-direction: column; gap: .5rem; }
+.dash-colunas-lista {
+  display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; margin-top: .3rem;
+}
+.dash-colunas-lista label { font-size: .88rem; display: flex; align-items: center; gap: .35rem; cursor: pointer; }
+.dash-colunas-lista label.desabilitada { opacity: .55; cursor: default; }
+.dash-colunas-lista input { width: auto; min-height: 0; }
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
 .campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
               opacity: 0; pointer-events: none; }

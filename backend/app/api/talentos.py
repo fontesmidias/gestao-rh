@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, EmailStr, field_validator
-from sqlalchemy import or_, select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -181,7 +181,7 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
 # ---------- RH (protegido) ----------
 
 
-def _dump(t: Talento) -> dict:
+def _dump(t: Talento, teste: dict | None = None) -> dict:
     return {
         "id": t.id, "nome": t.nome, "email": t.email, "telefone": t.telefone,
         "cargo_interesse": t.cargo_interesse,
@@ -193,6 +193,7 @@ def _dump(t: Talento) -> dict:
         "recebe_seguro_desemprego": t.recebe_seguro_desemprego,
         "consentimento_lgpd_em": t.consentimento_lgpd_em,
         "tem_curriculo": bool(t.curriculo_key), "curriculo_nome": t.curriculo_nome,
+        "teste_status": (teste or {}).get("status"),  # None | enviado | em_andamento | concluido
         "status": t.status.value, "candidato_id": t.candidato_id, "criado_em": t.criado_em,
     }
 
@@ -204,13 +205,19 @@ def listar(status: str | None = None, busca: str | None = None,
     if status:
         consulta = consulta.where(Talento.status == status)
     if cargo:
-        consulta = consulta.where(Talento.cargo_interesse.ilike(f"%{cargo}%"))
+        # cargo bate no string legado OU na lista JSON (texto do JSON)
+        consulta = consulta.where(or_(
+            Talento.cargo_interesse.ilike(f"%{cargo}%"),
+            cast(Talento.cargos_interesse, String).ilike(f"%{cargo}%")))
     if busca:
         termo = f"%{busca.lower()}%"
         consulta = consulta.where(or_(
             Talento.nome.ilike(termo), Talento.email.ilike(termo),
             Talento.cidade.ilike(termo), Talento.resumo.ilike(termo)))
-    return [_dump(t) for t in db.scalars(consulta).all()]
+    talentos = db.scalars(consulta).all()
+    # resumo de teste por talento (1 consulta, sem N+1)
+    testes = {t.id: _resumo_teste_talento(db, t.id) for t in talentos}
+    return [_dump(t, testes.get(t.id)) for t in talentos]
 
 
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])
@@ -280,3 +287,91 @@ def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get
         assunto, texto, html = email_convite(candidato.nome_completo, link)
         enviado = enviar_email(candidato.email, assunto, texto, html)
     return {"candidato_id": candidato.id, "link_magico": link, "email_enviado": enviado}
+
+
+# ---------- Enviar teste avulso ao talento (link /t/) ----------
+
+
+def _resumo_teste_talento(db: Session, talento_id: uuid.UUID) -> dict | None:
+    """Status/resultado do teste avulso disparado para o talento, para o dash.
+    None se nunca enviou. Junta o link (talento_id) → participante → testes."""
+    from app.models.testagem import (LinkTestagem, ParticipanteTestagem,
+                                     TesteTestagem)
+    from app.models.teste import StatusTeste
+    link = db.scalar(select(LinkTestagem)
+                     .where(LinkTestagem.talento_id == talento_id)
+                     .order_by(LinkTestagem.criado_em.desc()))
+    if link is None:
+        return None
+    part = db.scalar(select(ParticipanteTestagem)
+                     .where(ParticipanteTestagem.link_id == link.id)
+                     .order_by(ParticipanteTestagem.criado_em.desc()))
+    if part is None:
+        return {"status": "enviado", "token": link.token}
+    testes = db.scalars(select(TesteTestagem)
+                        .where(TesteTestagem.participante_id == part.id)).all()
+    concluidos = sum(1 for x in testes if x.status == StatusTeste.concluido)
+    total = len(testes)
+    status = "concluido" if total and concluidos == total else "em_andamento"
+    return {"status": status, "token": link.token,
+            "concluidos": concluidos, "total": total}
+
+
+class EnviarTesteIn(BaseModel):
+    tem_disc: bool = True
+    tem_situacional: bool = True
+
+
+@router.post("/rh/talentos/{talento_id}/enviar-teste", dependencies=[Depends(requer_rh)])
+def enviar_teste(talento_id: uuid.UUID, payload: EnviarTesteIn, request: Request,
+                 db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Cria um link de testagem DEDICADO ao talento (sem convertê-lo em candidato)
+    e envia o link /t/ ao e-mail dele. O resultado volta ao dash pelo talento_id."""
+    import secrets
+
+    from app.models.testagem import LinkTestagem
+    from app.services.email import enviar_email as _envia, html_moderno
+    from app.services.limite import exigir
+    t = db.get(Talento, talento_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="talento_nao_encontrado")
+    if not payload.tem_disc and not payload.tem_situacional:
+        raise HTTPException(status_code=422, detail="escolha_ao_menos_um_teste")
+    exigir(f"talento-teste:{talento_id}", maximo=5, janela_s=3600)
+
+    link = LinkTestagem(nome=t.nome[:120], token=secrets.token_urlsafe(16),
+                        criado_por=rh.email, tem_disc=payload.tem_disc,
+                        tem_situacional=payload.tem_situacional,
+                        talento_id=t.id, email_destino=t.email)
+    db.add(link)
+    registrar(db, "talento_teste_enviado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"talento": t.nome, "disc": payload.tem_disc,
+                       "situacional": payload.tem_situacional})
+    db.commit()
+
+    url = f"{base_url_publica(request)}/t/{link.token}"
+    enviado = False
+    if t.email:
+        enviado = _envia(
+            t.email,
+            "Green House — convite para um teste rápido",
+            f"Olá, {t.nome.split()[0].title()}!\n\n"
+            "A Green House gostaria que você fizesse um teste rápido como parte do "
+            f"nosso processo. Acesse o link e siga as instruções:\n{url}\n\n"
+            "É rápido e você pode fazer pelo celular.\n",
+            html_moderno(
+                "Um teste rápido para você",
+                [f"Olá, <strong>{t.nome.split()[0].title()}</strong>!",
+                 "A Green House gostaria que você fizesse um teste rápido. "
+                 "Toque no botão para começar — é rápido e dá para fazer pelo celular."],
+                botao_texto="Fazer o teste", botao_url=url))
+    return {"ok": True, "token": link.token, "url": url, "email_enviado": enviado}
+
+
+@router.get("/rh/talentos/{talento_id}/teste", dependencies=[Depends(requer_rh)])
+def teste_do_talento(talento_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Status/resultado do teste do talento (para o dash abrir o detalhe)."""
+    resumo = _resumo_teste_talento(db, talento_id)
+    if resumo is None:
+        raise HTTPException(status_code=404, detail="sem_teste")
+    return resumo
