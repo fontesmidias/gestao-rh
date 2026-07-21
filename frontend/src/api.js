@@ -490,6 +490,17 @@ export const rh = {
   enviarTesteTalento: (id, { tem_disc = true, tem_situacional = true } = {}) =>
     req(`/rh/talentos/${id}/enviar-teste`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ tem_disc, tem_situacional }) }),
+  importarTalentosPlanilha: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/talentos/importar-planilha`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),

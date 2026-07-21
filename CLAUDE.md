@@ -146,7 +146,13 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (`talento_id`+`email_destino`) e manda o link `/t/` ao e-mail — SEM converter o
   talento; o resultado volta ao dash (`teste_status` no `_dump`, via
   `_resumo_teste_talento`). Ao mexer no form público, ATUALIZE o teste E2E
-  `portal.spec.js` (o de 3 passos) — mudou de campo único p/ chips. `models/talento.py` tem
+  `portal.spec.js` (o de 3 passos) — mudou de campo único p/ chips.
+  **Importar da planilha do Forms**: `POST /rh/talentos/importar-planilha` lê o
+  .xlsx do Microsoft Forms (colunas casadas pelo cabeçalho; cargos/regiões
+  separados por `;`; "Tanto faz…"→`tanto_faz`; Sim/Não→bool; "Li e concordo"→
+  carimbo LGPD). IDEMPOTENTE: pula quem já existe (por e-mail; ou nome+telefone
+  sem e-mail), inclusive duplicados DENTRO da planilha. Reusa `_ler_abas` de
+  `incidencia_beneficios.py`. `models/talento.py` tem
   `cargos_interesse`/`regioes` (JSON, múltipla escolha) além do `cargo_interesse`
   string legado, que é SEMPRE sincronizado com o 1º cargo (o `converter`
   talento→candidato usa a string). Consentimento LGPD é obrigatório no cadastro

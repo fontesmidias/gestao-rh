@@ -375,3 +375,142 @@ def teste_do_talento(talento_id: uuid.UUID, db: Session = Depends(get_db)) -> di
     if resumo is None:
         raise HTTPException(status_code=404, detail="sem_teste")
     return resumo
+
+
+# ---------- Importar a planilha do Microsoft Forms ----------
+
+
+def _norm_cab_talento(txt: str) -> str:
+    import re
+    import unicodedata
+    txt = unicodedata.normalize("NFKD", str(txt or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"\s+", " ", txt).strip().lower()
+
+
+def _achar(cab: list[str], *alvos: str) -> int | None:
+    norm = [_norm_cab_talento(c) for c in cab]
+    for a in alvos:
+        na = _norm_cab_talento(a)
+        for i, c in enumerate(norm):
+            if c == na or (na and na in c):
+                return i
+    return None
+
+
+def _lista(valor: str) -> list[str]:
+    """Cargos/regiões do Forms vêm separados por ';' (com ';' no fim)."""
+    return [p.strip() for p in (valor or "").split(";") if p.strip()]
+
+
+def _sim_nao(valor: str) -> bool | None:
+    v = _norm_cab_talento(valor)
+    if v in ("sim", "s"):
+        return True
+    if v in ("nao", "n"):
+        return False
+    return None
+
+
+def _tipo_contratacao(valor: str) -> str | None:
+    v = _norm_cab_talento(valor)
+    if "efetivo" in v and "intermitente" in v:
+        return "tanto_faz"
+    if "tanto faz" in v or "os dois" in v or "ambos" in v:
+        return "tanto_faz"
+    if "intermitente" in v:
+        return "intermitente"
+    if "efetivo" in v:
+        return "efetivo"
+    return None
+
+
+@router.post("/rh/talentos/importar-planilha", dependencies=[Depends(requer_rh)])
+async def importar_planilha(arquivo: UploadFile, db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Importa os pré-cadastros exportados do Microsoft Forms (.xlsx). Casa as
+    colunas pelo cabeçalho, mapeia cargos/regiões (separados por ';') e os
+    Sim/Não. Idempotente: PULA quem já existe (por e-mail; ou nome+telefone quando
+    sem e-mail) — reimportar a mesma planilha não duplica."""
+    from app.api.incidencia_beneficios import _ler_abas
+    try:
+        conteudo = await arquivo.read()
+    finally:
+        await arquivo.close()  # descarta o spool em disco (dados pessoais)
+    abas = _ler_abas(conteudo)
+    if not abas:
+        raise HTTPException(status_code=422, detail="arquivo_invalido")
+    linhas = next(iter(abas.values()))
+    if len(linhas) < 2:
+        raise HTTPException(status_code=422, detail="planilha_vazia")
+    cab = linhas[0]
+    ci = {
+        "nome": _achar(cab, "nome completo", "nome"),
+        "telefone": _achar(cab, "telefone / whatsapp", "telefone", "whatsapp"),
+        "email": _achar(cab, "e-mail", "email"),
+        "cidade": _achar(cab, "cidade / bairro", "cidade"),
+        "cargos": _achar(cab, "cargos / funcoes de interesse", "cargos"),
+        "regioes": _achar(cab, "regioes onde voce pode trabalhar", "regioes"),
+        "tipo": _achar(cab, "tipo de contratacao"),
+        "ja_trabalhou": _achar(cab, "voce ja trabalhou"),
+        "seguro": _achar(cab, "seguro-desemprego", "seguro desemprego"),
+        "lgpd": _achar(cab, "autorizacao de uso dos dados", "lgpd"),
+    }
+    # a coluna "Nome completo" (col 6) é a resposta; a col "Nome" (4) é do Forms
+    # (autor anônimo) — o _achar por "nome completo" pega a certa.
+    if ci["nome"] is None:
+        raise HTTPException(status_code=422, detail="sem_coluna_nome")
+
+    # índice de duplicados existentes (por e-mail; e por nome+telefone)
+    existentes = db.scalars(select(Talento)).all()
+    por_email = {(t.email or "").strip().lower(): t for t in existentes if t.email}
+    por_nome_tel = {((t.nome or "").strip().lower(), _so_digitos_tel(t.telefone))
+                    for t in existentes}
+
+    criados = pulados = 0
+    for bruta in linhas[1:]:
+        v = list(bruta) + [""] * (len(cab) - len(bruta))
+        def val(k):  # noqa: E306
+            i = ci[k]
+            return (str(v[i]).strip() if i is not None and i < len(v) and v[i] is not None else "")
+        nome = val("nome")
+        if not nome:
+            continue
+        email = val("email").lower() or None
+        tel = val("telefone") or None
+        # dedup
+        if email and email in por_email:
+            pulados += 1
+            continue
+        if (nome.lower(), _so_digitos_tel(tel)) in por_nome_tel:
+            pulados += 1
+            continue
+
+        cargos = _lista(val("cargos"))
+        regioes = _lista(val("regioes"))
+        t = Talento(
+            nome=nome[:200], email=(email or None), telefone=(tel[:20] if tel else None),
+            cidade=val("cidade")[:120] or None,
+            cargos_interesse=cargos or None, regioes=regioes or None,
+            cargo_interesse=cargos[0] if cargos else None,
+            tipo_contratacao=_tipo_contratacao(val("tipo")),
+            ja_trabalhou_funcao=_sim_nao(val("ja_trabalhou")),
+            recebe_seguro_desemprego=_sim_nao(val("seguro")),
+            origem="Importação (Forms)",
+        )
+        # LGPD: a planilha registra "Li e concordo" — carimba o consentimento
+        if _norm_cab_talento(val("lgpd")):
+            t.consentimento_lgpd_em = datetime.now(timezone.utc)
+        db.add(t)
+        if email:
+            por_email[email] = t
+        por_nome_tel.add((nome.lower(), _so_digitos_tel(tel)))
+        criados += 1
+
+    registrar(db, "talentos_importados", ator="rh", ator_detalhe=rh.email,
+              detalhe={"criados": criados, "pulados": pulados})
+    db.commit()
+    return {"criados": criados, "pulados": pulados, "total_planilha": len(linhas) - 1}
+
+
+def _so_digitos_tel(tel) -> str:
+    return "".join(c for c in str(tel or "") if c.isdigit())

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
+import { comAmpulheta } from '../Carregando.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 
 const STATUS = {
@@ -23,9 +24,26 @@ const simNao = (v) => v == null ? '—' : v ? 'Sim' : 'Não'
 export default function TalentosRH({ aoAbrir }) {
   const [talentos, setTalentos] = useState(null)
   const [msg, setMsg] = useState(null)
+  const inputPlanilha = useRef(null)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
   useEffect(() => { recarregar() }, [])
+
+  const importar = async (arquivo) => {
+    if (!arquivo) return
+    setMsg(null)
+    try {
+      const r = await comAmpulheta('Importando a planilha do Banco de Talentos…',
+                                   () => api.importarTalentosPlanilha(arquivo))
+      setMsg({ tipo: 'ok', texto: `Importação concluída: ${r.criados} novo(s), `
+        + `${r.pulados} já existente(s) pulado(s) (de ${r.total_planilha} na planilha).` })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'sem_coluna_nome'
+        ? 'A planilha precisa ter a coluna "Nome completo". Confira o export do Forms.'
+        : `Falha ao importar (${e.detail || e.message}).` })
+    } finally { if (inputPlanilha.current) inputPlanilha.current.value = '' }
+  }
 
   const converter = async (t) => {
     if (!window.confirm(`Converter ${t.nome} em candidato e iniciar a admissão?`)) return
@@ -133,10 +151,18 @@ export default function TalentosRH({ aoAbrir }) {
 
   return (
     <main className="rh-painel">
-      <header className="rh-topo"><h1>🎯 Banco de Talentos</h1><div /></header>
-      <p className="explica">Interessados do formulário público (<code>/banco-de-talentos</code>).
-        Ordene por qualquer coluna, filtre, selecione para agir em massa, envie testes e converta
-        em candidato — os dados migram e o link de admissão é disparado.</p>
+      <header className="rh-topo">
+        <h1>🎯 Banco de Talentos</h1>
+        <div>
+          <input ref={inputPlanilha} type="file" accept=".xlsx" hidden
+                 onChange={(e) => importar(e.target.files?.[0])} />
+          <button className="btn-secundario btn-mini" onClick={() => inputPlanilha.current?.click()}>
+            ⬆ Importar planilha (Forms)</button>
+        </div>
+      </header>
+      <p className="explica">Interessados do formulário público (<code>/banco-de-talentos</code>) ou
+        importados da planilha do Microsoft Forms. Ordene por qualquer coluna, filtre, selecione para
+        agir em massa, envie testes e converta em candidato — os dados migram e o link de admissão é disparado.</p>
 
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
