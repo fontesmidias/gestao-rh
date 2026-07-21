@@ -1060,6 +1060,16 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   background: #2b3a33; color: #fff; padding: .5rem .65rem; border-radius: 8px;
   font-size: .85rem; line-height: 1.35; box-shadow: 0 6px 20px rgba(0,0,0,.22);
   white-space: normal; text-align: left; font-weight: 400;
+  /* oculto por padrão; aparece no hover/focus (padrão único do sistema) */
+  opacity: 0; visibility: hidden; transition: opacity .12s ease;
+  pointer-events: none;
+}
+.teste-ajuda-wrap:hover .teste-ajuda-balao,
+.teste-ajuda-wrap:focus-within .teste-ajuda-balao {
+  opacity: 1; visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .teste-ajuda-balao { transition: none; }
 }
 .teste-ajuda-balao::after {
   content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);

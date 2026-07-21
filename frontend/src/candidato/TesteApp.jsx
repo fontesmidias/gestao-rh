@@ -193,23 +193,18 @@ export function Instrucoes({ tipo, aoIniciar, comTelemetria = true }) {
   )
 }
 
-// Tooltip do significado da palavra (feedback 2026-07-19): funciona no toque
-// (celular) e no hover. Definição é sinônimo neutro — não revela o perfil.
+// Tooltip do significado da palavra: aparece ao PASSAR O MOUSE (hover) e some ao
+// tirar — padrão único do sistema, igual ao Ajuda.jsx (feedback 2026-07-20). No
+// celular, o toque dá foco ao botão (:focus-within) e mostra o balão. O balão
+// vive sempre no DOM; a visibilidade é 100% por CSS. Definição é sinônimo neutro
+// — não revela o perfil DISC.
 function AjudaPalavra({ palavra, significado }) {
-  const [aberto, setAberto] = useState(false)
-  useEffect(() => {
-    if (!aberto) return
-    const fechar = () => setAberto(false)
-    // fecha ao tocar em qualquer lugar depois de abrir
-    const t = setTimeout(() => document.addEventListener('click', fechar, { once: true }), 0)
-    return () => { clearTimeout(t); document.removeEventListener('click', fechar) }
-  }, [aberto])
   return (
     <span className="teste-ajuda-wrap">
-      <button type="button" className="teste-ajuda" title={`${palavra}: ${significado}`}
+      <button type="button" className="teste-ajuda"
               aria-label={`Significado de ${palavra}`}
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setAberto((v) => !v) }}>ⓘ</button>
-      {aberto && <span className="teste-ajuda-balao" role="tooltip">{significado}</span>}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault() }}>ⓘ</button>
+      <span className="teste-ajuda-balao" role="tooltip">{significado}</span>
     </span>
   )
 }

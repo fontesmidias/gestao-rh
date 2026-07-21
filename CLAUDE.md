@@ -199,6 +199,15 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `mandar_para_lixeira` antes do delete; retenção configurável, padrão 60 dias).
 - Termos de negócio não se trocam por sinônimos; explicá-los com o tooltip
   `Ajuda.jsx` (glossário).
+- **Tooltips**: padrão ÚNICO = aparece no HOVER e some ao tirar o mouse (no
+  celular, `:focus-within` cobre o toque) — 100% por CSS, nunca por estado/onClick.
+  Vale para os tooltips CURTOS de referência: glossário do RH (`Ajuda.jsx`,
+  `.ajuda-q` + `data-dica`), significado da palavra no DISC (`AjudaPalavra` em
+  `TesteApp.jsx`, `.teste-ajuda-balao` visível no `:hover`/`:focus-within` do
+  `.teste-ajuda-wrap`) e os `title=` nativos. NÃO se aplica às dicas LONGAS
+  expansíveis de "como conseguir o documento" (checklist/wizard do candidato):
+  essas continuam abrindo no CLIQUE — texto longo que a pessoa lê enquanto age no
+  celular; hover as faria sumir no meio do passo a passo.
 - UI: edição inline na própria linha (nunca formulário no topo); ações pesadas
   com `comAmpulheta()`; toda tabela `.rh-tabela` vira card no mobile
   (rotulagem automática via `responsivo.js`).
