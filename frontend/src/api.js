@@ -229,6 +229,14 @@ export const talentos = {
   opcoes: () => req('/talentos/opcoes'),
   cadastrar: (dados) =>
     req('/talentos', { method: 'POST', body: JSON.stringify(dados) }),
+  enviarCurriculo: async (id, uploadToken, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/talentos/${id}/curriculo?upload_token=${encodeURIComponent(uploadToken)}`,
+                           { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
 }
 
 // --- RH (token de sessão no localStorage) ---
@@ -477,6 +485,8 @@ export const rh = {
     req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(), body: JSON.stringify({ status }) }),
   converterTalento: (id) =>
     req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
+  baixarCurriculoTalento: (id) =>
+    req(`/rh/talentos/${id}/curriculo`, { headers: authRH() }),  // devolve blob
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),

@@ -132,6 +132,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
+  = wizard de 3 passos que substituiu o Microsoft Forms. `models/talento.py` tem
+  `cargos_interesse`/`regioes` (JSON, múltipla escolha) além do `cargo_interesse`
+  string legado, que é SEMPRE sincronizado com o 1º cargo (o `converter`
+  talento→candidato usa a string). Consentimento LGPD é obrigatório no cadastro
+  (422 `consentimento_obrigatorio`). **Currículo é OPCIONAL** e guardado ORIGINAL
+  no MinIO (`talentos/{id}/curriculo.{ext}`) — sem conversão (não há OCR aqui);
+  RH baixa como veio. Upload sem login: o `POST /talentos` devolve um
+  `upload_token` (itsdangerous, TTL 30min) que autoriza `POST
+  /talentos/{id}/curriculo` — amarra o arquivo ao cadastro sem furar o honeypot.
+  Formatos: pdf/jpg/png/heic/webp/doc/docx, ≤10MB. Cargos/regiões do formulário =
+  lista fixa do Forms em `talentos.py` (`CARGOS_SUGERIDOS`/`REGIOES_SUGERIDAS`).
 - **Reembolso-Creche (módulo)**: elegibilidade é POR POSTO
   (`PostoServico.da_direito_creche` + `valor_reembolso_creche`); intermitente não
   vê o benefício (o bloco só aparece se o posto dá direito) e passa a ver sozinho

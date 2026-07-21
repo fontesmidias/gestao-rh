@@ -47,6 +47,17 @@ export default function TalentosRH({ aoAbrir }) {
     catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
   }
 
+  const verCurriculo = async (t) => {
+    setMsg(null)
+    try {
+      const blob = await api.baixarCurriculoTalento(t.id)
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível abrir o currículo (${e.detail || e.message}).` }) }
+  }
+  const TIPO_ROT = { efetivo: 'Efetivo', intermitente: 'Intermitente', tanto_faz: 'Efetivo ou intermitente' }
+
   return (
     <main className="rh-painel">
       <header className="rh-topo"><h1>🎯 Banco de Talentos</h1><div /></header>
@@ -85,8 +96,9 @@ export default function TalentosRH({ aoAbrir }) {
               return (
                 <Fragment key={t.id}>
                   <tr>
-                    <td><strong>{t.nome}</strong><br /><small>{t.email || t.telefone || '—'}</small></td>
-                    <td>{t.cargo_interesse || '—'}</td>
+                    <td><strong>{t.nome}</strong><br /><small>{t.email || t.telefone || '—'}</small>
+                      {t.tem_curriculo && <span title="Enviou currículo"> 📎</span>}</td>
+                    <td>{(t.cargos_interesse?.length ? t.cargos_interesse.join(', ') : t.cargo_interesse) || '—'}</td>
                     <td>{t.cidade || '—'}</td>
                     <td><span className="chip" style={{ '--chip-cor': cor }}>{rotulo}</span></td>
                     <td>{fmtData(t.criado_em)}</td>
@@ -104,9 +116,17 @@ export default function TalentosRH({ aoAbrir }) {
                       <td colSpan={6}>
                         <div className="talento-detalhe">
                           <p><strong>Contato:</strong> {t.email || '—'} · {t.telefone || '—'}</p>
+                          {t.regioes?.length > 0 && <p><strong>Regiões:</strong> {t.regioes.join(', ')}</p>}
+                          <p><strong>Contratação:</strong> {TIPO_ROT[t.tipo_contratacao] || '—'} ·{' '}
+                            <strong>Já trabalhou na função:</strong> {t.ja_trabalhou_funcao == null ? '—' : t.ja_trabalhou_funcao ? 'Sim' : 'Não'} ·{' '}
+                            <strong>Seguro-desemprego:</strong> {t.recebe_seguro_desemprego == null ? '—' : t.recebe_seguro_desemprego ? 'Sim' : 'Não'}</p>
                           <p><strong>Escolaridade:</strong> {t.escolaridade || '—'} ·{' '}
                             <strong>Como conheceu:</strong> {t.origem || '—'}</p>
                           {t.resumo && <p><strong>Experiência:</strong> {t.resumo}</p>}
+                          {t.tem_curriculo && (
+                            <p><button className="btn-secundario btn-mini" onClick={() => verCurriculo(t)}>
+                              📎 Ver currículo {t.curriculo_nome ? `(${t.curriculo_nome})` : ''}</button></p>
+                          )}
                           {t.status !== 'convertido' && (
                             <div className="navegacao" style={{ justifyContent: 'flex-start', gap: '.4rem' }}>
                               {PROXIMO_STATUS.filter(([s]) => s !== t.status).map(([s, txt]) => (

@@ -167,6 +167,65 @@ a { color: var(--verde-escuro); }
 .portal-talentos { text-align: center; margin: 0; font-size: var(--fs-apoio); }
 .talento-form { max-width: 560px; margin: 4vh auto; }
 .talento-form h1 { text-align: center; }
+
+/* Banco de Talentos — wizard de 3 passos */
+.talento-passos { display: flex; gap: .4rem; margin: 1.1rem 0 1.4rem; }
+.talento-passo {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  position: relative; text-align: center;
+}
+.talento-passo-num {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-size: .82rem; font-weight: 700; border: 2px solid var(--borda);
+  background: var(--fundo, #fff); color: var(--texto-suave, #6c7a72); z-index: 1;
+}
+.talento-passo-rot { font-size: .68rem; color: var(--texto-suave, #6c7a72); line-height: 1.2; }
+.talento-passo.ativo .talento-passo-num { border-color: var(--verde-vivo); color: var(--verde-escuro); }
+.talento-passo.ativo .talento-passo-rot { color: var(--verde-escuro); font-weight: 600; }
+.talento-passo.feito .talento-passo-num { background: var(--verde-vivo); border-color: var(--verde-vivo); color: #fff; }
+/* linha ligando os passos */
+.talento-passo:not(:last-child)::after {
+  content: ''; position: absolute; top: 13px; left: 50%; width: 100%; height: 2px;
+  background: var(--borda); z-index: 0;
+}
+.talento-passo.feito:not(:last-child)::after { background: var(--verde-vivo); }
+
+.talento-fs { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.talento-fs legend { font-weight: 700; font-size: 1.05rem; margin-bottom: .6rem; color: var(--verde-escuro); }
+
+/* chips de escolha múltipla (cargos, regiões, tipo, sim/não) */
+.chips-escolha { display: flex; flex-wrap: wrap; gap: .45rem; margin: .35rem 0 .2rem; }
+.chip-escolha {
+  border: 1.5px solid var(--borda); background: var(--fundo, #fff); color: var(--texto, #16201a);
+  border-radius: 999px; padding: .42rem .85rem; font-size: .86rem; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s; line-height: 1.2;
+}
+.chip-escolha:hover { border-color: var(--verde-vivo); }
+.chip-escolha.on {
+  background: var(--verde-suave); border-color: var(--verde-vivo); color: var(--verde-escuro);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) { .chip-escolha { transition: none; } }
+
+/* botão de anexar currículo */
+.talento-cv {
+  display: flex; align-items: center; gap: .5rem; width: 100%; justify-content: center;
+  border: 1.5px dashed var(--borda); background: var(--verde-suave); color: var(--verde-escuro);
+  border-radius: 12px; padding: .9rem 1rem; font-size: .95rem; cursor: pointer;
+  transition: border-color .12s;
+}
+.talento-cv:hover { border-color: var(--verde-vivo); }
+.talento-cv small { opacity: .7; font-weight: 400; }
+
+/* aceite LGPD */
+.talento-lgpd {
+  display: flex; gap: .6rem; align-items: flex-start; margin-top: 1rem;
+  font-size: .82rem; color: var(--texto-suave, #47554d); line-height: 1.45;
+}
+.talento-lgpd input { margin-top: .2rem; flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--verde-vivo); }
+
+.talento-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 1.4rem; }
+.talento-nav .btn-principal, .talento-nav .btn-secundario { min-width: 130px; }
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
 .campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
               opacity: 0; pointer-events: none; }
