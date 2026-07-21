@@ -1,0 +1,30 @@
+# ============================================================================
+# ADD-ON — Expor o console e a API do MinIO que JÁ roda no stack do app
+# ----------------------------------------------------------------------------
+# NÃO cria um segundo MinIO: é um OVERRIDE do serviço `minio` do compose base,
+# que apenas (1) habilita o console e (2) publica as portas no LOOPBACK da VPS
+# (127.0.0.1). Quem expõe para a internet é o NGINX (subdomínios s3. e minio.,
+# com TLS — ver deploy/minio/nginx-minio.conf). Os DADOS são os mesmos do app
+# (mesmo volume minio-data) — nada é duplicado.
+#
+# Uso (a partir da raiz — combine com o base, na MESMA ordem do deploy do app):
+#   docker compose --env-file .env \
+#     -f deploy/docker-compose.base.yml \
+#     -f deploy/docker-compose.ip.yml \
+#     -f deploy/minio/docker-compose.minio-exposto.yml up -d
+#
+# (Se o app sobe com traefik/certbot, troque o -f do meio pela variante usada.)
+#
+# ⚠️ O --env-file .env aqui é o .env do APP (raiz) — as credenciais do MinIO
+#    (MINIO_ROOT_USER/PASSWORD) já vivem lá. Este add-on não tem .env próprio de
+#    segredo; o .env.example ao lado só documenta as portas/loopback.
+# ============================================================================
+
+services:
+  minio:
+    # habilita o console na 9001 (o base sobe só "server /data")
+    command: server /data --console-address ":9001"
+    ports:
+      # publica SÓ no loopback; o Nginx faz o proxy externo com TLS.
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"     # API S3 (SDK/boto/mc)
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001" # console web (admin)

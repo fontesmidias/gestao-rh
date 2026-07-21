@@ -1,0 +1,51 @@
+# ============================================================================
+# STACK INDEPENDENTE — pgAdmin 4 (administração do Postgres do Portal)
+# ----------------------------------------------------------------------------
+# Sobe SOZINHO, sem tocar no stack do app. Conecta-se à rede do stack principal
+# (deploy_internal) para enxergar o serviço "db" pelo nome. O acesso web é
+# publicado só em 127.0.0.1 (loopback) — quem expõe para a internet é o NGINX da
+# VPS, com TLS e no subdomínio pgadmin.SEUDOMINIO (ver deploy/pgadmin/nginx-pgadmin.conf).
+#
+# Uso (a partir da raiz do repositório):
+#   docker compose --env-file deploy/pgadmin/.env \
+#     -f deploy/pgadmin/docker-compose.pgadmin.yml up -d
+#
+# ATENÇÃO à rede externa: o stack do app precisa estar de pé (a rede
+# deploy_internal é criada por ele). Confirme o nome com:  docker network ls
+# — se o seu diretório de deploy não for "deploy/", o prefixo muda (ex.:
+#   admissao_internal). Ajuste `name:` na seção networks abaixo.
+# ============================================================================
+
+services:
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      # e-mail/senha do login inicial do pgAdmin (definidos no .env)
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      # rodar atrás de proxy reverso com TLS terminando no Nginx:
+      PGADMIN_CONFIG_PROXY_X_FOR_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_PROTO_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_HOST_COUNT: "1"
+      PGADMIN_CONFIG_PROXY_X_PORT_COUNT: "1"
+      # cookie seguro (o Nginx serve HTTPS); ajuste para False se testar em http
+      PGADMIN_CONFIG_SESSION_COOKIE_SECURE: "True"
+      # aumenta o timeout de login e evita logout agressivo
+      PGADMIN_CONFIG_LOGIN_BANNER: '"Acesso restrito — Portal de RH Green House"'
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      # publica SÓ no loopback da VPS — o Nginx faz o proxy para cá.
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    networks:
+      - stack        # enxerga o "db" do app
+    restart: unless-stopped
+
+networks:
+  stack:
+    external: true
+    # nome da rede criada pelo stack principal (confirme com `docker network ls`)
+    name: ${STACK_NETWORK:-deploy_internal}
+
+volumes:
+  pgadmin-data:
