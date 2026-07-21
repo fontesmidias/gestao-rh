@@ -230,6 +230,12 @@ a { color: var(--verde-escuro); }
 /* Dash-planilha reutilizável (RH) */
 .dash-filtros { flex-wrap: wrap; align-items: center; }
 .dash-filtros .dash-espaco { flex: 1; }
+/* rolagem horizontal do dash: a tabela nunca estoura a tela; scrolla dentro
+   do próprio container (o corpo da página nunca rola de lado) */
+.dash-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.dash-scroll .dash-tabela { min-width: max-content; }
+.dash-tabela th, .dash-tabela td { padding: .55rem .6rem; font-size: .88rem; white-space: nowrap; }
+.dash-tabela td small { white-space: nowrap; }
 .dash-tabela th.dash-ord { cursor: pointer; user-select: none; white-space: nowrap; }
 .dash-tabela th.dash-ord:hover { color: var(--verde-escuro); }
 .dash-check { width: 34px; text-align: center; }

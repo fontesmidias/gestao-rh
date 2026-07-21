@@ -20,7 +20,13 @@ export default function DashPlanilha({
   const [sort, setSort] = useState({ chave: null, dir: 'asc' })
   const [filtros, setFiltros] = useState({})
   const [selec, setSelec] = useState(() => new Set())
-  const [ocultas, setOcultas] = useState(() => carregarOcultas(id))
+  // ocultas: usa a escolha salva do RH; se nunca mexeu, o default vem das
+  // colunas marcadas `oculta` na config (deixa o dash caber na tela).
+  const [ocultas, setOcultas] = useState(() => {
+    const salvo = carregarOcultas(id)
+    if (salvo) return salvo
+    return new Set(colunas.filter((c) => c.oculta).map((c) => c.chave))
+  })
   const [configAberta, setConfigAberta] = useState(false)
 
   const visiveis = colunas.filter((c) => !ocultas.has(c.chave))
@@ -131,6 +137,7 @@ export default function DashPlanilha({
       {linhas.length === 0 ? (
         <p className="explica centro">{vazio}</p>
       ) : (
+        <div className="dash-scroll">
         <table className="rh-tabela dash-tabela">
           <thead>
             <tr>
@@ -170,14 +177,18 @@ export default function DashPlanilha({
             })}
           </tbody>
         </table>
+        </div>
       )}
     </>
   )
 }
 
 function carregarOcultas(id) {
-  try { return new Set(JSON.parse(localStorage.getItem(`dash-ocultas:${id}`) || '[]')) }
-  catch { return new Set() }
+  // null = o RH nunca configurou (usa o default da config); Set = escolha salva
+  try {
+    const bruto = localStorage.getItem(`dash-ocultas:${id}`)
+    return bruto == null ? null : new Set(JSON.parse(bruto))
+  } catch { return null }
 }
 function salvarOcultas(id, set) {
   try { localStorage.setItem(`dash-ocultas:${id}`, JSON.stringify([...set])) } catch { /* ignora */ }
