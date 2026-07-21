@@ -438,3 +438,119 @@ def _uuid_ok(v: str) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+# ===========================================================================
+# Correção e acompanhamento (RH)
+# ===========================================================================
+
+
+def _recalcular_nota_final(db: Session, a: AplicacaoProva) -> None:
+    """Combina objetivas (auto) + discursivas (RH) ponderadas por peso, 0-100.
+    Cada objetiva certa vale seu peso; cada discursiva vale (nota/100)*peso; a
+    nota final é o total ganho / peso total de TODAS as questões."""
+    questoes = {str(q.id): q for q in _questoes(db, a.prova_id)}
+    respostas = {str(r.get("questao_id")): r for r in (a.respostas or [])}
+    correcao = a.correcao_discursivas or {}
+    peso_total = ganho_obj = ganho_disc = peso_disc = 0.0
+    for qid, q in questoes.items():
+        peso_total += q.peso
+        if q.tipo == "objetiva":
+            r = respostas.get(qid)
+            if r and str(r.get("escolha")) == str(q.gabarito):
+                ganho_obj += q.peso
+        else:  # discursiva
+            peso_disc += q.peso
+            nota = (correcao.get(qid) or {}).get("nota")
+            if nota is not None:
+                ganho_disc += (float(nota) / 100.0) * q.peso
+    a.nota_objetivas = round(100.0 * ganho_obj / (peso_total or 1), 1) if peso_total else None
+    a.nota_discursivas = (round(100.0 * ganho_disc / peso_disc, 1) if peso_disc else None)
+    a.nota_final = round(100.0 * (ganho_obj + ganho_disc) / peso_total, 1) if peso_total else None
+
+
+def _dump_aplicacao_rh(db: Session, a: AplicacaoProva, com_respostas: bool = False) -> dict:
+    p = db.get(ProvaCargo, a.prova_id)
+    questoes = _questoes(db, a.prova_id)
+    disc = [q for q in questoes if q.tipo == "discursiva"]
+    corrigidas = len((a.correcao_discursivas or {}))
+    d = {
+        "id": a.id, "nome": a.nome, "prova_id": a.prova_id,
+        "prova_titulo": p.titulo if p else "—", "cargo": p.cargo if p else None,
+        "status": a.status, "iniciado_em": a.iniciado_em, "concluido_em": a.concluido_em,
+        "nota_objetivas": a.nota_objetivas, "nota_discursivas": a.nota_discursivas,
+        "nota_final": a.nota_final,
+        "discursivas_total": len(disc), "discursivas_corrigidas": corrigidas,
+        "precisa_correcao": a.status in ("concluido", "expirado") and corrigidas < len(disc),
+        "criado_em": a.criado_em,
+    }
+    if com_respostas:
+        respostas = {str(r.get("questao_id")): r for r in (a.respostas or [])}
+        correcao = a.correcao_discursivas or {}
+        d["questoes"] = []
+        for q in questoes:
+            r = respostas.get(str(q.id)) or {}
+            item = {"id": str(q.id), "enunciado": q.enunciado, "tipo": q.tipo, "peso": q.peso}
+            if q.tipo == "objetiva":
+                item["opcoes"] = q.opcoes or []
+                item["gabarito"] = q.gabarito   # RH VÊ o gabarito
+                item["escolha"] = r.get("escolha")
+                item["acertou"] = str(r.get("escolha")) == str(q.gabarito) if r else False
+            else:
+                item["resposta"] = r.get("texto") or ""
+                item["correcao"] = correcao.get(str(q.id)) or {}
+            d["questoes"].append(item)
+        from app.api.testes import _resumo_eventos
+        d["comportamento"] = _resumo_eventos(a.eventos or [])
+    return d
+
+
+@router.get("/rh/provas-aplicacoes", dependencies=[Depends(requer_rh)])
+def listar_aplicacoes(prova_id: uuid.UUID | None = None, status: str | None = None,
+                      db: Session = Depends(get_db)) -> list[dict]:
+    q = select(AplicacaoProva).order_by(AplicacaoProva.criado_em.desc())
+    if prova_id:
+        q = q.where(AplicacaoProva.prova_id == prova_id)
+    if status:
+        q = q.where(AplicacaoProva.status == status)
+    return [_dump_aplicacao_rh(db, a) for a in db.scalars(q).all()]
+
+
+@router.get("/rh/provas-aplicacoes/{aid}", dependencies=[Depends(requer_rh)])
+def detalhe_aplicacao(aid: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    a = db.get(AplicacaoProva, aid)
+    if a is None:
+        raise HTTPException(status_code=404, detail="aplicacao_nao_encontrada")
+    return _dump_aplicacao_rh(db, a, com_respostas=True)
+
+
+class CorrecaoIn(BaseModel):
+    # {questao_id: {nota: 0-100, comentario?}}
+    correcao_discursivas: dict
+
+
+@router.put("/rh/provas-aplicacoes/{aid}/correcao", dependencies=[Depends(requer_rh)])
+def corrigir_discursivas(aid: uuid.UUID, payload: CorrecaoIn, db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    a = db.get(AplicacaoProva, aid)
+    if a is None:
+        raise HTTPException(status_code=404, detail="aplicacao_nao_encontrada")
+    # só aceita correção para questões discursivas desta prova; clampa a nota 0-100
+    disc_ids = {str(q.id) for q in _questoes(db, a.prova_id) if q.tipo == "discursiva"}
+    limpo = {}
+    for qid, c in (payload.correcao_discursivas or {}).items():
+        if str(qid) not in disc_ids or not isinstance(c, dict):
+            continue
+        nota = c.get("nota")
+        limpo[str(qid)] = {
+            "nota": max(0.0, min(100.0, float(nota))) if nota is not None else None,
+            "comentario": str(c.get("comentario") or "")[:1000] or None,
+        }
+    a.correcao_discursivas = limpo
+    a.corrigido_por = rh.email
+    a.corrigido_em = datetime.now(timezone.utc)
+    _recalcular_nota_final(db, a)
+    registrar(db, "prova_corrigida", ator="rh", ator_detalhe=rh.email,
+              candidato_id=None, detalhe={"aplicacao": str(aid), "nota_final": a.nota_final})
+    db.commit()
+    return _dump_aplicacao_rh(db, a, com_respostas=True)

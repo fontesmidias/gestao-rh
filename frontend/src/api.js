@@ -571,6 +571,17 @@ export const rh = {
     req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirQuestao: (provaId, qid) =>
     req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'DELETE', headers: authRH() }),
+  criarLinkProva: (provaId, nome) =>
+    req(`/rh/provas/${provaId}/link`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ nome }) }),
+  provaAplicacoes: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/provas-aplicacoes${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  provaAplicacao: (aid) => req(`/rh/provas-aplicacoes/${aid}`, { headers: authRH() }),
+  corrigirProva: (aid, correcao_discursivas) =>
+    req(`/rh/provas-aplicacoes/${aid}/correcao`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ correcao_discursivas }) }),
   // Dash unificado de testes + reset (admissão e testagem)
   testesDash: () => req('/rh/testes/dash', { headers: authRH() }),
   resetarTeste: (candidatoId, tipo) =>

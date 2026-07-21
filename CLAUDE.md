@@ -132,6 +132,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Provas por cargo** (`models/prova.py`, `api/provas.py`, `ProvasRH.jsx`,
+  `ProvaApp.jsx`): banco de provas CONFIGURÁVEL pelo RH (diferente do DISC/
+  situacional, gabarito fixo no código). Questões objetivas (opções {id,texto} +
+  gabarito) e discursivas. Objetivas corrigidas AUTOMÁTICAS (pesos); discursivas
+  o RH pontua 0-100; nota_final combina as duas por peso. Aplicação por link
+  avulso `/p/{token}` (participante só informa o nome, timer server-side,
+  telemetria — igual `/t/`); o participante NÃO vê a nota (seleção). GABARITO
+  nunca vai ao público (`_questao_publica` remove; testado). **Armadilha de
+  rotas**: as rotas de aplicação são `/rh/provas-aplicacoes` (hífen!) e NÃO
+  `/rh/provas/aplicacoes` — senão o `aplicacoes` vira `{prova_id}` UUID e dá 422.
+  A correção do RH usa o DashPlanilha. Link pode ir a um talento (`LinkProva.talento_id`).
 - **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
   — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
   em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em

@@ -257,6 +257,11 @@ a { color: var(--verde-escuro); }
 .prova-opcao-linha input[type="radio"] { width: auto; min-height: 0; flex-shrink: 0; accent-color: var(--verde-vivo); }
 .prova-opcao-linha input[type="text"], .prova-opcao-linha > input:not([type="radio"]) { flex: 1; }
 .prova-resposta { width: 100%; margin-top: .5rem; }
+.prova-correcao { margin-top: .5rem; }
+.prova-resposta-txt {
+  background: var(--fundo, #f4f6f4); border: 1px solid var(--borda); border-radius: 8px;
+  padding: .6rem .8rem; margin: .4rem 0; white-space: pre-wrap; font-size: .92rem;
+}
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
 .campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
               opacity: 0; pointer-events: none; }

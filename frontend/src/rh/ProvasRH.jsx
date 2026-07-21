@@ -1,10 +1,27 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
+import { fmtData } from '../fmt.js'
+import DashPlanilha from './DashPlanilha.jsx'
 
-// Editor de PROVAS por cargo: o RH monta provas com questões objetivas (múltipla
-// escolha, gabarito) e discursivas. Aplicadas por link avulso (aba/telas de
-// aplicação vêm no fluxo público /p/). O gabarito nunca vai ao candidato.
+// Módulo de PROVAS por cargo: o RH monta provas (objetivas com gabarito +
+// discursivas), gera link de aplicação e corrige. Duas visões: Editor e
+// Aplicações (dash-planilha com correção). O gabarito nunca vai ao candidato.
 export default function ProvasRH() {
+  const [visao, setVisao] = useState('editor')  // editor | aplicacoes
+  return (
+    <>
+      <div className="rh-card rh-lote" style={{ gap: '.4rem' }}>
+        <button className={`btn-mini ${visao === 'editor' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => setVisao('editor')}>📝 Provas</button>
+        <button className={`btn-mini ${visao === 'aplicacoes' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => setVisao('aplicacoes')}>📊 Aplicações & correção</button>
+      </div>
+      {visao === 'editor' ? <Editor /> : <Aplicacoes />}
+    </>
+  )
+}
+
+function Editor() {
   const [provas, setProvas] = useState(null)
   const [aberta, setAberta] = useState(null)   // prova em edição (com questões)
   const [msg, setMsg] = useState(null)
@@ -85,10 +102,21 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
     catch (e) { setMsg({ tipo: 'erro', texto: `Falha (${e.detail || e.message}).` }) }
   }
 
+  const gerarLink = async () => {
+    if (!p.questoes?.length) { setMsg({ tipo: 'erro', texto: 'Adicione ao menos uma questão antes de aplicar.' }); return }
+    try {
+      const r = await api.criarLinkProva(p.id, p.titulo)
+      navigator.clipboard?.writeText(r.url)
+      setMsg({ tipo: 'ok', texto: `Link de aplicação criado e copiado: ${r.url}` })
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao gerar link (${e.detail || e.message}).` }) }
+  }
+
   return (
     <>
       <div className="rh-card rh-lote">
         <button className="btn-link" onClick={aoVoltar}>← Voltar às provas</button>
+        <span className="dash-espaco" style={{ flex: 1 }} />
+        <button className="btn-principal btn-mini" onClick={gerarLink}>🔗 Gerar link de aplicação</button>
       </div>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
@@ -228,5 +256,145 @@ function FormQuestao({ provaId, inicial, aoSalvar, aoCancelar }) {
         <button className="btn-link" onClick={aoCancelar}>cancelar</button>
       </div>
     </div>
+  )
+}
+
+// Aplicações das provas: dash-planilha (ordena/filtra/exporta) + correção das
+// discursivas. A nota final combina objetivas (auto) + discursivas (RH).
+function Aplicacoes() {
+  const [apps, setApps] = useState(null)
+  const [aberta, setAberta] = useState(null)  // aplicação em correção (detalhe)
+  const [msg, setMsg] = useState(null)
+
+  const recarregar = () => api.provaAplicacoes({}).then(setApps).catch(() => setApps([]))
+  useEffect(() => { recarregar() }, [])
+
+  const abrir = async (a) => {
+    try { setAberta(await api.provaAplicacao(a.id)) }
+    catch { setMsg({ tipo: 'erro', texto: 'Não foi possível abrir a aplicação.' }) }
+  }
+
+  if (aberta) return <Correcao aplicacao={aberta}
+                               aoVoltar={() => { setAberta(null); recarregar() }} />
+
+  const nota = (v) => v == null ? '—' : `${v}`
+  const STATUS = {
+    pendente: ['Não começou', '#889'], em_andamento: ['Em andamento', '#f0ad4e'],
+    concluido: ['Concluído', '#0fb257'], expirado: ['Tempo esgotado', '#d9534f'],
+  }
+  const chip = (s) => { const [r, c] = STATUS[s] || [s, '#888']; return <span className="chip" style={{ '--chip-cor': c }}>{r}</span> }
+
+  const colunas = [
+    { chave: 'nome', rotulo: 'Participante', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+      render: (a) => <strong>{a.nome}</strong> },
+    { chave: 'prova_titulo', rotulo: 'Prova', ordenavel: true, filtro: 'texto' },
+    { chave: 'cargo', rotulo: 'Cargo', filtro: 'texto' },
+    { chave: 'status', rotulo: 'Status', filtro: 'select',
+      opcoes: [{ v: 'concluido', r: 'Concluído' }, { v: 'em_andamento', r: 'Em andamento' },
+               { v: 'expirado', r: 'Tempo esgotado' }, { v: 'pendente', r: 'Não começou' }],
+      valor: (a) => (STATUS[a.status] || [a.status])[0], render: (a) => chip(a.status) },
+    { chave: 'nota_objetivas', rotulo: 'Objetivas', ordenavel: true, valor: (a) => a.nota_objetivas ?? -1,
+      render: (a) => nota(a.nota_objetivas) },
+    { chave: 'nota_final', rotulo: 'Nota final', ordenavel: true, valor: (a) => a.nota_final ?? -1,
+      render: (a) => a.nota_final == null ? '—' : <strong>{a.nota_final}</strong> },
+    { chave: 'correcao', rotulo: 'Correção', valor: (a) => a.precisa_correcao ? 'Pendente' : 'OK',
+      render: (a) => a.precisa_correcao
+        ? <span className="chip" style={{ '--chip-cor': '#d9534f' }}>corrigir</span>
+        : (a.discursivas_total ? '✅' : '—') },
+    { chave: 'criado_em', rotulo: 'Quando', ordenavel: true, valor: (a) => a.criado_em,
+      render: (a) => fmtData(a.criado_em) },
+  ]
+  const acoesLinha = (a) => (
+    <button className="btn-secundario btn-mini" onClick={() => abrir(a)}>
+      {a.precisa_correcao ? 'Corrigir' : 'Ver'}</button>
+  )
+
+  return (
+    <>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+      {!apps ? <p>Carregando…</p> : (
+        <DashPlanilha id="prova-aplicacoes" colunas={colunas} dados={apps}
+                      acoesLinha={acoesLinha} vazio="Nenhuma prova aplicada ainda." />
+      )}
+    </>
+  )
+}
+
+// Detalhe + correção de uma aplicação: RH vê as objetivas (com acerto) e pontua
+// as discursivas (0-100). A nota final é recalculada no servidor.
+function Correcao({ aplicacao, aoVoltar }) {
+  const [a] = useState(aplicacao)
+  const [notas, setNotas] = useState(() => {
+    const init = {}
+    for (const q of a.questoes || []) if (q.tipo === 'discursiva') init[q.id] = q.correcao || {}
+    return init
+  })
+  const [msg, setMsg] = useState(null)
+  const [salvo, setSalvo] = useState(a.nota_final)
+
+  const setNota = (qid, campo, v) => setNotas((n) => ({ ...n, [qid]: { ...n[qid], [campo]: v } }))
+
+  const salvar = async () => {
+    const correcao = {}
+    for (const [qid, c] of Object.entries(notas)) {
+      correcao[qid] = { nota: c.nota === '' || c.nota == null ? null : Number(c.nota),
+                        comentario: c.comentario || '' }
+    }
+    try {
+      const r = await api.corrigirProva(a.id, correcao)
+      setSalvo(r.nota_final)
+      setMsg({ tipo: 'ok', texto: `Correção salva. Nota final: ${r.nota_final ?? '—'}.` })
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao salvar (${e.detail || e.message}).` }) }
+  }
+
+  return (
+    <>
+      <div className="rh-card rh-lote">
+        <button className="btn-link" onClick={aoVoltar}>← Voltar às aplicações</button>
+        <span className="dash-espaco" style={{ flex: 1 }} />
+        <span className="explica" style={{ margin: 0 }}>Objetivas: <strong>{a.nota_objetivas ?? '—'}</strong>
+          {' · '}Final: <strong>{salvo ?? '—'}</strong></span>
+      </div>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      <div className="rh-card">
+        <h3>{a.nome} — {a.prova_titulo}</h3>
+        {(a.questoes || []).map((q, i) => (
+          <div key={q.id} className="prova-questao">
+            <strong>{i + 1}. {q.tipo === 'objetiva' ? '☑' : '✎'} {q.enunciado}</strong>
+            {q.tipo === 'objetiva' ? (
+              <ul className="prova-opcoes">
+                {(q.opcoes || []).map((o) => {
+                  const certa = o.id === q.gabarito
+                  const escolhida = o.id === q.escolha
+                  return (
+                    <li key={o.id} className={certa ? 'certa' : ''}>
+                      {certa ? '✔ ' : ''}{escolhida ? '➡ ' : ''}{o.texto}
+                      {escolhida && !certa && <span style={{ color: '#d9534f' }}> (marcou)</span>}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <div className="prova-correcao">
+                <p className="prova-resposta-txt">{q.resposta || <em>(sem resposta)</em>}</p>
+                <div className="linha2">
+                  <label className="campo" style={{ maxWidth: 140 }}><span className="rotulo">Nota (0–100)</span>
+                    <input type="number" min={0} max={100} value={notas[q.id]?.nota ?? ''}
+                           onChange={(e) => setNota(q.id, 'nota', e.target.value)} /></label>
+                  <label className="campo"><span className="rotulo">Comentário (opcional)</span>
+                    <input value={notas[q.id]?.comentario ?? ''}
+                           onChange={(e) => setNota(q.id, 'comentario', e.target.value)} /></label>
+                </div>
+              </div>
+            )}
+            <small className="explica" style={{ margin: 0 }}>Peso {q.peso}</small>
+          </div>
+        ))}
+        {(a.questoes || []).some((q) => q.tipo === 'discursiva') && (
+          <button className="btn-principal btn-mini" onClick={salvar}>Salvar correção</button>
+        )}
+      </div>
+    </>
   )
 }
