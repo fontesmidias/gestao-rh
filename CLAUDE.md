@@ -102,7 +102,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
 - **Integração Tirvu (export de admissões)**: `export_tirvu.py` gera o layout
   de 28 colunas em ORDEM FIXA (`COLUNAS_TIRVU`); o Tirvu recusa linha sem
-  CTPS/PIS (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). O export EM
+  CTPS/PIS (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). O arquivo é
+  gerado por `montar_workbook_tirvu` (NÃO o `montar_workbook` genérico): planilha
+  CRUA idêntica ao modelo `docs/Layout de Importação de Admissões.xlsx` — aba
+  **`Plan1`**, SEM auto-filtro/painel congelado/cor no cabeçalho (o importador do
+  Tirvu recusa a "decoração": `<autoFilter>`/`<pane>` no XML, aba com outro nome).
+  Célula vazia é OMITIDA (não escrever `""` — o openpyxl geraria
+  `<c t="inlineStr"></c>` malformado, que o parser do Tirvu rejeita); só grava
+  células com conteúdo. Ordem SEMPRE por `COLUNAS_TIRVU`, nunca pela união das
+  chaves do dict. CEP no padrão do Tirvu: COM hífen (`cep_mascarado`, 00000-000);
+  CPF com máscara; datas dd/mm/aaaa; Sexo M/F; Registra Ponto S/N; PIS sem
+  máscara. O export individual (ficha, `revisao.py`) e o em massa
+  (`colaboradores.py`) usam o MESMO `montar_workbook_tirvu`. O export EM
   MASSA vive em **Colaboradores**, não em Admissões: só se manda para o Tirvu
   quem já foi EFETIVADO (quem está em admissão não tem vínculo a criar lá). Por
   padrão exclui `origem == "importacao"` — quem veio do Tirvu já existe lá

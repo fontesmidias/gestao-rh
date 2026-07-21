@@ -8,6 +8,7 @@ dd/mm/aaaa, empresa pela razão social. CTPS segue o padrão eSocial (CTPS
 Digital): número = o próprio CPF (11 dígitos), série = "0000" — derivada aqui
 quando a ficha ainda não a tem gravada."""
 
+import io
 import re
 
 from sqlalchemy.orm import Session
@@ -36,6 +37,14 @@ def cpf_mascarado(cpf) -> str:
     if len(d) != 11:
         return str(cpf or "")
     return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+
+
+def cep_mascarado(cep) -> str:
+    """CEP no padrão do Tirvu: 00000-000 (ele exporta com hífen)."""
+    d = _so_digitos(cep)
+    if len(d) != 8:
+        return str(cep or "")
+    return f"{d[:5]}-{d[5:]}"
 
 
 def ctps_do_cpf(cpf) -> tuple[str, str]:
@@ -132,12 +141,50 @@ def linha_tirvu(db: Session, c: Candidato) -> dict:
         "Endereço": logradouro,
         "Endereço - Número": numero,
         "Endereço - Complemento": complemento,
-        "Endereço - CEP": (e.cep if e else "") or "",
+        "Endereço - CEP": cep_mascarado(e.cep if e else ""),
         "Endereço - Bairro": (e.bairro if e else "") or "",
         "Endereço - Cidade": (e.cidade if e else "") or "",
         "Endereço - UF": (e.uf if e else "") or "",
         "Login Sign-On": "",
     }
+
+
+ABA_TIRVU = "Plan1"
+
+
+def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
+    """Gera a planilha EXATAMENTE no formato que o Tirvu aceita na importação:
+    aba 'Plan1', as 28 colunas de COLUNAS_TIRVU em ordem FIXA (nunca a união das
+    chaves), SEM auto-filtro, SEM painel congelado e SEM cabeçalho estilizado —
+    o importador do Tirvu recusa planilhas com essa "decoração" (autoFilter no
+    XML, aba com outro nome). Célula vazia é string vazia (não célula ausente/
+    inlineStr solta), para o parser não tropeçar.
+
+    Difere de propósito do `export_planilha.montar_workbook` (que é para o RH ler,
+    com cor/filtro/congelamento) — este é para MÁQUINA, fiel ao modelo oficial
+    `docs/Layout de Importação de Admissões.xlsx`."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = ABA_TIRVU
+    # cabeçalho: texto puro, sem estilo (o modelo tem negrito, mas o que o Tirvu
+    # lê é o TEXTO — mantemos simples e fiel à ordem)
+    for j, nome in enumerate(COLUNAS_TIRVU, start=1):
+        ws.cell(row=1, column=j, value=nome)
+    for i, linha in enumerate(linhas, start=2):
+        for j, nome in enumerate(COLUNAS_TIRVU, start=1):
+            v = linha.get(nome, "")
+            # Célula vazia: NÃO escreve (deixa ausente) — evita o
+            # `<c t="inlineStr"></c>` malformado do openpyxl (tipo string sem o
+            # elemento <is>), que faz parsers rígidos como o do Tirvu recusarem.
+            # Só grava quando há conteúdo; números (salário) permanecem número.
+            if v is None or v == "":
+                continue
+            ws.cell(row=i, column=j, value=v)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def pendencias_linha(linha: dict) -> list[str]:
