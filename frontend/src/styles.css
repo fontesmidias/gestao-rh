@@ -240,6 +240,22 @@ a { color: var(--verde-escuro); }
 .dash-colunas-lista label { font-size: .88rem; display: flex; align-items: center; gap: .35rem; cursor: pointer; }
 .dash-colunas-lista label.desabilitada { opacity: .55; cursor: default; }
 .dash-colunas-lista input { width: auto; min-height: 0; }
+
+/* Editor de provas por cargo */
+.prova-questao {
+  border: 1px solid var(--borda); border-radius: 10px; padding: .8rem 1rem;
+  margin: .6rem 0; background: var(--fundo, #fff);
+}
+.prova-questao.editando { border-color: var(--verde-vivo); background: var(--verde-suave); }
+.prova-questao-topo { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.prova-questao-acoes { display: flex; gap: .6rem; flex-shrink: 0; }
+.prova-opcoes { list-style: none; padding: 0; margin: .4rem 0; }
+.prova-opcoes li { padding: .18rem 0; font-size: .9rem; color: var(--texto-suave, #47554d); }
+.prova-opcoes li.certa { color: var(--verde-escuro); font-weight: 600; }
+.prova-opcoes-ed { margin: .5rem 0; }
+.prova-opcao-linha { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
+.prova-opcao-linha input[type="radio"] { width: auto; min-height: 0; flex-shrink: 0; accent-color: var(--verde-vivo); }
+.prova-opcao-linha input[type="text"], .prova-opcao-linha > input:not([type="radio"]) { flex: 1; }
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
 .campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
               opacity: 0; pointer-events: none; }
