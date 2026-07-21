@@ -185,7 +185,9 @@ def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
                                            ids, incluir_importados)
     if not candidatos:
         raise HTTPException(status_code=404, detail="nenhum_colaborador")
-    linhas = [linha_tirvu(db, c) for c in candidatos]
+    # gerar_matricula=True: quem não tem matrícula recebe a automática (999+seq),
+    # gravada no cadastro (o commit abaixo persiste).
+    linhas = [linha_tirvu(db, c, gerar_matricula=True) for c in candidatos]
     # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze)
     conteudo = montar_workbook_tirvu(linhas)
     registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=rh.email,

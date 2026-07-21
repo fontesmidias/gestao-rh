@@ -116,8 +116,9 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(404, "Candidato não encontrado")
-    # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze)
-    conteudo = montar_workbook_tirvu([linha_tirvu(db, cand)])
+    # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze);
+    # gerar_matricula=True grava a matrícula automática se faltar (commit abaixo).
+    conteudo = montar_workbook_tirvu([linha_tirvu(db, cand, gerar_matricula=True)])
     registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
               detalhe={"linhas": 1, "candidato": str(cand.id)})
     db.commit()

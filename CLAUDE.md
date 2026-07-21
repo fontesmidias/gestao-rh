@@ -102,7 +102,15 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
 - **Integração Tirvu (export de admissões)**: `export_tirvu.py` gera o layout
   de 28 colunas em ORDEM FIXA (`COLUNAS_TIRVU`); o Tirvu recusa linha sem
-  CTPS/PIS (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). O arquivo é
+  CTPS/PIS/JORNADA (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). A
+  **matrícula** NÃO é pendência: quando falta, o export a gera automaticamente no
+  padrão **999+sequencial de 4 dígitos** (`9990001`, `9990002`, …) e GRAVA no
+  cadastro (`garantir_matricula`/`proxima_matricula_auto`) — estável entre
+  exports, sem colisão (continua da maior `999NNNN` existente). `linha_tirvu` só
+  gera+grava com `gerar_matricula=True` (o EXPORT passa True e faz commit; a
+  pré-checagem passa False — consulta não muta dados). **Jornada** é dado real do
+  cadastro e continua bloqueante (o Tirvu acusa "Faltando Jornada de Trabalho" na
+  importação). O arquivo é
   gerado por `montar_workbook_tirvu` (NÃO o `montar_workbook` genérico): planilha
   CRUA idêntica ao modelo `docs/Layout de Importação de Admissões.xlsx` — aba
   **`Plan1`**, SEM auto-filtro/painel congelado/cor no cabeçalho (o importador do
