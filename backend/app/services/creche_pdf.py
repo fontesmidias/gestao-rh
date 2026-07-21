@@ -27,9 +27,16 @@ def _parentesco_txt(p: str) -> str:
             "guarda": "Criança sob guarda judicial"}.get(p, p)
 
 
-def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche) -> bytes:
+def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche,
+                              vistos: list | None = None, sol=None,
+                              base_url: str | None = None) -> bytes:
     """Requerimento de concessão do benefício, preenchido com os dados do
-    colaborador e das crianças, com as cláusulas de declaração (a-e) da IN 147."""
+    colaborador e das crianças, com as cláusulas de declaração (a-e) da IN 147.
+
+    Quando `vistos` é passado (assinatura pela plataforma), a linha de assinatura
+    em papel dá lugar aos BLOCOS de assinatura eletrônica empilhados + o manifesto
+    multi-assinante (mesmo pipeline dos demais documentos). Preserva o layout
+    oficial do requerimento (decisão do Bruno: manter o PDF gerado + vistos)."""
     col = db.get(Candidato, beneficio.candidato_id)
     posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
     tomador = (posto.razao_social or posto.nome) if posto else "-"
@@ -97,14 +104,9 @@ def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche) -> bytes:
         pdf.paragrafo(cl)
 
     pdf.ln(2)
-    pdf.paragrafo(_data_extenso(datetime.now(timezone.utc)))
-    pdf.ln(8)
     pdf.set_font("helvetica", "", 10.5)
-    pdf.cell(0, 6, "___________________________________________________",
-             align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 6, "Assinatura do colaborador(a)", align="C",
-             new_x="LMARGIN", new_y="NEXT")
-
+    pdf.multi_cell(0, 6, _data_extenso(datetime.now(timezone.utc)), align="C",
+                   new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     pdf.set_font("helvetica", "B", 9.5)
     pdf.cell(0, 6, "Documentos anexos:", new_x="LMARGIN", new_y="NEXT")
@@ -113,6 +115,23 @@ def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche) -> bytes:
                  "Documento de guarda judicial (quando aplicável);",
                  "Demais documentos eventualmente solicitados pela empresa."):
         pdf.cell(0, 5.4, f"  -  {item}", new_x="LMARGIN", new_y="NEXT")
+
+    if vistos:
+        # assinatura eletrônica pela plataforma: blocos empilhados + manifesto
+        from app.services.fichas import _bloco_visto, _pagina_manifesto_multi
+        for v in vistos:
+            _bloco_visto(pdf, v)
+        titulo = "REQUERIMENTO - REEMBOLSO-CRECHE"
+        _pagina_manifesto_multi(pdf, vistos, titulo,
+                                str(sol.id) if sol is not None else "", base_url)
+    else:
+        # via em branco (prévia): linha de assinatura tradicional
+        pdf.ln(8)
+        pdf.set_font("helvetica", "", 10.5)
+        pdf.cell(0, 6, "___________________________________________________",
+                 align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "Assinatura do colaborador(a)", align="C",
+                 new_x="LMARGIN", new_y="NEXT")
 
     return bytes(pdf.output())
 
@@ -147,7 +166,7 @@ def gerar_declaracao_modelo(db: Session, beneficio: BeneficioCreche) -> bytes:
         "cabíveis.")
     pdf.paragrafo("Por ser verdade, firmo a presente declaração.")
     pdf.ln(4)
-    pdf.cell(0, 6, "Brasília, DF, _______/_______/__________",
+    pdf.cell(0, 6, "Brasília, DF, _______/_______/__________", align="C",
              new_x="LMARGIN", new_y="NEXT")
     pdf.ln(12)
     pdf.cell(0, 6, "_______________________________________________",

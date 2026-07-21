@@ -24,7 +24,7 @@ from app.main import app
 c = TestClient(app)
 
 # 1) health
-assert c.get("/api/health").json() == {"status": "ok"}
+assert c.get("/api/health").json().get("status") == "ok"
 
 # 2) login RH (admin criado pelo bootstrap)
 r = c.post("/api/rh/auth/login", json={"email": "rh@greenhousedf.com.br", "senha": "senha-teste-123"})

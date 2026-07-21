@@ -3,6 +3,7 @@ import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import CheckMestre from '../CheckMestre.jsx'
 import Ajuda from '../Ajuda.jsx'
+import IncidenciaBeneficios from './IncidenciaBeneficios.jsx'
 
 const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
   documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
@@ -19,11 +20,15 @@ export default function PostosRH() {
   const [msg, setMsg] = useState(null)
   const [selecionados, setSelecionados] = useState(() => new Set())
   const [massaKit, setMassaKit] = useState(null) // painel de vínculo em massa
+  const [verIncidencia, setVerIncidencia] = useState(false)
   const inputPlanilha = useRef(null)
 
   const recarregar = () => api.postos(true).then((r) => {
     setPostos(r.postos); setColunas(r.colunas || []); setDocsDisp(r.documentos_disponiveis || {}) })
   useEffect(() => { recarregar() }, [])
+  if (verIncidencia) return (
+    <IncidenciaBeneficios aoVoltar={() => setVerIncidencia(false)} aoAplicar={recarregar} />
+  )
   if (!postos) return <main className="rh-painel"><p>Carregando…</p></main>
 
   const importarPlanilha = async (arquivo) => {
@@ -119,6 +124,8 @@ export default function PostosRH() {
                onChange={(e) => importarPlanilha(e.target.files?.[0])} />
         <button className="btn-secundario btn-mini"
                 onClick={() => inputPlanilha.current?.click()}>⬆ Importar planilha do Tirvu</button>
+        <button className="btn-secundario btn-mini"
+                onClick={() => setVerIncidencia(true)}>📋 Incidência de Benefícios</button>
         <button className="btn-secundario btn-mini" onClick={() => setImportar('')}>Colar lista</button>
         <button className="btn-secundario btn-mini"
                 onClick={() => setGerColunas(colunas.join(', '))}>⚙ Colunas ({colunas.length})</button>

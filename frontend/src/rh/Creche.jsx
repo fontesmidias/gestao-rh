@@ -90,15 +90,28 @@ function Levantamentos() {
     try { await api.crechePrazos([ben.id], parseInt(dia, 10)); setMsg('Prazo atualizado.'); carregar() }
     catch (e) { setErro(`Falha ao alterar o prazo (${e.detail || e.message}).`) }
   }
+  const abrirBlob = (blob) => {
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+  }
   const baixarDossie = async (ben) => {
     setErro(null)
     try {
       const blob = await comAmpulheta('Montando o dossiê do benefício…',
                                       () => api.crecheBaixarDossie(ben.id))
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
+      abrirBlob(blob)
     } catch (e) { setErro(`Falha ao gerar o dossiê (${e.detail || e.message}).`) }
+  }
+  const verDocumento = async (ben, tipo) => {
+    setErro(null)
+    try { abrirBlob(await api.crecheBaixarDocumento(ben.id, tipo)) }
+    catch (e) { setErro(`Falha ao abrir o documento (${e.detail || e.message}).`) }
+  }
+  const verDocCrianca = async (ben, crianca, tipo) => {
+    setErro(null)
+    try { abrirBlob(await api.crecheBaixarDocCrianca(ben.id, crianca.id, tipo)) }
+    catch (e) { setErro(`Falha ao abrir o arquivo (${e.detail || e.message}).`) }
   }
 
   return (
@@ -171,17 +184,22 @@ function Levantamentos() {
                     <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
                     <td>{c.parentesco}</td>
                     <td>{c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
-                    <td>{c.tem_certidao ? '📄 certidão' : '⚠️ sem certidão'}
-                        {c.tem_guarda ? ' · guarda' : ''}</td>
+                    <td>
+                      {c.tem_certidao
+                        ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
+                        : <span>⚠️ sem certidão</span>}
+                      {c.tem_guarda &&
+                        <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div className="rh-lote" style={{ marginTop: '.6rem' }}>
-              <a className="btn-secundario btn-mini" href={api.crecheDocumentoUrl(b.id, 'requerimento')}
-                 target="_blank" rel="noreferrer">📄 Prévia do requerimento</a>
-              <a className="btn-secundario btn-mini" href={api.crecheDocumentoUrl(b.id, 'declaracao')}
-                 target="_blank" rel="noreferrer">📄 Declaração-modelo</a>
+              <button className="btn-secundario btn-mini"
+                      onClick={() => verDocumento(b, 'requerimento')}>📄 Prévia do requerimento</button>
+              <button className="btn-secundario btn-mini"
+                      onClick={() => verDocumento(b, 'declaracao')}>📄 Declaração-modelo</button>
               <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
             </div>
             {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (

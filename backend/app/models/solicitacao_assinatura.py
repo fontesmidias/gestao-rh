@@ -54,6 +54,9 @@ class SolicitacaoAssinatura(Base):
         ForeignKey("modelo_documento.id"), nullable=True)
     titulo_doc: Mapped[str | None] = mapped_column(String(200))
     corpo_doc: Mapped[str | None] = mapped_column(Text)
+    # módulo que originou o roteiro (ex.: 'creche_requerimento') — decide o
+    # gerador de PDF na consolidação. None = documento fixo/de modelo padrão.
+    origem: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[StatusSolicitacao] = mapped_column(
         Enum(StatusSolicitacao, name="status_solicitacao"),
         default=StatusSolicitacao.rascunho)

@@ -162,10 +162,17 @@ export const candidato = {
 
 // --- Reembolso-Creche: link público de levantamento (sem token de sessão RH) ---
 export const creche = {
-  iniciar: (cpf, email) =>
-    req('/creche/iniciar', { method: 'POST', body: JSON.stringify({ cpf, email }) }),
-  confirmar: (cpf, codigo, email) =>
-    req('/creche/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo, email }) }),
+  iniciar: (cpf) =>
+    req('/creche/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
+  confirmar: (cpf, codigo) =>
+    req('/creche/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo }) }),
+  // Verificação de identidade (KBA) para quem não tem e-mail cadastrado
+  kbaIniciar: (cpf) =>
+    req('/creche/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
+  kbaResponder: (desafio, respostas) =>
+    req('/creche/kba/responder', { method: 'POST', body: JSON.stringify({ desafio, respostas }) }),
+  kbaDefinirEmail: (autorizacao, email) =>
+    req('/creche/kba/definir-email', { method: 'POST', body: JSON.stringify({ autorizacao, email }) }),
   sessao: (t) => req(`/creche/sessao/${t}`),
   conferirDados: (t, dados) =>
     req(`/creche/sessao/${t}/dados`, { method: 'PUT', body: JSON.stringify(dados) }),
@@ -182,6 +189,9 @@ export const creche = {
     return r.json()
   },
   enviar: (t) => req(`/creche/sessao/${t}/enviar`, { method: 'POST' }),
+  requerimentoStatus: (t) => req(`/creche/sessao/${t}/requerimento`),
+  assinarRequerimento: (t) =>
+    req(`/creche/sessao/${t}/assinar-requerimento`, { method: 'POST' }),
 }
 
 // --- Testagem (link público /t/{token}: só o nome, resultado visível) ---
@@ -397,6 +407,20 @@ export const rh = {
   },
   editarPostosMassa: (dados) =>
     req('/rh/postos/massa', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  incidenciaPreview: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/incidencia/preview`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
+  incidenciaConfirmar: (decisoes) =>
+    req('/rh/incidencia/confirmar', { method: 'POST', headers: authRH(),
+                                      body: JSON.stringify({ decisoes }) }),
   lixeira: () => req('/rh/lixeira', { headers: authRH() }),
   lixeiraRestaurar: (id) =>
     req(`/rh/lixeira/${id}/restaurar`, { method: 'POST', headers: authRH() }),
@@ -473,6 +497,12 @@ export const rh = {
   crecheBaixarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { headers: authRH() }),
   crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
+  // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
+  crecheBaixarDocumento: (id, tipo) =>
+    req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),
+  crecheBaixarDocCrianca: (id, criancaId, tipo) =>
+    req(`/rh/creche/levantamentos/${id}/crianca/${criancaId}/documento/${tipo}`,
+        { headers: authRH() }),
   // Testes do candidato (resultado restrito ao RH)
   testesCandidato: (id) => req(`/rh/candidatos/${id}/testes`, { headers: authRH() }),
   definirTestes: (id, fazer_disc, fazer_situacional) =>
