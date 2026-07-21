@@ -256,6 +256,7 @@ a { color: var(--verde-escuro); }
 .prova-opcao-linha { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
 .prova-opcao-linha input[type="radio"] { width: auto; min-height: 0; flex-shrink: 0; accent-color: var(--verde-vivo); }
 .prova-opcao-linha input[type="text"], .prova-opcao-linha > input:not([type="radio"]) { flex: 1; }
+.prova-resposta { width: 100%; margin-top: .5rem; }
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
 .campo-isca { position: absolute; left: -9999px; width: 1px; height: 1px;
               opacity: 0; pointer-events: none; }

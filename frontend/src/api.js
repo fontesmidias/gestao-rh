@@ -211,6 +211,21 @@ export const testagem = {
   eventosUrl: (t, pid, tipo) => `${BASE}/t/${t}/p/${pid}/${tipo}/eventos`,
 }
 
+// --- Prova por cargo (link público /p/{token}) ---
+export const prova = {
+  info: (t) => req(`/p/${t}`),
+  participar: (t, nome) =>
+    req(`/p/${t}/participar`, { method: 'POST', body: JSON.stringify({ nome }) }),
+  iniciar: (t, aid) => req(`/p/${t}/a/${aid}/iniciar`, { method: 'POST' }),
+  questoes: (t, aid) => req(`/p/${t}/a/${aid}/questoes`),
+  responder: (t, aid, dados) =>
+    req(`/p/${t}/a/${aid}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
+  concluir: (t, aid) => req(`/p/${t}/a/${aid}/concluir`, { method: 'POST' }),
+  eventos: (t, aid, eventos) =>
+    req(`/p/${t}/a/${aid}/eventos`, { method: 'POST', body: JSON.stringify({ eventos }) }),
+  eventosUrl: (t, aid) => `${BASE}/p/${t}/a/${aid}/eventos`,
+}
+
 // --- Assinatura de signatário externo (link público /assinar/{token}) ---
 export const assinaturaExterna = {
   info: (t) => req(`/assinar/${t}`),
