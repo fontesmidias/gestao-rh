@@ -149,6 +149,17 @@ export default function TalentosRH({ aoAbrir }) {
       Arquivar</button>
   </>)
 
+  // cards de status clicáveis: o filtro aponta para o RÓTULO da coluna `status`
+  // (é assim que o DashPlanilha compara). Clicar filtra; clicar de novo limpa.
+  const cards = (talentos || []).length ? [
+    { rotulo: 'Total', valor: talentos.length },
+    ...['novo', 'em_analise', 'convertido', 'arquivado'].map((s) => ({
+      rotulo: STATUS[s][0], cor: STATUS[s][1],
+      valor: talentos.filter((t) => t.status === s).length,
+      filtro: { chave: 'status', valor: STATUS[s][0] },
+    })),
+  ] : null
+
   return (
     <main className="rh-painel">
       <header className="rh-topo">
@@ -167,7 +178,7 @@ export default function TalentosRH({ aoAbrir }) {
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
       {!talentos ? <p>Carregando…</p> : (
-        <DashPlanilha id="talentos" colunas={colunas} dados={talentos}
+        <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
                       vazio="Nenhum talento cadastrado ainda." />
       )}

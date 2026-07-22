@@ -7,11 +7,15 @@ import CheckMestre from '../CheckMestre.jsx'
 // PILOTO no Banco de Talentos; a mesma config serve os demais módulos depois.
 //
 // Config de coluna: { chave, rotulo, valor?(linha)->texto, ordenavel?, filtro?:
-//   'texto'|'select', opcoes?:[...], render?(linha)->JSX, sempreVisivel? }
+//   'texto'|'select', opcoes?:[...], render?(linha)->JSX, sempreVisivel?, quebra? }
+// Card de métrica (opcional): { rotulo, valor, cor?, filtro?: {chave, valor} } —
+//   clicar num card COM `filtro` ativa aquele filtro (toggle); clicar de novo
+//   limpa. Cards sem `filtro` são só indicadores. (feedback 2026-07-22, item 3)
 export default function DashPlanilha({
   id,               // identificador do módulo (namespace do localStorage)
   colunas,
   dados,            // array de linhas (objetos)
+  cards,            // [{rotulo, valor, cor?, filtro?}]  (opcional)
   chaveLinha = (l) => l.id,
   acoesLinha,       // (linha) => JSX  (opcional)
   acoesMassa,       // (linhasSelecionadas, limparSelecao) => JSX  (opcional)
@@ -90,8 +94,30 @@ export default function DashPlanilha({
     a.click(); URL.revokeObjectURL(a.href)
   }
 
+  // clicar num card com `filtro` ativa/desliga (toggle) o filtro daquela coluna
+  const cardAtivo = (card) =>
+    card.filtro && (filtros[card.filtro.chave] || '') === String(card.filtro.valor)
+  const clicarCard = (card) => {
+    if (!card.filtro) return
+    const { chave, valor } = card.filtro
+    setFiltros((f) => ({ ...f, [chave]: cardAtivo(card) ? '' : String(valor) }))
+  }
+
   return (
     <>
+      {cards && cards.length > 0 && (
+        <div className="rh-metricas dash-cards">
+          {cards.map((card, i) => (
+            <button key={i} type="button"
+                    className={`rh-metrica dash-card${card.filtro ? ' clicavel' : ''}${cardAtivo(card) ? ' ativo' : ''}`}
+                    style={card.cor ? { '--card-cor': card.cor } : undefined}
+                    onClick={() => clicarCard(card)} disabled={!card.filtro}
+                    title={card.filtro ? (cardAtivo(card) ? 'Clique para limpar o filtro' : `Filtrar por ${card.rotulo}`) : undefined}>
+              <strong>{card.valor}</strong><span>{card.rotulo}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {/* barra de filtros + ações */}
       <div className="rh-card rh-lote dash-filtros">
         {colunas.filter((c) => c.filtro).map((c) => (
