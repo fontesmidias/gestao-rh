@@ -102,6 +102,9 @@ def listar(status: str | None = None, busca: str | None = None,
             # indício de que já existe no Tirvu — o front avisa (não bloqueia)
             # antes de reverter a candidato (feedback 2026-07-21).
             "indicio_tirvu": _indicio_tirvu(c),
+            # campos vazios do cadastro (importados do Tirvu vêm com buracos) —
+            # o RH vê na lista quem precisa completar (feedback 2026-07-21).
+            "dados_faltando": _dados_faltando(db, c, cpf, nasc),
             "criado_em": c.criado_em,
             "dossie_gerado_em": c.dossie_gerado_em,
         })
@@ -406,6 +409,31 @@ DESTINOS_REVERTER = {
     StatusCandidato.convidado,
     StatusCandidato.em_revisao,
 }
+
+
+def _dados_faltando(db: Session, c: Candidato, cpf: str | None,
+                    nascimento: str | None) -> list[str]:
+    """Campos vazios no cadastro que travam a operação do RH (feedback
+    2026-07-21: "tem gente que foi importada do Tirvu e tem dados em branco").
+    Checa o que é preciso para CONTATAR e para EFETIVAR/EXPORTAR — não a ficha
+    inteira (o importado nunca preencheu ficha e não deve parecer 'incompleto'
+    por causa disso)."""
+    faltas = []
+    if not cpf:
+        faltas.append("CPF")
+    if not nascimento:
+        faltas.append("nascimento")
+    if not c.email:
+        faltas.append("e-mail")
+    if not c.celular_whatsapp:
+        faltas.append("telefone")
+    if not c.posto_servico_id:
+        faltas.append("posto")
+    if not c.cargo_funcao:
+        faltas.append("cargo")
+    if not c.jornada_id:
+        faltas.append("jornada")
+    return faltas
 
 
 def _indicio_tirvu(c: Candidato) -> str | None:
