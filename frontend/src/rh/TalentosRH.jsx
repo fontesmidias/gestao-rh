@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { fmtData } from '../fmt.js'
+import { fmtData, fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
@@ -106,10 +106,10 @@ export default function TalentosRH({ aoAbrir }) {
     { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
       render: (t) => (<><strong>{t.nome}</strong><br /><small>{t.email || t.telefone || '—'}</small>
         {t.tem_curriculo && <span title="Enviou currículo"> 📎</span>}</>) },
-    { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'texto',
+    { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'texto', quebra: true,
       valor: (t) => (t.cargos_interesse?.length ? t.cargos_interesse : (t.cargo_interesse ? [t.cargo_interesse] : [])) },
     { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'texto' },
-    { chave: 'regioes', rotulo: 'Regiões', oculta: true, valor: (t) => t.regioes || [] },
+    { chave: 'regioes', rotulo: 'Regiões', oculta: true, quebra: true, valor: (t) => t.regioes || [] },
     { chave: 'tipo_contratacao', rotulo: 'Contratação', filtro: 'select', oculta: true,
       opcoes: [{ v: 'efetivo', r: 'Efetivo' }, { v: 'intermitente', r: 'Intermitente' }, { v: 'tanto_faz', r: 'Tanto faz' }],
       valor: (t) => TIPO_ROT[t.tipo_contratacao] || '' },
@@ -129,8 +129,8 @@ export default function TalentosRH({ aoAbrir }) {
                { v: 'convertido', r: 'Convertido' }, { v: 'arquivado', r: 'Arquivado' }],
       valor: (t) => (STATUS[t.status] || [t.status])[0],
       render: (t) => chip(...(STATUS[t.status] || [t.status, '#888'])) },
-    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, oculta: true, valor: (t) => t.criado_em,
-      render: (t) => fmtData(t.criado_em) },
+    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, valor: (t) => t.criado_em,
+      render: (t) => <span title={fmtDataHora(t.criado_em)}>{fmtDataHora(t.criado_em)}</span> },
   ]
 
   const acoesLinha = (t) => (<>

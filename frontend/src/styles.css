@@ -233,9 +233,16 @@ a { color: var(--verde-escuro); }
 /* rolagem horizontal do dash: a tabela nunca estoura a tela; scrolla dentro
    do próprio container (o corpo da página nunca rola de lado) */
 .dash-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
-.dash-scroll .dash-tabela { min-width: max-content; }
-.dash-tabela th, .dash-tabela td { padding: .55rem .6rem; font-size: .88rem; white-space: nowrap; }
+/* a tabela ocupa 100% e só cresce além disso se REALMENTE precisar — colunas de
+   texto longo (cargos, regiões) quebram linha em vez de esticar a página. */
+.dash-scroll .dash-tabela { min-width: 100%; }
+.dash-tabela th, .dash-tabela td { padding: .55rem .6rem; font-size: .88rem; white-space: nowrap; vertical-align: top; }
 .dash-tabela td small { white-space: nowrap; }
+/* colunas marcadas com `quebra: true`: texto flui em várias linhas, largura
+   limitada — acaba com a rolagem lateral de listas longas (feedback 2026-07-22). */
+.dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra {
+  white-space: normal; max-width: 22rem; min-width: 10rem; word-break: break-word;
+}
 .dash-tabela th.dash-ord { cursor: pointer; user-select: none; white-space: nowrap; }
 .dash-tabela th.dash-ord:hover { color: var(--verde-escuro); }
 .dash-check { width: 34px; text-align: center; }

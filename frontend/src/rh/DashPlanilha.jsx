@@ -169,7 +169,8 @@ export default function DashPlanilha({
                     </td>
                   )}
                   {visiveis.map((c) => (
-                    <td key={c.chave}>{c.render ? c.render(l) : (textoDe(l, c) || '—')}</td>
+                    <td key={c.chave} className={c.quebra ? 'dash-quebra' : undefined}>
+                      {c.render ? c.render(l) : (textoDe(l, c) || '—')}</td>
                   ))}
                   {acoesLinha && <td className="acoes-candidato">{acoesLinha(l)}</td>}
                 </tr>

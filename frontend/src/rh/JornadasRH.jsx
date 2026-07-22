@@ -71,7 +71,7 @@ export default function JornadasRH({ aoVoltar }) {
 
   const colunas = [
     { chave: 'descricao', rotulo: 'Jornada (texto do Tirvu)', ordenavel: true, filtro: 'texto',
-      sempreVisivel: true,
+      sempreVisivel: true, quebra: true,
       render: (j) => (<><strong>{j.descricao}</strong>{!j.estruturado &&
         <span title="Estrutura ainda não confirmada pelo RH"> ⚠️</span>}</>) },
     { chave: 'posto', rotulo: 'Posto', filtro: 'texto', valor: (j) => postoNome(j.posto_servico_id),
