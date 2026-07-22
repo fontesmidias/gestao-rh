@@ -9,6 +9,7 @@ import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
+import JornadasRH from './JornadasRH.jsx'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
@@ -184,6 +185,7 @@ const GRUPOS = [
     ['inicio', '📋', 'Admissões'],
     ['colaboradores', '👥', 'Colaboradores'],
     ['postos', '🏢', 'Postos'],
+    ['jornadas', '🕒', 'Jornadas'],
   ]],
   ['Documentos', [
     ['modelos', '📝', 'Modelos'],
@@ -297,6 +299,7 @@ function Painel({ aoSair }) {
                          aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
         {pagina === 'postos' && <PostosRH />}
+        {pagina === 'jornadas' && <JornadasRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
         {pagina === 'testagem' && (
           <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />

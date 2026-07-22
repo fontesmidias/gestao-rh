@@ -310,6 +310,26 @@ export const rh = {
     req(`/rh/jornadas${postoId ? `?posto_id=${postoId}` : ''}`, { headers: authRH() }),
   criarJornada: (dados) =>
     req('/rh/jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarJornada: (id, dados, { confirmarEstrutura = false } = {}) =>
+    req(`/rh/jornadas/${id}${confirmarEstrutura ? '?confirmar_estrutura=true' : ''}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirJornada: (id) =>
+    req(`/rh/jornadas/${id}`, { method: 'DELETE', headers: authRH() }),
+  propostaJornada: (id) =>
+    req(`/rh/jornadas/${id}/proposta`, { headers: authRH() }),
+  jornadasDuplicidades: () =>
+    req('/rh/jornadas-duplicidades', { headers: authRH() }),
+  importarJornadasPlanilha: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/jornadas/importar-planilha`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
   importarJornadas: async (arquivo) => {
     const fd = new FormData()
     fd.append('arquivo', arquivo)

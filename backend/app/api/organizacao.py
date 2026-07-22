@@ -13,8 +13,9 @@ import unicodedata
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,6 +26,8 @@ from app.models.candidato import Candidato, Empresa, Jornada, PostoServico
 from app.models.ficha import Endereco
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
+from app.services.jornada_duplicidade import suspeitas as _dup_suspeitas
+from app.services.jornada_parser import propor as _propor_jornada
 
 router = APIRouter(tags=["organizacao-rh"], dependencies=[Depends(requer_rh)])
 
@@ -99,6 +102,38 @@ def editar_empresa(empresa_id: uuid.UUID, dados: EmpresaIn,
 class JornadaIn(BaseModel):
     descricao: str
     posto_servico_id: uuid.UUID | None = None
+    # campos estruturados (opcionais; None = não mexer). O RH confirma a proposta
+    # do parser ou edita à mão. A `descricao` continua canônica p/ o Tirvu.
+    escala: str | None = None
+    hora_entrada: str | None = None
+    saida_almoco: str | None = None
+    volta_almoco: str | None = None
+    hora_saida: str | None = None
+    bloco_secundario: str | None = None
+    turno: str | None = None
+    adicional_noturno: bool | None = None
+    tem_intrajornada: bool | None = None
+    intrajornada_obs: str | None = None
+    cargo_relacionado: str | None = None
+
+
+_CAMPOS_ESTRUT = ("escala", "hora_entrada", "saida_almoco", "volta_almoco",
+                  "hora_saida", "bloco_secundario", "turno", "adicional_noturno",
+                  "tem_intrajornada", "intrajornada_obs", "cargo_relacionado")
+
+
+def _dump_jornada(j: Jornada) -> dict:
+    return {
+        "id": j.id, "descricao": j.descricao,
+        "posto_servico_id": j.posto_servico_id, "ativa": j.ativa,
+        "escala": j.escala, "hora_entrada": j.hora_entrada,
+        "saida_almoco": j.saida_almoco, "volta_almoco": j.volta_almoco,
+        "hora_saida": j.hora_saida, "bloco_secundario": j.bloco_secundario,
+        "turno": j.turno, "adicional_noturno": j.adicional_noturno,
+        "tem_intrajornada": j.tem_intrajornada, "intrajornada_obs": j.intrajornada_obs,
+        "cargo_relacionado": j.cargo_relacionado,
+        "estruturado": j.estruturado_confirmado_em is not None,
+    }
 
 
 @router.get("/rh/jornadas")
@@ -111,8 +146,7 @@ def listar_jornadas(posto_id: uuid.UUID | None = None,
                           .order_by(Jornada.descricao)).all()
     if posto_id:
         jornadas.sort(key=lambda j: (j.posto_servico_id != posto_id, j.descricao))
-    return [{"id": j.id, "descricao": j.descricao,
-             "posto_servico_id": j.posto_servico_id} for j in jornadas]
+    return [_dump_jornada(j) for j in jornadas]
 
 
 @router.post("/rh/jornadas", status_code=201)
@@ -123,33 +157,167 @@ def criar_jornada(dados: JornadaIn, db: Session = Depends(get_db),
         raise HTTPException(422, "Descrição obrigatória.")
     existente = db.scalar(select(Jornada).where(Jornada.descricao.ilike(desc)))
     if existente:
-        return {"id": existente.id, "descricao": existente.descricao,
-                "posto_servico_id": existente.posto_servico_id}
+        return _dump_jornada(existente)
     j = Jornada(descricao=desc, posto_servico_id=dados.posto_servico_id)
+    # aplica campos estruturados enviados na criação (opcional)
+    for campo in _CAMPOS_ESTRUT:
+        valor = getattr(dados, campo)
+        if valor is not None:
+            setattr(j, campo, valor)
     db.add(j)
     registrar(db, "jornada_criada", ator="rh", ator_detalhe=rh.email,
               detalhe={"descricao": desc})
     db.commit()
-    return {"id": j.id, "descricao": j.descricao,
-            "posto_servico_id": j.posto_servico_id}
+    return _dump_jornada(j)
 
 
 @router.put("/rh/jornadas/{jornada_id}")
 def editar_jornada(jornada_id: uuid.UUID, dados: JornadaIn,
-                   ativa: bool | None = None, db: Session = Depends(get_db),
+                   ativa: bool | None = None, confirmar_estrutura: bool = False,
+                   db: Session = Depends(get_db),
                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Edita a jornada. Os campos estruturados enviados (não-None) são gravados;
+    com `confirmar_estrutura=true`, carimba a confirmação humana da estruturação
+    (o RH validou a proposta do parser)."""
     j = db.get(Jornada, jornada_id)
     if j is None:
         raise HTTPException(404, "Jornada não encontrada")
     j.descricao = re.sub(r"\s+", " ", dados.descricao).strip() or j.descricao
     j.posto_servico_id = dados.posto_servico_id
+    # grava só os campos estruturados que vieram preenchidos (None = não mexe)
+    for campo in _CAMPOS_ESTRUT:
+        valor = getattr(dados, campo)
+        if valor is not None:
+            setattr(j, campo, valor)
+    if confirmar_estrutura:
+        j.estruturado_confirmado_em = datetime.now(timezone.utc)
     if ativa is not None:
         j.ativa = ativa
     registrar(db, "jornada_editada", ator="rh", ator_detalhe=rh.email,
-              detalhe={"id": str(jornada_id)})
+              detalhe={"id": str(jornada_id), "confirmou_estrutura": confirmar_estrutura})
     db.commit()
-    return {"id": j.id, "descricao": j.descricao,
-            "posto_servico_id": j.posto_servico_id, "ativa": j.ativa}
+    return _dump_jornada(j)
+
+
+@router.delete("/rh/jornadas/{jornada_id}", status_code=204)
+def excluir_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)):
+    """Exclui a jornada. Se algum colaborador ainda a usa, recusa (o vínculo
+    quebraria) — o RH desliga a jornada (`ativa=false`) ou reatribui antes."""
+    j = db.get(Jornada, jornada_id)
+    if j is None:
+        raise HTTPException(404, "Jornada não encontrada")
+    em_uso = db.scalar(select(Candidato).where(Candidato.jornada_id == jornada_id))
+    if em_uso is not None:
+        raise HTTPException(409, detail="jornada_em_uso")
+    registrar(db, "jornada_excluida", ator="rh", ator_detalhe=rh.email,
+              detalhe={"descricao": j.descricao})
+    db.delete(j)
+    db.commit()
+
+
+@router.get("/rh/jornadas/{jornada_id}/proposta")
+def proposta_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
+                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Roda o parser sobre a descrição e devolve a PROPOSTA estruturada (não
+    grava). O front mostra lado a lado com a descrição e o RH confirma/corrige."""
+    j = db.get(Jornada, jornada_id)
+    if j is None:
+        raise HTTPException(404, "Jornada não encontrada")
+    return {"jornada_id": j.id, "descricao": j.descricao,
+            "proposta": _propor_jornada(j.descricao)}
+
+
+@router.get("/rh/jornadas-duplicidades")
+def jornadas_duplicidades(db: Session = Depends(get_db),
+                          _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Pares de jornadas SUSPEITAS de duplicidade (grafias/typos diferentes) para
+    o RH revisar. NUNCA funde — só sinaliza (regra dos ~40 erros de digitação).
+    Rota com hífen (não `/jornadas/duplicidades`) para não colidir com
+    `/jornadas/{id}` paramétrica."""
+    jornadas = db.scalars(select(Jornada).where(Jornada.ativa)).all()
+    por_desc = {j.descricao: j for j in jornadas}
+    pares = _dup_suspeitas(list(por_desc.keys()))
+    saida = []
+    for p in pares:
+        ja, jb = por_desc.get(p["a"]), por_desc.get(p["b"])
+        if ja and jb:
+            saida.append({**p, "id_a": ja.id, "id_b": jb.id})
+    return saida
+
+
+@router.post("/rh/jornadas/importar-planilha")
+async def importar_jornadas(arquivo: UploadFile = File(...),
+                            db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Importa jornadas da planilha de colaboradores (.xlsx): coluna
+    'Jornada de Trabalho' (a descrição CANÔNICA), casando o posto pela coluna
+    'Lotação'. Idempotente por descrição normalizada (rodar 2x não duplica). Cada
+    jornada nova nasce com a PROPOSTA do parser já aplicada, porém NÃO confirmada
+    (`estruturado_confirmado_em` NULL) — o RH revisa e confirma depois."""
+    from app.api.postos import _ler_linhas_xlsx
+    try:
+        conteudo = await arquivo.read()
+    finally:
+        await arquivo.close()
+    linhas = _ler_linhas_xlsx(conteudo)
+    if not linhas or len(linhas) < 2:
+        raise HTTPException(422, detail="planilha_invalida")
+    cab = [(c or "").strip().lower() for c in linhas[0]]
+
+    def _idx(*nomes):
+        for n in nomes:
+            for i, c in enumerate(cab):
+                if n in c:
+                    return i
+        return None
+
+    ij = _idx("jornada de trabalho", "jornada")
+    il = _idx("lotação", "lotacao")
+    if ij is None:
+        raise HTTPException(422, detail="sem_coluna_jornada")
+
+    # cache de postos por nome normalizado, p/ casar a Lotação
+    postos = db.scalars(select(PostoServico)).all()
+    def _norm(s):
+        s = "".join(c for c in unicodedata.normalize("NFKD", s or "")
+                    if not unicodedata.combining(c)).upper()
+        return re.sub(r"\s+", " ", s).strip()
+    postos_por_nome = {_norm(p.nome): p for p in postos}
+    # também casa por sigla, quando houver
+    for p in postos:
+        if p.sigla:
+            postos_por_nome.setdefault(_norm(p.sigla), p)
+
+    existentes = {_norm(j.descricao): j for j in db.scalars(select(Jornada)).all()}
+    criadas = puladas = 0
+    for linha in linhas[1:]:
+        desc = re.sub(r"\s+", " ", (linha[ij] if ij < len(linha) else "") or "").strip()
+        if not desc:
+            continue
+        if _norm(desc) in existentes:
+            puladas += 1
+            continue
+        lot = _norm(linha[il]) if (il is not None and il < len(linha)) else ""
+        posto = postos_por_nome.get(lot) if lot else None
+        p = _propor_jornada(desc)
+        j = Jornada(
+            descricao=desc, posto_servico_id=(posto.id if posto else None),
+            escala=p["escala"], hora_entrada=p["hora_entrada"],
+            saida_almoco=p["saida_almoco"], volta_almoco=p["volta_almoco"],
+            hora_saida=p["hora_saida"], bloco_secundario=p["bloco_secundario"],
+            turno=p["turno"], adicional_noturno=p["adicional_noturno"],
+            tem_intrajornada=p["tem_intrajornada"], intrajornada_obs=p["intrajornada_obs"],
+            cargo_relacionado=p["cargo_relacionado"],
+        )
+        db.add(j)
+        existentes[_norm(desc)] = j
+        criadas += 1
+    registrar(db, "jornadas_importadas", ator="rh", ator_detalhe=rh.email,
+              detalhe={"criadas": criadas, "puladas": puladas})
+    db.commit()
+    return {"criadas": criadas, "puladas": puladas,
+            "total_planilha": len(linhas) - 1}
 
 
 # ======================================================================

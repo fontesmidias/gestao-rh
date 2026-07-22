@@ -104,9 +104,35 @@ class Jornada(Base):
     __tablename__ = "jornada"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # `descricao` é CANÔNICA: é ela que vai para o Tirvu (texto único), como
+    # hoje. Os campos estruturados abaixo são METADADOS internos do RH (filtros,
+    # decisão de rubrica), preenchidos por parser-proponente + confirmação
+    # humana — nunca alteram o que o Tirvu recebe (feedback 2026-07-22).
     descricao: Mapped[str] = mapped_column(String(300), unique=True)
     posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("posto_servico.id"), nullable=True)
+    # --- Estrutura (opcional; proposta pelo parser, confirmada pelo RH) ---
+    # escala: seg-sex | 12x36 | 5x2 | seg-qui+sex | intermitente
+    escala: Mapped[str | None] = mapped_column(String(20))
+    # os 4 horários do bloco principal, "HH:MM" (entrada, saída p/ almoço,
+    # volta do almoço, saída). Jornadas sem almoço (12x36 noturno) podem ter só 2.
+    hora_entrada: Mapped[str | None] = mapped_column(String(5))
+    saida_almoco: Mapped[str | None] = mapped_column(String(5))
+    volta_almoco: Mapped[str | None] = mapped_column(String(5))
+    hora_saida: Mapped[str | None] = mapped_column(String(5))
+    # 2º bloco quando a jornada é composta (sexta/sábado diferente) — texto livre
+    bloco_secundario: Mapped[str | None] = mapped_column(String(150))
+    # diurno | noturno (adicional noturno = rubrica)
+    turno: Mapped[str | None] = mapped_column(String(10))
+    adicional_noturno: Mapped[bool] = mapped_column(default=False)
+    # intrajornada: dá direito à rubrica de adicional; obs = detalhe do parser
+    # ("15 MINUTOS", "REDUÇÃO"), texto livre confirmado pelo RH.
+    tem_intrajornada: Mapped[bool] = mapped_column(default=False)
+    intrajornada_obs: Mapped[str | None] = mapped_column(String(60))
+    # cargo típico embutido na descrição (motorista/brigadista/ASG/AGP…)
+    cargo_relacionado: Mapped[str | None] = mapped_column(String(40))
+    # quando o RH confirmou a proposta do parser (NULL = ainda "a confirmar")
+    estruturado_confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ativa: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
