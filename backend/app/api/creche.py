@@ -196,6 +196,13 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "motivo_indeferimento": ben.motivo_indeferimento,
         "motivo_devolucao": ben.motivo_devolucao,
         "devolvido_em": ben.devolvido_em,
+        # fila de acompanhamento (auditoria 2026-07-22): distingue "devolvi e
+        # espero correção" de "colaborador só começou". aguardando_correcao =
+        # voltou a levantamento por devolução e ainda não reenviou.
+        "aguardando_correcao": (ben.status == StatusBeneficio.levantamento
+                                and ben.devolvido_em is not None),
+        "reenviado_apos_correcao": bool(ben.devolvido_em and ben.enviado_em
+                                        and ben.enviado_em > ben.devolvido_em),
         "sem_direito_em": ben.sem_direito_em,
         "sem_direito_por": ben.sem_direito_por,
         "criancas": criancas,
@@ -262,12 +269,22 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
         try:
             criar_roteiro_creche(db, ben, rh)
         except Exception:
-            pass  # a assinatura é reproduzível; não trava a ativação do benefício
-        _email_orientacoes_mensais(ben, col)
+            # NÃO engolir sem rastro: sem o roteiro o colaborador nunca vê o botão
+            # de assinar. Registra para o RH reprocessar (auditoria 2026-07-22).
+            registrar(db, "creche_roteiro_falhou", ator="sistema",
+                      candidato_id=col.id, detalhe={"beneficio": str(ben.id)})
     registrar(db, "creche_beneficio_ativado", ator="rh", ator_detalhe=rh.email,
               candidato_id=col.id,
               detalhe={"status": ben.status.value, "dia": ben.dia_entrega_mensal})
     db.commit()
+    # e-mails após o commit (SMTP fora não desfaz a decisão)
+    try:
+        if ben.status == StatusBeneficio.ativo:
+            _email_orientacoes_mensais(ben, col)
+        else:
+            _email_aguardando_repactuacao(ben, col)
+    except Exception:
+        pass
     return _dump_beneficio(db, ben)
 
 
@@ -315,6 +332,12 @@ def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    # guard: devolver só faz sentido para pedido em análise/aguardando. Sem isso
+    # um clique fora de ordem devolveria um ATIVO, reabrindo edição de benefício
+    # que já tem dossiê/assinatura (deixaria artefatos órfãos). Reabrir um
+    # terminal (indeferido/sem-direito) é a rota /reabrir, não esta.
+    if ben.status not in (StatusBeneficio.em_analise, StatusBeneficio.aguardando_repactuacao):
+        raise HTTPException(status_code=409, detail="nao_devolvivel")
     ben.status = StatusBeneficio.levantamento
     ben.motivo_devolucao = payload.motivo.strip()
     ben.devolvido_em = datetime.now(timezone.utc)
@@ -398,6 +421,33 @@ def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_d
     _marcar_sem_direito(db, ben, rh.email)
     registrar(db, "creche_sem_direito", ator="rh", ator_detalhe=rh.email,
               candidato_id=colaborador_id, detalhe={"por": "rh"})
+    db.commit()
+    return _dump_beneficio(db, ben)
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/reabrir")
+def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Tira o benefício de um estado TERMINAL (indeferido / sem_direito_declarado)
+    e o devolve a `levantamento` para o colaborador refazer — a situação mudou
+    (indeferido por engano; ou quem declarou 'sem direito' passou a ter filho/
+    guarda). Feedback 2026-07-22: antes esses estados eram becos sem saída dos
+    dois lados. Só age sobre terminais reabríveis; um ativo não se 'reabre' assim."""
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    if ben.status not in (StatusBeneficio.indeferido, StatusBeneficio.sem_direito_declarado):
+        raise HTTPException(status_code=409, detail="nao_reabrivel")
+    ben.status = StatusBeneficio.levantamento
+    ben.motivo_indeferimento = None
+    ben.sem_direito_em = None
+    ben.sem_direito_por = None
+    ben.enviado_em = None
+    ben.dados_conferidos_em = None
+    ben.revisado_por = rh.email
+    ben.revisado_em = datetime.now(timezone.utc)
+    registrar(db, "creche_beneficio_reaberto", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id)
     db.commit()
     return _dump_beneficio(db, ben)
 
@@ -491,6 +541,34 @@ def _email_devolucao(ben: BeneficioCreche, col: Candidato) -> None:
                 "<strong>devolvido para correção</strong>.",
                 f"<strong>Motivo do RH:</strong> {motivo}",
                 f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, corrija e reenvie.",
+            ],
+        ),
+    )
+
+
+def _email_aguardando_repactuacao(ben: BeneficioCreche, col: Candidato) -> None:
+    """Avisa o colaborador de que foi APROVADO, mas o pagamento depende do ajuste
+    (repactuação) do contrato do posto — senão ele acha que ainda está 'em
+    análise' e cobra o RH sem necessidade (auditoria 2026-07-22)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche: aprovado, aguardando o contrato",
+        f"Olá, {nome}!\n\n"
+        "Seu Reembolso-Creche foi APROVADO pelo RH. O pagamento começa após o "
+        "ajuste (repactuação) do contrato do seu posto. Avisaremos quando estiver "
+        "ativo — não é preciso fazer nada agora.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Aprovado — aguardando o contrato",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                "Seu <strong>Reembolso-Creche</strong> foi <strong>aprovado</strong> pelo RH. 🎉",
+                "O pagamento começa após o ajuste (repactuação) do contrato do seu "
+                "posto. <strong>Avisaremos quando estiver ativo</strong> — não é "
+                "preciso fazer nada agora.",
             ],
         ),
     )
