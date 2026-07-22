@@ -144,9 +144,15 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
 
 @router.get("/rh/metricas")
 def metricas(db: Session = Depends(get_db)) -> dict:
-    """Números do painel: funil de candidatos, fila de revisão e tempo médio."""
-    candidatos = db.scalars(select(Candidato)).all()
-    slots = db.scalars(select(SlotDocumento)).all()
+    """Números do painel de ADMISSÕES: só quem está em admissão (`situacao IS
+    NULL`) — coerente com a tela. Antes contava TODA a base (incl. os 1156
+    colaboradores importados do Tirvu), o que inflava "Candidatos" e não batia
+    com a lista (feedback 2026-07-22)."""
+    candidatos = db.scalars(select(Candidato).where(Candidato.situacao.is_(None))).all()
+    ids_admissao = {c.id for c in candidatos}
+    # slots só dos candidatos em admissão (não dos colaboradores importados)
+    slots = [s for s in db.scalars(select(SlotDocumento)).all()
+             if s.candidato_id in ids_admissao]
 
     por_status: dict[str, int] = {}
     for c in candidatos:

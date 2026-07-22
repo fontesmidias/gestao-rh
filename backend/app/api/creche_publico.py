@@ -353,6 +353,10 @@ def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
         # (feedback 2026-07-21) — só faz sentido enquanto estiver editável.
         "motivo_devolucao": (ben.motivo_devolucao
                              if ben.status == StatusBeneficio.levantamento else None),
+        # o motivo do indeferimento também é da pessoa (ela passou por 2FA) —
+        # mostrá-lo evita a enxurrada de "por que fui indeferido?" (2026-07-22).
+        "motivo_indeferimento": (ben.motivo_indeferimento
+                                 if ben.status == StatusBeneficio.indeferido else None),
     }
 
 

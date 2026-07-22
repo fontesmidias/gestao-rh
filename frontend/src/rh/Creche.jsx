@@ -114,6 +114,23 @@ function Levantamentos() {
     try { await api.crechePrazos([ben.id], parseInt(dia, 10)); setMsg('Prazo atualizado.'); carregar() }
     catch (e) { setErro(`Falha ao alterar o prazo (${e.detail || e.message}).`) }
   }
+  const reenviarLink = async (ben) => {
+    // destrava quem não conseguiu entrar: reenvia o código e, se preciso, corrige o e-mail
+    const email = window.prompt(
+      `Reenviar o link/código do Reembolso-Creche para ${ben.nome}.\n\n`
+      + 'E-mail de destino (deixe como está para reenviar ao atual; corrija se estiver errado):',
+      ben.email || '')
+    if (email === null) return
+    setMsg(null); setErro(null)
+    try {
+      const r = await api.crecheReenviarLink(ben.id, email.trim())
+      setMsg(`Código reenviado para ${r.enviado_para}.`); carregar()
+    } catch (e) {
+      setErro(e.detail === 'sem_email'
+        ? 'Sem e-mail para enviar — informe um e-mail válido para o colaborador.'
+        : `Não foi possível reenviar (${e.detail || e.message}).`)
+    }
+  }
   const abrirBlob = (blob) => {
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
@@ -202,7 +219,10 @@ function Levantamentos() {
             <h3>{b.nome} — {fmtCpf(b.cpf)}</h3>
             <p className="explica">Posto: <strong>{b.posto || '—'}</strong> ·
               e-mail: {b.email || '—'} · telefone: {b.telefone || '—'} ·
-              valor do posto: {b.valor_posto || '— (a repactuar)'}</p>
+              valor do posto: {b.valor_posto || '— (a repactuar)'}
+              {' '}<button className="btn-link" onClick={() => reenviarLink(b)}
+                     title="Reenviar o código de acesso ao colaborador (e corrigir o e-mail, se preciso)">
+                ✉️ reenviar link</button></p>
             <table className="rh-tabela">
               <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
                 <th>Na idade?</th><th>Docs</th></tr></thead>
