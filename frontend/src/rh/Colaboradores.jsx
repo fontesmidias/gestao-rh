@@ -194,6 +194,51 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     try { await api.desligarColaborador(c.id, data.trim()); carregar() }
     catch { setErro('Não foi possível registrar o desligamento.') }
   }
+  // Pergunta destino + motivo da reversão (colaborador -> candidato). Retorna
+  // {destino, motivo} ou null se o RH cancelar. Avisa (não bloqueia) quando há
+  // indício de Tirvu — decisão do Bruno 2026-07-21.
+  const pedirReversao = (rotuloAlvo, indicio) => {
+    if (indicio && !window.confirm(
+      `Atenção: ${rotuloAlvo} tem indício de já existir no Tirvu (${indicio}).\n\n`
+      + 'Reverter aqui NÃO desfaz o vínculo no Tirvu — resolva lá se necessário. Continuar?')) return null
+    const escolha = window.prompt(
+      `Reverter ${rotuloAlvo} de colaborador para candidato.\n\n`
+      + 'Para onde volta? Digite 1 ou 2:\n1) Início (novo convite)\n2) Revisão (reavaliar dados)', '2')
+    if (escolha === null) return null
+    const destino = escolha.trim() === '1' ? 'convidado' : 'em_revisao'
+    const motivo = window.prompt('Motivo da reversão (obrigatório, fica na auditoria):', '')
+    if (!motivo || !motivo.trim()) {
+      setErro('A reversão precisa de um motivo.'); return null
+    }
+    return { destino, motivo: motivo.trim() }
+  }
+  const reverter = async (c) => {
+    const r = pedirReversao(c.nome_completo, c.indicio_tirvu)
+    if (!r) return
+    setErro(null); setAviso(null)
+    try {
+      await api.reverterColaborador(c.id, r.destino, r.motivo)
+      setAviso(`${c.nome_completo} voltou a ser candidato.`)
+      carregar()
+    } catch (e) { setErro(`Não foi possível reverter (${e.detail || e.message}).`) }
+  }
+  const reverterSelecionados = async () => {
+    const alvos = selList.filter((c) => c.situacao)  // só quem é colaborador
+    if (!alvos.length) { setErro('Selecione ao menos um colaborador para reverter.'); return }
+    const comTirvu = alvos.filter((c) => c.indicio_tirvu).length
+    const rotulo = `${alvos.length} colaborador(es)`
+        + (comTirvu ? ` (${comTirvu} com indício de Tirvu)` : '')
+    const r = pedirReversao(rotulo, comTirvu ? 'alguns já podem existir no Tirvu' : null)
+    if (!r) return
+    setErro(null); setAviso(null)
+    try {
+      const res = await comAmpulheta('Revertendo selecionados…',
+        () => api.reverterLote(alvos.map((c) => c.id), r.destino, r.motivo))
+      setAviso(`${res.revertidos} revertido(s) a candidato`
+        + (res.pulados ? `, ${res.pulados} ignorado(s) (não eram colaboradores).` : '.'))
+      setSelecionados(new Set()); carregar()
+    } catch (e) { setErro(`Não foi possível reverter em massa (${e.detail || e.message}).`) }
+  }
   const transferir = async (c) => {
     const opts = postos.filter((p) => p.ativo)
     if (!opts.length) { setErro('Cadastre postos antes de transferir.'); return }
@@ -277,6 +322,10 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
           {selDesligados > 0 && (
             <button className="btn-secundario btn-mini" onClick={() => acaoMassa('reativar')}>
               ♻️ Reativar ({selDesligados})</button>)}
+          {(selAtivos + selDesligados) > 0 && (
+            <button className="btn-secundario btn-mini" onClick={reverterSelecionados}
+                    title="Voltar colaborador a candidato (converteu por engano)">
+              ↩️ Reverter a candidato ({selAtivos + selDesligados})</button>)}
           <button className="btn-secundario btn-mini" onClick={() => acaoMassa('marcar_dominio')}
                   title="Marca que estas admissões já foram lançadas no sistema Domínio (contabilidade)">
             🧾 Na Domínio ({selecionados.size})</button>
@@ -346,6 +395,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                       <button className="btn-secundario btn-mini" onClick={() => desligar(c)}
                               title="Registrar desligamento">Desligar</button>
                     </>)}
+                  {c.situacao && (
+                    <button className="btn-secundario btn-mini" onClick={() => reverter(c)}
+                            title="Voltar a candidato (converteu por engano)">↩️ Reverter</button>)}
                 </td>
               </tr>
             ))}
