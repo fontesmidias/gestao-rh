@@ -31,11 +31,22 @@ imagem; as migrations rodam sozinhas no entrypoint).
   **Colaboradores** filtra `situacao IS NOT NULL` — cada registro aparece numa
   tela só (v1.63; antes vazava nas duas). Escapes simétricos:
   `incluir_colaboradores` (Admissões) e `incluir_admissao` (Colaboradores).
-  ATENÇÃO: há DOIS campos de status parcialmente sobrepostos — `status`
-  (`StatusCandidato`, fase do fluxo, 13 valores) e `situacao` (vínculo), que
-  colidem nas palavras `ativo`/`desligado`. Limpar essa colisão (tirar
-  ativo/desligado do `StatusCandidato`) é pendência aprovada — NÃO fundir os
-  campos (fase de fluxo × vínculo são ortogonais).
+  **`status` é SÓ fluxo; `situacao` é SÓ vínculo** (v1.69, item 1b — antes
+  compartilhavam ativo/desligado e confundiam a tela). Regras: efetivar aqui →
+  `status=aprovado`; importar do Tirvu → `status=importado` (valor novo, nunca
+  passou pelo funil); desligar/reativar mexem SÓ na `situacao`, nunca no
+  `status`. Os valores `ativo`/`desligado` do `StatusCandidato` são ÓRFÃOS (não
+  se escreve mais; ficam no enum porque o Postgres não remove valor sem recriar
+  o tipo; o front `status.js` já os ignora). NÃO usar em código novo, NÃO fundir
+  os campos. **Bomba do expurgo:** `workers/expurgo.py` apaga arquivos de quem
+  tem `status=aprovado` — como efetivado agora fica `aprovado`, o filtro exige
+  `situacao IS NULL` (só admissão), senão apagaria documentos de colaborador
+  ativo.
+- **Migrations que adicionam E usam um valor de enum:** o `env.py` roda com
+  `transaction_per_migration=True` (cada revisão commita sozinha). Separe em
+  DUAS revisões: uma faz `ALTER TYPE ... ADD VALUE` (com `op.execute("COMMIT")`),
+  a SEGUINTE usa o valor no `UPDATE` — o Postgres proíbe usar valor de enum
+  recém-criado na mesma transação (`UnsafeNewEnumValueUsage`).
 - **Reverter colaborador→candidato** (`/rh/colaboradores/{cid}/reverter` e
   `/lote/reverter`, v1.65): zera `situacao`/data para uma FASE de fluxo escolhida
   (convidado | em_revisao), **preserva a matrícula** e os dados. Motivo
