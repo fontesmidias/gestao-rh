@@ -55,9 +55,14 @@ function Levantamentos() {
   const [msg, setMsg] = useState(null)
   const [aberto, setAberto] = useState(null) // benefício em detalhe
 
-  const carregar = (st = filtro) =>
-    api.crecheLevantamentos(st || undefined).then(setLista)
+  const carregar = (st = filtro) => {
+    // "__devolvidos" é derivado (levantamento + devolvido_em): carrega os
+    // levantamentos e filtra em memória por aguardando_correcao.
+    const stServer = st === '__devolvidos' ? 'levantamento' : st
+    return api.crecheLevantamentos(stServer || undefined)
+      .then((r) => setLista(st === '__devolvidos' ? r.filter((b) => b.aguardando_correcao) : r))
       .catch(() => setErro('Não foi possível carregar os levantamentos.'))
+  }
   useEffect(() => { carregar() }, [])
 
   const ativar = async (ben, aguardar) => {
@@ -114,6 +119,16 @@ function Levantamentos() {
     try { await api.crechePrazos([ben.id], parseInt(dia, 10)); setMsg('Prazo atualizado.'); carregar() }
     catch (e) { setErro(`Falha ao alterar o prazo (${e.detail || e.message}).`) }
   }
+  const reabrir = async (ben) => {
+    if (!window.confirm(`Reabrir o levantamento de ${ben.nome}?\n\n`
+      + 'Volta a "preenchendo" para o colaborador refazer (indeferido por engano, '
+      + 'ou passou a ter dependente).')) return
+    setMsg(null); setErro(null)
+    try {
+      await api.crecheReabrir(ben.id)
+      setMsg('Levantamento reaberto — o colaborador pode refazer.'); setAberto(null); carregar()
+    } catch (e) { setErro(`Não foi possível reabrir (${e.detail || e.message}).`) }
+  }
   const reenviarLink = async (ben) => {
     // destrava quem não conseguiu entrar: reenvia o código e, se preciso, corrige o e-mail
     const email = window.prompt(
@@ -162,6 +177,7 @@ function Levantamentos() {
                 onChange={(e) => { setFiltro(e.target.value); carregar(e.target.value) }}>
           <option value="">Todos os status</option>
           <option value="em_analise">Aguardando análise</option>
+          <option value="__devolvidos">Devolvidos — aguardando correção</option>
           <option value="aguardando_repactuacao">Aguardando repactuação</option>
           <option value="ativo">Ativos</option>
           <option value="indeferido">Indeferidos</option>
@@ -190,7 +206,15 @@ function Levantamentos() {
                     <span title="Posto não marcado como elegível"> ⚠️</span>}</td>
                   <td>{(b.criancas || []).length} ({elegiveis} na idade)</td>
                   <td>dia {b.dia_entrega_mensal}</td>
-                  <td><span className="chip" style={{ '--chip-cor': s.cor }}>{s.rot}</span></td>
+                  <td>
+                    {b.aguardando_correcao
+                      ? <span className="chip" style={{ '--chip-cor': '#d9822b' }}
+                              title={b.motivo_devolucao || ''}>↩️ Devolvido — aguarda reenvio</span>
+                      : <span className="chip" style={{ '--chip-cor': s.cor }}>{s.rot}</span>}
+                    {b.reenviado_apos_correcao && (
+                      <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.3rem' }}
+                            title="O colaborador reenviou após a devolução">✓ reenviado</span>)}
+                  </td>
                   <td className="acoes-candidato">
                     <button className="btn-secundario btn-mini"
                             onClick={() => setAberto(aberto === b.id ? null : b.id)}>
@@ -199,10 +223,14 @@ function Levantamentos() {
                       <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
                     {b.status === 'ativo' && (
                       <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>)}
-                    {b.status === 'levantamento' && (
+                    {b.status === 'levantamento' && !b.aguardando_correcao && (
                       <button className="btn-secundario btn-mini" onClick={() => marcarSemDireito(b)}
                               title="Registrar que declarou não ter dependentes que dão direito">
                         Sem direito</button>)}
+                    {['indeferido', 'sem_direito_declarado'].includes(b.status) && (
+                      <button className="btn-secundario btn-mini" onClick={() => reabrir(b)}
+                              title="Voltar a preenchendo (indeferido por engano, ou passou a ter dependente)">
+                        ↩️ Reabrir</button>)}
                   </td>
                 </tr>
               )
@@ -223,6 +251,10 @@ function Levantamentos() {
               {' '}<button className="btn-link" onClick={() => reenviarLink(b)}
                      title="Reenviar o código de acesso ao colaborador (e corrigir o e-mail, se preciso)">
                 ✉️ reenviar link</button></p>
+            {b.motivo_devolucao && (
+              <p className="explica" style={{ margin: '0 0 .6rem', color: '#7a5b1a' }}>
+                ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
+                {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
             <table className="rh-tabela">
               <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
                 <th>Na idade?</th><th>Docs</th></tr></thead>
