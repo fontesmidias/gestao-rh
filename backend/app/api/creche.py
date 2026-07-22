@@ -104,6 +104,41 @@ def resumo(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@router.get("/rh/creche/pendentes-resposta")
+def pendentes_resposta(db: Session = Depends(get_db),
+                       _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Colaboradores ATIVOS em postos elegíveis que ainda NÃO responderam ao
+    levantamento (não têm benefício, ou têm um em `levantamento` que nunca foi
+    enviado). É a prova, para os órgãos (CNMP/ANATEL, prazo de 5 dias), de que
+    todos os elegíveis foram consultados — e a lista de quem o RH precisa cobrar
+    (auditoria 2026-07-22)."""
+    postos = _postos_elegiveis(db)
+    ids = [p.id for p in postos]
+    if not ids:
+        return []
+    nomes_posto = {p.id: p.nome for p in postos}
+    ativos = db.scalars(select(Candidato).where(
+        Candidato.posto_servico_id.in_(ids),
+        Candidato.situacao == "ativo")).all()
+    # benefícios existentes por colaborador (o último estado conta como resposta,
+    # exceto um levantamento que nunca foi enviado = não respondeu)
+    bens = {b.candidato_id: b for b in db.scalars(select(BeneficioCreche)).all()}
+    pendentes = []
+    for c in ativos:
+        b = bens.get(c.id)
+        respondeu = b is not None and (
+            b.status != StatusBeneficio.levantamento or b.enviado_em is not None)
+        if not respondeu:
+            pendentes.append({
+                "candidato_id": c.id, "nome": c.nome_completo, "cpf": c.cpf,
+                "matricula": c.matricula, "email": c.email,
+                "posto": nomes_posto.get(c.posto_servico_id),
+                "iniciou": b is not None,  # abriu o link mas não terminou
+            })
+    pendentes.sort(key=lambda x: (x["posto"] or "", x["nome"]))
+    return pendentes
+
+
 @router.get("/rh/creche/exportar")
 def exportar(db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> Response:
@@ -231,6 +266,44 @@ def detalhe_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db))
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
     return _dump_beneficio(db, ben)
+
+
+# rótulos amigáveis para o histórico (as ações de auditoria com prefixo creche_)
+_HIST_ROTULO = {
+    "creche_levantamento_enviado": "Colaborador enviou o levantamento",
+    "creche_beneficio_devolvido": "RH devolveu para correção",
+    "creche_beneficio_indeferido": "RH indeferiu",
+    "creche_beneficio_ativado": "RH aprovou/ativou",
+    "creche_beneficio_reaberto": "RH reabriu o levantamento",
+    "creche_beneficio_suspenso": "RH suspendeu",
+    "creche_beneficio_encerrado": "Benefício encerrado",
+    "creche_sem_direito": "Registrado sem direito (não faz jus)",
+    "creche_link_reenviado": "RH reenviou o link/código",
+    "creche_codigo_enviado": "Código de acesso enviado",
+    "creche_roteiro_falhou": "⚠️ Falha ao gerar o requerimento (reprocessar)",
+}
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}/historico")
+def historico_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                           _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Linha do tempo das decisões do benefício (auditoria 2026-07-22): antes o
+    RH só via o estado atual e o último revisor. Lê os eventos `creche_*` do
+    colaborador, mais recente primeiro, com data/ator/motivo."""
+    from app.models.evento import EventoAuditoria
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    eventos = db.scalars(
+        select(EventoAuditoria)
+        .where(EventoAuditoria.candidato_id == ben.candidato_id,
+               EventoAuditoria.acao.like("creche\\_%", escape="\\"))
+        .order_by(EventoAuditoria.criado_em.desc())).all()
+    return [{
+        "quando": e.criado_em, "ator": e.ator, "ator_detalhe": e.ator_detalhe,
+        "acao": e.acao, "rotulo": _HIST_ROTULO.get(e.acao, e.acao),
+        "motivo": (e.detalhe or {}).get("motivo") if e.detalhe else None,
+    } for e in eventos]
 
 
 class AtivarIn(BaseModel):
@@ -426,6 +499,10 @@ def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_d
     registrar(db, "creche_sem_direito", ator="rh", ator_detalhe=rh.email,
               candidato_id=colaborador_id, detalhe={"por": "rh"})
     db.commit()
+    try:
+        _email_sem_direito(ben, col)  # confirmação escrita ao colaborador
+    except Exception:
+        pass
     return _dump_beneficio(db, ben)
 
 
@@ -634,6 +711,34 @@ def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
         _email_suspensao(ben, col, "Colaborador desligado", encerrado=True)
     except Exception:
         pass
+
+
+def _email_sem_direito(ben: BeneficioCreche, col: Candidato) -> None:
+    """Quando o RH registra 'sem direito' por um colaborador (respondeu por fora),
+    manda uma confirmação escrita — ele pode contestar antes de virar relatório
+    oficial, e a trilha de auditoria fica mais forte (auditoria 2026-07-22)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche: registro de 'sem direito'",
+        f"Olá, {nome}!\n\n"
+        "Registramos que você informou NÃO ter dependentes que dão direito ao "
+        "Reembolso-Creche.\n\nSe isso estiver incorreto ou mudar (novo filho, "
+        "guarda, adoção), procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Registro de 'sem direito'",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                "Registramos que você informou <strong>não ter dependentes</strong> "
+                "que dão direito ao Reembolso-Creche.",
+                "Se isso estiver <strong>incorreto ou mudar</strong> (novo filho, "
+                "guarda, adoção), procure o RH.",
+            ],
+        ),
+    )
 
 
 def _email_suspensao(ben: BeneficioCreche, col: Candidato, motivo: str, encerrado: bool) -> None:

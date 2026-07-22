@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
-import { fmtCpf as fmtCpfBase, soDigitos } from '../fmt.js'
+import { fmtCpf as fmtCpfBase, soDigitos, fmtDataHora } from '../fmt.js'
 import Ajuda from '../Ajuda.jsx'
 
 // exibição em tabela: CPF completo mascarado, senão travessão
@@ -41,11 +41,55 @@ export default function Creche({ aoVoltar }) {
                 onClick={() => setAba('levantamentos')}>Levantamentos<Ajuda termo="levantamento" /></button>
         <button className={aba === 'postos' ? 'ativa' : ''}
                 onClick={() => setAba('postos')}>Elegibilidade por posto<Ajuda termo="elegibilidade" /></button>
+        <button className={aba === 'pendentes' ? 'ativa' : ''}
+                onClick={() => setAba('pendentes')}>Pendentes de resposta</button>
       </div>
 
-      {aba === 'levantamentos' ? <Levantamentos /> : <PorPosto />}
+      {aba === 'levantamentos' ? <Levantamentos />
+        : aba === 'pendentes' ? <Pendentes />
+        : <PorPosto />}
     </main>
   )
+}
+
+// Elegíveis que ainda NÃO responderam — prova de consulta p/ os órgãos + cobrança.
+function Pendentes() {
+  const [lista, setLista] = useState(null)
+  useEffect(() => { api.crechePendentesResposta().then(setLista).catch(() => setLista([])) }, [])
+  const exportarCsv = () => {
+    const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`
+    const linhas = [['Nome', 'CPF', 'Matrícula', 'E-mail', 'Posto', 'Situação'].map(esc).join(';'),
+      ...lista.map((p) => [p.nome, p.cpf, p.matricula, p.email, p.posto,
+        p.iniciou ? 'Começou, não enviou' : 'Não acessou'].map(esc).join(';'))]
+    const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = `creche-pendentes-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+  }
+  if (!lista) return <p>Carregando…</p>
+  if (!lista.length) return <p className="explica centro">Todos os elegíveis responderam. 🎉</p>
+  return (<>
+    <div className="rh-card rh-lote">
+      <button className="btn-principal btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
+      <span className="explica" style={{ margin: 0 }}><strong>{lista.length}</strong> colaborador(es)
+        ativo(s) em posto elegível que ainda não responderam — cobre e prova a consulta aos órgãos.</span>
+    </div>
+    <div className="dash-scroll">
+    <table className="rh-tabela dash-tabela">
+      <thead><tr><th>Nome</th><th>CPF</th><th>Posto</th><th>Situação</th></tr></thead>
+      <tbody>
+        {lista.map((p) => (
+          <tr key={p.candidato_id}>
+            <td><strong>{p.nome}</strong><br /><small>{p.email || '—'}</small></td>
+            <td>{fmtCpf(p.cpf)}</td><td className="dash-quebra">{p.posto || '—'}</td>
+            <td>{p.iniciou
+              ? <span className="chip" style={{ '--chip-cor': '#c8a415' }}>Começou, não enviou</span>
+              : <span className="chip" style={{ '--chip-cor': '#889' }}>Não acessou</span>}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    </div>
+  </>)
 }
 
 function Levantamentos() {
@@ -54,6 +98,13 @@ function Levantamentos() {
   const [erro, setErro] = useState(null)
   const [msg, setMsg] = useState(null)
   const [aberto, setAberto] = useState(null) // benefício em detalhe
+  const [historico, setHistorico] = useState(null) // timeline do benefício aberto
+
+  const verHistorico = async (ben) => {
+    setHistorico('carregando')
+    try { setHistorico(await api.crecheHistorico(ben.id)) }
+    catch { setHistorico([]) }
+  }
 
   const carregar = (st = filtro) => {
     // "__devolvidos" é derivado (levantamento + devolvido_em): carrega os
@@ -276,6 +327,21 @@ function Levantamentos() {
               <p className="explica" style={{ margin: '0 0 .6rem', color: '#7a5b1a' }}>
                 ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
                 {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
+            <div className="rh-lote" style={{ margin: '0 0 .6rem' }}>
+              <button className="btn-link" onClick={() => verHistorico(b)}>🕘 Ver histórico de decisões</button>
+            </div>
+            {historico && historico !== 'carregando' && (
+              <div className="rh-card" style={{ background: 'var(--hover)', marginBottom: '.6rem' }}>
+                <strong>Histórico</strong>
+                {historico.length === 0 ? <p className="explica">Sem eventos.</p> : (
+                  <ul className="explica" style={{ margin: '.4rem 0 0', paddingLeft: '1.1rem' }}>
+                    {historico.map((h, i) => (
+                      <li key={i}>{fmtDataHora(h.quando)} — <strong>{h.rotulo}</strong>
+                        {h.ator_detalhe ? ` (${h.ator_detalhe})` : ''}
+                        {h.motivo ? `: ${h.motivo}` : ''}</li>))}
+                  </ul>)}
+              </div>)}
+            {historico === 'carregando' && <p className="explica">Carregando histórico…</p>}
             <table className="rh-tabela">
               <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
                 <th>Na idade?</th><th>Docs</th></tr></thead>
