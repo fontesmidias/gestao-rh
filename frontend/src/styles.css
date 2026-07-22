@@ -243,6 +243,15 @@ a { color: var(--verde-escuro); }
 .dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra {
   white-space: normal; max-width: 22rem; min-width: 10rem; word-break: break-word;
 }
+/* cards de métrica clicáveis: clicar ativa o filtro correspondente (item 3).
+   Reusa .rh-metrica; vira botão com estado hover/ativo. */
+.dash-cards { margin-bottom: .6rem; }
+button.dash-card { font: inherit; text-align: center; border: 2px solid transparent; cursor: default; }
+button.dash-card.clicavel { cursor: pointer; transition: border-color .12s, transform .06s; }
+button.dash-card.clicavel:hover { border-color: var(--card-cor, var(--verde)); }
+button.dash-card.clicavel:active { transform: translateY(1px); }
+button.dash-card.ativo { border-color: var(--card-cor, var(--verde)); background: var(--verde-suave); }
+button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(--tinta-suave); }
 .dash-tabela th.dash-ord { cursor: pointer; user-select: none; white-space: nowrap; }
 .dash-tabela th.dash-ord:hover { color: var(--verde-escuro); }
 .dash-check { width: 34px; text-align: center; }

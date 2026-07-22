@@ -105,6 +105,16 @@ export default function JornadasRH({ aoVoltar }) {
     <button className="btn-secundario btn-mini" onClick={() => excluir(j)}>Excluir</button>)
 
   const aConfirmar = (jornadas || []).filter((j) => !j.estruturado).length
+  // cards clicáveis: total, a-confirmar, 12x36, noturno (filtram a lista)
+  const cards = (jornadas || []).length ? [
+    { rotulo: 'Total', valor: jornadas.length },
+    { rotulo: 'A confirmar', valor: aConfirmar, cor: '#e9a63a',
+      filtro: { chave: 'estruturado', valor: 'A confirmar' } },
+    { rotulo: '12x36', valor: jornadas.filter((j) => j.escala === '12x36').length, cor: '#5b7',
+      filtro: { chave: 'escala', valor: ESCALA_ROT['12x36'] } },
+    { rotulo: 'Noturnas', valor: jornadas.filter((j) => j.adicional_noturno).length, cor: '#8a6d3b',
+      filtro: { chave: 'adicional_noturno', valor: 'Sim' } },
+  ] : null
 
   return (
     <main className="rh-painel">
@@ -139,7 +149,8 @@ export default function JornadasRH({ aoVoltar }) {
         <Confirmar jornadas={jornadas.filter((j) => !j.estruturado)} postos={postos}
                    onConfirmou={recarregar} setMsg={setMsg} />
       ) : (
-        <DashPlanilha id="jornadas" colunas={colunas} dados={jornadas} acoesLinha={acoesLinha}
+        <DashPlanilha id="jornadas" colunas={colunas} dados={jornadas} cards={cards}
+                      acoesLinha={acoesLinha}
                       vazio="Nenhuma jornada. Importe da planilha ou crie manualmente." />
       )}
     </main>
