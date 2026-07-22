@@ -194,6 +194,8 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "dia_entrega_mensal": ben.dia_entrega_mensal,
         "valor_reembolso": ben.valor_reembolso,
         "motivo_indeferimento": ben.motivo_indeferimento,
+        "motivo_devolucao": ben.motivo_devolucao,
+        "devolvido_em": ben.devolvido_em,
         "criancas": criancas,
         "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
     }
@@ -284,6 +286,38 @@ def indeferir_beneficio(beneficio_id: uuid.UUID, payload: IndeferirIn,
     ben.revisado_em = datetime.now(timezone.utc)
     registrar(db, "creche_beneficio_indeferido", ator="rh", ator_detalhe=rh.email,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_indeferimento})
+    db.commit()
+    return _dump_beneficio(db, ben)
+
+
+class DevolverIn(BaseModel):
+    motivo: str
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/devolver")
+def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
+                       db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Devolve o levantamento ao colaborador para correção (feedback
+    2026-07-21). O status volta a `levantamento` — o que reabre a edição no link
+    público e permite reenviar — com um motivo VISÍVEL ao colaborador. Limpa o
+    envio anterior e um eventual indeferimento (a devolução é uma segunda
+    chance, não um veredito)."""
+    if not (payload.motivo or "").strip():
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    ben.status = StatusBeneficio.levantamento
+    ben.motivo_devolucao = payload.motivo.strip()
+    ben.devolvido_em = datetime.now(timezone.utc)
+    ben.motivo_indeferimento = None  # devolver anula um indeferimento anterior
+    ben.enviado_em = None            # o colaborador vai reenviar
+    ben.dados_conferidos_em = None   # e reconferir os dados
+    ben.revisado_por = rh.email
+    ben.revisado_em = datetime.now(timezone.utc)
+    registrar(db, "creche_beneficio_devolvido", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_devolucao})
     db.commit()
     return _dump_beneficio(db, ben)
 

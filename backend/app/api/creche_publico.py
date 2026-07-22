@@ -349,6 +349,10 @@ def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
         "dados_conferidos": ben.dados_conferidos_em is not None,
         "criancas": [_dump_crianca(c) for c in ben.criancas],
         "editavel": ben.status in (StatusBeneficio.levantamento,),
+        # Se o RH devolveu para correção, o colaborador vê o motivo ao reabrir
+        # (feedback 2026-07-21) — só faz sentido enquanto estiver editável.
+        "motivo_devolucao": (ben.motivo_devolucao
+                             if ben.status == StatusBeneficio.levantamento else None),
     }
 
 
