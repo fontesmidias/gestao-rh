@@ -112,10 +112,23 @@ services:
 
   minio:
     image: minio/minio:latest
-    command: server /data
+    # --console-address habilita o console web (a base só rodava "server /data").
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # URLs PÚBLICAS (atrás do Nginx/TLS) — sem elas o console gera links
+      # internos (minio:9000) que o navegador não alcança e a listagem quebra.
+      #   MINIO_SERVER_URL           = https://s3.SEUDOMINIO   (API S3)
+      #   MINIO_BROWSER_REDIRECT_URL = https://minio.SEUDOMINIO (console web)
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL}
+    ports:
+      # publica SÓ no loopback da VPS — o Nginx faz o proxy externo com TLS.
+      # ⚠️ Portas de HOST em 91xx (não 9000/9001) p/ NÃO colidir com o Portainer,
+      #    que ocupa a 9000 na VPS. O container segue interno em 9000/9001.
+      - "127.0.0.1:${MINIO_API_PORT:-9100}:9000"     # API S3 (SDK/boto/mc)
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9101}:9001" # console web (admin)
     volumes:
       - minio-data:/data
     networks: [internal]
