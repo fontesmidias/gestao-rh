@@ -245,7 +245,9 @@ a { color: var(--verde-escuro); }
 }
 /* cards de métrica clicáveis: clicar ativa o filtro correspondente (item 3).
    Reusa .rh-metrica; vira botão com estado hover/ativo. */
-.dash-cards { margin-bottom: .6rem; }
+/* cards do dash: auto-fit (adapta a qualquer quantidade, não fixo em 6 como o
+   .rh-metricas do painel) — 5 cards não deixam buraco, e encolhem no mobile. */
+.dash-cards { margin-bottom: .6rem; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
 button.dash-card { font: inherit; text-align: center; border: 2px solid transparent; cursor: default; }
 button.dash-card.clicavel { cursor: pointer; transition: border-color .12s, transform .06s; }
 button.dash-card.clicavel:hover { border-color: var(--card-cor, var(--verde)); }

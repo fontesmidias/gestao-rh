@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
-import { STATUS_OPCOES, statusInfo } from '../status.js'
+import { statusInfo } from '../status.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import { fmtCpf as fmtCpfBase, soDigitos } from '../fmt.js'
+import { fmtData } from '../fmt.js'
 import SelectBusca from '../SelectBusca.jsx'
-import CheckMestre from '../CheckMestre.jsx'
 import Espera from '../Espera.jsx'
+import DashPlanilha from './DashPlanilha.jsx'
 
 // exibição em tabela: CPF completo mascarado, senão travessão
 const fmtCpf = (c) => (soDigitos(c).length === 11 ? fmtCpfBase(c) : (c || '—'))
@@ -16,9 +17,11 @@ const fmtDataBR = (s) => {
   return s
 }
 
-// Dash de colaboradores: importação em massa, filtros (status, situação, posto),
-// tabela e exportação Excel completa, além dos controles de vínculo (efetivar,
-// desligar, transferir) direto na linha.
+// Dash de colaboradores sobre o DashPlanilha (v1.76): sort/filtro por coluna,
+// cards clicáveis (situação/origem/Domínio), responsivo. Os filtros de TOPO
+// (status/situação/posto/busca/incluir_admissao) continuam SERVER-SIDE
+// (recarregam a API); o DashPlanilha refina em memória por cima e cuida da
+// seleção + ações em massa contextuais.
 export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [lista, setLista] = useState(null)
   const [postos, setPostos] = useState([])
@@ -30,17 +33,8 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState(null)
   const [aviso, setAviso] = useState(null)
-  const [selecionados, setSelecionados] = useState(() => new Set())
   const timer = useRef(null)
   const inputArquivo = useRef(null)
-
-  // Recortes da lista para decidir quais ações em massa fazem sentido.
-  const registros = lista || []
-  const efetivaveis = registros.filter((c) => !c.situacao)          // candidatos em admissão
-  const selList = registros.filter((c) => selecionados.has(c.id))
-  const selEfetivaveis = selList.filter((c) => !c.situacao).length
-  const selAtivos = selList.filter((c) => c.situacao === 'ativo').length
-  const selDesligados = selList.filter((c) => c.situacao === 'desligado').length
 
   const carregar = (f = {}) => {
     api.colaboradores({
@@ -73,7 +67,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       api.postos().then((rp) => setPostos(rp.postos || [])).catch(() => {})
     } catch (e) {
       setErro(e.detail === 'sem_coluna_cpf'
-        ? 'A planilha precisa ter uma coluna "CPF". Confira o arquivo do Tirvu.'
+        ? 'A planilha precisa de uma coluna "CPF". Confira o arquivo do Tirvu.'
         : e.detail === 'arquivo_invalido' || e.detail === 'planilha_vazia'
         ? 'Arquivo inválido ou vazio. Exporte novamente do Tirvu em .xlsx.'
         : 'A importação falhou. Tente novamente — se persistir, veja a auditoria.')
@@ -98,8 +92,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   }
 
   // Planilha de importação de admissões do TIRVU (28 colunas). Só colaborador
-  // vai para lá — quem ainda está em admissão não tem vínculo a criar. Por
-  // padrão exclui os importados do próprio Tirvu (já existem lá).
+  // vai para lá — quem ainda está em admissão não tem vínculo a criar.
   const exportarTirvu = async () => {
     setErro(null)
     const filtros = { status, busca, situacao, posto_id: postoId }
@@ -138,53 +131,6 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     try { await api.efetivarColaborador(c.id); carregar() }
     catch { setErro('Não foi possível efetivar.') }
   }
-  const alternarSel = (cid) => setSelecionados((s) => {
-    const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n
-  })
-  const selecionarTodos = (marcar) =>
-    setSelecionados(marcar ? new Set(registros.map((c) => c.id)) : new Set())
-  const efetivarSelecionados = async () => {
-    const ids = [...selecionados]
-    if (!ids.length) return
-    if (!window.confirm(`Efetivar ${ids.length} candidato(s) como colaboradores ativos?`
-      + '\n\nCandidatos ainda não aprovados também serão efetivados se estiverem selecionados.')) return
-    setErro(null); setAviso(null)
-    try {
-      const r = await comAmpulheta('Efetivando selecionados…', () => api.efetivarLote(ids))
-      setAviso(`${r.efetivados} efetivado(s)` + (r.pulados ? `, ${r.pulados} já eram colaboradores.` : '.'))
-      setSelecionados(new Set())
-      carregar()
-    } catch (e) {
-      setErro(`Não foi possível efetivar em massa (${e.detail || e.message}).`)
-    }
-  }
-  const acaoMassa = async (acao) => {
-    const ids = [...selecionados]
-    if (!ids.length) return
-    let data = null
-    const rotulos = {
-      desligar: 'desligado(s)', reativar: 'reativado(s)',
-      marcar_dominio: 'marcado(s) como lançado(s) na Domínio',
-      desmarcar_dominio: 'desmarcado(s) da Domínio',
-    }
-    if (acao === 'desligar') {
-      data = window.prompt(`Desligar ${ids.length} colaborador(es) selecionado(s).`
-        + '\nInforme a data de desligamento (dd/mm/aaaa):', new Date().toLocaleDateString('pt-BR'))
-      if (!data) return
-    } else {
-      if (!window.confirm(`Confirmar: ${ids.length} registro(s) ${rotulos[acao]}?`)) return
-    }
-    setErro(null); setAviso(null)
-    try {
-      const r = await comAmpulheta('Aplicando ação nos selecionados…',
-        () => api.acaoMassaColaboradores(ids, acao, data?.trim()))
-      setAviso(`${r.afetados} ${rotulos[acao]}`
-        + (r.pulados ? `, ${r.pulados} ignorado(s) (não eram colaboradores).` : '.'))
-      setSelecionados(new Set()); carregar()
-    } catch (e) {
-      setErro(`Não foi possível ${acao} em massa (${e.detail || e.message}).`)
-    }
-  }
   const desligar = async (c) => {
     const data = window.prompt(
       `Desligar ${c.nome_completo}.\nInforme a data de desligamento (dd/mm/aaaa):`,
@@ -192,51 +138,6 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     if (!data) return
     try { await api.desligarColaborador(c.id, data.trim()); carregar() }
     catch { setErro('Não foi possível registrar o desligamento.') }
-  }
-  // Pergunta destino + motivo da reversão (colaborador -> candidato). Retorna
-  // {destino, motivo} ou null se o RH cancelar. Avisa (não bloqueia) quando há
-  // indício de Tirvu — decisão do Bruno 2026-07-21.
-  const pedirReversao = (rotuloAlvo, indicio) => {
-    if (indicio && !window.confirm(
-      `Atenção: ${rotuloAlvo} tem indício de já existir no Tirvu (${indicio}).\n\n`
-      + 'Reverter aqui NÃO desfaz o vínculo no Tirvu — resolva lá se necessário. Continuar?')) return null
-    const escolha = window.prompt(
-      `Reverter ${rotuloAlvo} de colaborador para candidato.\n\n`
-      + 'Para onde volta? Digite 1 ou 2:\n1) Início (novo convite)\n2) Revisão (reavaliar dados)', '2')
-    if (escolha === null) return null
-    const destino = escolha.trim() === '1' ? 'convidado' : 'em_revisao'
-    const motivo = window.prompt('Motivo da reversão (obrigatório, fica na auditoria):', '')
-    if (!motivo || !motivo.trim()) {
-      setErro('A reversão precisa de um motivo.'); return null
-    }
-    return { destino, motivo: motivo.trim() }
-  }
-  const reverter = async (c) => {
-    const r = pedirReversao(c.nome_completo, c.indicio_tirvu)
-    if (!r) return
-    setErro(null); setAviso(null)
-    try {
-      await api.reverterColaborador(c.id, r.destino, r.motivo)
-      setAviso(`${c.nome_completo} voltou a ser candidato.`)
-      carregar()
-    } catch (e) { setErro(`Não foi possível reverter (${e.detail || e.message}).`) }
-  }
-  const reverterSelecionados = async () => {
-    const alvos = selList.filter((c) => c.situacao)  // só quem é colaborador
-    if (!alvos.length) { setErro('Selecione ao menos um colaborador para reverter.'); return }
-    const comTirvu = alvos.filter((c) => c.indicio_tirvu).length
-    const rotulo = `${alvos.length} colaborador(es)`
-        + (comTirvu ? ` (${comTirvu} com indício de Tirvu)` : '')
-    const r = pedirReversao(rotulo, comTirvu ? 'alguns já podem existir no Tirvu' : null)
-    if (!r) return
-    setErro(null); setAviso(null)
-    try {
-      const res = await comAmpulheta('Revertendo selecionados…',
-        () => api.reverterLote(alvos.map((c) => c.id), r.destino, r.motivo))
-      setAviso(`${res.revertidos} revertido(s) a candidato`
-        + (res.pulados ? `, ${res.pulados} ignorado(s) (não eram colaboradores).` : '.'))
-      setSelecionados(new Set()); carregar()
-    } catch (e) { setErro(`Não foi possível reverter em massa (${e.detail || e.message}).`) }
   }
   const transferir = async (c) => {
     const opts = postos.filter((p) => p.ativo)
@@ -249,11 +150,170 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     const data = window.prompt('Data da transferência (dd/mm/aaaa):',
                                new Date().toLocaleDateString('pt-BR'))
     if (!data) return
-    try {
-      await api.transferirColaborador(c.id, opts[idx].id, data.trim())
-      carregar()
-    } catch { setErro('Não foi possível transferir.') }
+    try { await api.transferirColaborador(c.id, opts[idx].id, data.trim()); carregar() }
+    catch { setErro('Não foi possível transferir.') }
   }
+  // reverter colaborador -> candidato (pergunta destino + motivo; avisa se Tirvu)
+  const pedirReversao = (rotuloAlvo, indicio) => {
+    if (indicio && !window.confirm(
+      `Atenção: ${rotuloAlvo} tem indício de já existir no Tirvu (${indicio}).\n\n`
+      + 'Reverter aqui NÃO desfaz o vínculo no Tirvu — resolva lá se necessário. Continuar?')) return null
+    const escolha = window.prompt(
+      `Reverter ${rotuloAlvo} de colaborador para candidato.\n\n`
+      + 'Para onde volta? Digite 1 ou 2:\n1) Início (novo convite)\n2) Revisão (reavaliar dados)', '2')
+    if (escolha === null) return null
+    const destino = escolha.trim() === '1' ? 'convidado' : 'em_revisao'
+    const motivo = window.prompt('Motivo da reversão (obrigatório, fica na auditoria):', '')
+    if (!motivo || !motivo.trim()) { setErro('A reversão precisa de um motivo.'); return null }
+    return { destino, motivo: motivo.trim() }
+  }
+  const reverter = async (c) => {
+    const r = pedirReversao(c.nome_completo, c.indicio_tirvu)
+    if (!r) return
+    setErro(null); setAviso(null)
+    try {
+      await api.reverterColaborador(c.id, r.destino, r.motivo)
+      setAviso(`${c.nome_completo} voltou a ser candidato.`); carregar()
+    } catch (e) { setErro(`Não foi possível reverter (${e.detail || e.message}).`) }
+  }
+
+  // --- ações em massa (recebem as linhas selecionadas do DashPlanilha) ---
+  const efetivarSelecionados = async (linhas, limpar) => {
+    const ids = linhas.filter((c) => !c.situacao).map((c) => c.id)
+    if (!ids.length) { setErro('Nenhum candidato efetivável selecionado.'); return }
+    if (!window.confirm(`Efetivar ${ids.length} candidato(s) como colaboradores ativos?`
+      + '\n\nCandidatos ainda não aprovados também serão efetivados se estiverem selecionados.')) return
+    setErro(null); setAviso(null)
+    try {
+      const r = await comAmpulheta('Efetivando selecionados…', () => api.efetivarLote(ids))
+      setAviso(`${r.efetivados} efetivado(s)` + (r.pulados ? `, ${r.pulados} já eram colaboradores.` : '.'))
+      limpar(); carregar()
+    } catch (e) { setErro(`Não foi possível efetivar em massa (${e.detail || e.message}).`) }
+  }
+  const acaoMassa = async (linhas, limpar, acao) => {
+    const ids = linhas.filter((c) => c.situacao).map((c) => c.id)  // só colaboradores
+    if (!ids.length && acao !== 'marcar_dominio' && acao !== 'desmarcar_dominio') {
+      setErro('Selecione ao menos um colaborador.'); return
+    }
+    const idsDominio = linhas.map((c) => c.id)
+    const alvo = (acao === 'marcar_dominio' || acao === 'desmarcar_dominio') ? idsDominio : ids
+    let data = null
+    const rotulos = {
+      desligar: 'desligado(s)', reativar: 'reativado(s)',
+      marcar_dominio: 'marcado(s) como lançado(s) na Domínio',
+      desmarcar_dominio: 'desmarcado(s) da Domínio',
+    }
+    if (acao === 'desligar') {
+      data = window.prompt(`Desligar ${alvo.length} colaborador(es) selecionado(s).`
+        + '\nInforme a data de desligamento (dd/mm/aaaa):', new Date().toLocaleDateString('pt-BR'))
+      if (!data) return
+    } else if (!window.confirm(`Confirmar: ${alvo.length} registro(s) ${rotulos[acao]}?`)) return
+    setErro(null); setAviso(null)
+    try {
+      const r = await comAmpulheta('Aplicando ação nos selecionados…',
+        () => api.acaoMassaColaboradores(alvo, acao, data?.trim()))
+      setAviso(`${r.afetados} ${rotulos[acao]}`
+        + (r.pulados ? `, ${r.pulados} ignorado(s) (não eram colaboradores).` : '.'))
+      limpar(); carregar()
+    } catch (e) { setErro(`Não foi possível ${acao} em massa (${e.detail || e.message}).`) }
+  }
+  const reverterSelecionados = async (linhas, limpar) => {
+    const alvos = linhas.filter((c) => c.situacao)  // só colaboradores
+    if (!alvos.length) { setErro('Selecione ao menos um colaborador para reverter.'); return }
+    const comTirvu = alvos.filter((c) => c.indicio_tirvu).length
+    const rotulo = `${alvos.length} colaborador(es)` + (comTirvu ? ` (${comTirvu} com indício de Tirvu)` : '')
+    const r = pedirReversao(rotulo, comTirvu ? 'alguns já podem existir no Tirvu' : null)
+    if (!r) return
+    setErro(null); setAviso(null)
+    try {
+      const res = await comAmpulheta('Revertendo selecionados…',
+        () => api.reverterLote(alvos.map((c) => c.id), r.destino, r.motivo))
+      setAviso(`${res.revertidos} revertido(s) a candidato`
+        + (res.pulados ? `, ${res.pulados} ignorado(s) (não eram colaboradores).` : '.'))
+      limpar(); carregar()
+    } catch (e) { setErro(`Não foi possível reverter em massa (${e.detail || e.message}).`) }
+  }
+
+  // --- config do DashPlanilha ---
+  const chipSituacao = (c) => c.situacao
+    ? <span className="chip" style={{ '--chip-cor': c.situacao === 'ativo' ? '#0fb257' : '#889' }}>
+        {c.situacao === 'ativo' ? '🟢 Ativo' : '⚪ Desligado'}
+        {c.data_desligamento ? ` (${c.data_desligamento})` : ''}</span>
+    : <span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
+        {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>
+
+  const colunas = [
+    { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+      valor: (c) => c.nome_completo,
+      render: (c) => (<><strong>{c.nome_completo}</strong><br /><small>{c.email || '—'}</small></>) },
+    { chave: 'cpf', rotulo: 'CPF', filtro: 'texto', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
+    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true,
+      valor: (c) => c.posto_nome || '' },
+    { chave: 'nascimento', rotulo: 'Nascimento', ordenavel: true, oculta: true,
+      valor: (c) => c.nascimento, render: (c) => fmtDataBR(c.nascimento) },
+    { chave: 'contato', rotulo: 'Contato', oculta: true, valor: (c) => c.celular_whatsapp || '' },
+    { chave: 'situacao', rotulo: 'Situação', ordenavel: true, filtro: 'select',
+      opcoes: [{ v: 'Ativo', r: 'Ativo' }, { v: 'Desligado', r: 'Desligado' }, { v: 'Em admissão', r: 'Em admissão' }],
+      valor: (c) => c.situacao === 'ativo' ? 'Ativo' : c.situacao === 'desligado' ? 'Desligado' : 'Em admissão',
+      render: (c) => (<>{chipSituacao(c)}{c.na_dominio_em && (
+        <span className="chip" style={{ '--chip-cor': '#3b7dd8', marginLeft: '.3rem' }}
+              title={`Lançada na Domínio em ${new Date(c.na_dominio_em).toLocaleDateString('pt-BR')}`}>🧾 Domínio</span>)}</>) },
+    { chave: 'origem', rotulo: 'Origem', filtro: 'select', oculta: true,
+      opcoes: [{ v: 'Tirvu', r: 'Importado (Tirvu)' }, { v: 'Admissão', r: 'Da admissão' }],
+      valor: (c) => c.origem === 'importacao' ? 'Tirvu' : 'Admissão' },
+    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, oculta: true,
+      valor: (c) => c.criado_em, render: (c) => fmtData(c.criado_em) },
+  ]
+
+  const acoesLinha = (c) => (<>
+    <button className="btn-secundario btn-mini" onClick={() => aoAbrir(c.id)}>Abrir</button>
+    {c.situacao !== 'ativo' && (
+      <button className="btn-secundario btn-mini" onClick={() => efetivar(c)} title="Tornar colaborador ativo">Efetivar</button>)}
+    {c.situacao === 'ativo' && (<>
+      <button className="btn-secundario btn-mini" onClick={() => transferir(c)} title="Transferir de posto">Transferir</button>
+      <button className="btn-secundario btn-mini" onClick={() => desligar(c)} title="Registrar desligamento">Desligar</button>
+    </>)}
+    {c.situacao && (
+      <button className="btn-secundario btn-mini" onClick={() => reverter(c)} title="Voltar a candidato">↩️ Reverter</button>)}
+  </>)
+
+  // ações em massa CONTEXTUAIS: só aparece o botão que faz sentido p/ a seleção
+  const acoesMassa = (linhas, limpar) => {
+    const efetivaveis = linhas.filter((c) => !c.situacao).length
+    const ativos = linhas.filter((c) => c.situacao === 'ativo').length
+    const desligados = linhas.filter((c) => c.situacao === 'desligado').length
+    return (<>
+      {efetivaveis > 0 && (
+        <button className="btn-principal btn-mini" onClick={() => efetivarSelecionados(linhas, limpar)}>
+          ✅ Efetivar ({efetivaveis})</button>)}
+      {ativos > 0 && (
+        <button className="btn-secundario btn-mini" onClick={() => acaoMassa(linhas, limpar, 'desligar')}>
+          🚪 Desligar ({ativos})</button>)}
+      {desligados > 0 && (
+        <button className="btn-secundario btn-mini" onClick={() => acaoMassa(linhas, limpar, 'reativar')}>
+          ♻️ Reativar ({desligados})</button>)}
+      {(ativos + desligados) > 0 && (
+        <button className="btn-secundario btn-mini" onClick={() => reverterSelecionados(linhas, limpar)}
+                title="Voltar colaborador a candidato">↩️ Reverter ({ativos + desligados})</button>)}
+      <button className="btn-secundario btn-mini" onClick={() => acaoMassa(linhas, limpar, 'marcar_dominio')}
+              title="Marca que estas admissões já foram lançadas na Domínio">🧾 Na Domínio ({linhas.length})</button>
+      <button className="btn-secundario btn-mini" onClick={() => acaoMassa(linhas, limpar, 'desmarcar_dominio')}>
+        ↩ Tirar da Domínio</button>
+    </>)
+  }
+
+  // cards clicáveis (filtram a coluna 'situacao'/'origem' em memória)
+  const reg = lista || []
+  const cards = reg.length ? [
+    { rotulo: 'Total', valor: reg.length },
+    { rotulo: 'Ativos', valor: reg.filter((c) => c.situacao === 'ativo').length, cor: '#0fb257',
+      filtro: { chave: 'situacao', valor: 'Ativo' } },
+    { rotulo: 'Desligados', valor: reg.filter((c) => c.situacao === 'desligado').length, cor: '#889',
+      filtro: { chave: 'situacao', valor: 'Desligado' } },
+    { rotulo: 'Importados (Tirvu)', valor: reg.filter((c) => c.origem === 'importacao').length, cor: '#5b7',
+      filtro: { chave: 'origem', valor: 'Tirvu' } },
+    { rotulo: 'Na Domínio', valor: reg.filter((c) => c.na_dominio_em).length, cor: '#3b7dd8' },
+  ] : null
 
   return (
     <main className="rh-painel">
@@ -266,142 +326,39 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
           <button className="btn-secundario btn-mini"
                   onClick={() => inputArquivo.current?.click()}>⬆ Importar base</button>
           <button className="btn-secundario btn-mini" disabled={!lista?.length}
-                  title="Planilha no layout de importação de admissões do Tirvu (28 colunas), com quem veio da admissão"
+                  title="Planilha no layout de importação de admissões do Tirvu (28 colunas)"
                   onClick={exportarTirvu}>⬆ Exportar p/ Tirvu</button>
           <button className="btn-principal btn-mini" disabled={exportando || !lista?.length}
-                  onClick={exportar}>
-            {exportando ? 'Gerando…' : '⬇ Exportar Excel'}</button>
+                  onClick={exportar}>{exportando ? 'Gerando…' : '⬇ Exportar Excel'}</button>
         </div>
       </header>
-      <p className="explica">Importe a base ativa do <strong>Tirvu (.xlsx)</strong> — a
-        importação é <strong>por CPF</strong>: rodar de novo atualiza, não duplica. A
-        exportação traz <strong>uma linha por colaborador com todas as respostas</strong>,
-        respeitando os filtros. Atenção: contém dados pessoais e de saúde — trate conforme a LGPD.</p>
-      <p className="explica"><strong>⬆ Exportar p/ Tirvu</strong> gera a planilha de
-        <strong> importação de admissões</strong> (28 colunas) para você subir lá — apenas
-        com quem <strong>veio da admissão</strong> e já foi efetivado. Quem foi importado
-        do Tirvu já existe lá e fica de fora. O Tirvu ignora cadastros repetidos.</p>
+      <p className="explica">Importe a base ativa do <strong>Tirvu (.xlsx)</strong> — a importação é
+        <strong> por CPF</strong> (rodar de novo atualiza, não duplica). Clique nos cards para filtrar;
+        ordene e filtre por qualquer coluna. Contém dados pessoais e de saúde — trate conforme a LGPD.</p>
 
+      {/* filtros de topo SERVER-SIDE (recarregam a base) */}
       <div className="rh-card rh-lote">
-        <select value={status} style={{ maxWidth: 200 }}
-                onChange={(e) => { setStatus(e.target.value); carregar({ status: e.target.value }) }}>
-          {STATUS_OPCOES.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-        </select>
-        <select value={situacao} style={{ maxWidth: 170 }}
-                onChange={(e) => { setSituacao(e.target.value); carregar({ situacao: e.target.value }) }}>
-          <option value="">Todas as situações</option>
-          <option value="ativo">Ativos</option>
-          <option value="desligado">Desligados</option>
-        </select>
         <SelectBusca style={{ minWidth: 200 }} vazioRotulo="Todos os postos" placeholder="Buscar posto…"
           valor={postoId} aoEscolher={(v) => { setPostoId(v); carregar({ posto_id: v }) }}
           opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.nome }))} />
         <input placeholder="Buscar por nome, e-mail ou CPF…" value={busca}
                style={{ flex: 1, minWidth: 200 }} onChange={(e) => aoBuscar(e.target.value)} />
-        <span className="explica" style={{ margin: 0 }}>
-          {lista ? `${lista.length} registro(s)` : ''}</span>
+        <label className="explica" style={{ display: 'flex', alignItems: 'center', gap: '.4rem', margin: 0 }}>
+          <input type="checkbox" checked={incluirAdmissao}
+                 onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
+          incluir em admissão
+        </label>
       </div>
-      <label className="explica" style={{ display: 'flex', alignItems: 'center', gap: '.5rem',
-              margin: '0 0 .6rem' }}>
-        <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={incluirAdmissao}
-               onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
-        Incluir candidatos ainda em processo de admissão (por padrão, esta tela mostra só
-        quem já é colaborador — importado ou efetivado).
-      </label>
-
-      {selecionados.size > 0 && (
-        <div className="rh-card rh-lote" style={{ alignItems: 'center' }}>
-          <strong>{selecionados.size} selecionado(s):</strong>
-          {selEfetivaveis > 0 && (
-            <button className="btn-principal btn-mini" onClick={efetivarSelecionados}>
-              ✅ Efetivar ({selEfetivaveis})</button>)}
-          {selAtivos > 0 && (
-            <button className="btn-secundario btn-mini" onClick={() => acaoMassa('desligar')}>
-              🚪 Desligar ({selAtivos})</button>)}
-          {selDesligados > 0 && (
-            <button className="btn-secundario btn-mini" onClick={() => acaoMassa('reativar')}>
-              ♻️ Reativar ({selDesligados})</button>)}
-          {(selAtivos + selDesligados) > 0 && (
-            <button className="btn-secundario btn-mini" onClick={reverterSelecionados}
-                    title="Voltar colaborador a candidato (converteu por engano)">
-              ↩️ Reverter a candidato ({selAtivos + selDesligados})</button>)}
-          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('marcar_dominio')}
-                  title="Marca que estas admissões já foram lançadas no sistema Domínio (contabilidade)">
-            🧾 Na Domínio ({selecionados.size})</button>
-          <button className="btn-secundario btn-mini" onClick={() => acaoMassa('desmarcar_dominio')}
-                  title="Desfaz a marcação de lançado na Domínio">
-            ↩ Tirar da Domínio</button>
-          <button className="btn-link" onClick={() => setSelecionados(new Set())}>limpar seleção</button>
-        </div>
-      )}
 
       {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
       {aviso && <div className="alerta" style={{ borderColor: 'var(--verde)',
                      background: 'var(--verde-suave)', color: 'var(--verde-escuro)' }}>{aviso}</div>}
       {erro && <div className="alerta">{erro}</div>}
 
-      {!lista ? <p>Carregando…</p> : lista.length === 0 ? (
-        <p className="explica centro">Nenhum colaborador com esses filtros.</p>
-      ) : (
-        <table className="rh-tabela">
-          <thead>
-            <tr>
-              <th style={{ width: 34 }}>
-                <CheckMestre
-                  marcado={registros.length > 0 && registros.every((c) => selecionados.has(c.id))}
-                  parcial={registros.some((c) => selecionados.has(c.id))
-                           && !registros.every((c) => selecionados.has(c.id))}
-                  onChange={() => selecionarTodos(
-                    !registros.every((c) => selecionados.has(c.id)))}
-                  title="Selecionar todos os registros visíveis" />
-              </th>
-              <th>Nome</th><th>CPF</th><th>Posto</th><th>Nascimento</th>
-              <th>Contato</th><th>Situação/Status</th><th>Ações</th></tr>
-          </thead>
-          <tbody>
-            {lista.map((c) => (
-              <tr key={c.id}>
-                <td><input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
-                           checked={selecionados.has(c.id)} onChange={() => alternarSel(c.id)}
-                           title="Selecionar para ação em massa" /></td>
-                <td><strong>{c.nome_completo}</strong><br /><small>{c.email}</small></td>
-                <td>{fmtCpf(c.cpf)}</td>
-                <td>{c.posto_nome || '—'}</td>
-                <td>{fmtDataBR(c.nascimento)}</td>
-                <td>{c.celular_whatsapp || '—'}</td>
-                <td>
-                  {c.situacao
-                    ? <span className="chip" style={{ '--chip-cor': c.situacao === 'ativo' ? '#0fb257' : '#889' }}>
-                        {c.situacao === 'ativo' ? '🟢 Ativo' : '⚪ Desligado'}
-                        {c.data_desligamento ? ` (${c.data_desligamento})` : ''}
-                      </span>
-                    : <span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
-                        {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>}
-                  {c.na_dominio_em && (
-                    <span className="chip" style={{ '--chip-cor': '#3b7dd8', marginLeft: '.3rem' }}
-                          title={`Lançada no sistema Domínio em ${new Date(c.na_dominio_em).toLocaleDateString('pt-BR')}`}>
-                      🧾 Domínio</span>)}
-                </td>
-                <td className="acoes-candidato">
-                  <button className="btn-secundario btn-mini" onClick={() => aoAbrir(c.id)}>Abrir</button>
-                  {c.situacao !== 'ativo' && (
-                    <button className="btn-secundario btn-mini" onClick={() => efetivar(c)}
-                            title="Tornar colaborador ativo">Efetivar</button>)}
-                  {c.situacao === 'ativo' && (
-                    <>
-                      <button className="btn-secundario btn-mini" onClick={() => transferir(c)}
-                              title="Transferir de posto">Transferir</button>
-                      <button className="btn-secundario btn-mini" onClick={() => desligar(c)}
-                              title="Registrar desligamento">Desligar</button>
-                    </>)}
-                  {c.situacao && (
-                    <button className="btn-secundario btn-mini" onClick={() => reverter(c)}
-                            title="Voltar a candidato (converteu por engano)">↩️ Reverter</button>)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {!lista ? <p>Carregando…</p> : (
+        <DashPlanilha id="colaboradores" colunas={colunas} dados={lista} cards={cards}
+                      acoesLinha={acoesLinha} acoesMassa={acoesMassa}
+                      vazio="Nenhum colaborador com esses filtros." />
       )}
     </main>
   )
