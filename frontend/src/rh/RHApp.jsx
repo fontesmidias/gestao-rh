@@ -169,14 +169,17 @@ const COLUNAS_ADMISSAO = () => [
 // métricas operacionais (docs a revisar, reenvios, tempo médio) vêm de
 // /rh/metricas e entram como indicadores.
 function cardsAdmissao(lista, m) {
-  if (!lista?.length) return null
-  const porStatus = (s) => lista.filter((c) => c.status === s).length
+  // as métricas vêm de /rh/metricas (não da lista), então os cards aparecem
+  // MESMO com a lista vazia/filtrada — são o painel, não o rodapé da tabela.
+  if (!lista && !m) return null
+  const reg = lista || []
+  const porStatus = (s) => reg.filter((c) => c.status === s).length
   const cardStatus = (s) => ({
     rotulo: statusInfo(s).label, cor: statusInfo(s).cor, valor: porStatus(s),
     filtro: { chave: 'status', valor: statusInfo(s).label },
   })
   const cards = [
-    { rotulo: 'Em admissão', valor: lista.length },
+    { rotulo: 'Em admissão', valor: reg.length },
     cardStatus('envio_concluido'),
     cardStatus('em_revisao'),
     cardStatus('docs_pendentes'),
