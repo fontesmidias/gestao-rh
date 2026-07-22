@@ -451,6 +451,23 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
     return {"status": ben.status}
 
 
+@router.post("/creche/sessao/{token}/sem-direito")
+def declarar_sem_direito(token: str, db: Session = Depends(get_db)) -> dict:
+    """O colaborador declara que NÃO tem dependentes que dão direito ao benefício
+    (feedback 2026-07-21). Some da fila de ação, mas fica no relatório do RH como
+    'consultado e não pediu'. Só quando ainda está preenchendo (levantamento)."""
+    _, ben = _requer_sessao(token, db)
+    if ben.status != StatusBeneficio.levantamento:
+        raise HTTPException(status_code=409, detail="levantamento_encerrado")
+    ben.status = StatusBeneficio.sem_direito_declarado
+    ben.sem_direito_em = datetime.now(timezone.utc)
+    ben.sem_direito_por = "colaborador"
+    registrar(db, "creche_sem_direito", ator="colaborador",
+              candidato_id=ben.candidato_id, detalhe={"por": "colaborador"})
+    db.commit()
+    return {"status": ben.status}
+
+
 # --------------------------------------------------------------------------
 # Assinatura do requerimento pela plataforma (após aprovação do RH). O
 # colaborador assina na PRÓPRIA sessão de creche (já autenticada por 2FA);

@@ -189,6 +189,7 @@ export const creche = {
     return r.json()
   },
   enviar: (t) => req(`/creche/sessao/${t}/enviar`, { method: 'POST' }),
+  crecheSemDireito: (t) => req(`/creche/sessao/${t}/sem-direito`, { method: 'POST' }),
   requerimentoStatus: (t) => req(`/creche/sessao/${t}/requerimento`),
   assinarRequerimento: (t) =>
     req(`/creche/sessao/${t}/assinar-requerimento`, { method: 'POST' }),
@@ -537,6 +538,8 @@ export const rh = {
   crecheDevolver: (id, motivo) =>
     req(`/rh/creche/levantamentos/${id}/devolver`, { method: 'POST', headers: authRH(),
                                                      body: JSON.stringify({ motivo }) }),
+  crecheMarcarSemDireito: (colaboradorId) =>
+    req(`/rh/creche/colaboradores/${colaboradorId}/sem-direito`, { method: 'POST', headers: authRH() }),
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),

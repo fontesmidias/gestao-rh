@@ -15,6 +15,7 @@ const STATUS_BEN = {
   suspenso: { rot: 'Suspenso', cor: '#889' },
   encerrado: { rot: 'Encerrado', cor: '#889' },
   indeferido: { rot: 'Indeferido', cor: '#889' },
+  sem_direito_declarado: { rot: 'Sem direito (declarado)', cor: '#6c8' },
 }
 
 // Reembolso-Creche (IN SEGES/MGI 147/2026): revisão dos levantamentos enviados
@@ -95,6 +96,19 @@ function Levantamentos() {
       setMsg('Pedido devolvido ao colaborador para correção.'); setAberto(null); carregar()
     } catch (e) { setErro(`Falha ao devolver (${e.detail || e.message}).`) }
   }
+  const marcarSemDireito = async (ben) => {
+    if (!window.confirm(`Registrar que ${ben.nome} declarou NÃO ter filhos/dependentes `
+      + 'que dão direito ao benefício?\n\nFica no relatório como consultado — não pediu.')) return
+    setMsg(null); setErro(null)
+    try {
+      await api.crecheMarcarSemDireito(ben.candidato_id)
+      setMsg('Registrado: colaborador sem direito ao benefício.'); carregar()
+    } catch (e) {
+      setErro(e.detail === 'beneficio_ativo'
+        ? 'Este colaborador tem benefício ATIVO — encerre-o antes.'
+        : `Não foi possível registrar (${e.detail || e.message}).`)
+    }
+  }
   const alterarPrazo = async (ben) => {
     const dia = window.prompt('Novo dia de entrega mensal (1 a 28):', String(ben.dia_entrega_mensal))
     if (dia === null) return
@@ -136,6 +150,7 @@ function Levantamentos() {
           <option value="ativo">Ativos</option>
           <option value="indeferido">Indeferidos</option>
           <option value="levantamento">Ainda preenchendo</option>
+          <option value="sem_direito_declarado">Sem direito (declarado)</option>
         </select>
         <span className="explica" style={{ margin: 0 }}>{lista ? `${lista.length} registro(s)` : ''}</span>
       </div>
@@ -168,6 +183,10 @@ function Levantamentos() {
                       <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
                     {b.status === 'ativo' && (
                       <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>)}
+                    {b.status === 'levantamento' && (
+                      <button className="btn-secundario btn-mini" onClick={() => marcarSemDireito(b)}
+                              title="Registrar que declarou não ter dependentes que dão direito">
+                        Sem direito</button>)}
                   </td>
                 </tr>
               )

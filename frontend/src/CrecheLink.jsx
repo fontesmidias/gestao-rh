@@ -224,6 +224,14 @@ function SessaoCreche({ token, aoEnviar }) {
         : 'Não foi possível enviar. Confira os dados.')
     } finally { setEnviando(false) }
   }
+  const semDireito = async () => {
+    if (!window.confirm('Confirmar que você NÃO tem filhos ou dependentes de até 5 anos '
+      + 'que dão direito ao reembolso-creche?\n\nIsto encerra o levantamento sem pedido.')) return
+    setErro(null); setEnviando(true)
+    try { await api.crecheSemDireito(token); aoEnviar() }
+    catch { setErro('Não foi possível registrar. Tente de novo.') }
+    finally { setEnviando(false) }
+  }
 
   if (!dados) return <div className="rh-card creche-card"><p>Carregando…</p></div>
   if (dados.status !== 'levantamento') {
@@ -304,6 +312,11 @@ function SessaoCreche({ token, aoEnviar }) {
       <button className="btn-principal creche-enviar" disabled={enviando || !(dados.criancas || []).length}
               onClick={enviar}>
         {enviando ? 'Enviando…' : 'Enviar levantamento'}</button>
+      <p className="explica centro" style={{ marginTop: '.8rem' }}>
+        Não tem filhos ou dependentes de até 5 anos?{' '}
+        <button className="btn-link" onClick={semDireito} disabled={enviando}>
+          Declarar que não tenho direito ao benefício</button>
+      </p>
     </div>
   )
 }
