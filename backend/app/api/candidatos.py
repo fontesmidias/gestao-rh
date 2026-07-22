@@ -27,6 +27,10 @@ class NovoCandidato(BaseModel):
     email: EmailStr | None = None
     celular_whatsapp: str | None = None
     posto_id: uuid.UUID | None = None
+    # Jornada obrigatória já no convite (feedback 2026-07-21): o Tirvu recusa
+    # admissão sem jornada, e exigir aqui evita descobrir a pendência lá na
+    # frente. O seletor do front oferece as jornadas do posto primeiro.
+    jornada_id: uuid.UUID | None = None
     regime: str = "efetivo"
     cargo_funcao: str | None = None
     # Testes marcados pelo RH ao gerar o link: o candidato responde ANTES de
@@ -75,17 +79,23 @@ def criar_candidato(
     Com o posto e o regime escolhidos aqui, os documentos específicos do kit
     (INFRAERO / Informativo do Intermitente) já nascem exigidos."""
     from app.api.postos import gerar_docs_do_posto_e_regime
-    from app.models.candidato import PostoServico
+    from app.models.candidato import Jornada, PostoServico
 
     dados = payload.model_dump()
     posto_id = dados.pop("posto_id", None)
+    jornada_id = dados.pop("jornada_id", None)
     regime = (dados.pop("regime", None) or "efetivo").strip().lower()
     cargo = dados.pop("cargo_funcao", None)
     fazer_disc = bool(dados.pop("fazer_disc", False))
     fazer_situacional = bool(dados.pop("fazer_situacional", False))
     if posto_id is not None and db.get(PostoServico, posto_id) is None:
         raise HTTPException(status_code=404, detail="posto_nao_encontrado")
-    candidato = Candidato(**dados, posto_servico_id=posto_id,
+    # Jornada é obrigatória no convite (feedback 2026-07-21) e precisa existir.
+    if jornada_id is None:
+        raise HTTPException(status_code=422, detail="jornada_obrigatoria")
+    if db.get(Jornada, jornada_id) is None:
+        raise HTTPException(status_code=404, detail="jornada_nao_encontrada")
+    candidato = Candidato(**dados, posto_servico_id=posto_id, jornada_id=jornada_id,
                           regime=regime if regime in ("efetivo", "intermitente") else "efetivo",
                           cargo_funcao=cargo)
     db.add(candidato)

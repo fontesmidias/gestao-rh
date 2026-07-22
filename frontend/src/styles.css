@@ -315,6 +315,15 @@ input:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--verde); background: var(--cartao);
   box-shadow: 0 0 0 4px rgba(22, 196, 100, .16);
 }
+/* Checkbox e radio NÃO são campos de texto: a regra acima (width:100% +
+   min-height do alvo de toque) os inflava, obrigando cada tela a remendar com
+   style inline (width:auto; min-height:0). Reset global no tamanho natural com
+   acento verde — resolve os "checkbox enormes" da tela de incidência/postos e
+   dispensa o remendo daqui pra frente (feedback 2026-07-21). */
+input[type="checkbox"], input[type="radio"] {
+  width: 1.15rem; height: 1.15rem; min-width: 0; min-height: 0;
+  padding: 0; flex-shrink: 0; accent-color: var(--verde-vivo); cursor: pointer;
+}
 textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .linha2 { display: grid; grid-template-columns: 2fr 1fr; gap: .75rem; }
 .linha3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; }

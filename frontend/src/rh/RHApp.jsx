@@ -273,6 +273,14 @@ function Painel({ aoSair }) {
   // no celular, as tabelas viram cards com rótulos automáticos das colunas
   useEffect(() => observarTabelas(), [])
 
+  // Jornadas para o seletor do convite: as do posto escolhido vêm primeiro
+  // (ordenação, não filtro). Jornada é obrigatória no convite (feedback 2026-07-21).
+  const [jornadasConvite, setJornadasConvite] = useState([])
+  useEffect(() => {
+    if (!novo) { setJornadasConvite([]); return }
+    api.jornadas(novo.posto_id || null).then(setJornadasConvite).catch(() => setJornadasConvite([]))
+  }, [novo?.posto_id, novo === null])
+
   const navegar = (destino) => {
     setPagina(destino)
     setSelecionado(null)
@@ -317,9 +325,10 @@ function Painel({ aoSair }) {
       {novo && (
         <div className="rh-card">
           <h3>Convidar candidato</h3>
-          <p className="explica">Nome e <strong>posto</strong> são obrigatórios — com base no posto
-            e no regime, os documentos específicos do kit já nascem certos. Sem e-mail? Sem problema:
-            o link aparece aqui para copiar e mandar pelo WhatsApp.</p>
+          <p className="explica">Nome, <strong>posto</strong> e <strong>jornada</strong> são
+            obrigatórios — com base no posto e no regime, os documentos do kit já nascem certos, e a
+            jornada evita a pendência que o Tirvu acusa depois. Sem e-mail? Sem problema: o link
+            aparece aqui para copiar e mandar pelo WhatsApp.</p>
           <div className="linha3">
             <input placeholder="Nome completo"
                    onChange={(e) => setNovo({ ...novo, nome_completo: e.target.value })} />
@@ -338,13 +347,23 @@ function Painel({ aoSair }) {
                 {p.sigla || p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
               <option value="__novo">➕ Outro (cadastrar novo posto)</option>
             </select>
+            <select value={novo.jornada_id || ''}
+                    onChange={(e) => setNovo({ ...novo, jornada_id: e.target.value })}>
+              <option value="">— jornada (obrigatória) —</option>
+              {jornadasConvite.map((j) => <option key={j.id} value={j.id}>{j.descricao}</option>)}
+            </select>
             <select value={novo.regime || 'efetivo'}
                     onChange={(e) => setNovo({ ...novo, regime: e.target.value })}>
               <option value="efetivo">Regime: Efetivo</option>
               <option value="intermitente">Regime: Intermitente</option>
             </select>
+          </div>
+          <div className="linha2">
             <input placeholder="Cargo/função (opcional)"
                    onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
+            {jornadasConvite.length === 0 && (
+              <span className="explica" style={{ margin: 0, alignSelf: 'center' }}>
+                Nenhuma jornada cadastrada ainda — cadastre em <strong>Config → Empresas e jornadas</strong>.</span>)}
           </div>
           <div className="rh-lote" style={{ margin: '.5rem 0 0' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
@@ -392,6 +411,10 @@ function Painel({ aoSair }) {
               if (!novo.posto_id) {
                 setErroConvite('Escolha o posto de serviço (ou cadastre um novo em "Outro").'); return
               }
+              if (!novo.jornada_id) {
+                setErroConvite('Escolha a jornada de trabalho (o Tirvu recusa admissão sem jornada). '
+                  + 'Se não houver nenhuma, cadastre em Config → Empresas e jornadas.'); return
+              }
               setEnviandoConvite(true)
               try {
                 const r = await api.novoCandidato({
@@ -399,6 +422,7 @@ function Painel({ aoSair }) {
                   email: (novo.email || '').trim() || null,
                   celular_whatsapp: (novo.celular_whatsapp || '').trim() || null,
                   posto_id: novo.posto_id,
+                  jornada_id: novo.jornada_id,
                   regime: novo.regime || 'efetivo',
                   cargo_funcao: (novo.cargo_funcao || '').trim() || null,
                   fazer_disc: !!novo.fazer_disc,

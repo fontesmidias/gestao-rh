@@ -35,10 +35,17 @@ rh = {"Authorization": f"Bearer {r.json()['token']}"}
 assert c.post("/api/rh/candidatos", json={}).status_code == 401
 
 # 3) cadastro de candidato -> link mágico
+# jornada é obrigatória no convite (feedback 2026-07-21) — sem ela, 422
+jr = c.post("/api/rh/jornadas", headers=rh, json={"descricao": "SMOKE - 2A A 6A - 08H AS 17H"})
+assert jr.status_code == 201, jr.text
+jornada_id = jr.json()["id"]
+sem_jornada = c.post("/api/rh/candidatos", headers=rh, json={"nome_completo": "Sem Jornada"})
+assert sem_jornada.status_code == 422 and sem_jornada.json()["detail"] == "jornada_obrigatoria", sem_jornada.text
 r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "José Teste da Silva",
     "email": "jose@example.com",
     "celular_whatsapp": "+5561999998888",
+    "jornada_id": jornada_id,
 })
 assert r.status_code == 201, r.text
 convite = r.json()
