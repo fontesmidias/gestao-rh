@@ -351,8 +351,9 @@ async def importar_colaboradores(arquivo: UploadFile,
             if k == "nome_completo" and not val:
                 continue
             setattr(alvo, k, val)
-        alvo.situacao = situacao
-        alvo.status = StatusCandidato.desligado if situacao == "desligado" else StatusCandidato.ativo
+        alvo.situacao = situacao  # vínculo (ativo/desligado) vem do Tirvu
+        # `status` é fluxo: importado nunca passou pelo funil daqui (v1.69).
+        alvo.status = StatusCandidato.importado
         if lotacao:
             alvo.posto_servico_id = _casar_posto(db, cache_postos, lotacao)
         # mescla dinâmicos preservando o que já houver
@@ -391,8 +392,9 @@ def _get_colab(db: Session, cid: uuid.UUID) -> Candidato:
 
 
 def _efetivar_um(db: Session, c: Candidato) -> None:
-    c.situacao = "ativo"
-    c.status = StatusCandidato.ativo
+    c.situacao = "ativo"  # vínculo
+    # `status` é fluxo: efetivar aqui = admissão aprovada e concluída (v1.69).
+    c.status = StatusCandidato.aprovado
     if not c.data_admissao:
         c.data_admissao = datetime.now(timezone.utc).strftime("%d/%m/%Y")
 
@@ -486,12 +488,10 @@ def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(ge
             pulados += 1
             continue
         if payload.acao == "desligar":
-            c.situacao = "desligado"
-            c.status = StatusCandidato.desligado
+            c.situacao = "desligado"  # vínculo; `status` (fluxo) não muda
             c.data_desligamento = payload.data_desligamento.strip()
         else:  # reativar
             c.situacao = "ativo"
-            c.status = StatusCandidato.ativo
             c.data_desligamento = None
         afetados += 1
     registrar(db, "colaboradores_acao_massa", ator="rh", ator_detalhe=rh.email,
@@ -588,8 +588,7 @@ def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
 def desligar(cid: uuid.UUID, payload: DesligamentoIn, db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> dict:
     c = _get_colab(db, cid)
-    c.situacao = "desligado"
-    c.status = StatusCandidato.desligado
+    c.situacao = "desligado"  # vínculo; `status` (fluxo) não muda
     c.data_desligamento = payload.data_desligamento.strip() or None
     registrar(db, "colaborador_desligado", ator="rh", ator_detalhe=rh.email,
               candidato_id=c.id,

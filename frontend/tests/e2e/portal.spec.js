@@ -75,8 +75,18 @@ async function criarConvite(request, dados) {
     { data: { email: RH_EMAIL, senha: RH_SENHA } })
   expect(login.ok()).toBeTruthy()
   const { token } = await login.json()
+  const auth = { Authorization: `Bearer ${token}` }
+  // Jornada é obrigatória no convite (v1.64). Garante uma e injeta o id, a menos
+  // que o teste já tenha passado jornada_id.
+  if (!dados.jornada_id) {
+    const jr = await request.post('/api/rh/jornadas', {
+      headers: auth, data: { descricao: `E2E JORNADA ${Date.now()}` },
+    })
+    expect(jr.status()).toBe(201)
+    dados = { ...dados, jornada_id: (await jr.json()).id }
+  }
   const convite = await request.post('/api/rh/candidatos', {
-    headers: { Authorization: `Bearer ${token}` }, data: dados,
+    headers: auth, data: dados,
   })
   expect(convite.status()).toBe(201)
   return convite.json()
