@@ -254,6 +254,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   elegível foi consultado e NÃO pediu. **"Novo requerimento p/ mais filhos" é
   pendência** (o modelo é 1:1, `candidato_id unique=True`; virar 1:N toca
   assinatura/dossiê/ativação/link — projetar p/ N, entregar 1).
+  **Comunicação de estado + saídas (v1.73-75, auditoria):** TODA transição de
+  decisão avisa o colaborador por e-mail (`_email_*`: ativar/repactuação/devolver/
+  indeferir/suspensão). O gate serve importados do Tirvu (sem ficha): a KBA usa
+  dados IMUTÁVEIS NATIVOS do `Candidato` (nascimento+sobrenome), não as fichas.
+  RH destrava quem não entra via `/reenviar-link` (corrige e-mail + reenvia
+  código). `AposEnvio` (CrecheLink) tem texto honesto por StatusBeneficio.
+  Saídas: `/reabrir` (indeferido/sem_direito → levantamento), `/suspender`
+  (encerrar:bool, 409 se não-ativo). **Desligar colaborador encerra o benefício
+  ativo** (`encerrar_creche_no_desligamento`). Guards de status em toda
+  transição. Flags no dump: `aguardando_correcao`, `reenviado_apos_correcao`,
+  `revisar_idade` (ativo sem criança na idade = risco de glosa). Métricas
+  (`/rh/metricas`) contam só `situacao IS NULL`, não a base inteira.
 - **Incidência de Benefícios** (`incidencia_beneficios.py`): a planilha do RH
   (abas PÚBLICO/PRIVADO) normaliza os postos no padrão `CLIENTE - Nº CONTRATO -
   OBJETO` e define a elegibilidade creche pela coluna "Reembolso creche/Mês". Lê
