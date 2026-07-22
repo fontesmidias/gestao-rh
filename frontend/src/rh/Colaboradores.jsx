@@ -261,6 +261,15 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     { chave: 'origem', rotulo: 'Origem', filtro: 'select', oculta: true,
       opcoes: [{ v: 'Tirvu', r: 'Importado (Tirvu)' }, { v: 'Admissão', r: 'Da admissão' }],
       valor: (c) => c.origem === 'importacao' ? 'Tirvu' : 'Admissão' },
+    // o que falta preencher no cadastro (importados do Tirvu vêm com buracos)
+    { chave: 'cadastro', rotulo: 'Cadastro', filtro: 'select', quebra: true,
+      opcoes: [{ v: 'Completo', r: 'Completo' }, { v: 'Falta', r: 'Falta preencher' }],
+      valor: (c) => (c.dados_faltando?.length ? 'Falta' : 'Completo'),
+      render: (c) => (c.dados_faltando?.length
+        ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}
+                title={`Faltam: ${c.dados_faltando.join(', ')}`}>
+            ⚠️ falta {c.dados_faltando.join(', ')}</span>
+        : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✓ completo</span>) },
     { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, oculta: true,
       valor: (c) => c.criado_em, render: (c) => fmtData(c.criado_em) },
   ]
@@ -312,6 +321,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       filtro: { chave: 'situacao', valor: 'Desligado' } },
     { rotulo: 'Importados (Tirvu)', valor: reg.filter((c) => c.origem === 'importacao').length, cor: '#5b7',
       filtro: { chave: 'origem', valor: 'Tirvu' } },
+    { rotulo: 'Cadastro incompleto', cor: '#e9a63a',
+      valor: reg.filter((c) => c.dados_faltando?.length).length,
+      filtro: { chave: 'cadastro', valor: 'Falta' } },
     { rotulo: 'Na Domínio', valor: reg.filter((c) => c.na_dominio_em).length, cor: '#3b7dd8' },
   ] : null
 
