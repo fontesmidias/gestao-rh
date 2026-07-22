@@ -3,6 +3,7 @@ import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import { fmtCpf as fmtCpfBase, soDigitos, fmtDataHora } from '../fmt.js'
 import Ajuda from '../Ajuda.jsx'
+import DashPlanilha from './DashPlanilha.jsx'
 
 // exibição em tabela: CPF completo mascarado, senão travessão
 const fmtCpf = (c) => (soDigitos(c).length === 11 ? fmtCpfBase(c) : (c || '—'))
@@ -234,6 +235,73 @@ function Levantamentos() {
     catch (e) { setErro(`Falha ao abrir o arquivo (${e.detail || e.message}).`) }
   }
 
+  // --- config do DashPlanilha (v1.78): sort/filtro por coluna + cards clicáveis ---
+  const rotStatus = (b) => b.aguardando_correcao
+    ? 'Devolvido — aguarda reenvio'
+    : (STATUS_BEN[b.status]?.rot || b.status)
+  const colunas = [
+    { chave: 'nome', rotulo: 'Colaborador', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+      valor: (b) => b.nome,
+      render: (b) => (<><strong>{b.nome}</strong><br /><small>{fmtCpf(b.cpf)}</small></>) },
+    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true,
+      valor: (b) => b.posto || '',
+      render: (b) => (<>{b.posto || '—'}{!b.posto_da_direito &&
+        <span title="Posto não marcado como elegível"> ⚠️</span>}</>) },
+    { chave: 'criancas', rotulo: 'Crianças', ordenavel: true,
+      valor: (b) => (b.criancas || []).length,
+      render: (b) => `${(b.criancas || []).length} (${(b.criancas || []).filter((c) => c.elegivel_idade).length} na idade)` },
+    { chave: 'prazo', rotulo: 'Prazo', oculta: true, valor: (b) => b.dia_entrega_mensal,
+      render: (b) => `dia ${b.dia_entrega_mensal}` },
+    { chave: 'status', rotulo: 'Status', ordenavel: true, filtro: 'select',
+      opcoes: [...Object.values(STATUS_BEN).map((s) => ({ v: s.rot, r: s.rot })),
+               { v: 'Devolvido — aguarda reenvio', r: 'Devolvido — aguarda reenvio' }],
+      valor: rotStatus,
+      render: (b) => (<>
+        {b.aguardando_correcao
+          ? <span className="chip" style={{ '--chip-cor': '#d9822b' }}
+                  title={b.motivo_devolucao || ''}>↩️ Devolvido — aguarda reenvio</span>
+          : <span className="chip" style={{ '--chip-cor': (STATUS_BEN[b.status] || {}).cor || '#889' }}>
+              {(STATUS_BEN[b.status] || {}).rot || b.status}</span>}
+        {b.reenviado_apos_correcao && (
+          <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.3rem' }}
+                title="O colaborador reenviou após a devolução">✓ reenviado</span>)}
+        {b.revisar_idade && (
+          <span className="chip" style={{ '--chip-cor': '#d9534f', marginLeft: '.3rem' }}
+                title="Todas as crianças passaram da idade limite — revise (suspender)">⚠️ revisar idade</span>)}
+      </>) },
+  ]
+  const acoesLinha = (b) => (<>
+    <button className="btn-secundario btn-mini"
+            onClick={() => { setAberto(aberto === b.id ? null : b.id); setHistorico(null) }}>
+      {aberto === b.id ? 'Fechar' : 'Ver'}</button>
+    {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
+      <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
+    {b.status === 'ativo' && (<>
+      <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>
+      <button className="btn-secundario btn-mini" onClick={() => suspender(b, false)}
+              title="Suspender (criança passou da idade, pendência)">Suspender</button>
+      <button className="btn-secundario btn-mini" onClick={() => suspender(b, true)}
+              title="Encerrar definitivamente">Encerrar</button>
+    </>)}
+    {b.status === 'levantamento' && !b.aguardando_correcao && (
+      <button className="btn-secundario btn-mini" onClick={() => marcarSemDireito(b)}
+              title="Registrar que declarou não ter dependentes que dão direito">Sem direito</button>)}
+    {['indeferido', 'sem_direito_declarado'].includes(b.status) && (
+      <button className="btn-secundario btn-mini" onClick={() => reabrir(b)}
+              title="Voltar a preenchendo (indeferido por engano, ou passou a ter dependente)">
+        ↩️ Reabrir</button>)}
+  </>)
+  const reg = lista || []
+  const cards = reg.length ? [
+    { rotulo: 'No filtro', valor: reg.length },
+    { rotulo: 'Devolvidos', cor: '#d9822b',
+      valor: reg.filter((b) => b.aguardando_correcao).length,
+      filtro: { chave: 'status', valor: 'Devolvido — aguarda reenvio' } },
+    { rotulo: 'Revisar idade', cor: '#d9534f', valor: reg.filter((b) => b.revisar_idade).length },
+    { rotulo: 'Ativos', cor: '#0fb257', valor: reg.filter((b) => b.status === 'ativo').length,
+      filtro: { chave: 'status', valor: STATUS_BEN.ativo.rot } },
+  ] : null
+
   return (
     <>
       <div className="rh-card rh-lote">
@@ -253,62 +321,10 @@ function Levantamentos() {
       {msg && <div className="sucesso">{msg}</div>}
       {erro && <div className="alerta">{erro}</div>}
 
-      {!lista ? <p>Carregando…</p> : lista.length === 0 ? (
-        <p className="explica centro">Nenhum levantamento com esse filtro.</p>
-      ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Colaborador</th><th>Posto</th><th>Crianças</th>
-            <th>Prazo</th><th>Status</th><th>Ações</th></tr></thead>
-          <tbody>
-            {lista.map((b) => {
-              const s = STATUS_BEN[b.status] || { rot: b.status, cor: '#889' }
-              const elegiveis = (b.criancas || []).filter((c) => c.elegivel_idade).length
-              return (
-                <tr key={b.id}>
-                  <td><strong>{b.nome}</strong><br /><small>{fmtCpf(b.cpf)}</small></td>
-                  <td>{b.posto || '—'}{!b.posto_da_direito &&
-                    <span title="Posto não marcado como elegível"> ⚠️</span>}</td>
-                  <td>{(b.criancas || []).length} ({elegiveis} na idade)</td>
-                  <td>dia {b.dia_entrega_mensal}</td>
-                  <td>
-                    {b.aguardando_correcao
-                      ? <span className="chip" style={{ '--chip-cor': '#d9822b' }}
-                              title={b.motivo_devolucao || ''}>↩️ Devolvido — aguarda reenvio</span>
-                      : <span className="chip" style={{ '--chip-cor': s.cor }}>{s.rot}</span>}
-                    {b.reenviado_apos_correcao && (
-                      <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.3rem' }}
-                            title="O colaborador reenviou após a devolução">✓ reenviado</span>)}
-                    {b.revisar_idade && (
-                      <span className="chip" style={{ '--chip-cor': '#d9534f', marginLeft: '.3rem' }}
-                            title="Todas as crianças passaram da idade limite — revise (suspender)">⚠️ revisar idade</span>)}
-                  </td>
-                  <td className="acoes-candidato">
-                    <button className="btn-secundario btn-mini"
-                            onClick={() => setAberto(aberto === b.id ? null : b.id)}>
-                      {aberto === b.id ? 'Fechar' : 'Ver'}</button>
-                    {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
-                      <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
-                    {b.status === 'ativo' && (<>
-                      <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>
-                      <button className="btn-secundario btn-mini" onClick={() => suspender(b, false)}
-                              title="Suspender (criança passou da idade, pendência)">Suspender</button>
-                      <button className="btn-secundario btn-mini" onClick={() => suspender(b, true)}
-                              title="Encerrar definitivamente">Encerrar</button>
-                    </>)}
-                    {b.status === 'levantamento' && !b.aguardando_correcao && (
-                      <button className="btn-secundario btn-mini" onClick={() => marcarSemDireito(b)}
-                              title="Registrar que declarou não ter dependentes que dão direito">
-                        Sem direito</button>)}
-                    {['indeferido', 'sem_direito_declarado'].includes(b.status) && (
-                      <button className="btn-secundario btn-mini" onClick={() => reabrir(b)}
-                              title="Voltar a preenchendo (indeferido por engano, ou passou a ter dependente)">
-                        ↩️ Reabrir</button>)}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      {!lista ? <p>Carregando…</p> : (
+        <DashPlanilha id="creche" colunas={colunas} dados={lista} cards={cards}
+                      acoesLinha={acoesLinha}
+                      vazio="Nenhum levantamento com esse filtro." />
       )}
 
       {aberto && lista && (() => {

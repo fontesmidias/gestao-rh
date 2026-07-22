@@ -10,6 +10,7 @@ import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
 import JornadasRH from './JornadasRH.jsx'
+import DashPlanilha from './DashPlanilha.jsx'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
@@ -145,34 +146,76 @@ function RedefinirSenha({ token }) {
   )
 }
 
-const EM_ANDAMENTO = ['convidado', 'preenchendo', 'aguardando_assinatura', 'docs_pendentes']
+// --- Admissões no DashPlanilha (v1.78): sort/filtro por coluna + cards clicáveis ---
+const COLUNAS_ADMISSAO = () => [
+  { chave: 'nome', rotulo: 'Candidato', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+    valor: (c) => c.nome_completo,
+    render: (c) => (<><strong>{c.nome_completo}</strong><br />
+      <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></>) },
+  { chave: 'status', rotulo: 'Status', ordenavel: true, filtro: 'select',
+    opcoes: STATUS_OPCOES.filter(([v]) => v).map(([v, r]) => ({ v: r, r })),
+    valor: (c) => statusInfo(c.status).label,
+    render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
+      {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>) },
+  { chave: 'docs', rotulo: 'Docs', ordenavel: true,
+    valor: (c) => (c.progresso_docs?.total ? c.progresso_docs.ok / c.progresso_docs.total : -1),
+    render: (c) => (c.progresso_docs?.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—') },
+  { chave: 'criado_em', rotulo: 'Criado', ordenavel: true, valor: (c) => c.criado_em,
+    render: (c) => fmtData(c.criado_em) },
+]
 
-function Metricas({ dados }) {
-  if (!dados) return null
-  const andamento = EM_ANDAMENTO.reduce((n, s) => n + (dados.por_status[s] || 0), 0)
+// Cards do painel de Admissões: um bloco só, clicáveis quando filtram por status
+// (v1.78 — antes eram <div> estáticos separados que não filtravam nada). As
+// métricas operacionais (docs a revisar, reenvios, tempo médio) vêm de
+// /rh/metricas e entram como indicadores.
+function cardsAdmissao(lista, m) {
+  if (!lista?.length) return null
+  const porStatus = (s) => lista.filter((c) => c.status === s).length
+  const cardStatus = (s) => ({
+    rotulo: statusInfo(s).label, cor: statusInfo(s).cor, valor: porStatus(s),
+    filtro: { chave: 'status', valor: statusInfo(s).label },
+  })
   const cards = [
-    ['Candidatos', dados.total_candidatos, ''],
-    ['Em andamento', andamento, ''],
-    ['Docs p/ revisar', dados.documentos_aguardando_revisao,
-     dados.documentos_aguardando_revisao > 0 ? 'destaque' : ''],
-    ['Reenvios pendentes', dados.documentos_rejeitados_em_aberto,
-     dados.documentos_rejeitados_em_aberto > 0 ? 'destaque' : ''],
-    ['Dossiês gerados', dados.dossies_gerados, ''],
-    ['Tempo médio', dados.tempo_medio_minutos_convite_ao_dossie == null
-      ? '—' : `${dados.tempo_medio_minutos_convite_ao_dossie.toLocaleString('pt-BR')} min`, ''],
+    { rotulo: 'Em admissão', valor: lista.length },
+    cardStatus('envio_concluido'),
+    cardStatus('em_revisao'),
+    cardStatus('docs_pendentes'),
+    cardStatus('aprovado'),
   ]
-  return (
-    <div className="rh-metricas">
-      {cards.map(([rotulo, valor, extra]) => (
-        <div className={`rh-metrica ${extra}`} key={rotulo}
-             title={rotulo === 'Tempo médio' ? 'Do convite até o dossiê pronto' : undefined}>
-          <strong>{valor}</strong>
-          <span>{rotulo}</span>
-        </div>
-      ))}
-    </div>
-  )
+  if (m) {
+    cards.push({ rotulo: 'Docs p/ revisar', valor: m.documentos_aguardando_revisao, cor: '#d9534f' })
+    cards.push({ rotulo: 'Reenvios pendentes', valor: m.documentos_rejeitados_em_aberto, cor: '#e9a63a' })
+    cards.push({ rotulo: 'Tempo médio',
+      valor: m.tempo_medio_minutos_convite_ao_dossie == null ? '—'
+        : `${m.tempo_medio_minutos_convite_ao_dossie.toLocaleString('pt-BR')}min` })
+  }
+  return cards
 }
+
+const acoesAdmissao = (c, abrir) => (<>
+  <button className="btn-secundario btn-mini" onClick={() => abrir(c.id)}>Abrir</button>
+  <button className="btn-secundario btn-mini"
+          title="Copia um link novo para você enviar pelo WhatsApp — NÃO envia e-mail"
+          onClick={async (e) => {
+            const btn = e.currentTarget
+            const r = await api.gerarLink(c.id)
+            await navigator.clipboard.writeText(r.link_magico)
+            const original = btn.textContent
+            btn.textContent = '✓ Copiado!'
+            setTimeout(() => { btn.textContent = original }, 2000)
+          }}>📋 Copiar link</button>
+  <button className="btn-secundario btn-mini"
+          title="Gera um link novo e reenvia o convite por e-mail"
+          onClick={async (e) => {
+            if (!window.confirm(`Reenviar o convite por e-mail para ${c.nome_completo}?`)) return
+            const btn = e.currentTarget
+            const r = await api.reenviarLink(c.id)
+            const original = btn.textContent
+            btn.textContent = r.email_enviado ? '✓ Enviado!'
+              : (c.email ? '⚠ E-mail falhou' : '⚠ Sem e-mail')
+            setTimeout(() => { btn.textContent = original }, 2500)
+          }}>✉️ Reenviar</button>
+</>)
 
 // Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos
 // rótulos de antes, novo lugar (feedback de campo, 2026-07-15).
@@ -323,7 +366,7 @@ function Painel({ aoSair }) {
         <button className="btn-principal" onClick={() => setNovo({})}>+ Novo candidato</button>
       </header>
 
-      <Metricas dados={metricas} />
+      {/* os cards agora vivem no DashPlanilha (clicáveis, filtram por status) */}
 
       {novo && (
         <div className="rh-card">
@@ -488,56 +531,13 @@ function Painel({ aoSair }) {
                 })}>⬇ Exportar planilha</button>
       </div>
 
-      {!candidatos ? <p>Carregando…</p> : candidatos.length === 0 ? (
-        <p className="explica centro">{(filtros.busca || filtros.status || filtros.posto_id)
-          ? 'Nenhuma admissão com esses filtros.'
-          : 'Nenhum candidato ainda. Toque em "+ Novo candidato" para enviar o primeiro convite.'}</p>
-      ) : (
-        <table className="rh-tabela">
-          <thead>
-            <tr><th>Candidato</th><th>Status</th><th>Docs</th><th>Criado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {candidatos.map((c) => {
-              const si = statusInfo(c.status)
-              return (
-                <tr key={c.id}>
-                  <td><strong>{c.nome_completo}</strong><br />
-                    <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></td>
-                  <td><span className="chip" style={{ '--chip-cor': si.cor }}>
-                    {si.icone} {si.label}</span></td>
-                  <td>{c.progresso_docs.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—'}</td>
-                  <td>{fmtData(c.criado_em)}</td>
-                  <td className="acoes-candidato">
-                    <button className="btn-secundario btn-mini"
-                            onClick={() => setSelecionado(c.id)}>Abrir</button>
-                    <button className="btn-secundario btn-mini"
-                            title="Copia um link novo para você enviar pelo WhatsApp — NÃO envia e-mail"
-                            onClick={async (e) => {
-                              const btn = e.currentTarget
-                              const r = await api.gerarLink(c.id)
-                              await navigator.clipboard.writeText(r.link_magico)
-                              const original = btn.textContent
-                              btn.textContent = '✓ Copiado!'
-                              setTimeout(() => { btn.textContent = original }, 2000)
-                            }}>📋 Copiar link</button>
-                    <button className="btn-secundario btn-mini"
-                            title="Gera um link novo e reenvia o convite por e-mail"
-                            onClick={async (e) => {
-                              if (!window.confirm(`Reenviar o convite por e-mail para ${c.nome_completo}?`)) return
-                              const btn = e.currentTarget
-                              const r = await api.reenviarLink(c.id)
-                              const original = btn.textContent
-                              btn.textContent = r.email_enviado ? '✓ Enviado!'
-                                : (c.email ? '⚠ E-mail falhou' : '⚠ Sem e-mail')
-                              setTimeout(() => { btn.textContent = original }, 2500)
-                            }}>✉️ Reenviar</button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      {!candidatos ? <p>Carregando…</p> : (
+        <DashPlanilha id="admissoes" colunas={COLUNAS_ADMISSAO()}
+                      dados={candidatos} cards={cardsAdmissao(candidatos, metricas)}
+                      acoesLinha={(c) => acoesAdmissao(c, setSelecionado)}
+                      vazio={(filtros.busca || filtros.status || filtros.posto_id)
+                        ? 'Nenhuma admissão com esses filtros.'
+                        : 'Nenhum candidato ainda. Toque em "+ Novo candidato" para enviar o primeiro convite.'} />
       )}
     </main>
         )}
