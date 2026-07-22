@@ -195,8 +195,12 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   filtro?:{chave,valor}}]`. Card com `filtro` ativa aquele filtro ao clicar
   (TOGGLE — clicar de novo limpa); o `valor` do filtro é comparado com o
   `textoDe` da coluna, então use o RÓTULO exibido, não o código
-  (ex.: 'Novo', não 'novo'). Cards sem `filtro` são indicadores (Total). Já em
-  uso em Talentos (status) e Jornadas (escala/confirmação).
+  (ex.: 'Novo', não 'novo'). Cards sem `filtro` são indicadores (Total).
+  **PADRÃO DE TODAS AS LISTAS do RH** (v1.76/v1.78): Talentos, Jornadas,
+  Colaboradores, Admissões e Creche usam o DashPlanilha. Os filtros pesados/
+  server-side (posto via SelectBusca, busca com debounce, status do creche)
+  ficam FORA do dash, no topo, alimentando `dados`; o dash refina em memória por
+  cima. Ao criar uma lista nova, use o DashPlanilha — não escreva `<table>` à mão.
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
   = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
   `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado
@@ -251,9 +255,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   marca pelo painel (`/rh/creche/colaboradores/{id}/sem-direito`, cria o
   benefício se não existir, recusa 409 se já estiver `ativo`) — some da fila de
   ação mas fica no relatório (filtro de status no dash) para provar que o
-  elegível foi consultado e NÃO pediu. **"Novo requerimento p/ mais filhos" é
-  pendência** (o modelo é 1:1, `candidato_id unique=True`; virar 1:N toca
-  assinatura/dossiê/ativação/link — projetar p/ N, entregar 1).
+  elegível foi consultado e NÃO pediu. **"Mais filhos" NÃO virou 1:N** (v1.79):
+  o modelo é 1 benefício : N crianças, então `/reabrir` aceita o benefício ATIVO
+  e o colaborador ACRESCENTA a criança (botão "➕ Incluir criança"). Decisão do
+  Bruno: evita largar o `candidato_id unique=True` e mexer em assinatura/dossiê.
+  Reabrir um ativo o tira do pagamento até reaprovar — o e-mail avisa isso.
   **Comunicação de estado + saídas (v1.73-75, auditoria):** TODA transição de
   decisão avisa o colaborador por e-mail (`_email_*`: ativar/repactuação/devolver/
   indeferir/suspensão). O gate serve importados do Tirvu (sem ficha): a KBA usa
