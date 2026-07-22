@@ -196,6 +196,8 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "motivo_indeferimento": ben.motivo_indeferimento,
         "motivo_devolucao": ben.motivo_devolucao,
         "devolvido_em": ben.devolvido_em,
+        "sem_direito_em": ben.sem_direito_em,
+        "sem_direito_por": ben.sem_direito_por,
         "criancas": criancas,
         "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
     }
@@ -318,6 +320,39 @@ def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
     ben.revisado_em = datetime.now(timezone.utc)
     registrar(db, "creche_beneficio_devolvido", ator="rh", ator_detalhe=rh.email,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_devolucao})
+    db.commit()
+    return _dump_beneficio(db, ben)
+
+
+def _marcar_sem_direito(db: Session, ben: BeneficioCreche, por: str) -> None:
+    """Marca a declaração de que o colaborador não tem dependentes que dão
+    direito. `por` = 'colaborador' (declarou no link) ou o e-mail do RH."""
+    ben.status = StatusBeneficio.sem_direito_declarado
+    ben.sem_direito_em = datetime.now(timezone.utc)
+    ben.sem_direito_por = por
+
+
+@router.post("/rh/creche/colaboradores/{colaborador_id}/sem-direito")
+def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """O RH registra que o colaborador (elegível por posto) declarou não ter
+    dependentes que dão direito — para quem respondeu por fora (WhatsApp,
+    pessoalmente). Cria o benefício se ainda não existir. Fica no relatório
+    como 'consultado e não pediu' (feedback 2026-07-21)."""
+    col = db.get(Candidato, colaborador_id)
+    if col is None:
+        raise HTTPException(status_code=404, detail="colaborador_nao_encontrado")
+    ben = db.scalar(select(BeneficioCreche)
+                    .where(BeneficioCreche.candidato_id == colaborador_id))
+    if ben is None:
+        ben = BeneficioCreche(candidato_id=colaborador_id)
+        db.add(ben)
+    elif ben.status == StatusBeneficio.ativo:
+        # não apaga um benefício em pagamento por engano de clique
+        raise HTTPException(status_code=409, detail="beneficio_ativo")
+    _marcar_sem_direito(db, ben, rh.email)
+    registrar(db, "creche_sem_direito", ator="rh", ator_detalhe=rh.email,
+              candidato_id=colaborador_id, detalhe={"por": "rh"})
     db.commit()
     return _dump_beneficio(db, ben)
 

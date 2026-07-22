@@ -30,6 +30,12 @@ class StatusBeneficio(str, enum.Enum):
     encerrado = "encerrado"
     # RH recusou o pedido
     indeferido = "indeferido"
+    # o próprio colaborador declarou que não tem filhos/dependentes que dão
+    # direito — some da fila de ação, mas fica no relatório para o RH provar que
+    # o elegível foi consultado e NÃO PEDIU (feedback 2026-07-21: "para depois
+    # não vir cobrar o RH"). Pode ser declarado pelo colaborador (link) ou
+    # registrado pelo RH (quem respondeu por fora).
+    sem_direito_declarado = "sem_direito_declarado"
 
 
 class BeneficioCreche(Base):
@@ -60,6 +66,11 @@ class BeneficioCreche(Base):
     # `motivo_indeferimento`, que é terminal.
     motivo_devolucao: Mapped[str | None] = mapped_column(String(400))
     devolvido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # "Não faço jus": quando e por quem foi registrada a declaração de que o
+    # colaborador não tem dependentes que dão direito (feedback 2026-07-21).
+    # sem_direito_por = "colaborador" (declarou no link) ou o e-mail do RH.
+    sem_direito_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sem_direito_por: Mapped[str | None] = mapped_column(String(200))
     ativado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # dossiê do benefício (separado do admissional)
     dossie_pdf_key: Mapped[str | None] = mapped_column(String(300))
