@@ -46,7 +46,14 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # transaction_per_migration: cada revisão commita sozinha. Necessário
+        # para migrations que ADICIONAM um valor de enum e o USAM logo depois
+        # (Postgres proíbe usar o valor novo na MESMA transação do ADD VALUE);
+        # com cada migration numa transação própria, o ADD da revisão N commita
+        # antes de a revisão N+1 usar o valor. Também deixa cada migration
+        # atômica de forma independente.
+        context.configure(connection=connection, target_metadata=target_metadata,
+                          transaction_per_migration=True)
         with context.begin_transaction():
             context.run_migrations()
 

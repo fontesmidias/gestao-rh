@@ -27,6 +27,10 @@ def expurgar() -> int:
         candidatos = db.scalars(
             select(Candidato).where(
                 Candidato.status == StatusCandidato.aprovado,
+                # SÓ admissão: quem já é colaborador (situacao preenchida) NÃO é
+                # expurgado — efetivar agora deixa status=aprovado (v1.69), e o
+                # colaborador ativo não pode ter os documentos apagados.
+                Candidato.situacao.is_(None),
                 Candidato.dossie_gerado_em < limite,
                 Candidato.arquivos_expurgados_em.is_(None),
             )

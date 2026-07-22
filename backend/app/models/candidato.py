@@ -10,6 +10,12 @@ from app.core.db import Base
 
 
 class StatusCandidato(str, enum.Enum):
+    """Fase do FLUXO de admissão (ortogonal ao vínculo, que vive em `situacao`).
+    Feedback 2026-07-21: `status` e `situacao` compartilhavam ativo/desligado e
+    confundiam a tela. Agora `status` é só fluxo: efetivado aqui → `aprovado`
+    (passou pelo funil); importado do Tirvu → `importado` (nunca passou). O
+    vínculo (ativo/desligado) fica SÓ na `situacao`."""
+
     convidado = "convidado"
     preenchendo = "preenchendo"
     docs_pendentes = "docs_pendentes"
@@ -19,9 +25,11 @@ class StatusCandidato(str, enum.Enum):
     aprovado = "aprovado"
     reprovado_pendencias = "reprovado_pendencias"
     expurgado = "expurgado"
-    # Já é colaborador da casa (aprovado e efetivado, ou importado da base do
-    # Tirvu). É o "estado colaborador" do mesmo registro — Candidato é a fase
-    # inicial do ciclo de vida, o colaborador é a fase de vínculo ativo.
+    # Veio da base do Tirvu (não passou pelo funil de admissão daqui).
+    importado = "importado"
+    # ÓRFÃOS (v1.69): não são mais escritos — o vínculo migrou para `situacao`.
+    # Mantidos no enum porque o Postgres não remove valor sem recriar o tipo; o
+    # front (status.js) já os ignora. NÃO USAR em código novo.
     ativo = "ativo"
     desligado = "desligado"
 

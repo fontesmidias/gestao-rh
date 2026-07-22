@@ -14,6 +14,9 @@ export const STATUS = {
   aprovado:              { label: 'Aprovado',             cor: '#4f9d3a', icone: '✓' },
   reprovado_pendencias:  { label: 'Pendências',           cor: '#d9534f', icone: '⚠️' },
   expurgado:             { label: 'Expurgado',            cor: '#999999', icone: '🗑️' },
+  // Colaborador que veio da base do Tirvu (não passou pelo funil daqui). O
+  // vínculo (ativo/desligado) vem na `situacao`, mostrada à parte.
+  importado:             { label: 'Importado (Tirvu)',    cor: '#5b7', icone: '📥' },
 }
 
 export function statusInfo(s) {
