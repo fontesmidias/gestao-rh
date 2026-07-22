@@ -565,6 +565,9 @@ export const rh = {
         { method: 'POST', headers: authRH(), body: JSON.stringify({ email: email || null }) }),
   crecheReabrir: (beneficioId) =>
     req(`/rh/creche/levantamentos/${beneficioId}/reabrir`, { method: 'POST', headers: authRH() }),
+  crecheSuspender: (beneficioId, motivo, encerrar) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/suspender`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo, encerrar: !!encerrar }) }),
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),

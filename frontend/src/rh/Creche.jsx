@@ -129,6 +129,19 @@ function Levantamentos() {
       setMsg('Levantamento reaberto — o colaborador pode refazer.'); setAberto(null); carregar()
     } catch (e) { setErro(`Não foi possível reabrir (${e.detail || e.message}).`) }
   }
+  const suspender = async (ben, encerrar) => {
+    const acao = encerrar ? 'Encerrar' : 'Suspender'
+    const motivo = window.prompt(
+      `${acao} o benefício de ${ben.nome}.\n\n`
+      + (encerrar ? 'O benefício é encerrado (definitivo). ' : 'O benefício é suspenso (pode reativar depois). ')
+      + 'Qual o motivo? (o colaborador é avisado e para de enviar comprovação)')
+    if (!motivo || !motivo.trim()) return
+    setMsg(null); setErro(null)
+    try {
+      await api.crecheSuspender(ben.id, motivo.trim(), encerrar)
+      setMsg(`Benefício ${encerrar ? 'encerrado' : 'suspenso'}.`); setAberto(null); carregar()
+    } catch (e) { setErro(`Não foi possível ${acao.toLowerCase()} (${e.detail || e.message}).`) }
+  }
   const reenviarLink = async (ben) => {
     // destrava quem não conseguiu entrar: reenvia o código e, se preciso, corrige o e-mail
     const email = window.prompt(
@@ -214,6 +227,9 @@ function Levantamentos() {
                     {b.reenviado_apos_correcao && (
                       <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.3rem' }}
                             title="O colaborador reenviou após a devolução">✓ reenviado</span>)}
+                    {b.revisar_idade && (
+                      <span className="chip" style={{ '--chip-cor': '#d9534f', marginLeft: '.3rem' }}
+                            title="Todas as crianças passaram da idade limite — revise (suspender)">⚠️ revisar idade</span>)}
                   </td>
                   <td className="acoes-candidato">
                     <button className="btn-secundario btn-mini"
@@ -221,8 +237,13 @@ function Levantamentos() {
                       {aberto === b.id ? 'Fechar' : 'Ver'}</button>
                     {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
                       <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
-                    {b.status === 'ativo' && (
-                      <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>)}
+                    {b.status === 'ativo' && (<>
+                      <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>
+                      <button className="btn-secundario btn-mini" onClick={() => suspender(b, false)}
+                              title="Suspender (criança passou da idade, pendência)">Suspender</button>
+                      <button className="btn-secundario btn-mini" onClick={() => suspender(b, true)}
+                              title="Encerrar definitivamente">Encerrar</button>
+                    </>)}
                     {b.status === 'levantamento' && !b.aguardando_correcao && (
                       <button className="btn-secundario btn-mini" onClick={() => marcarSemDireito(b)}
                               title="Registrar que declarou não ter dependentes que dão direito">
