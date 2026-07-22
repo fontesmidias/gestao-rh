@@ -265,6 +265,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   descrições parecidas (há ~40 erros de digitação nos dados reais; merge
   silencioso cria associação errada invisível). No seletor, jornadas do posto
   vêm PRIMEIRO (ordenação, nunca filtro).
+- **Jornadas estruturadas** (v1.70, `JornadasRH.jsx`, submenu "Jornadas"): a
+  `descricao` é CANÔNICA — é ela que vai ao Tirvu (texto único, formato
+  inalterado); os campos estruturados (escala/4 horários/turno/adicional
+  noturno/intrajornada+obs/cargo) são METADADOS INTERNOS. `jornada_parser.py`
+  PROPÕE a estrutura (heurístico, ~86% confiança alta nos 270 casos reais); o RH
+  CONFIRMA na aba "A confirmar" (`estruturado_confirmado_em`) — NUNCA
+  auto-grava. `jornada_duplicidade.py` só SINALIZA pares suspeitos
+  (SequenceMatcher sobre descrição normalizada + typos tipo ADICONAL→ADICIONAL);
+  separa "idênticas após normalizar" das "parecidas mas diferentes" — o RH
+  decide, o sistema NUNCA funde. Import por `POST /rh/jornadas/importar-planilha`
+  (coluna "Jornada de Trabalho" + casa posto pela "Lotação"; idempotente por
+  descrição normalizada; nasce com proposta aplicada mas não confirmada). Rotas:
+  CRUD + `/jornadas/{id}/proposta` + `/jornadas-duplicidades` (HÍFEN, senão
+  colide com a paramétrica). DELETE recusa 409 se a jornada estiver em uso. A
+  página usa o `DashPlanilha` (2º consumidor real dele, além de Talentos).
 - **Uploads de planilha do RH**: sempre `await arquivo.close()` em `finally` —
   o Starlette faz spool em disco acima de ~1MB e o temp file ficaria no
   container com CPFs de mil pessoas.
