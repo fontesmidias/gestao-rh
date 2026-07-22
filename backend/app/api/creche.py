@@ -509,16 +509,27 @@ def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_d
 @router.post("/rh/creche/levantamentos/{beneficio_id}/reabrir")
 def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
-    """Tira o benefício de um estado TERMINAL (indeferido / sem_direito_declarado)
-    e o devolve a `levantamento` para o colaborador refazer — a situação mudou
-    (indeferido por engano; ou quem declarou 'sem direito' passou a ter filho/
-    guarda). Feedback 2026-07-22: antes esses estados eram becos sem saída dos
-    dois lados. Só age sobre terminais reabríveis; um ativo não se 'reabre' assim."""
+    """Devolve o benefício a `levantamento` para o colaborador refazer/completar.
+
+    Cobre três casos (feedback 2026-07-22):
+    - indeferido por engano (ou o colaborador quer corrigir e reapresentar);
+    - quem declarou 'sem direito' passou a ter filho/guarda;
+    - **MAIS FILHOS num benefício ATIVO**: o modelo é 1 benefício : N crianças,
+      então "novo requerimento" se resolve reabrindo e ACRESCENTANDO a criança —
+      sem duplicar benefício (decisão do Bruno 2026-07-22, evita a migração 1:N).
+      Reabrir um ativo o tira do pagamento até o RH aprovar de novo, por isso
+      fica explícito na auditoria.
+    Encerrado/suspenso não se reabre por aqui (o vínculo/idade mudou: é caso de
+    novo levantamento pelo link, ou de reativar via aprovação)."""
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
-    if ben.status not in (StatusBeneficio.indeferido, StatusBeneficio.sem_direito_declarado):
+    if ben.status not in (StatusBeneficio.indeferido,
+                          StatusBeneficio.sem_direito_declarado,
+                          StatusBeneficio.ativo,
+                          StatusBeneficio.aguardando_repactuacao):
         raise HTTPException(status_code=409, detail="nao_reabrivel")
+    era_ativo = ben.status in (StatusBeneficio.ativo, StatusBeneficio.aguardando_repactuacao)
     ben.status = StatusBeneficio.levantamento
     ben.motivo_indeferimento = None
     ben.sem_direito_em = None
@@ -527,9 +538,17 @@ def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
     ben.dados_conferidos_em = None
     ben.revisado_por = rh.email
     ben.revisado_em = datetime.now(timezone.utc)
+    col = db.get(Candidato, ben.candidato_id)
     registrar(db, "creche_beneficio_reaberto", ator="rh", ator_detalhe=rh.email,
-              candidato_id=ben.candidato_id)
+              candidato_id=ben.candidato_id,
+              detalhe={"era_ativo": era_ativo,
+                       "motivo": "inclusão de criança" if era_ativo else "reabertura"})
     db.commit()
+    if era_ativo:
+        try:
+            _email_reabertura_para_incluir(ben, col)
+        except Exception:
+            pass
     return _dump_beneficio(db, ben)
 
 
@@ -711,6 +730,38 @@ def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
         _email_suspensao(ben, col, "Colaborador desligado", encerrado=True)
     except Exception:
         pass
+
+
+def _email_reabertura_para_incluir(ben: BeneficioCreche, col: Candidato) -> None:
+    """Avisa o colaborador de que o RH reabriu o levantamento para ele INCLUIR
+    outra criança (mais filhos). O benefício fica fora do pagamento até a nova
+    aprovação — por isso o pedido de urgência (2026-07-22)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    url = _url_creche()
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche: inclua a nova criança",
+        f"Olá, {nome}!\n\n"
+        "Reabrimos seu Reembolso-Creche para você INCLUIR a nova criança.\n\n"
+        f"Acesse {url}, entre com seu CPF, cadastre a criança com a certidão de "
+        "nascimento e reenvie. O benefício volta a ser pago após a aprovação do "
+        "RH — quanto antes enviar, melhor.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Inclua a nova criança",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                "Reabrimos seu <strong>Reembolso-Creche</strong> para você "
+                "<strong>incluir a nova criança</strong>.",
+                f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, cadastre a "
+                "criança com a <strong>certidão de nascimento</strong> e reenvie.",
+                "O benefício volta a ser pago após a aprovação do RH — quanto "
+                "antes enviar, melhor.",
+            ],
+        ),
+    )
 
 
 def _email_sem_direito(ben: BeneficioCreche, col: Candidato) -> None:

@@ -181,6 +181,19 @@ function Levantamentos() {
       setMsg('Levantamento reaberto — o colaborador pode refazer.'); setAberto(null); carregar()
     } catch (e) { setErro(`Não foi possível reabrir (${e.detail || e.message}).`) }
   }
+  // "mais filhos": o modelo é 1 benefício : N crianças, então reabrimos o ativo
+  // para o colaborador acrescentar a criança (sem duplicar benefício).
+  const incluirCrianca = async (ben) => {
+    if (!window.confirm(`Reabrir o benefício de ${ben.nome} para INCLUIR outra criança?\n\n`
+      + 'O colaborador recebe um e-mail para cadastrar a criança e reenviar. '
+      + 'ATENÇÃO: o benefício sai do pagamento até você aprovar de novo.')) return
+    setMsg(null); setErro(null)
+    try {
+      await api.crecheReabrir(ben.id)
+      setMsg('Reaberto para inclusão — o colaborador foi avisado por e-mail.')
+      setAberto(null); carregar()
+    } catch (e) { setErro(`Não foi possível reabrir (${e.detail || e.message}).`) }
+  }
   const suspender = async (ben, encerrar) => {
     const acao = encerrar ? 'Encerrar' : 'Suspender'
     const motivo = window.prompt(
@@ -278,6 +291,9 @@ function Levantamentos() {
       <button className="btn-principal btn-mini" onClick={() => ativar(b, false)}>Ativar</button>)}
     {b.status === 'ativo' && (<>
       <button className="btn-secundario btn-mini" onClick={() => alterarPrazo(b)}>Prazo</button>
+      <button className="btn-secundario btn-mini" onClick={() => incluirCrianca(b)}
+              title="Nasceu outro filho? Reabre para o colaborador incluir a criança">
+        ➕ Incluir criança</button>
       <button className="btn-secundario btn-mini" onClick={() => suspender(b, false)}
               title="Suspender (criança passou da idade, pendência)">Suspender</button>
       <button className="btn-secundario btn-mini" onClick={() => suspender(b, true)}
