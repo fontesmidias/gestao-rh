@@ -207,6 +207,10 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "sem_direito_por": ben.sem_direito_por,
         "criancas": criancas,
         "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
+        # alerta de idade (auditoria 2026-07-22): benefício ATIVO em que NENHUMA
+        # criança ainda está na idade → o RH deve suspender (risco de glosa).
+        "revisar_idade": (ben.status == StatusBeneficio.ativo and bool(criancas)
+                          and not any(c["elegivel_idade"] for c in criancas)),
     }
 
 
@@ -452,6 +456,42 @@ def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
     return _dump_beneficio(db, ben)
 
 
+class EncerrarIn(BaseModel):
+    motivo: str
+    encerrar: bool = False  # False = suspender (reversível), True = encerrar
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/suspender")
+def suspender_beneficio(beneficio_id: uuid.UUID, payload: EncerrarIn,
+                        db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Tira um benefício ATIVO de circulação: suspende (criança passou de 5a11m,
+    pendência) ou encerra (desligamento). Para o ciclo mensal e avisa o
+    colaborador — sem isso o RH seguia orientado a reembolsar quem já não tem
+    direito (risco de glosa na prestação de contas, auditoria 2026-07-22)."""
+    if not (payload.motivo or "").strip():
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    if ben.status not in (StatusBeneficio.ativo, StatusBeneficio.aguardando_repactuacao):
+        raise HTTPException(status_code=409, detail="nao_suspensivel")
+    ben.status = StatusBeneficio.encerrado if payload.encerrar else StatusBeneficio.suspenso
+    ben.motivo_indeferimento = payload.motivo.strip()  # reusa o campo de motivo
+    ben.revisado_por = rh.email
+    ben.revisado_em = datetime.now(timezone.utc)
+    col = db.get(Candidato, ben.candidato_id)
+    registrar(db, "creche_beneficio_encerrado" if payload.encerrar else "creche_beneficio_suspenso",
+              ator="rh", ator_detalhe=rh.email, candidato_id=col.id,
+              detalhe={"motivo": payload.motivo.strip()})
+    db.commit()
+    try:
+        _email_suspensao(ben, col, payload.motivo.strip(), payload.encerrar)
+    except Exception:
+        pass
+    return _dump_beneficio(db, ben)
+
+
 class PrazoMassaIn(BaseModel):
     beneficio_ids: list[uuid.UUID]
     dia_entrega_mensal: int
@@ -569,6 +609,55 @@ def _email_aguardando_repactuacao(ben: BeneficioCreche, col: Candidato) -> None:
                 "O pagamento começa após o ajuste (repactuação) do contrato do seu "
                 "posto. <strong>Avisaremos quando estiver ativo</strong> — não é "
                 "preciso fazer nada agora.",
+            ],
+        ),
+    )
+
+
+def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
+    """Gancho chamado quando o colaborador é desligado: encerra o benefício
+    creche ativo/aguardando (não faz sentido reembolsar quem saiu). Idempotente
+    e silencioso — não trava o desligamento. NÃO faz commit (o chamador commita).
+    Avisa o colaborador por e-mail."""
+    ben = db.scalar(select(BeneficioCreche).where(
+        BeneficioCreche.candidato_id == candidato_id,
+        BeneficioCreche.status.in_((StatusBeneficio.ativo,
+                                    StatusBeneficio.aguardando_repactuacao))))
+    if ben is None:
+        return
+    ben.status = StatusBeneficio.encerrado
+    ben.motivo_indeferimento = "Colaborador desligado"
+    col = db.get(Candidato, candidato_id)
+    registrar(db, "creche_beneficio_encerrado", ator="sistema",
+              candidato_id=candidato_id, detalhe={"motivo": "desligamento"})
+    try:
+        _email_suspensao(ben, col, "Colaborador desligado", encerrado=True)
+    except Exception:
+        pass
+
+
+def _email_suspensao(ben: BeneficioCreche, col: Candidato, motivo: str, encerrado: bool) -> None:
+    """Avisa o colaborador de que o benefício foi suspenso/encerrado e que ele
+    NÃO precisa mais enviar a comprovação mensal (auditoria 2026-07-22)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    verbo = "encerrado" if encerrado else "suspenso"
+    enviar_email(
+        email,
+        f"Green House — Reembolso-Creche {verbo}",
+        f"Olá, {nome}!\n\n"
+        f"Seu Reembolso-Creche foi {verbo}.\n\nMotivo: {motivo}\n\n"
+        "Você não precisa mais enviar a comprovação mensal. Em caso de dúvida, "
+        "procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            f"Reembolso-Creche {verbo}",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                f"Seu <strong>Reembolso-Creche</strong> foi <strong>{verbo}</strong>.",
+                f"<strong>Motivo:</strong> {motivo}",
+                "Você <strong>não precisa mais</strong> enviar a comprovação mensal.",
             ],
         ),
     )

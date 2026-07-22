@@ -490,6 +490,8 @@ def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(ge
         if payload.acao == "desligar":
             c.situacao = "desligado"  # vínculo; `status` (fluxo) não muda
             c.data_desligamento = payload.data_desligamento.strip()
+            from app.api.creche import encerrar_creche_no_desligamento
+            encerrar_creche_no_desligamento(db, c.id)  # encerra benefício ativo
         else:  # reativar
             c.situacao = "ativo"
             c.data_desligamento = None
@@ -590,6 +592,9 @@ def desligar(cid: uuid.UUID, payload: DesligamentoIn, db: Session = Depends(get_
     c = _get_colab(db, cid)
     c.situacao = "desligado"  # vínculo; `status` (fluxo) não muda
     c.data_desligamento = payload.data_desligamento.strip() or None
+    # encerra o benefício creche ativo (não se reembolsa quem saiu)
+    from app.api.creche import encerrar_creche_no_desligamento
+    encerrar_creche_no_desligamento(db, c.id)
     registrar(db, "colaborador_desligado", ator="rh", ator_detalhe=rh.email,
               candidato_id=c.id,
               detalhe={"nome": c.nome_completo, "data": c.data_desligamento})
