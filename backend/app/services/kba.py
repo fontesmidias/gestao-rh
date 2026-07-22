@@ -63,15 +63,38 @@ def normalizar(texto: str) -> str:
 
 
 def perguntas_do_candidato(db: Session, candidato: Candidato) -> list[tuple[str, str, str]]:
-    """Pool de perguntas (código, enunciado, resposta correta) para um candidato/
-    colaborador, a partir dos dados de cadastro que ele preencheu."""
+    """Pool de perguntas (código, enunciado, resposta correta).
+
+    Começa pelos dados IMUTÁVEIS NATIVOS do próprio Candidato (nascimento e nome)
+    — que existem inclusive para quem foi IMPORTADO do Tirvu e nunca preencheu a
+    ficha de admissão (feedback 2026-07-22: antes o pool vinha só das fichas, e o
+    colaborador importado — a maioria — nunca tinha perguntas suficientes e caía
+    no gabarito impossível, sem conseguir entrar). Depois complementa com os
+    dados de ficha, quando existirem."""
+    pool: list[tuple[str, str, str]] = []
+
+    # --- imutáveis nativos (valem para importado E para quem fez a ficha) ---
+    # data_nascimento nativa é string "dd/mm/aaaa"
+    nasc = (candidato.data_nascimento or "").strip()
+    if len(nasc) == 10 and nasc[2] == "/" and nasc[5] == "/":
+        dia, mes = nasc[:2], nasc[3:5]
+        pool.append(("dia_nascimento", "Qual é o DIA do seu nascimento? (só o número)",
+                     str(int(dia))))
+        pool.append(("mes_nascimento", "Qual é o MÊS do seu nascimento? (só o número)",
+                     str(int(mes))))
+    partes_nome = [x for x in (candidato.nome_completo or "").split() if len(x) > 2]
+    if len(partes_nome) >= 2:
+        # um SOBRENAME (o último com >2 letras — evita "de"/"da"/"do")
+        pool.append(("sobrenome", "Qual é o seu ÚLTIMO sobrenome?", partes_nome[-1]))
+
+    # --- complementos de ficha (só quem passou pela admissão daqui tem) ---
     p = db.get(DadosPessoais, candidato.id)
     e = db.get(Endereco, candidato.id)
     b = db.get(DadosProfissionaisBancarios, candidato.id)
     contato = db.scalars(select(ContatoEmergencia)
                          .where(ContatoEmergencia.candidato_id == candidato.id)).first()
-    pool: list[tuple[str, str, str]] = []
-    if p and p.data_nascimento:
+    # nascimento da ficha só se a nativa faltou (evita pergunta duplicada)
+    if not any(c == "dia_nascimento" for c, _, _ in pool) and p and p.data_nascimento:
         pool.append(("dia_nascimento", "Qual é o DIA do seu nascimento? (só o número)",
                      str(p.data_nascimento.day)))
         pool.append(("mes_nascimento", "Qual é o MÊS do seu nascimento? (só o número)",
@@ -92,8 +115,10 @@ def perguntas_do_candidato(db: Session, candidato: Candidato) -> list[tuple[str,
     return pool
 
 
-# Enunciados genéricos para CPF inexistente (anti-enumeração): mesmas categorias.
+# Enunciados genéricos para CPF inexistente (anti-enumeração): mesmas categorias
+# que as perguntas reais, para não revelar nada pela forma da pergunta.
 POOL_GENERICO = [
+    ("sobrenome", "Qual é o seu ÚLTIMO sobrenome?"),
     ("nome_mae", "Qual é o PRIMEIRO NOME da sua mãe?"),
     ("dia_nascimento", "Qual é o DIA do seu nascimento? (só o número)"),
     ("mes_nascimento", "Qual é o MÊS do seu nascimento? (só o número)"),

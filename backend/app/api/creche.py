@@ -286,9 +286,14 @@ def indeferir_beneficio(beneficio_id: uuid.UUID, payload: IndeferirIn,
     ben.motivo_indeferimento = payload.motivo.strip() or None
     ben.revisado_por = rh.email
     ben.revisado_em = datetime.now(timezone.utc)
+    col = db.get(Candidato, ben.candidato_id)
     registrar(db, "creche_beneficio_indeferido", ator="rh", ator_detalhe=rh.email,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_indeferimento})
     db.commit()
+    try:
+        _email_indeferimento(ben, col)  # avisa o colaborador (não trava)
+    except Exception:
+        pass
     return _dump_beneficio(db, ben)
 
 
@@ -318,10 +323,50 @@ def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
     ben.dados_conferidos_em = None   # e reconferir os dados
     ben.revisado_por = rh.email
     ben.revisado_em = datetime.now(timezone.utc)
+    col = db.get(Candidato, ben.candidato_id)
     registrar(db, "creche_beneficio_devolvido", ator="rh", ator_detalhe=rh.email,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_devolucao})
     db.commit()
+    try:
+        _email_devolucao(ben, col)  # avisa o colaborador que precisa corrigir
+    except Exception:
+        pass
     return _dump_beneficio(db, ben)
+
+
+class ReenviarLinkIn(BaseModel):
+    email: str | None = None  # se vier, corrige o e-mail do colaborador antes
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/reenviar-link")
+def reenviar_link_creche(beneficio_id: uuid.UUID, payload: ReenviarLinkIn,
+                         db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Destrava o colaborador que não consegue entrar (feedback 2026-07-22): e-mail
+    não chegou, código expirou, ou o e-mail na base está errado. O RH pode
+    corrigir o e-mail (com auditoria) e reenvia o código 2FA. Sem e-mail, não há
+    como enviar — devolve 422 para o RH resolver o contato antes."""
+    from app.api.creche_publico import _gerar_e_enviar_codigo
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    col = db.get(Candidato, ben.candidato_id)
+    novo_email = (payload.email or "").strip()
+    if novo_email:
+        antes = col.email
+        col.email = novo_email
+        ben.email_confirmado = None  # o novo e-mail passará pelo 2FA de novo
+        registrar(db, "creche_email_corrigido", ator="rh", ator_detalhe=rh.email,
+                  candidato_id=col.id, detalhe={"antes": antes, "depois": novo_email})
+        db.commit()
+    destino = ben.email_confirmado or col.email
+    if not destino:
+        raise HTTPException(status_code=422, detail="sem_email")
+    _gerar_e_enviar_codigo(db, col, ben, destino)
+    registrar(db, "creche_link_reenviado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=col.id)
+    db.commit()
+    return {"enviado_para": destino}
 
 
 def _marcar_sem_direito(db: Session, ben: BeneficioCreche, por: str) -> None:
@@ -409,6 +454,70 @@ def _email_orientacoes_mensais(ben: BeneficioCreche, col: Candidato) -> None:
                 "<li><strong>Nota fiscal</strong> da creche/pré-escola, quando for "
                 "um estabelecimento.</li></ul>",
                 "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.",
+            ],
+        ),
+    )
+
+
+def _url_creche() -> str:
+    from app.core.config import get_settings
+    return f"{get_settings().base_url.rstrip('/')}/creche"
+
+
+def _email_devolucao(ben: BeneficioCreche, col: Candidato) -> None:
+    """Avisa o colaborador que o RH devolveu o levantamento para correção — sem
+    isso ele só descobriria se reabrisse o link por acaso (feedback 2026-07-22).
+    Instrui a acessar /creche com o CPF (não expomos link com token por e-mail:
+    o acesso passa pelo 2FA de sempre)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    motivo = ben.motivo_devolucao or "verifique os dados e reenvie."
+    url = _url_creche()
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche: seu pedido foi devolvido para correção",
+        f"Olá, {nome}!\n\n"
+        "Seu levantamento do Reembolso-Creche foi DEVOLVIDO para correção.\n\n"
+        f"Motivo: {motivo}\n\n"
+        f"Acesse {url}, entre com seu CPF, corrija o que for necessário e reenvie.\n\n"
+        "Atenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Pedido devolvido para correção",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                "Seu levantamento do <strong>Reembolso-Creche</strong> foi "
+                "<strong>devolvido para correção</strong>.",
+                f"<strong>Motivo do RH:</strong> {motivo}",
+                f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, corrija e reenvie.",
+            ],
+        ),
+    )
+
+
+def _email_indeferimento(ben: BeneficioCreche, col: Candidato) -> None:
+    """Avisa o colaborador do indeferimento com o motivo (antes: silencioso)."""
+    email = ben.email_confirmado or col.email
+    if not email:
+        return
+    nome = col.nome_completo.split()[0].title()
+    motivo = ben.motivo_indeferimento or "não atende aos requisitos do benefício."
+    enviar_email(
+        email,
+        "Green House — Reembolso-Creche: resultado da análise",
+        f"Olá, {nome}!\n\n"
+        "Após a análise, seu pedido de Reembolso-Creche foi INDEFERIDO.\n\n"
+        f"Motivo: {motivo}\n\n"
+        "Em caso de dúvida, procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
+        html_moderno(
+            "Resultado da análise — indeferido",
+            [
+                f"Olá, <strong>{nome}</strong>!",
+                "Após a análise, seu pedido de <strong>Reembolso-Creche</strong> "
+                "foi <strong>indeferido</strong>.",
+                f"<strong>Motivo:</strong> {motivo}",
+                "Em caso de dúvida, procure o RH.",
             ],
         ),
     )

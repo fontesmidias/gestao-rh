@@ -560,6 +560,9 @@ export const rh = {
                                                      body: JSON.stringify({ motivo }) }),
   crecheMarcarSemDireito: (colaboradorId) =>
     req(`/rh/creche/colaboradores/${colaboradorId}/sem-direito`, { method: 'POST', headers: authRH() }),
+  crecheReenviarLink: (beneficioId, email) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/reenviar-link`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ email: email || null }) }),
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),

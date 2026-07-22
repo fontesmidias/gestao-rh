@@ -236,7 +236,8 @@ function SessaoCreche({ token, aoEnviar }) {
 
   if (!dados) return <div className="rh-card creche-card"><p>Carregando…</p></div>
   if (dados.status !== 'levantamento') {
-    return <AposEnvio token={token} status={dados.status} />
+    return <AposEnvio token={token} status={dados.status}
+                      motivoIndeferimento={dados.motivo_indeferimento} />
   }
 
   return (
@@ -249,15 +250,19 @@ function SessaoCreche({ token, aoEnviar }) {
         </div>
       )}
       <div className="rh-card creche-card">
-        <h2>Confira seus dados</h2>
-        <p className="explica">Puxamos do seu cadastro. Confira e, se algo mudou, atualize.</p>
+        <h2>Seus dados de contato</h2>
+        <p className="explica">Confira o que já temos e <strong>complete o que estiver em branco</strong>.
+          O <strong>e-mail</strong> é por onde você recebe as atualizações do seu pedido (aprovação,
+          devolução, orientações) — informe um e-mail que você acessa.</p>
         <div className="creche-dados">
           <div><span className="rotulo">Nome</span><strong>{dados.nome_completo}</strong></div>
           <div><span className="rotulo">CPF</span><strong>{dados.cpf}</strong></div>
-          <label className="campo"><span className="rotulo">E-mail</span>
-            <input type="email" defaultValue={dados.email || ''}
+          <label className="campo">
+            <span className="rotulo">E-mail {!dados.email && <em className="dica-inline">— a preencher</em>}</span>
+            <input type="email" placeholder="voce@exemplo.com" defaultValue={dados.email || ''}
                    onBlur={(e) => api.conferirDados(token, { email: e.target.value })} /></label>
-          <label className="campo"><span className="rotulo">Telefone / WhatsApp</span>
+          <label className="campo">
+            <span className="rotulo">Telefone / WhatsApp {!dados.telefone && <em className="dica-inline">— a preencher</em>}</span>
             <input inputMode="tel" placeholder="(61) 99999-8888"
                    defaultValue={fmtTelefone(dados.telefone)}
                    onInput={(e) => { e.target.value = fmtTelefone(e.target.value) }}
@@ -326,7 +331,25 @@ function SessaoCreche({ token, aoEnviar }) {
 
 // Tela pós-envio: mostra o andamento e, quando o RH aprova, libera a assinatura
 // do requerimento pela plataforma (o colaborador já está autenticado por 2FA).
-function AposEnvio({ token, status }) {
+// Texto honesto por estado — antes tudo que não era 'indeferido' mentia
+// "em análise, aguarde" (feedback 2026-07-22), inclusive aprovado-com-ressalva,
+// suspenso e a própria auto-declaração de "não tenho direito".
+const ESTADO_MSG = {
+  em_analise: { icone: '🎉', titulo: 'Você já enviou',
+    texto: 'Seu levantamento está em análise. Você será avisado por e-mail quando o RH decidir.' },
+  aguardando_repactuacao: { icone: '✅', titulo: 'Aprovado — aguardando o contrato',
+    texto: 'Seu pedido foi APROVADO. O pagamento começa após o ajuste (repactuação) do contrato do seu posto. Avisaremos por e-mail quando estiver ativo — não é preciso fazer nada agora.' },
+  ativo: { icone: '✅', titulo: 'Benefício ativo',
+    texto: 'Seu Reembolso-Creche está ativo. O RH está preparando seu requerimento para assinatura — você será avisado.' },
+  suspenso: { icone: '⏸️', titulo: 'Benefício suspenso',
+    texto: 'Seu benefício está suspenso. Em caso de dúvida, procure o RH.' },
+  encerrado: { icone: '🔒', titulo: 'Benefício encerrado',
+    texto: 'Seu benefício foi encerrado. Em caso de dúvida, procure o RH.' },
+  sem_direito_declarado: { icone: '📄', titulo: 'Sem direito ao benefício',
+    texto: 'Você declarou não ter dependentes que dão direito ao Reembolso-Creche. Se isso mudou (novo filho, guarda, adoção), procure o RH para refazer o levantamento.' },
+}
+
+function AposEnvio({ token, status, motivoIndeferimento }) {
   const [req, setReq] = useState(undefined) // undefined=carregando, null=indisponível
   const [erro, setErro] = useState(null)
   const [assinando, setAssinando] = useState(false)
@@ -370,14 +393,25 @@ function AposEnvio({ token, status }) {
       </div>
     )
   }
-  const indeferido = status === 'indeferido'
+  if (status === 'indeferido') {
+    return (
+      <div className="rh-card creche-card centro">
+        <div style={{ fontSize: '3rem' }}>📋</div>
+        <h2>Pedido não deferido</h2>
+        <p className="explica">Após a análise, seu pedido de Reembolso-Creche foi indeferido.</p>
+        {motivoIndeferimento && (
+          <div className="alerta" style={{ borderColor: '#e9a63a', background: '#fff8ec', color: '#7a5b1a' }}>
+            <strong>Motivo:</strong> {motivoIndeferimento}</div>)}
+        <p className="explica">Em caso de dúvida, procure o RH.</p>
+      </div>
+    )
+  }
+  const m = ESTADO_MSG[status] || ESTADO_MSG.em_analise
   return (
     <div className="rh-card creche-card centro">
-      <div style={{ fontSize: '3rem' }}>{indeferido ? '📋' : '🎉'}</div>
-      <h2>{indeferido ? 'Pedido analisado' : 'Você já enviou'}</h2>
-      <p className="explica">{indeferido
-        ? 'Seu pedido foi analisado pelo RH. Em caso de dúvida, procure o RH.'
-        : 'Seu levantamento está em análise. Aguarde o retorno do RH por e-mail.'}</p>
+      <div style={{ fontSize: '3rem' }}>{m.icone}</div>
+      <h2>{m.titulo}</h2>
+      <p className="explica">{m.texto}</p>
     </div>
   )
 }
