@@ -347,6 +347,12 @@ export const rh = {
   desligarColaborador: (id, data_desligamento) =>
     req(`/rh/colaboradores/${id}/desligar`, { method: 'POST', headers: authRH(),
                                               body: JSON.stringify({ data_desligamento }) }),
+  reverterColaborador: (id, destino, motivo) =>
+    req(`/rh/colaboradores/${id}/reverter`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ destino, motivo }) }),
+  reverterLote: (ids, destino, motivo) =>
+    req('/rh/colaboradores/lote/reverter', { method: 'POST', headers: authRH(),
+        body: JSON.stringify({ ids, destino, motivo }) }),
   transferirColaborador: (id, posto_id, data_transferencia) =>
     req(`/rh/colaboradores/${id}/transferir`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ posto_id, data_transferencia }) }),

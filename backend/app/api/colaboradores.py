@@ -99,6 +99,9 @@ def listar(status: str | None = None, busca: str | None = None,
             "data_admissao": c.data_admissao,
             "data_desligamento": c.data_desligamento,
             "na_dominio_em": c.na_dominio_em,
+            # indício de que já existe no Tirvu — o front avisa (não bloqueia)
+            # antes de reverter a candidato (feedback 2026-07-21).
+            "indicio_tirvu": _indicio_tirvu(c),
             "criado_em": c.criado_em,
             "dossie_gerado_em": c.dossie_gerado_em,
         })
@@ -394,6 +397,37 @@ def _efetivar_um(db: Session, c: Candidato) -> None:
         c.data_admissao = datetime.now(timezone.utc).strftime("%d/%m/%Y")
 
 
+# Reverter colaborador -> candidato (feedback 2026-07-21: "converti por engano
+# e não consigo voltar"). Destinos válidos = fases do fluxo em que faz sentido
+# reentrar (não os estados terminais nem o vínculo ativo/desligado).
+DESTINOS_REVERTER = {
+    StatusCandidato.convidado,
+    StatusCandidato.em_revisao,
+}
+
+
+def _indicio_tirvu(c: Candidato) -> str | None:
+    """Sinaliza que o colaborador provavelmente já existe no Tirvu — para o RH
+    ser AVISADO (nunca bloqueado, decisão do Bruno 2026-07-21) antes de reverter.
+    Dois indícios: veio do Tirvu (importação) ou já ganhou matrícula 999NNNN
+    (gerada só no export de admissões para o Tirvu)."""
+    if c.origem == "importacao":
+        return "importado do Tirvu"
+    if (c.matricula or "").startswith("999"):
+        return "já teve matrícula gerada para o Tirvu"
+    return None
+
+
+def _reverter_um(c: Candidato, destino: StatusCandidato) -> None:
+    """Zera o vínculo de colaborador e devolve o registro ao fluxo de admissão.
+    Preserva a matrícula (reusada se a pessoa voltar a ser efetivada) e os dados;
+    só limpa o que caracteriza o vínculo ativo."""
+    c.situacao = None
+    c.status = destino
+    c.data_admissao = None
+    c.data_desligamento = None
+
+
 class LoteEfetivarIn(BaseModel):
     ids: list[uuid.UUID]
 
@@ -464,6 +498,76 @@ def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(ge
               detalhe={"acao": payload.acao, "afetados": afetados, "pulados": pulados})
     db.commit()
     return {"afetados": afetados, "pulados": pulados}
+
+
+class ReverterIn(BaseModel):
+    destino: str = "convidado"      # "convidado" | "em_revisao"
+    motivo: str                     # obrigatório (auditoria)
+
+
+class LoteReverterIn(BaseModel):
+    ids: list[uuid.UUID]
+    destino: str = "convidado"
+    motivo: str
+
+
+def _validar_reverter(destino: str, motivo: str) -> StatusCandidato:
+    if not (motivo or "").strip():
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+    try:
+        alvo = StatusCandidato(destino)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="destino_invalido")
+    if alvo not in DESTINOS_REVERTER:
+        raise HTTPException(status_code=422, detail="destino_invalido")
+    return alvo
+
+
+# Específica ANTES da paramétrica /{cid}/... (senão "lote" vira UUID inválido).
+@router.post("/rh/colaboradores/lote/reverter")
+def reverter_lote(payload: LoteReverterIn, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Reverte vários colaboradores a candidatos de uma vez. Só age sobre quem
+    JÁ é colaborador (tem situação); candidatos em admissão são pulados. O aviso
+    de indício-Tirvu é responsabilidade do front (nunca bloqueia — decisão do
+    Bruno); aqui só executa e audita."""
+    alvo = _validar_reverter(payload.destino, payload.motivo)
+    revertidos, pulados = 0, 0
+    for cid in payload.ids:
+        c = db.get(Candidato, cid)
+        if c is None or not c.situacao:  # inexistente ou já em admissão
+            pulados += 1
+            continue
+        _reverter_um(c, alvo)
+        registrar(db, "colaborador_revertido", ator="rh", ator_detalhe=rh.email,
+                  candidato_id=c.id,
+                  detalhe={"nome": c.nome_completo, "destino": alvo.value,
+                           "motivo": payload.motivo.strip(),
+                           "tirvu": _indicio_tirvu(c)})
+        revertidos += 1
+    registrar(db, "colaboradores_revertidos_lote", ator="rh", ator_detalhe=rh.email,
+              detalhe={"revertidos": revertidos, "pulados": pulados,
+                       "destino": alvo.value})
+    db.commit()
+    return {"revertidos": revertidos, "pulados": pulados}
+
+
+@router.post("/rh/colaboradores/{cid}/reverter")
+def reverter(cid: uuid.UUID, payload: ReverterIn, db: Session = Depends(get_db),
+             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Reverte um colaborador a candidato (converteu por engano, ou precisa
+    reprocessar). Preserva matrícula e dados; motivo é obrigatório."""
+    alvo = _validar_reverter(payload.destino, payload.motivo)
+    c = _get_colab(db, cid)
+    if not c.situacao:
+        raise HTTPException(status_code=422, detail="nao_e_colaborador")
+    _reverter_um(c, alvo)
+    registrar(db, "colaborador_revertido", ator="rh", ator_detalhe=rh.email,
+              candidato_id=c.id,
+              detalhe={"nome": c.nome_completo, "destino": alvo.value,
+                       "motivo": payload.motivo.strip(), "tirvu": _indicio_tirvu(c)})
+    db.commit()
+    return {"id": c.id, "situacao": c.situacao, "status": c.status.value}
 
 
 @router.post("/rh/colaboradores/{cid}/efetivar",
