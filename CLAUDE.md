@@ -190,7 +190,13 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   texto longo** (cargos, descrição de jornada): marque `quebra: true` na config —
   a célula quebra linha (`white-space: normal`, `max-width: 22rem`) em vez de
   esticar a tabela e forçar rolagem lateral (v1.71). Sem isso, o default é
-  `nowrap` (certo para datas/status/botões, ruim para texto livre).
+  `nowrap` (certo para datas/status/botões, ruim para texto livre). **Cards
+  clicáveis→filtro** (item 3, v1.72): prop `cards` = `[{rotulo, valor, cor?,
+  filtro?:{chave,valor}}]`. Card com `filtro` ativa aquele filtro ao clicar
+  (TOGGLE — clicar de novo limpa); o `valor` do filtro é comparado com o
+  `textoDe` da coluna, então use o RÓTULO exibido, não o código
+  (ex.: 'Novo', não 'novo'). Cards sem `filtro` são indicadores (Total). Já em
+  uso em Talentos (status) e Jornadas (escala/confirmação).
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
   = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
   `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado
