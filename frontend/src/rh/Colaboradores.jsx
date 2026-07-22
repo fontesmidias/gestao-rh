@@ -2,14 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import { fmtCpf as fmtCpfBase, soDigitos } from '../fmt.js'
 import SelectBusca from '../SelectBusca.jsx'
 import CheckMestre from '../CheckMestre.jsx'
 import Espera from '../Espera.jsx'
 
-const fmtCpf = (c) => {
-  const d = (c || '').replace(/\D/g, '')
-  return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : (c || '—')
-}
+// exibição em tabela: CPF completo mascarado, senão travessão
+const fmtCpf = (c) => (soDigitos(c).length === 11 ? fmtCpfBase(c) : (c || '—'))
 const fmtDataBR = (s) => {
   if (!s) return '—'
   // aceita "aaaa-mm-dd" (fichas) e "dd/mm/aaaa" (importação)

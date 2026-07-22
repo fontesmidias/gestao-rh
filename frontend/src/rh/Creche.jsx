@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import { fmtCpf as fmtCpfBase, soDigitos } from '../fmt.js'
 import Ajuda from '../Ajuda.jsx'
 
-const fmtCpf = (c) => {
-  const d = (c || '').replace(/\D/g, '')
-  return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : (c || '—')
-}
+// exibição em tabela: CPF completo mascarado, senão travessão
+const fmtCpf = (c) => (soDigitos(c).length === 11 ? fmtCpfBase(c) : (c || '—'))
 const STATUS_BEN = {
   levantamento: { rot: 'Preenchendo', cor: '#c8a415' },
   em_analise: { rot: 'Em análise', cor: '#d9534f' },

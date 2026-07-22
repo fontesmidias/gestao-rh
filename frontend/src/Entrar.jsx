@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import { entrada } from './api.js'
-import { cpfValido } from './candidato/Wizard.jsx'
+import { fmtCpf, cpfValido } from './fmt.js'
 import Espera from './Espera.jsx'
-
-const fmtCpf = (v) => (v || '')
-  .replace(/\D/g, '').slice(0, 11)
-  .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-  .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
 
 // Portal único de retorno: CPF → 2 perguntas de verificação → sessão.
 // A segurança de verdade é o e-mail (fallback); as perguntas só encurtam o caminho.

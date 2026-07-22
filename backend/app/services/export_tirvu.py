@@ -174,7 +174,9 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
         "Salário - Extra": "",
         "Data Vigência - Salário": "",
         "Descrição da Jornada de Trabalho": jornada.descricao if jornada else "",
-        "Whatsapp": c.celular_whatsapp or "",
+        # só dígitos: o front agora guarda mascarado (61) 99999-8888, mas o
+        # Tirvu recebe o telefone limpo (como PIS/CPF-sem-máscara alhures)
+        "Whatsapp": _so_digitos(c.celular_whatsapp),
         "Últ. Período Aquisitivo": "",
         "Endereço": logradouro,
         "Endereço - Número": numero,

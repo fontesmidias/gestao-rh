@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { fmtData } from '../fmt.js'
+import { fmtData, fmtTelefone } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import SelectBusca from '../SelectBusca.jsx'
@@ -334,8 +334,9 @@ function Painel({ aoSair }) {
                    onChange={(e) => setNovo({ ...novo, nome_completo: e.target.value })} />
             <input placeholder="E-mail (opcional)" type="email"
                    onChange={(e) => setNovo({ ...novo, email: e.target.value })} />
-            <input placeholder="Celular/WhatsApp (opcional)"
-                   onChange={(e) => setNovo({ ...novo, celular_whatsapp: e.target.value })} />
+            <input placeholder="Celular/WhatsApp (opcional)" inputMode="tel"
+                   value={fmtTelefone(novo.celular_whatsapp)}
+                   onChange={(e) => setNovo({ ...novo, celular_whatsapp: fmtTelefone(e.target.value) })} />
           </div>
           <div className="linha3">
             <select value={novo.posto_id || ''} onChange={(e) => {

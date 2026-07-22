@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { creche as api } from './api.js'
+import { fmtTelefone } from './fmt.js'
 import logo from './assets/logo.png'
 
 // Link público único do levantamento do Reembolso-Creche (IN SEGES/MGI 147/2026).
@@ -257,7 +258,9 @@ function SessaoCreche({ token, aoEnviar }) {
             <input type="email" defaultValue={dados.email || ''}
                    onBlur={(e) => api.conferirDados(token, { email: e.target.value })} /></label>
           <label className="campo"><span className="rotulo">Telefone / WhatsApp</span>
-            <input defaultValue={dados.telefone || ''}
+            <input inputMode="tel" placeholder="(61) 99999-8888"
+                   defaultValue={fmtTelefone(dados.telefone)}
+                   onInput={(e) => { e.target.value = fmtTelefone(e.target.value) }}
                    onBlur={(e) => api.conferirDados(token, { telefone: e.target.value })} /></label>
         </div>
       </div>

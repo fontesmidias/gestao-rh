@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
 import { CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
+import { fmtCpf, cpfValido, fmtTelefone } from '../fmt.js'
 import Espera from '../Espera.jsx'
 import CapturaDocumento from './Camera.jsx'
+
+// cpfValido é reexportado por compatibilidade (Entrar.jsx importava daqui).
+export { cpfValido }
 
 // Descrições idênticas às do formulário original da Green House.
 const GENERO_DESCRICOES = [
@@ -33,22 +37,6 @@ const OPCOES = {
 }
 
 // Dígitos verificadores do CPF (algoritmo oficial da Receita).
-export function cpfValido(cpf) {
-  const n = (cpf || '').replace(/\D/g, '')
-  if (n.length !== 11 || /^(\d)\1{10}$/.test(n)) return false
-  for (const pos of [9, 10]) {
-    let soma = 0
-    for (let i = 0; i < pos; i++) soma += Number(n[i]) * ((pos + 1) - i)
-    if ((soma * 10) % 11 % 10 !== Number(n[pos])) return false
-  }
-  return true
-}
-
-const fmtCpf = (v) => (v || '')
-  .replace(/\D/g, '').slice(0, 11)
-  .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-  .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
-
 function AvisoCpf({ cpf }) {
   const n = (cpf || '').replace(/\D/g, '')
   if (n.length !== 11 || cpfValido(n)) return null
@@ -496,9 +484,9 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
         <Campo rotulo="E-mail"><input type="email" value={p.email || ''}
           onChange={(e) => setSec('pessoais', 'email', e.target.value)} /></Campo>
         <Campo rotulo="Celular / WhatsApp (com DDD)">
-          <input placeholder="(61) 99999-8888" inputMode="tel" value={p.celular_whatsapp || ''}
+          <input placeholder="(61) 99999-8888" inputMode="tel" value={fmtTelefone(p.celular_whatsapp)}
                  onChange={(e) => setSec('pessoais', 'celular_whatsapp',
-                                          e.target.value.replace(/[^\d() -]/g, ''))} /></Campo>
+                                          fmtTelefone(e.target.value))} /></Campo>
       </>}
 
       {etapa === 1 && <>
@@ -732,9 +720,9 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
               <Campo rotulo="Parentesco"><input value={c.parentesco || ''}
                 onChange={(e) => atualizaContato(i, 'parentesco', e.target.value)} /></Campo>
               <Campo rotulo="Celular (com DDD)">
-                <input placeholder="(61) 99999-8888" inputMode="tel" value={c.telefone_celular || ''}
+                <input placeholder="(61) 99999-8888" inputMode="tel" value={fmtTelefone(c.telefone_celular)}
                        onChange={(e) => atualizaContato(i, 'telefone_celular',
-                                                        e.target.value.replace(/[^\d() -]/g, ''))} /></Campo>
+                                                        fmtTelefone(e.target.value))} /></Campo>
             </div>
           </fieldset>
         ))}
