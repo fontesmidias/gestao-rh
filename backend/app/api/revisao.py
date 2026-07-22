@@ -24,10 +24,20 @@ router = APIRouter(tags=["revisao-rh"], dependencies=[Depends(requer_rh)])
 
 
 def _candidatos_admissao(db: Session, status: str | None, busca: str | None,
-                         posto_id: uuid.UUID | None) -> list[Candidato]:
+                         posto_id: uuid.UUID | None,
+                         incluir_colaboradores: bool = False) -> list[Candidato]:
     """Filtra a lista de Admissões. Com o uso, serão muitos admitidos — daí os
-    filtros (feedback 2026-07-19)."""
+    filtros (feedback 2026-07-19).
+
+    Admissões mostra SÓ quem está em admissão (``situacao IS NULL``); quem já é
+    colaborador (importado do Tirvu ou efetivado) tem ``situacao`` preenchida e
+    vive na tela de Colaboradores — antes aparecia nas duas telas, misturando
+    tudo (feedback 2026-07-21). ``incluir_colaboradores`` é o escape simétrico
+    ao ``incluir_admissao`` de Colaboradores, para consultas que precisem de
+    todos (ex.: envio pontual de modelo)."""
     q = select(Candidato).order_by(Candidato.criado_em.desc())
+    if not incluir_colaboradores:
+        q = q.where(Candidato.situacao.is_(None))
     if status:
         try:
             q = q.where(Candidato.status == StatusCandidato(status))
@@ -55,8 +65,10 @@ def _candidatos_admissao(db: Session, status: str | None, busca: str | None,
 @router.get("/rh/candidatos")
 def listar_candidatos(status: str | None = None, busca: str | None = None,
                       posto_id: uuid.UUID | None = None,
+                      incluir_colaboradores: bool = False,
                       db: Session = Depends(get_db)) -> list[dict]:
-    candidatos = _candidatos_admissao(db, status, busca, posto_id)
+    candidatos = _candidatos_admissao(db, status, busca, posto_id,
+                                      incluir_colaboradores=incluir_colaboradores)
     slots = db.scalars(select(SlotDocumento)).all()
     por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
     for s in slots:
