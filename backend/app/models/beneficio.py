@@ -54,6 +54,12 @@ class BeneficioCreche(Base):
     revisado_por: Mapped[str | None] = mapped_column(String(200))
     revisado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     motivo_indeferimento: Mapped[str | None] = mapped_column(String(400))
+    # Devolução para correção (feedback 2026-07-21): o RH devolve o levantamento
+    # ao colaborador com um motivo VISÍVEL para ele; o status volta a
+    # `levantamento` (reabre a edição) e ele reenvia. Distinto do
+    # `motivo_indeferimento`, que é terminal.
+    motivo_devolucao: Mapped[str | None] = mapped_column(String(400))
+    devolvido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ativado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # dossiê do benefício (separado do admissional)
     dossie_pdf_key: Mapped[str | None] = mapped_column(String(300))

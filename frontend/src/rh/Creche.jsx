@@ -84,6 +84,17 @@ function Levantamentos() {
     try { await api.crecheIndeferir(ben.id, motivo); setMsg('Pedido indeferido.'); setAberto(null); carregar() }
     catch (e) { setErro(`Falha ao indeferir (${e.detail || e.message}).`) }
   }
+  const devolver = async (ben) => {
+    const motivo = window.prompt(
+      `Devolver o pedido de ${ben.nome} para correção.\n\n`
+      + 'O motivo abaixo aparece para o colaborador, que poderá corrigir e reenviar:')
+    if (!motivo || !motivo.trim()) return
+    setMsg(null); setErro(null)
+    try {
+      await api.crecheDevolver(ben.id, motivo.trim())
+      setMsg('Pedido devolvido ao colaborador para correção.'); setAberto(null); carregar()
+    } catch (e) { setErro(`Falha ao devolver (${e.detail || e.message}).`) }
+  }
   const alterarPrazo = async (ben) => {
     const dia = window.prompt('Novo dia de entrega mensal (1 a 28):', String(ben.dia_entrega_mensal))
     if (dia === null) return
@@ -206,6 +217,9 @@ function Levantamentos() {
               <div className="navegacao">
                 <button className="btn-link" style={{ color: '#d9534f' }}
                         onClick={() => indeferir(b)}>Indeferir</button>
+                <button className="btn-secundario btn-mini" onClick={() => devolver(b)}
+                        title="Devolver ao colaborador para corrigir e reenviar (com motivo)">
+                  ↩️ Devolver p/ correção</button>
                 {b.status === 'em_analise' && (
                   <button className="btn-secundario" onClick={() => ativar(b, true)}>
                     Aprovar (aguardar repactuação)</button>)}

@@ -232,6 +232,13 @@ function SessaoCreche({ token, aoEnviar }) {
 
   return (
     <div className="creche-sessao">
+      {dados.motivo_devolucao && (
+        <div className="alerta" style={{ borderColor: '#e9a63a', background: '#fff8ec', color: '#7a5b1a' }}>
+          <strong>Seu pedido foi devolvido para correção.</strong><br />
+          Motivo do RH: <em>{dados.motivo_devolucao}</em><br />
+          Corrija o que for necessário abaixo e reenvie.
+        </div>
+      )}
       <div className="rh-card creche-card">
         <h2>Confira seus dados</h2>
         <p className="explica">Puxamos do seu cadastro. Confira e, se algo mudou, atualize.</p>

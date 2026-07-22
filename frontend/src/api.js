@@ -534,6 +534,9 @@ export const rh = {
   crecheIndeferir: (id, motivo) =>
     req(`/rh/creche/levantamentos/${id}/indeferir`, { method: 'POST', headers: authRH(),
                                                       body: JSON.stringify({ motivo }) }),
+  crecheDevolver: (id, motivo) =>
+    req(`/rh/creche/levantamentos/${id}/devolver`, { method: 'POST', headers: authRH(),
+                                                     body: JSON.stringify({ motivo }) }),
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),
