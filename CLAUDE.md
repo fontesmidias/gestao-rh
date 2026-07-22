@@ -26,7 +26,24 @@ imagem; as migrations rodam sozinhas no entrypoint).
   `src/rh/` (painel), `src/api.js` (todas as chamadas), `src/styles.css` (único CSS).
 - Candidato e colaborador são o MESMO registro (`Candidato`): `situacao NULL` =
   em admissão; `ativo`/`desligado` = colaborador. Importação do Tirvu é
-  idempotente (CPF p/ colaboradores, `tirvu_id` p/ postos).
+  idempotente (CPF p/ colaboradores, `tirvu_id` p/ postos). A tela de
+  **Admissões** (`revisao.py::_candidatos_admissao`) filtra `situacao IS NULL`;
+  **Colaboradores** filtra `situacao IS NOT NULL` — cada registro aparece numa
+  tela só (v1.63; antes vazava nas duas). Escapes simétricos:
+  `incluir_colaboradores` (Admissões) e `incluir_admissao` (Colaboradores).
+  ATENÇÃO: há DOIS campos de status parcialmente sobrepostos — `status`
+  (`StatusCandidato`, fase do fluxo, 13 valores) e `situacao` (vínculo), que
+  colidem nas palavras `ativo`/`desligado`. Limpar essa colisão (tirar
+  ativo/desligado do `StatusCandidato`) é pendência aprovada — NÃO fundir os
+  campos (fase de fluxo × vínculo são ortogonais).
+- **Reverter colaborador→candidato** (`/rh/colaboradores/{cid}/reverter` e
+  `/lote/reverter`, v1.65): zera `situacao`/data para uma FASE de fluxo escolhida
+  (convidado | em_revisao), **preserva a matrícula** e os dados. Motivo
+  OBRIGATÓRIO (auditoria). `_indicio_tirvu` (origem=importacao ou matrícula
+  999NNNN) só AVISA no front — nunca bloqueia (decisão do Bruno). Feito na tela
+  atual de Colaboradores reusando o `Set` de selecionados (NÃO migra p/
+  DashPlanilha — a avaliação adversária mostrou que o dash não aguenta o filtro
+  server-side de Colaboradores sem regressão de LGPD/performance).
 
 ## Comandos (Windows; use o venv, o `python` do PATH é alias da MS Store)
 
@@ -149,8 +166,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `localStorage` por `id` do módulo) e export CSV (BOM UTF-8, abre no Excel-BR) do
   que está filtrado/ordenado. Dirigido por config de colunas
   (`{chave,rotulo,valor,ordenavel,filtro,opcoes,render,sempreVisivel}`). PILOTO no
-  Banco de Talentos (`TalentosRH.jsx`); a mesma config serve os outros módulos
-  depois (Colaboradores/Admissões). Sort/filtro são EM MEMÓRIA (volumes baixos).
+  Banco de Talentos (`TalentosRH.jsx`). Sort/filtro são EM MEMÓRIA (volumes
+  baixos). **ATENÇÃO** (avaliação adversária 2026-07-21): propagar aos outros
+  módulos NÃO é plug-and-play. Colaboradores/Admissões filtram SERVER-SIDE
+  (recarregam a API a cada filtro) e a base é a folha inteira (LGPD) — trocar
+  pelo filtro-em-memória do dash traria tudo ao cliente (regressão de
+  performance E de exposição). O componente ainda NÃO tem: cards/métricas no
+  topo, nem forma de o pai injetar/controlar filtro (estado interno), nem modo
+  server-side, nem paginação. Cards clicáveis→filtro (item 3) exige EVOLUIR o
+  dash primeiro (slot de cards + filtro controlável + modo server-side) — piloto
+  planejado só no Creche (que já tem `.rh-metrica` e volume baixo).
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
   = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
   `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado
@@ -192,7 +217,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   Bruno: manter o PDF gerado, não virar modelo de texto). Datas dos PDFs de creche
   são CENTRALIZADAS. RH abre cada doc de criança individualmente
   (`/rh/creche/.../crianca/{id}/documento/{tipo}`, serve do MinIO com Content-Type
-  pela extensão — pode ser imagem, não só PDF).
+  pela extensão — pode ser imagem, não só PDF). **Decisões do RH sobre o
+  levantamento** (v1.66/v1.67): além de Aprovar (`ativar_beneficio`, que é o
+  "deferir") e Indeferir (terminal, `motivo_indeferimento`), há **Devolver**
+  (`/levantamentos/{id}/devolver`): status volta a `levantamento` — o que reabre
+  a edição no link público (reusa o gate `editavel`, sem estado novo) e permite
+  reenviar — com `motivo_devolucao` VISÍVEL ao colaborador (no CrecheLink) e
+  distinto do `motivo_indeferimento`; devolver LIMPA `enviado_em`/
+  `dados_conferidos_em` e anula um indeferimento anterior. **"Não faço jus"**
+  (status `sem_direito_declarado` + `sem_direito_em/por`): o colaborador declara
+  no link (`/creche/sessao/{token}/sem-direito`, rastro "colaborador") OU o RH
+  marca pelo painel (`/rh/creche/colaboradores/{id}/sem-direito`, cria o
+  benefício se não existir, recusa 409 se já estiver `ativo`) — some da fila de
+  ação mas fica no relatório (filtro de status no dash) para provar que o
+  elegível foi consultado e NÃO pediu. **"Novo requerimento p/ mais filhos" é
+  pendência** (o modelo é 1:1, `candidato_id unique=True`; virar 1:N toca
+  assinatura/dossiê/ativação/link — projetar p/ N, entregar 1).
 - **Incidência de Benefícios** (`incidencia_beneficios.py`): a planilha do RH
   (abas PÚBLICO/PRIVADO) normaliza os postos no padrão `CLIENTE - Nº CONTRATO -
   OBJETO` e define a elegibilidade creche pela coluna "Reembolso creche/Mês". Lê
@@ -225,7 +265,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   new_y="NEXT"`; rótulos de tabela usam o `campo()` de `_FichaPDF` (quebra
   linha na célula). PDFs de prova: gerar e CONFERIR visualmente (tool Read).
 - **CSS**: conferir classes existentes em `styles.css` antes de usar (chip usa
-  `--chip-cor` inline; métricas são `.rh-metrica strong/span`).
+  `--chip-cor` inline; métricas são `.rh-metrica strong/span`). **Checkbox/radio**
+  já têm reset global (`input[type=checkbox],input[type=radio]` → 1.15rem, accent
+  verde) desde v1.64 — NÃO precisa mais do remendo inline `style={{ width:'auto',
+  minHeight:0 }}` que o código legado espalha (a regra `input,select,textarea`
+  os inflava; por isso o remendo existia).
 - **MutationObserver** de `responsivo.js`: só `childList+subtree` — observar
   `attributes` causa loop infinito.
 
