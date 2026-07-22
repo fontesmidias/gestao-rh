@@ -186,7 +186,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   topo, nem forma de o pai injetar/controlar filtro (estado interno), nem modo
   server-side, nem paginação. Cards clicáveis→filtro (item 3) exige EVOLUIR o
   dash primeiro (slot de cards + filtro controlável + modo server-side) — piloto
-  planejado só no Creche (que já tem `.rh-metrica` e volume baixo).
+  planejado só no Creche (que já tem `.rh-metrica` e volume baixo). **Coluna de
+  texto longo** (cargos, descrição de jornada): marque `quebra: true` na config —
+  a célula quebra linha (`white-space: normal`, `max-width: 22rem`) em vez de
+  esticar a tabela e forçar rolagem lateral (v1.71). Sem isso, o default é
+  `nowrap` (certo para datas/status/botões, ruim para texto livre).
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
   = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
   `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado
