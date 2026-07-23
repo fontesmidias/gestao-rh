@@ -91,10 +91,34 @@ saúde ocupacional**. O Bruno reafirmou ciente de que é dado pessoal sensível
 (LGPD art. 11, categoria especial) e acrescentou o requisito: *"não quero
 problemas"* — tratado aqui como requisito técnico, não como ressalva.
 
+**Provedor escolhido pelo Bruno (2026-07-22): Mistral** — o mesmo já integrado
+em `ocr_ia.py`. Verificado na documentação oficial em 2026-07-22:
+
+| Ponto | Situação |
+|---|---|
+| Treinamento com dado de API | **Não** — "data sent through the API isn't used for model training" (vale para API paga; o tier gratuito *Experiment* treina por padrão) |
+| Retenção padrão | **30 dias** para monitoramento de abuso |
+| Zero Data Retention (ZDR) | **Só no plano Scale**, mediante **pedido aprovado** caso a caso — não é chave que se liga |
+| `/v1/ocr` coberto pelo ZDR | **Sim** (é endpoint stateless) |
+| Sede / regime | Empresa da UE, dados na UE, DPA disponível para clientes empresariais |
+
+> ⚠️ **Consequência para o atestado de saúde:** sem ZDR aprovado, o documento
+> fica **30 dias** nos servidores da Mistral. Para dado de saúde (LGPD art. 11)
+> isso é retenção de dado sensível por terceiro sem necessidade — e o tier
+> gratuito, que treina com o que recebe, é **proibido** para qualquer documento
+> deste módulo. **Ordem prática:** (1) contratar o plano Scale; (2) pedir o ZDR
+> justificando "documentos de RH com dados pessoais sensíveis"; (3) assinar o
+> DPA; (4) só então habilitar a leitura de atestado. Enquanto o ZDR não estiver
+> aprovado, o roteamento por sensibilidade deve **barrar o tipo `saude`** e
+> deixar os demais funcionando — é uma linha de configuração, não um bloqueio de
+> projeto.
+
 **Condições de implementação (obrigatórias, não negociáveis):**
 
 1. **Provedor com retenção zero e não-treinamento — em contrato**, não em página
-   de marketing. A escolha do provedor é do Bruno; a cláusula não é opcional.
+   de marketing. → Mistral plano **Scale** + **ZDR aprovado** + **DPA assinado**;
+   nunca o tier gratuito. A chave do tier gratuito no painel não pode ser usada
+   para documento sensível.
 2. **Documento sensível nunca é persistido fora da VPS.** Entra, extrai campo,
    sai. O arquivo original fica no MinIO, como o creche já faz.
 3. **Log de auditoria de toda leitura de documento sensível:** quem, quando,
@@ -260,8 +284,12 @@ crítico, validade dura, quatro cargos, IA lendo dado de saúde, prazo por posto
 notificação com antecedência customizável, dossiê final para a Multicursos. Se
 aguenta o brigadista, aguenta o curso de Excel de olhos fechados.
 
-Volume: ~40 a 60 pessoas → 2 a 3 documentos/dia na fila. O validador aprende o
-fluxo antes da torneira dos 1.200 abrir.
+**Dimensionamento confirmado pelo Bruno (2026-07-22): ~10 postos com brigada.**
+A ~4-6 brigadistas por posto, o piloto cobre **40 a 60 pessoas** — dentro do
+estimado. Cada uma envia 3 documentos (identidade + certificado + ASO): ~150
+documentos na primeira carga, depois só reciclagem (a cada 24 meses) e entrada
+de gente nova. Fila diária de 2 a 3 documentos. O validador aprende o fluxo
+antes da torneira dos 1.200 abrir.
 
 **Critério de saída do piloto** (definido antes de começar, senão vira piloto
 eterno): **um ciclo real completo ponta a ponta** — aviso de vencimento
@@ -472,8 +500,57 @@ Tirvu para dar "dados objetivos" ao avaliador.
 > nunca como nota calculada; e o colaborador vê o que está registrado sobre ele
 > (regra 6.2).
 
-**Bloqueio atual:** o layout do export de ponto do Tirvu ainda não foi visto.
-Sem ele, não há como especificar o parser. **Pendência com o Bruno.**
+**Layout recebido em 2026-07-22** (`docs/Exportação de Ponto Eletrônico.xlsx`,
+431 linhas reais, 33 pessoas, julho/2026). Estrutura verificada:
+
+- **Aba única, cabeçalho em DUAS linhas.** Linha 0 tem os grupos (`Entrada 1`,
+  `Saída 1`, `Entrada 2`, `Saída 2`) com `undefined` nas colunas seguintes;
+  linha 1 tem os subcampos de cada grupo. Os dados começam na **linha 2**.
+- **49 colunas** = 13 de identificação/apuração + 4 blocos de 9 colunas
+  (`Hora`, `Posto de Serviço`, `Latitude`, `Longitude`, `Distância`,
+  `Expressão`, `Modo de Registro`, `Foto`, `Sincronização`).
+- Identificação: `ID`, `Competência` (data dd/mm/aaaa), `Dia` (nome da semana),
+  `Nome`, `Matrícula`, `Cargo`, `Empresa`, `Posto de Serviço`, `Jornada de
+  Trabalho`, `Situação`, `Carga Prevista`, `Horas Trabalhadas`, `% Trabalhado`.
+- `Situação` ∈ {Acima do Previsto, Dentro do Previsto, Abaixo do Previsto}.
+- Lido pelo `_ler_linhas_xlsx` de `postos.py` (zip+XML) — o arquivo **não tem
+  sharedStrings**, tudo inline. openpyxl não é necessário nem confiável aqui.
+
+> ⚠️ **Armadilhas encontradas nos dados reais** (não são hipóteses — estão nas
+> 431 linhas):
+> 1. **NÃO existe coluna de CPF.** O casamento com o `Candidato` só pode ser
+>    por **matrícula** — que é exatamente o campo que o sistema gera sozinho
+>    (999+seq) quando falta. Casar por nome seria erro garantido (homônimos,
+>    acentuação). Import tem de recusar linha cuja matrícula não exista na base
+>    e listar as recusadas para o RH, nunca criar pessoa.
+>    **Cuidado com zeros à esquerda:** as matrículas reais vêm como `001941`,
+>    `001767`, `003035` — texto, não número. Normalizar dos dois lados antes de
+>    comparar (`lstrip("0")` ou comparação por dígitos), senão `1941 != 001941`
+>    e o import recusa a base inteira. A amostra também mostra a MESMA pessoa
+>    com `3035` e outras com `003035` — a inconsistência está nos dados de
+>    origem.
+> 2. **Uma célula de horário pode conter DOIS horários** (`"10:17 07:00"`,
+>    `"12:00 17:17"`) — 14 linhas na amostra. Um parser ingênuo de `HH:MM`
+>    lê o primeiro e descarta o segundo em silêncio.
+> 3. **29 linhas com `00:00` em Horas Trabalhadas** e `Situação = Abaixo do
+>    Previsto`, mas COM marcação de entrada. É registro incompleto (esqueceu de
+>    bater a saída), **não é falta** — tratar como falta seria acusar de ausência
+>    quem trabalhou. Falta de verdade precisa de outro sinal, a confirmar (§ 9).
+> 4. **A ausência de marcação não significa ausência de trabalho.** Há linha sem
+>    nada em `Entrada 1` e com **04:10** em Horas Trabalhadas — e outra, também
+>    sem marcação, com **10:33 (117%)**. Ou seja: **`Horas Trabalhadas` e
+>    `Situação` são a apuração do Tirvu e devem ser a fonte de verdade**; as
+>    quatro colunas de marcação são detalhe operacional e podem estar vazias
+>    mesmo em dia trabalhado. Um parser que dedusse presença das marcações
+>    inventaria falta onde não há.
+>
+> Consequências de LGPD/proporcionalidade: o export traz **latitude, longitude,
+> distância e URL de FOTO** de cada marcação. Isso é rastreamento de localização
+> e imagem — importar para um módulo de **avaliação de desempenho** é
+> desproporcional ao fim. **Decisão de projeto: importar apenas as colunas de
+> apuração** (competência, situação, carga prevista, horas trabalhadas, %) e
+> **descartar geolocalização e foto na leitura**, sem persistir. Se um dia forem
+> necessárias, é outro módulo com outra base legal.
 
 ### 6.9. IA no desempenho
 
@@ -514,15 +591,25 @@ test_leitura_documento_sensivel_registra_auditoria_sem_conteudo
 
 ## 9. Pendências com o Bruno
 
+### Resolvidas em 2026-07-22 (mesma data)
+
+| # | Pendência | Resposta |
+|---|---|---|
+| 1 | Layout do export de ponto do Tirvu | **Recebido** (`docs/Exportação de Ponto Eletrônico.xlsx`) — layout, armadilhas e decisão de descartar geolocalização/foto em § 6.8 |
+| 2 | Provedor de IA | **Mistral** (o já integrado). Condições e ordem prática em § 3.1 |
+| 3 | Base legal LGPD para dado de saúde | **Minuta redigida**: `07-lgpd-leitura-automatizada-documentos.md` — art. 11, II, "a" e "f"; falta revisão jurídica |
+| 4 | Token sem 2FA na devolução do creche | **Confirmado e ENTREGUE** na Onda A (v1.82) |
+| 6 | Quantos postos têm brigada | **~10 postos** → piloto de 40 a 60 pessoas (§ 5.4) |
+| 7 | `Registra Ponto` nos registros existentes | **Resolvido na Onda A**: virou pendência do export, não campo travado (§ A1) |
+
+### Em aberto
+
 | # | Pendência | Trava o quê |
 |---|---|---|
-| 1 | **Layout do export de ponto/atestados do Tirvu** | Item 6.8 inteiro |
-| 2 | **Escolha do provedor de IA** (com cláusula de retenção zero em contrato) | Onda 0 |
-| 3 | **Base legal LGPD** para tratamento de dado de saúde + registro no inventário | Onda 0 / B |
-| 4 | Confirmar desenho do token sem 2FA na devolução do creche (7 dias, single-use, escopo restrito) | A3 |
+| 3b | **Revisão jurídica** da minuta LGPD + assinatura do DPA da Mistral + **aprovação do ZDR no plano Scale** | Leitura de ASO (só ela; o resto anda) |
 | 5 | **Comitê de calibração** — conversa dedicada, não coberta nesta sessão | C (não bloqueia início) |
-| 6 | Quantos postos têm brigada (dimensionar o piloto) | B |
-| 7 | `Registra Ponto` — o que fazer com os registros existentes sem o campo | A1 |
+| 8 | Como o Tirvu marca **falta** de verdade (o `00:00` com marcação é registro incompleto, não ausência — § 6.8) | Precisão do item 6.8 |
+| 9 | Confirmar se **par/ímpar e diurno/noturno** dá para derivar da jornada (hoje é texto livre) ou se pergunta ao brigadista | § 5.6 |
 
 ---
 
