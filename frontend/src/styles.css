@@ -1155,6 +1155,48 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
   width: 100cqw; max-width: 100cqw;
 }
 
+/* --- Formulário da cartilha (avaliação de desempenho) ------------------- */
+/* Cada linha: o item à esquerda, a escala como chips à direita. Em tela
+   estreita a escala desce para baixo do rótulo, sem espremer os botões. */
+.rh-escala { display: flex; flex-direction: column; gap: .4rem; }
+.rh-escala-linha { display: flex; justify-content: space-between; align-items: center;
+                   gap: .8rem; flex-wrap: wrap;
+                   padding: .45rem .6rem; border-radius: 8px;
+                   background: var(--input-bg); border: 1px solid var(--borda-suave); }
+.rh-escala-rotulo { font-size: .9rem; flex: 1 1 12rem; min-width: 0; }
+.rh-escala-rotulo small { color: var(--cinza-txt); text-transform: uppercase;
+                          font-size: .72rem; letter-spacing: .04em; }
+.rh-escala .chips-escolha { margin: 0; flex: 0 1 auto; }
+.rh-escala .chip-escolha { font-size: .78rem; padding: .25rem .55rem; }
+/* PDI: 4 colunas que viram 1 no celular */
+.rh-pdi-linha { display: grid; grid-template-columns: 1.2fr 1.4fr auto auto;
+                gap: .4rem; margin-bottom: .4rem; }
+@media (max-width: 860px) {
+  .rh-pdi-linha { grid-template-columns: 1fr; }
+  .rh-escala-linha { flex-direction: column; align-items: stretch; }
+}
+
+/* --- Radar de competências + timeline ---------------------------------- */
+.radar-bloco { display: flex; flex-direction: column; align-items: center; }
+.radar-svg { width: 100%; max-width: 22rem; height: auto; overflow: visible; }
+.radar-rotulo { font-size: 10px; fill: var(--cinza-txt); font-weight: 600; }
+.radar-legenda { display: flex; flex-wrap: wrap; gap: .8rem; justify-content: center;
+                 margin-top: .5rem; font-size: .82rem; color: var(--cinza-txt); }
+.radar-legenda span { display: inline-flex; align-items: center; gap: .3rem; }
+.radar-legenda i { width: .7rem; height: .7rem; border-radius: 3px; display: inline-block; }
+
+.timeline { display: flex; flex-direction: column; gap: .6rem; }
+.timeline-item { border-left: 3px solid var(--verde); padding: .1rem 0 .1rem .7rem; }
+.timeline-topo { display: flex; justify-content: space-between; align-items: center;
+                 gap: .5rem; flex-wrap: wrap; }
+.timeline-barra { position: relative; height: 1.15rem; border-radius: 6px;
+                  background: var(--borda-suave); margin: .3rem 0 .2rem;
+                  overflow: hidden; }
+.timeline-preenchida { height: 100%; background: linear-gradient(90deg, #8cc63f, #0a8f46);
+                       border-radius: 6px; }
+.timeline-valor { position: absolute; right: .4rem; top: 0; line-height: 1.15rem;
+                  font-size: .75rem; font-weight: 700; color: var(--tinta); }
+
 /* Conferência de um envio: documento de um lado, campos do outro. No celular
    as duas colunas viram uma só (o RH também confere pelo telefone). */
 .rh-conferencia { padding: 1.1rem 1.2rem 1.2rem; }

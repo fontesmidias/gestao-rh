@@ -89,6 +89,21 @@ _VALIDOS_COMPETENCIA = {e["valor"] for e in ESCALA_COMPETENCIA}
 # com outro nome, e o anonimato do par morreria na primeira semana.
 MINIMO_HORIZONTAL = 2
 
+# Prazo para o colaborador registrar a manifestação (seção 9) depois da conversa
+# de feedback. Sem prazo, o direito de resposta viraria letra morta — bastaria
+# homologar antes de a pessoa ler. Com prazo, ela tem tempo real e o RH não fica
+# travado para sempre.
+PRAZO_MANIFESTACAO_D = 7
+
+
+def prazo_manifestacao_vencido(avaliacao, hoje: date | None = None) -> bool:
+    """A janela de manifestação já passou? Sem data de feedback, não passou."""
+    if avaliacao.feedback_em is None:
+        return False
+    from datetime import timedelta
+    return (hoje or date.today()) > avaliacao.feedback_em + timedelta(
+        days=PRAZO_MANIFESTACAO_D)
+
 
 def formulario() -> dict:
     """Tudo que o front precisa para desenhar o formulário da cartilha."""
@@ -211,24 +226,34 @@ def desvio_do_avaliador(db: Session, avaliador: str, ciclo_id=None) -> dict | No
     minhas = [media_competencias(a.competencias) for a in todas
               if a.avaliador == avaliador]
     minhas = [m for m in minhas if m is not None]
-    geral = [media_competencias(a.competencias) for a in todas]
-    geral = [m for m in geral if m is not None]
-    if not minhas or len(geral) < 2:
+    # A média de comparação exclui as avaliações DELE: com poucos avaliadores, o
+    # próprio puxaria a média geral para perto da sua e mascararia o desvio (com
+    # 3 avaliações, quem dá 4,0 aparecia como "alinhado" à média que ele mesmo
+    # inflou).
+    outros = [media_competencias(a.competencias) for a in todas
+              if a.avaliador != avaliador]
+    outros = [m for m in outros if m is not None]
+    if not minhas or not outros:
         return None
 
     media_avaliador = round(sum(minhas) / len(minhas), 2)
-    media_geral = round(sum(geral) / len(geral), 2)
+    media_geral = round(sum(outros) / len(outros), 2)
     diferenca = round(media_avaliador - media_geral, 2)
     return {
         "avaliador": avaliador,
         "media_avaliador": media_avaliador,
+        # média dos DEMAIS avaliadores (não inclui as dele)
         "media_geral": media_geral,
         "diferenca": diferenca,
         "avaliacoes": len(minhas),
-        # tendência só quando a diferença é grande o bastante para significar
-        # algo (meio ponto numa escala de 1 a 4)
-        "tendencia": ("mais generoso" if diferenca >= 0.5
-                      else "mais rigoroso" if diferenca <= -0.5 else "alinhado"),
+        "avaliacoes_comparadas": len(outros),
+        # Tendência só quando a diferença significa algo. A escala vai de 1 a 4
+        # (3 pontos de amplitude), então 0,3 já é ~10% da régua — e é
+        # exatamente a diferença entre "Adequado" e "Elevado" em 1 de cada 3
+        # competências. Meio ponto era conservador demais: escondia justamente
+        # o avaliador que dá "Elevado" em quase tudo.
+        "tendencia": ("mais generoso" if diferenca >= 0.3
+                      else "mais rigoroso" if diferenca <= -0.3 else "alinhado"),
     }
 
 
