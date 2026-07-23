@@ -37,11 +37,11 @@ Fico no aguardo da confirmação da matrícula. Caso seja necessária alguma inf
 
 CORPO_GRUPO_PADRAO = """Prezados,
 
-Solicito, por gentileza, a matrícula dos colaboradores abaixo na turma com início em {data_turma}, no período {periodo}:
+Solicito, por gentileza, a matrícula dos {quantidade} colaboradores abaixo na turma com início em {data_turma}, no período {periodo}:
 
 {lista_nomes}
 
-Segue em anexo a documentação necessária para a inclusão dos colaboradores no curso.
+Segue em anexo a documentação necessária para a inclusão dos colaboradores no curso — um arquivo por colaborador, identificado pelo nome.
 
 Fico no aguardo da confirmação da matrícula. Caso seja necessária alguma informação adicional, permaneço à disposição."""
 
@@ -71,6 +71,94 @@ def textos(db: Session) -> dict:
 def _data_br(d: date | None) -> str:
     """dd/mm — como o Bruno escreve no e-mail ("início em 03/08")."""
     return d.strftime("%d/%m") if d else "(data a definir)"
+
+
+def _cpf_fmt(cpf: str | None) -> str:
+    d = "".join(c for c in (cpf or "") if c.isdigit())
+    return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}" if len(d) == 11 else (cpf or "")
+
+
+_MINUSCULAS = {"de", "da", "do", "das", "dos", "e"}
+
+
+def _titulo(texto: str | None) -> str:
+    """Capitaliza sem transformar preposição em nome próprio: o `.title()` do
+    Python devolve "Chefe De Brigada" — aqui sai "Chefe de Brigada"."""
+    if not texto:
+        return ""
+    palavras = texto.lower().split()
+    return " ".join(p if i and p in _MINUSCULAS else p.capitalize()
+                    for i, p in enumerate(palavras))
+
+
+def _linha_pessoa(i: int, p: dict) -> str:
+    """Uma pessoa na lista do e-mail em GRUPO.
+
+    Vai com os DADOS DE MATRÍCULA, não só o nome: a clínica precisa cadastrar
+    cada um, e com nome sozinho ela teria de abrir os PDFs para achar CPF e
+    nascimento (pedido do Bruno: "inserir automaticamente as informações
+    necessárias para matricular as pessoas"). Campo ausente é omitido, para não
+    poluir a linha com rótulo vazio.
+    """
+    partes = [f"{i}. {p['nome']}"]
+    detalhes = []
+    if p.get("cpf"):
+        detalhes.append(f"CPF {_cpf_fmt(p['cpf'])}")
+    if p.get("data_nascimento"):
+        detalhes.append(f"nascimento {p['data_nascimento']}")
+    if p.get("cargo"):
+        detalhes.append(_titulo(p["cargo"]))
+    if detalhes:
+        partes.append("   " + " · ".join(detalhes))
+    return "\n".join(partes)
+
+
+def _html_grupo(assunto: str, corpo: str, pessoas: list[dict],
+                data_fmt: str, periodo: str) -> str:
+    """Versão HTML do e-mail em grupo: os dados viram TABELA.
+
+    Com 2+ pessoas a lista em texto puro fica difícil de conferir; em tabela a
+    clínica bate os campos de cadastro de uma olhada. O texto puro continua
+    sendo enviado junto (multipart) para quem lê em cliente sem HTML.
+    """
+    from app.services.email import html_moderno
+    linhas = "".join(
+        f'<tr>'
+        f'<td style="padding:8px 10px;border-bottom:1px solid #e6ece4">{i}</td>'
+        f'<td style="padding:8px 10px;border-bottom:1px solid #e6ece4">'
+        f'<strong>{p["nome"]}</strong></td>'
+        f'<td style="padding:8px 10px;border-bottom:1px solid #e6ece4;'
+        f'white-space:nowrap">{_cpf_fmt(p.get("cpf")) or "—"}</td>'
+        f'<td style="padding:8px 10px;border-bottom:1px solid #e6ece4;'
+        f'white-space:nowrap">{p.get("data_nascimento") or "—"}</td>'
+        f'<td style="padding:8px 10px;border-bottom:1px solid #e6ece4">'
+        f'{_titulo(p.get("cargo")) or "—"}</td>'
+        f'</tr>'
+        for i, p in enumerate(pessoas, 1))
+    tabela = (
+        '<table style="width:100%;border-collapse:collapse;font-size:14px;'
+        'margin:18px 0">'
+        '<thead><tr style="background:#f2f8ea;text-align:left">'
+        '<th style="padding:8px 10px">#</th>'
+        '<th style="padding:8px 10px">Colaborador</th>'
+        '<th style="padding:8px 10px">CPF</th>'
+        '<th style="padding:8px 10px">Nascimento</th>'
+        '<th style="padding:8px 10px">Cargo</th>'
+        '</tr></thead>'
+        f'<tbody>{linhas}</tbody></table>')
+    # O corpo editado pelo RH manda: o que vem antes da lista e o que vem
+    # depois são preservados, e só a lista em texto vira tabela.
+    antes, _, depois = corpo.partition("{lista_nomes}")
+    if not depois:  # corpo já formatado (o RH editou): quebra na 1ª linha "1. "
+        pedaco = corpo.split("\n1. ")
+        antes = pedaco[0]
+        depois = ("\n".join(pedaco[1].split("\n")[len(pessoas):])
+                  if len(pedaco) > 1 else "")
+    paragrafos = [p.strip().replace("\n", "<br>") for p in antes.split("\n\n") if p.strip()]
+    paragrafos.append(tabela)
+    paragrafos += [p.strip().replace("\n", "<br>")
+                   for p in depois.split("\n\n") if p.strip()]
+    return html_moderno(assunto, paragrafos, rodape="RH — Green House")
 
 
 def pendencias_do_dossie(db: Session, registro: RegistroDesenvolvimento) -> list[str]:
@@ -111,6 +199,8 @@ def montar(db: Session, registros: list[RegistroDesenvolvimento],
             continue
         pessoas.append({"registro_id": str(reg.id), "candidato_id": str(col.id),
                         "nome": col.nome_completo,
+                        "cpf": col.cpf,
+                        "data_nascimento": _nascimento(db, col),
                         "matricula": col.matricula,
                         "cargo": col.cargo_funcao,
                         "pendencias": pendencias_do_dossie(db, reg)})
@@ -119,12 +209,16 @@ def montar(db: Session, registros: list[RegistroDesenvolvimento],
         return []
 
     if agrupar:
-        lista = "\n".join(f"{i}. {p['nome']}" for i, p in enumerate(pessoas, 1))
+        lista = "\n".join(_linha_pessoa(i, p) for i, p in enumerate(pessoas, 1))
         corpo = cfg["corpo_grupo"].format(data_turma=data_fmt, periodo=per,
-                                          lista_nomes=lista)
+                                          lista_nomes=lista,
+                                          quantidade=len(pessoas))
         return [{"assunto": cfg["assunto"], "corpo": corpo,
+                 "corpo_html": _html_grupo(cfg["assunto"], corpo, pessoas,
+                                           data_fmt, per),
                  "destinatarios": _destinos(cfg, turma),
                  "colaboradores": pessoas,
+                 "agrupado": True,
                  "anexos": [_nome_dossie(p["nome"]) for p in pessoas]}]
 
     return [
@@ -133,9 +227,23 @@ def montar(db: Session, registros: list[RegistroDesenvolvimento],
                                                  periodo=per),
          "destinatarios": _destinos(cfg, turma),
          "colaboradores": [p],
+         "agrupado": False,
          "anexos": [_nome_dossie(p["nome"])]}
         for p in pessoas
     ]
+
+
+def _nascimento(db: Session, col: Candidato) -> str | None:
+    """dd/mm/aaaa. A nativa do Candidato já é string (vale para o importado do
+    Tirvu); a da ficha é date e só é consultada quando a nativa falta."""
+    nativa = (col.data_nascimento or "").strip()
+    if len(nativa) == 10:
+        return nativa
+    from app.models.ficha import DadosPessoais
+    p = db.get(DadosPessoais, col.id)
+    if p and p.data_nascimento:
+        return p.data_nascimento.strftime("%d/%m/%Y")
+    return None
 
 
 def _destinos(cfg: dict, turma: TurmaReciclagem | None) -> list[str]:
