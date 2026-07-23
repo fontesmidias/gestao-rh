@@ -135,7 +135,7 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
     tid = str(talento.id)
     registrar(db, "talento_cadastrado", ator="publico",
               detalhe={"cargos": cargos, "cidade": talento.cidade})
-    nome_cad, cargos_cad = talento.nome_completo, cargos
+    nome_cad, cargos_cad = talento.nome, cargos
     db.commit()
     # aviso interno configurável (v1.82) — desligado por padrão seria pior:
     # cadastro de talento que ninguém vê é currículo perdido
