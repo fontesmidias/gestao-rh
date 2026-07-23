@@ -8,12 +8,21 @@ import logo from './assets/logo.png'
 // Quem não tem e-mail cadastrado: CPF -> verificar identidade (KBA) -> cadastrar
 // e-mail -> código 2FA. A resposta do /iniciar nunca revela se o CPF é da base.
 export default function CrecheLink() {
-  const [etapa, setEtapa] = useState('cpf') // cpf | codigo | kba | sessao | enviado
+  // ?t=<token> no link do e-mail de devolução (v1.82): o RH devolveu para
+  // correção e o e-mail já é comprovado, então entra direto — sem refazer o
+  // 2FA. O token vale 7 dias e é derrubado se o RH devolver de novo.
+  const tokenUrl = new URLSearchParams(window.location.search).get('t')
+  const [etapa, setEtapa] = useState(tokenUrl ? 'sessao' : 'cpf') // cpf | codigo | kba | sessao | enviado
   const [cpf, setCpf] = useState('')
   const [codigo, setCodigo] = useState('')
-  const [token, setToken] = useState(null)
+  const [token, setToken] = useState(tokenUrl || null)
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(false)
+
+  // tira o token da barra de endereço (histórico, print, ombro do colega)
+  useEffect(() => {
+    if (tokenUrl) window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
   const iniciar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
@@ -88,7 +97,8 @@ export default function CrecheLink() {
       )}
 
       {etapa === 'sessao' && token && (
-        <SessaoCreche token={token} aoEnviar={() => setEtapa('enviado')} />
+        <SessaoCreche token={token} aoEnviar={() => setEtapa('enviado')}
+                      aoExpirar={() => { setToken(null); setEtapa('cpf') }} />
       )}
 
       {etapa === 'enviado' && (
@@ -192,14 +202,19 @@ function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
   )
 }
 
-function SessaoCreche({ token, aoEnviar }) {
+function SessaoCreche({ token, aoEnviar, aoExpirar }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
   const [enviando, setEnviando] = useState(false)
   // form de nova criança
   const [nova, setNova] = useState({ nome: '', data_nascimento: '', parentesco: 'filho', tipo_comprovante: 'declaracao' })
 
-  const recarregar = () => api.sessao(token).then(setDados).catch(() => setErro('Sessão expirada. Recomece pelo CPF.'))
+  // Link do e-mail vencido (7 dias) cai aqui: em vez de tela morta, volta ao
+  // CPF — o caminho normal com 2FA continua valendo.
+  const recarregar = () => api.sessao(token).then(setDados).catch(() => {
+    setErro('Este link expirou. Entre com seu CPF para continuar.')
+    if (aoExpirar) aoExpirar()
+  })
   useEffect(() => { recarregar() }, [])
 
   const addCrianca = async () => {

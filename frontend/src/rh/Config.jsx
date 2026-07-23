@@ -888,32 +888,91 @@ function Smtp() {
 function AvisosInternos() {
   const [cfg, setCfg] = useState(null)
   const [email, setEmail] = useState('')
+  const [matriz, setMatriz] = useState({})
+  const [novo, setNovo] = useState({})     // e-mail sendo digitado, por evento
   const [msg, setMsg] = useState(null)
-  useEffect(() => { api.verAvisos().then((c) => { setCfg(c); setEmail(c.email_avisos_internos || '') }).catch(() => {}) }, [])
+  const carregar = (c) => {
+    setCfg(c); setEmail(c.email_avisos_internos || ''); setMatriz(c.matriz || {})
+  }
+  useEffect(() => { api.verAvisos().then(carregar).catch(() => {}) }, [])
   if (!cfg) return null
+
+  const doEvento = (chave) => matriz[chave] || { emails: [], ativo: true }
+  const mexer = (chave, mudanca) =>
+    setMatriz({ ...matriz, [chave]: { ...doEvento(chave), ...mudanca } })
+  const addEmail = (chave) => {
+    const e = (novo[chave] || '').trim()
+    if (!e || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) {
+      setMsg({ tipo: 'erro', texto: 'Informe um e-mail válido.' }); return }
+    const atuais = doEvento(chave).emails
+    if (atuais.some((x) => x.toLowerCase() === e.toLowerCase())) {
+      setNovo({ ...novo, [chave]: '' }); return }
+    mexer(chave, { emails: [...atuais, e] })
+    setNovo({ ...novo, [chave]: '' }); setMsg(null)
+  }
+
   return (
     <div className="rh-card">
-      <h3>📥 E-mail de avisos internos</h3>
-      <p className="explica">Para onde vão os avisos internos do sistema (ex.: "Dossiê de admissão
-        pronto"). Deixe em branco para usar o remetente padrão
-        (<code>{cfg.padrao || '—'}</code>).</p>
+      <h3>📥 Avisos internos</h3>
+      <p className="explica">Quem recebe cada aviso do sistema. O <strong>e-mail padrão</strong>
+        vale para todo aviso sem destinatário próprio; deixando-o em branco, os avisos vão
+        para o remetente (<code>{cfg.padrao || '—'}</code>).</p>
       <div className="linha2">
         <input type="email" placeholder="avisos@suaempresa.com.br" value={email}
                onChange={(e) => setEmail(e.target.value)} />
-        <button className="btn-secundario" onClick={async () => {
-          setMsg(null)
-          try {
-            const r = await api.salvarAvisos({ email_avisos_internos: email.trim() })
-            setCfg(r)
-            setMsg({ tipo: 'ok', texto: r.email_avisos_internos
-              ? `Avisos internos irão para ${r.email_avisos_internos}.`
-              : `Sem e-mail definido — usando o remetente padrão (${r.padrao}).` })
-          } catch (e) {
-            setMsg({ tipo: 'erro', texto: e.detail === 'email_invalido'
-              ? 'E-mail inválido.' : `Não foi possível salvar (${e.detail || e.message}).` })
-          }
-        }}>Salvar</button>
       </div>
+
+      <h4 style={{ marginTop: '1.2rem' }}>Por tipo de aviso</h4>
+      <p className="explica">Sem e-mail na lista, o aviso vai para o padrão acima.
+        Desmarcando <em>Avisar</em>, ninguém é notificado daquele evento.</p>
+      {(cfg.eventos || []).map((ev) => {
+        const at = doEvento(ev.chave)
+        return (
+          <div className="aviso-evento" key={ev.chave}>
+            <div className="aviso-evento-topo">
+              <label className="aviso-evento-nome">
+                <input type="checkbox" checked={at.ativo !== false}
+                       onChange={(e) => mexer(ev.chave, { ativo: e.target.checked })} />
+                <strong>{ev.rotulo}</strong>
+              </label>
+              <span className="explica" style={{ margin: 0 }}>{ev.descricao}</span>
+            </div>
+            {at.ativo !== false && (
+              <div className="aviso-evento-destinos">
+                {at.emails.map((e) => (
+                  <span className="chip" key={e}>{e}
+                    <button type="button" title="Remover" onClick={() =>
+                      mexer(ev.chave, { emails: at.emails.filter((x) => x !== e) })}>✕</button>
+                  </span>
+                ))}
+                {at.emails.length === 0 && (
+                  <span className="explica" style={{ margin: 0 }}>
+                    → usando o padrão ({cfg.email_avisos_internos || cfg.padrao || '—'})</span>
+                )}
+                <input type="email" placeholder="adicionar e-mail…" style={{ maxWidth: 240 }}
+                       value={novo[ev.chave] || ''}
+                       onChange={(e) => setNovo({ ...novo, [ev.chave]: e.target.value })}
+                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEmail(ev.chave) } }} />
+                <button type="button" className="btn-secundario btn-mini"
+                        onClick={() => addEmail(ev.chave)}>+ Adicionar</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      <button className="btn-principal" style={{ marginTop: '.8rem' }} onClick={async () => {
+        setMsg(null)
+        try {
+          const r = await api.salvarAvisos({
+            email_avisos_internos: email.trim(), matriz })
+          carregar(r)
+          setMsg({ tipo: 'ok', texto: 'Avisos internos salvos.' })
+        } catch (e) {
+          setMsg({ tipo: 'erro', texto: e.detail === 'email_invalido'
+            ? 'E-mail inválido.' : `Não foi possível salvar (${e.detail || e.message}).` })
+        }
+      }}>Salvar</button>
       <Msg msg={msg} />
     </div>
   )

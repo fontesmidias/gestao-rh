@@ -583,25 +583,39 @@ def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer
 
 class AvisosIn(BaseModel):
     email_avisos_internos: str | None = None
+    # {chave_evento: {"emails": [...], "ativo": bool}} — None não mexe na matriz
+    matriz: dict | None = None
 
 
 @router.get("/rh/config/avisos")
 def ver_avisos(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Avisos internos: o e-mail padrão + a MATRIZ evento × destinatários
+    (v1.82). O padrão continua valendo para todo evento sem lista própria."""
     from app.services.config_dinamica import ler_config
+    from app.services.notificacoes import EVENTOS, ler_matriz
     cfg = ler_config(db, ("email_avisos_internos",))
     return {"email_avisos_internos": cfg.get("email_avisos_internos", ""),
-            "padrao": smtp_config(db)["from_"]}
+            "padrao": smtp_config(db)["from_"],
+            "eventos": EVENTOS,
+            "matriz": ler_matriz(db)}
 
 
 @router.put("/rh/config/avisos")
 def salvar_avisos(payload: AvisosIn, db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.notificacoes import gravar_matriz
     email = (payload.email_avisos_internos or "").strip()
     if email and "@" not in email:
         raise HTTPException(status_code=422, detail="email_invalido")
     gravar_config(db, {"email_avisos_internos": email})
+    detalhe = {"destino": email or "(padrão: remetente)"}
+    # `matriz` ausente = chamada antiga, só mexe no padrão (não zera a matriz)
+    if payload.matriz is not None:
+        limpa = gravar_matriz(db, payload.matriz)
+        detalhe["eventos"] = {k: {"destinos": len(v["emails"]), "ativo": v["ativo"]}
+                              for k, v in limpa.items()}
     registrar(db, "email_avisos_alterado", ator="rh", ator_detalhe=rh.email,
-              detalhe={"destino": email or "(padrão: remetente)"})
+              detalhe=detalhe)
     db.commit()
     return ver_avisos(db, rh)
 

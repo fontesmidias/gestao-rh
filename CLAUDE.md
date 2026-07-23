@@ -138,7 +138,12 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   gera+grava com `gerar_matricula=True` (o EXPORT passa True e faz commit; a
   pré-checagem passa False — consulta não muta dados). **Jornada** é dado real do
   cadastro e continua bloqueante (o Tirvu acusa "Faltando Jornada de Trabalho" na
-  importação). O arquivo é
+  importação). **Registra Ponto** também é pendência (v1.82): em branco, o Tirvu
+  aceita a célula vazia CALADO e o colaborador nasce lá sem a marcação. Virou
+  pendência em `pendencias_linha`, não campo obrigatório no formulário — exigir
+  na tela travaria a edição dos importados, que nasceram sem o campo; o front só
+  marca o select em âmbar (`.campo-pendente`). Rótulo amigável das pendências em
+  `_ROTULO_PENDENCIA` (a coluna tem nome técnico). O arquivo é
   gerado por `montar_workbook_tirvu` (NÃO o `montar_workbook` genérico): planilha
   CRUA idêntica ao modelo `docs/Layout de Importação de Admissões.xlsx` — aba
   **`Plan1`**, SEM auto-filtro/painel congelado/cor no cabeçalho (o importador do
@@ -272,6 +277,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   transição. Flags no dump: `aguardando_correcao`, `reenviado_apos_correcao`,
   `revisar_idade` (ativo sem criança na idade = risco de glosa). Métricas
   (`/rh/metricas`) contam só `situacao IS NULL`, não a base inteira.
+  **Devolução manda LINK DIRETO, sem 2FA** (v1.82, pedido do Bruno): quem foi
+  devolvido já validou o e-mail alguma vez, e refazer o código só para corrigir
+  um dado faz a correção não voltar. `emitir_acesso_devolucao` (creche_publico)
+  cria um `AcessoCreche` já `confirmado_em`, TTL de 7 dias, e **invalida os
+  acessos vivos daquele benefício** — devolver de novo mata o link anterior. O
+  front lê `?t=<token>` em `/creche`, entra direto na sessão e LIMPA a URL
+  (`history.replaceState`); link vencido cai na tela de CPF, não em tela morta.
+  Contenção: o token dá acesso a UM benefício, e `add_crianca`/`enviar` recusam
+  409 fora de `levantamento` — link vazado após a aprovação não edita nada. A
+  emissão fica na auditoria (`creche_acesso_direto_emitido`), NUNCA o token.
 - **Incidência de Benefícios** (`incidencia_beneficios.py`): a planilha do RH
   (abas PÚBLICO/PRIVADO) normaliza os postos no padrão `CLIENTE - Nº CONTRATO -
   OBJETO` e define a elegibilidade creche pela coluna "Reembolso creche/Mês". Lê
@@ -281,6 +296,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   cego — regra dos ~40 erros de digitação). Valores compostos (dois sindicatos
   numa célula) ficam como texto p/ decisão humana. `await arquivo.close()` no
   `finally`. Export normalizado p/ carga futura no Tirvu ficou p/ a próxima leva.
+- **Avisos internos = MATRIZ evento × destinatários** (`services/notificacoes.py`,
+  v1.82): NUNCA mandar aviso interno direto para `smtp_from` — é a caixa de
+  LOGIN, pessoal (foi o que fez o Bruno receber "candidato concluiu o envio" no
+  e-mail dele). Use `avisar(db, "<evento>", assunto, corpo)`. Evento novo =
+  entrada nova em `EVENTOS` (chave estável + rótulo + descrição) e nada mais: a
+  tela do painel é dirigida por esse catálogo. Herança em cascata: lista do
+  evento → `email_avisos_internos` (padrão global) → remetente. Evento com
+  `ativo: false` não avisa NINGUÉM; evento fora do catálogo cai no padrão (aviso
+  novo que alguém esqueceu de cadastrar ainda chega a alguém). Guardado como
+  JSON na config dinâmica — sem migration. `avisar()` NUNCA levanta: aviso
+  interno que falha não pode derrubar a ação do candidato que o disparou.
+- **Cargo/função é STRING, não FK** (v1.82): `Candidato.cargo_funcao` continua
+  texto livre — `ModeloDocumento.cargo_alvo`, o filtro do Arquivo e as provas
+  por cargo casam por TEXTO, e virar tabela quebraria os três. `GET /rh/cargos`
+  devolve os cargos já usados na base com a contagem de pessoas (mais frequentes
+  primeiro) só para alimentar o `SelectBusca` do front — escolher da lista evita
+  "Vigia"/"vigia"/"Vigía" virando três cargos; a opção "＋ Cargo novo…" troca
+  para input livre. O cargo ATUAL é injetado na lista mesmo se não vier da API,
+  senão o seletor apareceria vazio para cargo raro.
 - **Campo novo em ficha assinada**: ACRESCENTAR campo não invalida assinatura
   (EDITAR invalida — regra de 2026-07-15). Tecnicamente: renderizar o campo novo
   SÓ se preenchido (`if`, como CNH/CTPS/laudo PCD em `fichas.py`) — o PDF é

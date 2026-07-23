@@ -41,6 +41,10 @@ router = APIRouter(tags=["creche-publico"])
 
 CODIGO_TTL_MIN = 15
 SESSAO_TTL_H = 6
+# Acesso direto (sem 2FA) mandado no e-mail de devolução: a pessoa lê o e-mail
+# quando pode, então a janela é de dias — mas não é eterna, e cada devolução
+# nova invalida a anterior.
+ACESSO_DEVOLUCAO_TTL_D = 7
 KBA_SALT = "creche-kba"
 
 
@@ -119,6 +123,55 @@ def _gerar_e_enviar_codigo(db: Session, colaborador: Candidato,
               candidato_id=colaborador.id, detalhe={"cpf_final": _digitos(colaborador.cpf or "")[-4:]})
     db.commit()
     _enviar_codigo(email_destino, colaborador.nome_completo, codigo)
+
+
+def emitir_acesso_devolucao(db: Session, ben: BeneficioCreche) -> str:
+    """Token de acesso DIRETO (sem 2FA) para o e-mail de devolução (v1.82).
+
+    Afrouxamento consciente do gate, pedido pelo Bruno: quem foi devolvido já
+    passou pelo 2FA alguma vez — o e-mail em `email_confirmado` é comprovado —
+    e obrigá-lo a refazer o código só para corrigir um dado é atrito que faz a
+    correção não voltar.
+
+    O estrago fica contido porque o token:
+      - vale ACESSO_DEVOLUCAO_TTL_D dias (não as 6h da sessão normal, porque a
+        pessoa lê o e-mail quando pode; mas não é eterno);
+      - é de USO ÚNICO no sentido de emissão — cada devolução emite um novo e
+        INVALIDA os anteriores (`_invalidar_acessos`), então reenviar o e-mail
+        mata o link antigo;
+      - dá acesso a UM benefício e nada mais — o `ver_sessao` e as rotas de
+        criança resolvem tudo a partir do `beneficio_id` do próprio acesso;
+      - não reabre um pedido fechado: `add_crianca`/`enviar` recusam 409 fora
+        do status `levantamento`, então um link vazado depois da aprovação não
+        edita nada.
+
+    O caller commita. O e-mail sai depois do commit.
+    """
+    _invalidar_acessos(db, ben)
+    token = secrets.token_urlsafe(32)
+    db.add(AcessoCreche(
+        beneficio_id=ben.id,
+        token_hash=_hash(token),
+        # nasce já confirmado: a prova de identidade é o e-mail validado antes
+        confirmado_em=datetime.now(timezone.utc),
+        expira_em=datetime.now(timezone.utc) + timedelta(days=ACESSO_DEVOLUCAO_TTL_D),
+    ))
+    # é acesso SEM 2FA: fica na auditoria para se saber por que aquela sessão
+    # existiu sem código (nunca o token, só o fato)
+    registrar(db, "creche_acesso_direto_emitido", ator="rh",
+              candidato_id=ben.candidato_id,
+              detalhe={"motivo": "devolucao", "dias": ACESSO_DEVOLUCAO_TTL_D})
+    return token
+
+
+def _invalidar_acessos(db: Session, ben: BeneficioCreche) -> None:
+    """Derruba as sessões vivas do benefício. Chamado ao emitir um acesso novo
+    por e-mail: se o RH devolve duas vezes, só o último link funciona."""
+    agora = datetime.now(timezone.utc)
+    for ac in db.scalars(select(AcessoCreche).where(
+            AcessoCreche.beneficio_id == ben.id,
+            AcessoCreche.expira_em > agora)):
+        ac.expira_em = agora
 
 
 class IniciarIn(BaseModel):
@@ -452,6 +505,15 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
     registrar(db, "creche_levantamento_enviado", ator="colaborador",
               candidato_id=col.id, detalhe={"criancas": len(ben.criancas)})
     db.commit()
+    # avisa o RH que entrou pedido na fila (v1.82) — destinatários configuráveis
+    from app.services.notificacoes import avisar
+    avisar(
+        db, "creche_levantamento_enviado",
+        f"👶 Reembolso-Creche: levantamento de {col.nome_completo}",
+        f"{col.nome_completo} enviou o levantamento do Reembolso-Creche "
+        f"({len(ben.criancas)} criança(s)) para análise.\n"
+        "Acesse o painel do RH para revisar.\n",
+    )
     return {"status": ben.status}
 
 

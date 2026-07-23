@@ -227,17 +227,29 @@ def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
     return buf.getvalue()
 
 
+# Rótulo amigável do campo na lista de pendências mostrada ao RH (a coluna do
+# layout tem nome técnico; o RH lê o nome do campo como aparece na ficha).
+_ROTULO_PENDENCIA = {
+    "Descrição da Jornada de Trabalho": "Jornada de Trabalho",
+    "Registra Ponto (S ou N)": "Registra Ponto",
+}
+
+
 def pendencias_linha(linha: dict) -> list[str]:
     """O que o Tirvu recusa/acusa como divergência no upload. Vai no aviso ao RH
     ANTES do upload — melhor saber aqui que descobrir na tela de divergências do
     Tirvu. A Matrícula NÃO entra: é auto-gerada (999+seq) no export. A Jornada
-    entra: é dado real do cadastro que o Tirvu exige."""
+    entra: é dado real do cadastro que o Tirvu exige.
+
+    "Registra Ponto" também entra (v1.82): é dado real do cadastro e sai em
+    branco quando ninguém preencheu — o Tirvu aceita a célula vazia calado, e o
+    colaborador nasce lá sem a marcação. Vira pendência aqui em vez de campo
+    obrigatório no formulário: exigir na tela travaria a edição dos importados
+    do Tirvu, que nasceram sem o campo."""
     faltas = []
     for campo in ("Nome Completo", "CPF", "PIS", "CTPS Número",
                   "Data de Admissão", "Empresa", "Cargo",
-                  "Descrição da Jornada de Trabalho"):
+                  "Descrição da Jornada de Trabalho", "Registra Ponto (S ou N)"):
         if not linha.get(campo):
-            # rótulo amigável p/ a jornada
-            faltas.append("Jornada de Trabalho"
-                          if campo == "Descrição da Jornada de Trabalho" else campo)
+            faltas.append(_ROTULO_PENDENCIA.get(campo, campo))
     return faltas
