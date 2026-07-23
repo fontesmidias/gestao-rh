@@ -163,6 +163,31 @@ class RegistroDesenvolvimento(Base):
         back_populates="registro", cascade="all, delete-orphan")
 
 
+class AcessoPortal(Base):
+    """Sessão do portal do colaborador (`/meu`).
+
+    Mesma mecânica do `AcessoCreche` — 2FA por e-mail, KBA para quem não tem
+    e-mail, só o hash guardado —, mas amarrada ao COLABORADOR e não a um
+    benefício: o portal serve desenvolvimento, creche, avaliação e o que vier.
+    Ter o `candidato_id` aqui é o que permite uma porta só em vez de uma por
+    módulo.
+    """
+
+    __tablename__ = "acesso_portal"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          default=uuid.uuid4)
+    candidato_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("candidato.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    codigo_hash: Mapped[str | None] = mapped_column(String(64))
+    codigo_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                server_default=func.now())
+
+
 class TurmaReciclagem(Base):
     """Turma da entidade formadora (Multicursos) para a qual o RH pede matrícula.
 
