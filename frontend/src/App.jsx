@@ -8,6 +8,7 @@ import Verificar, { VerificarEntrada } from './Verificar.jsx'
 import Entrar from './Entrar.jsx'
 import BancoDeTalentos from './Talentos.jsx'
 import CrecheLink from './CrecheLink.jsx'
+import Portal from './Portal.jsx'
 import logo from './assets/logo.png'
 import BotaoTema from './Tema.jsx'
 
@@ -66,6 +67,9 @@ export default function App() {
       <Route path="/banco-de-talentos" element={<BancoDeTalentos />} />
       <Route path="/entrar" element={<Entrar />} />
       <Route path="/creche" element={<CrecheLink />} />
+      {/* Portal do colaborador: uma porta só para cursos, certificados e
+          pendências da pessoa (v1.83). */}
+      <Route path="/meu" element={<Portal />} />
     </Routes>
     </>
   )

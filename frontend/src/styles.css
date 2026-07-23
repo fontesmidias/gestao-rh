@@ -1108,6 +1108,28 @@ body[data-rh-ocupado] { cursor: progress; }
 .creche-topo h1 { margin: .2rem 0; }
 .creche-sub { color: var(--tinta-suave, #6a7a70); max-width: 46ch; margin: .3rem auto 0; }
 .creche-card { margin-bottom: 1rem; }
+
+/* --- Portal do colaborador (/meu) --------------------------------------- */
+/* Pensado para o celular do plantão: alvo de toque grande, um passo por vez. */
+.portal-pendencia { display: flex; gap: .6rem; align-items: flex-start;
+                    padding: .7rem .8rem; border-radius: 10px;
+                    background: #fff8ec; border: 1px solid #f5d9a8;
+                    margin-bottom: .5rem; }
+.portal-pendencia.urgente { background: var(--erro-suave); border-color: #f3b6b8; }
+.portal-pendencia-icone { font-size: 1.1rem; line-height: 1.3; }
+.portal-registro { border: 1px solid var(--borda-suave); border-radius: 10px;
+                   padding: .7rem .8rem; margin-bottom: .5rem;
+                   background: var(--input-bg); }
+.portal-registro-topo { display: flex; justify-content: space-between;
+                        align-items: center; gap: .5rem; }
+.portal-docs { margin: .8rem 0; }
+.portal-doc { display: flex; justify-content: space-between; align-items: center;
+              gap: .6rem; padding: .6rem .7rem; margin-top: .4rem;
+              border: 1px dashed var(--borda); border-radius: 10px; }
+.portal-doc.ok { border-style: solid; border-color: var(--verde);
+                 background: var(--verde-suave); }
+/* o label vira botão de arquivo: precisa do mesmo alvo de toque de um botão */
+.portal-doc label { min-height: 40px; display: inline-flex; align-items: center; }
 .creche-card.centro { text-align: center; }
 .creche-card h2 { margin-top: 0; }
 .creche-dados { display: grid; gap: .7rem; }

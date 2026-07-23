@@ -119,7 +119,17 @@ export default function CrecheLink() {
 // Verificação de identidade (KBA) para quem não tem e-mail cadastrado: responde
 // perguntas que só a própria pessoa saberia, cadastra o e-mail e recebe o código.
 // A resposta uniforme do backend (mesmo p/ CPF fora da base) evita enumeração.
-function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
+//
+// EXPORTADO e parametrizável (v1.83): o portal do colaborador (/meu) usa o
+// MESMO componente com as rotas dele — as três funções de API entram por prop
+// em vez de virem fixas do módulo de creche. Sem props, cai no creche (as
+// chamadas existentes não mudam).
+export function VerificarIdentidade({ cpf, aoConcluir, aoVoltar,
+                                      kbaIniciar, kbaResponder, kbaDefinirEmail,
+                                      textoEmail }) {
+  const iniciarKba = kbaIniciar || api.kbaIniciar
+  const responderKba = kbaResponder || api.kbaResponder
+  const definirEmailKba = kbaDefinirEmail || api.kbaDefinirEmail
   const [fase, setFase] = useState('carregando') // carregando | perguntas | email
   const [desafio, setDesafio] = useState(null)
   const [perguntas, setPerguntas] = useState([])
@@ -130,7 +140,7 @@ function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
   const [carregando, setCarregando] = useState(false)
 
   useEffect(() => {
-    api.kbaIniciar(cpf)
+    iniciarKba(cpf)
       .then((r) => { setDesafio(r.desafio); setPerguntas(r.perguntas); setFase('perguntas') })
       .catch((err) => setErro(err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
         : err.detail === 'muitas_tentativas' ? 'Muitas tentativas. Aguarde alguns minutos.'
@@ -140,7 +150,7 @@ function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
   const responder = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
     try {
-      const r = await api.kbaResponder(desafio, respostas)
+      const r = await responderKba(desafio, respostas)
       setAutorizacao(r.autorizacao); setFase('email')
     } catch (err) {
       setErro(err.detail === 'nao_confirmado'
@@ -154,7 +164,7 @@ function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
   const definirEmail = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
     try {
-      await api.kbaDefinirEmail(autorizacao, email)
+      await definirEmailKba(autorizacao, email)
       aoConcluir()  // volta ao passo do código — já enviado ao novo e-mail
     } catch (err) {
       setErro(err.detail === 'email_invalido' ? 'E-mail inválido. Confira o endereço.'
@@ -173,7 +183,7 @@ function VerificarIdentidade({ cpf, aoConcluir, aoVoltar }) {
     <form className="rh-card creche-card" onSubmit={definirEmail}>
       <h2>Cadastre seu e-mail</h2>
       <p className="explica">Identidade confirmada! Informe um e-mail válido — enviaremos o código
-        de confirmação para ele e usaremos esse e-mail no seu benefício.</p>
+        de confirmação para ele e {textoEmail || 'usaremos esse e-mail no seu benefício'}.</p>
       <label className="campo"><span className="rotulo">Seu e-mail</span>
         <input type="email" placeholder="voce@exemplo.com" value={email} autoFocus
                onChange={(ev) => setEmail(ev.target.value)} /></label>

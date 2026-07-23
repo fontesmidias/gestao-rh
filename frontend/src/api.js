@@ -195,6 +195,40 @@ export const creche = {
     req(`/creche/sessao/${t}/assinar-requerimento`, { method: 'POST' }),
 }
 
+// --- Portal do colaborador (/meu): uma porta só para tudo que é da pessoa ---
+// Mesmo gate do creche (CPF → 2FA por e-mail; sem e-mail, KBA), mas a sessão é
+// do COLABORADOR e não de um benefício.
+export const portal = {
+  iniciar: (cpf) =>
+    req('/portal/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
+  confirmar: (cpf, codigo) =>
+    req('/portal/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo }) }),
+  kbaIniciar: (cpf) =>
+    req('/portal/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
+  kbaResponder: (desafio, respostas) =>
+    req('/portal/kba/responder', { method: 'POST', body: JSON.stringify({ desafio, respostas }) }),
+  kbaDefinirEmail: (autorizacao, email) =>
+    req('/portal/kba/definir-email', { method: 'POST', body: JSON.stringify({ autorizacao, email }) }),
+  sessao: (t) => req(`/portal/sessao/${t}`),
+  criarRegistro: (t, dados) =>
+    req(`/portal/sessao/${t}/registros`, { method: 'POST', body: JSON.stringify(dados) }),
+  editarRegistro: (t, id, dados) =>
+    req(`/portal/sessao/${t}/registros/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  excluirRegistro: (t, id) =>
+    req(`/portal/sessao/${t}/registros/${id}`, { method: 'DELETE' }),
+  // devolve { registro, sugestoes, leitura } — as sugestões são o que a IA
+  // propôs para a PESSOA conferir; nada é gravado a partir delas
+  subirDocumento: async (t, registroId, papel, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(
+      `${BASE}/portal/sessao/${t}/registros/${registroId}/documento?papel=${papel}`,
+      { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+}
+
 // --- Testagem (link público /t/{token}: só o nome, resultado visível) ---
 export const testagem = {
   info: (t) => req(`/t/${t}`),
