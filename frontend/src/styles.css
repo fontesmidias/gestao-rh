@@ -419,6 +419,11 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .sucesso { background: var(--verde-suave); color: var(--sucesso-txt); border-radius: var(--raio-input);
            padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
            border: 1px solid rgba(15, 178, 87, .2); animation: surgir .25s ease-out; }
+/* Nem erro, nem sucesso: "deu certo, MAS parte ficou de fora" — como o lote que
+   valida 8 e barra 2 documentos críticos. */
+.aviso-inline { background: #fff8ec; color: #9a6a12; border-radius: var(--raio-input);
+                padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
+                border: 1px solid #f5d9a8; animation: surgir .25s ease-out; }
 
 .ficha-item { display: flex; justify-content: space-between; align-items: center; gap: .75rem;
               border: 2px solid var(--borda-suave); border-radius: var(--raio-input); padding: 1rem;
@@ -1130,6 +1135,18 @@ body[data-rh-ocupado] { cursor: progress; }
                  background: var(--verde-suave); }
 /* o label vira botão de arquivo: precisa do mesmo alvo de toque de um botão */
 .portal-doc label { min-height: 40px; display: inline-flex; align-items: center; }
+/* na conferência do RH o mesmo bloco é um link para abrir o arquivo */
+a.portal-doc { text-decoration: none; color: inherit; }
+a.portal-doc:hover { border-color: var(--verde-vivo); }
+
+/* Conferência de um envio: documento de um lado, campos do outro. No celular
+   as duas colunas viram uma só (o RH também confere pelo telefone). */
+.rh-conferencia { border: 2px solid var(--verde); }
+.rh-conferencia-corpo { display: grid; grid-template-columns: 1fr 1fr;
+                        gap: 1rem; margin: .6rem 0; }
+@media (max-width: 720px) {
+  .rh-conferencia-corpo { grid-template-columns: 1fr; }
+}
 .creche-card.centro { text-align: center; }
 .creche-card h2 { margin-top: 0; }
 .creche-dados { display: grid; gap: .7rem; }
