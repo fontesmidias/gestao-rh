@@ -17,9 +17,9 @@ export default function DesenvolvimentoRH({ aoVoltar }) {
         <button className="btn-secundario btn-mini" onClick={aoVoltar}>← voltar</button>
       </div>
       <div className="rh-abas">
-        <button className={aba === 'fila' ? 'on' : ''} onClick={() => setAba('fila')}>
+        <button className={aba === 'fila' ? 'ativa' : ''} onClick={() => setAba('fila')}>
           Fila de validação</button>
-        <button className={aba === 'tipos' ? 'on' : ''} onClick={() => setAba('tipos')}>
+        <button className={aba === 'tipos' ? 'ativa' : ''} onClick={() => setAba('tipos')}>
           Tipos e prazos</button>
       </div>
       {aba === 'fila' ? <Fila /> : <Tipos />}
@@ -97,7 +97,7 @@ function Fila() {
 
   return (
     <>
-      <div className="rh-lote" style={{ marginBottom: '.6rem' }}>
+      <div className="rh-lote" style={{ margin: '.4rem 0 1rem' }}>
         <strong>Mostrar:</strong>
         <select value={filtroStatus} style={{ maxWidth: 220 }}
                 onChange={(e) => setFiltroStatus(e.target.value)}>
@@ -109,27 +109,31 @@ function Fila() {
       </div>
       <Msg msg={msg} />
 
-      {abrindo && (
-        <Conferencia registro={abrindo}
-                     aoFechar={() => { setAbrindo(null); carregar() }}
-                     aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
-      )}
-
       <DashPlanilha
         id="desenvolvimento-fila" colunas={colunas} dados={dados.registros} cards={cards}
         vazio="Nada aguardando validação. 🎉"
+        // o detalhe abre LOGO ABAIXO da linha clicada, não no topo da página
+        linhaExpandida={(l) => (abrindo === l.id ? (
+          // `key`: o form guarda o estado inicial da prop — sem isso, reabrir
+          // outro registro reaproveitaria os campos do anterior
+          <Conferencia key={l.id} registro={l}
+                       aoFechar={() => { setAbrindo(null); carregar() }}
+                       aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+        ) : null)}
         acoesLinha={(l) => (
-          <button className="btn-secundario btn-mini" onClick={() => setAbrindo(l)}>
-            Conferir</button>
+          <button className={`btn-${abrindo === l.id ? 'principal' : 'secundario'} btn-mini`}
+                  onClick={() => setAbrindo(abrindo === l.id ? null : l.id)}>
+            {abrindo === l.id ? 'Fechar' : 'Conferir'}</button>
         )}
         acoesMassa={(linhas, limpar) => (
           <button className="btn-principal btn-mini"
                   onClick={() => validarLote(linhas, limpar)}>
             ✔ Validar {linhas.length} selecionado(s)</button>
         )} />
-      <p className="explica">Documento <strong>crítico</strong> (brigada, NR) não é
-        validado em lote — precisa ser conferido um a um. Se você marcar um, o sistema
-        avisa e deixa os demais passarem.</p>
+      <p className="explica" style={{ marginTop: '.8rem' }}>
+        Documento <strong>crítico</strong> (brigada, NR) não é validado em lote —
+        precisa ser conferido um a um. Se você marcar um, o sistema avisa e deixa
+        os demais passarem.</p>
     </>
   )
 }
@@ -159,20 +163,26 @@ function Conferencia({ registro, aoFechar, aoErro }) {
   const sugeriu = Object.values(ia).some((v) => v && Object.keys(v).length)
 
   return (
-    <div className="rh-card rh-conferencia">
-      <div className="rh-topo" style={{ marginBottom: '.4rem' }}>
-        <h3 style={{ margin: 0 }}>{registro.colaborador}</h3>
+    <div className="rh-conferencia">
+      <div className="rh-conferencia-topo">
+        <div>
+          <h3>{registro.colaborador}</h3>
+          <span className="explica">
+            {[registro.cargo, registro.posto, registro.tipo].filter(Boolean).join(' · ')}
+          </span>
+          {registro.critico && (
+            <div style={{ marginTop: '.35rem' }}>
+              <span className="chip" style={{ '--chip-cor': '#e5484d' }}>
+                Crítico — confira com atenção</span>
+            </div>
+          )}
+        </div>
         <button className="btn-secundario btn-mini" onClick={aoFechar}>✕ fechar</button>
       </div>
-      <p className="explica" style={{ marginTop: 0 }}>
-        {[registro.cargo, registro.posto, registro.tipo].filter(Boolean).join(' · ')}
-        {registro.critico && <span className="chip" style={{ '--chip-cor': '#e5484d',
-          marginLeft: '.4rem' }}>Crítico — confira com atenção</span>}
-      </p>
 
       <div className="rh-conferencia-corpo">
         <div className="rh-conferencia-docs">
-          <span className="rotulo">Documentos enviados</span>
+          <span className="rh-conferencia-bloco-titulo">Documentos enviados</span>
           {registro.documentos.length === 0 && (
             <p className="explica">Nenhum documento anexado.</p>
           )}
@@ -200,9 +210,9 @@ function Conferencia({ registro, aoFechar, aoErro }) {
         </div>
 
         <div className="rh-conferencia-campos">
-          <span className="rotulo">O que a pessoa informou</span>
+          <span className="rh-conferencia-bloco-titulo">O que a pessoa informou</span>
           {sugeriu && (
-            <p className="explica" style={{ margin: '.2rem 0 .5rem' }}>
+            <p className="explica" style={{ margin: '0 0 .6rem' }}>
               ✨ A leitura automática propôs campos; a pessoa confirmou o que está abaixo.
             </p>
           )}
@@ -227,7 +237,7 @@ function Conferencia({ registro, aoFechar, aoErro }) {
       </div>
 
       {acao && (
-        <div className="campo">
+        <div className="campo" style={{ marginTop: '1rem', marginBottom: 0 }}>
           <span className="rotulo">
             {acao === 'devolver' ? 'O que a pessoa precisa corrigir?'
               : 'Por que não pode ser aceito?'}</span>
@@ -239,7 +249,7 @@ function Conferencia({ registro, aoFechar, aoErro }) {
         </div>
       )}
 
-      <div className="rh-lote">
+      <div className="rh-conferencia-acoes">
         {!acao && (
           <>
             <button className="btn-principal btn-mini" disabled={salvando}

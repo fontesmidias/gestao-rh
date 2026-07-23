@@ -18,6 +18,7 @@ export default function DashPlanilha({
   cards,            // [{rotulo, valor, cor?, filtro?}]  (opcional)
   chaveLinha = (l) => l.id,
   acoesLinha,       // (linha) => JSX  (opcional)
+  linhaExpandida,   // (linha) => JSX | null — detalhe aberto LOGO ABAIXO da linha
   acoesMassa,       // (linhasSelecionadas, limparSelecao) => JSX  (opcional)
   vazio = 'Nenhum registro.',
 }) {
@@ -186,8 +187,13 @@ export default function DashPlanilha({
           <tbody>
             {linhas.map((l) => {
               const k = chaveLinha(l)
-              return (
-                <tr key={k}>
+              // Painel de detalhe abre NA PRÓPRIA LINHA (v1.83). Abrir no topo
+              // da página tira a pessoa do contexto: ela clicou na linha 12 e a
+              // resposta aparece longe, fora da vista. Edição inline é o padrão
+              // da casa — vale também para o detalhe.
+              const expandido = linhaExpandida && linhaExpandida(l)
+              return [
+                <tr key={k} className={expandido ? 'dash-linha-aberta' : undefined}>
                   {acoesMassa && (
                     <td className="dash-check">
                       <input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
@@ -199,8 +205,15 @@ export default function DashPlanilha({
                       {c.render ? c.render(l) : (textoDe(l, c) || '—')}</td>
                   ))}
                   {acoesLinha && <td className="acoes-candidato">{acoesLinha(l)}</td>}
-                </tr>
-              )
+                </tr>,
+                expandido && (
+                  <tr key={`${k}-detalhe`} className="dash-detalhe">
+                    <td colSpan={visiveis.length + (acoesMassa ? 1 : 0) + (acoesLinha ? 1 : 0)}>
+                      {expandido}
+                    </td>
+                  </tr>
+                ),
+              ]
             })}
           </tbody>
         </table>

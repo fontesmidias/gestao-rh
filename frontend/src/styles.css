@@ -1139,13 +1139,41 @@ body[data-rh-ocupado] { cursor: progress; }
 a.portal-doc { text-decoration: none; color: inherit; }
 a.portal-doc:hover { border-color: var(--verde-vivo); }
 
+/* Detalhe aberto DENTRO da tabela, logo abaixo da linha clicada. A célula não
+   herda o padding apertado das demais: o painel precisa respirar. */
+.dash-linha-aberta > td { background: var(--verde-suave); }
+.dash-tabela tr.dash-detalhe > td { padding: 0; white-space: normal;
+                                    background: var(--hover);
+                                    border-bottom: 2px solid var(--verde); }
+/* A tabela pode ser mais larga que a tela (rola na horizontal). O painel de
+   detalhe NÃO pode acompanhar essa largura, senão metade dele fica fora da
+   vista — foi o que aconteceu na 1ª versão (o campo "Conclusão" ficava para
+   fora). Preso à largura VISÍVEL do container que rola, via container query. */
+.dash-scroll { container-type: inline-size; }
+.dash-tabela tr.dash-detalhe > td > * {
+  position: sticky; left: 0; box-sizing: border-box;
+  width: 100cqw; max-width: 100cqw;
+}
+
 /* Conferência de um envio: documento de um lado, campos do outro. No celular
    as duas colunas viram uma só (o RH também confere pelo telefone). */
-.rh-conferencia { border: 2px solid var(--verde); }
-.rh-conferencia-corpo { display: grid; grid-template-columns: 1fr 1fr;
-                        gap: 1rem; margin: .6rem 0; }
-@media (max-width: 720px) {
-  .rh-conferencia-corpo { grid-template-columns: 1fr; }
+.rh-conferencia { padding: 1.1rem 1.2rem 1.2rem; }
+.rh-conferencia-topo { display: flex; justify-content: space-between;
+                       align-items: flex-start; gap: 1rem; margin-bottom: .9rem; }
+.rh-conferencia-topo h3 { margin: 0 0 .2rem; font-size: 1.05rem; }
+.rh-conferencia-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+                        gap: 1.4rem; align-items: start; }
+.rh-conferencia-corpo > div { min-width: 0; }
+.rh-conferencia-corpo .campo { margin-bottom: .8rem; }
+.rh-conferencia-bloco-titulo { display: block; font-weight: 700; font-size: .82rem;
+                               letter-spacing: .04em; text-transform: uppercase;
+                               color: var(--cinza-txt); margin-bottom: .5rem; }
+.rh-conferencia-acoes { display: flex; flex-wrap: wrap; gap: .5rem;
+                        margin-top: 1.1rem; padding-top: .9rem;
+                        border-top: 1px solid var(--borda-suave); }
+@media (max-width: 860px) {
+  .rh-conferencia-corpo { grid-template-columns: 1fr; gap: 1rem; }
+  .rh-conferencia { padding: .9rem; }
 }
 .creche-card.centro { text-align: center; }
 .creche-card h2 { margin-top: 0; }
