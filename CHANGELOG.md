@@ -6,6 +6,176 @@ Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
 `alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
 tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 
+> **Sobre "legado"**: valores de enum e campos que deixaram de ser usados **não
+> são removidos** — o Postgres não apaga valor de enum sem recriar o tipo, e
+> apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
+> com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
+
+## [1.85.0] — 2026-07-23 — Import de ponto + interruptor do atestado
+
+### Adicionado
+- **Import de ponto do Tirvu como CONTEXTO da avaliação** (RH → Fatos
+  Observados → Importar ponto): upload do `.xlsx` de ponto eletrônico, agregado
+  por pessoa/período (`ResumoPonto`) e mostrado ao lado do formulário de
+  avaliação — **nunca como nota automática**. Decisão de projeto para evitar
+  "atraso vira número, número vira nota, nota vira desligamento".
+- **Interruptor da leitura de atestado de saúde** (Configurações → OCR com IA):
+  liga/desliga pelo painel a leitura por IA do atestado, que é dado sensível.
+  Desligado por padrão; só deve ser ligado após a Mistral aprovar o Zero Data
+  Retention no plano Scale (a trava vive no código, `ocr_roteador`).
+
+### Decisões de dados (evitam injustiça)
+- **Registro incompleto ≠ falta**: `00:00` de horas COM marcação de entrada é
+  esquecimento de bater a saída, não ausência. Nos dados reais de 1 mês são 28
+  incompletos contra 1 falta — tratar tudo como o Tirvu apurou acusaria 28
+  pessoas injustamente.
+- **`Horas Trabalhadas` é a fonte de verdade**, não as batidas (há dia sem
+  batida e com horas apuradas). Casamento por **matrícula** (não há CPF na
+  planilha), normalizando zeros à esquerda. Geolocalização e foto do ponto
+  **não** são lidas (desproporcional para avaliação — LGPD).
+
+## [1.84.0] — 2026-07-23 — Onda C: Avaliação de Desempenho
+
+Digitaliza a Cartilha do Avaliador (17/06/2026) que rodava no Microsoft Forms.
+
+### Adicionado
+- **Fatos Observados**: a liderança registra na hora o que o colaborador fez
+  (bom ou ruim), com fato e impacto — antídoto do efeito de recência. **O
+  colaborador vê os fatos sobre ele** (portal `/meu`), mas **nunca o autor**.
+  Rodam sozinhos e alimentam o formulário depois.
+- **Formulário da cartilha** (11 seções, 7 indicadores, 8 competências, 5
+  recomendações) com os fatos do período ao lado. Máquina de estados que **não
+  deixa pular o feedback presencial**: rascunho → preenchida → feedback dado →
+  manifestada → homologada.
+- **Manifestação do colaborador** (seção 9, direito de resposta) no portal, com
+  prazo de 7 dias — sem prazo, bastaria homologar antes de a pessoa ler.
+- **Avaliação 360**: vertical (liderança, identificada) e horizontal (pares,
+  **anônima e agregada** — o avaliado nunca vê o colega; o radar suprime a média
+  dos pares com menos de 2 respostas).
+- **Radar** ("teia") em SVG + **timeline** das médias na ficha da pessoa.
+- **Calibração**: o desvio do avaliador INFORMA o homologador ("dá em média 4,0;
+  os demais dão 3,6 — mais generoso") **sem alterar nota**. Distribuição forçada
+  foi vetada; normalização com N pequeno é ruído.
+- **Ciclos** (4 por ano, datas configuráveis) para agrupar as avaliações.
+
+## [1.83.0] — 2026-07-23 — Onda B: Portal do Colaborador + Desenvolvimento
+
+### Adicionado
+- **Portal do colaborador `/meu`**: UMA porta para tudo que é da pessoa —
+  cursos, certificados, pendências, avaliações. Gate do creche extraído (CPF →
+  2FA por e-mail; sem e-mail, KBA), agora amarrado ao colaborador. A home é a
+  lista de pendências dela, não um menu.
+- **Cadastro de Desenvolvimento**: cursos, certificações e reciclagens ao longo
+  do vínculo. Tipo configurável com validade, criticidade e cargos aplicáveis;
+  herança do prazo em três níveis (posto > cargo > tipo). Leitura por IA
+  pré-preenche; a pessoa confere.
+- **Brigadistas NÃO é módulo — é uma consulta**: certificação crítica vencendo,
+  com aviso automático 90 dias antes (worker), dash de quem está pronto, e
+  montagem do e-mail de matrícula à Multicursos (individual ou em grupo, com o
+  dossiê de cada um em PDF único).
+- **Fila de validação do RH** com aprovação em lote para o caso fácil —
+  documento crítico nunca entra no lote, e o lote diz quem barrou.
+- **IA roteada por sensibilidade**: documento de saúde (atestado) só é lido com
+  o Zero Data Retention ligado; identidade e certificado seguem normalmente.
+
+## [1.82.0] — 2026-07-22 — Onda A: ajustes de campo
+
+### Adicionado
+- **Matriz de notificações** (evento × destinatários): cada aviso do sistema
+  tem sua própria lista de e-mails, com herança de um padrão global. Corrige o
+  aviso de "candidato concluiu o envio" que ia para a caixa de login do RH.
+- **Creche — link direto na devolução, sem 2FA**: o e-mail de devolução leva um
+  link de uso único (7 dias) que abre só a tela de correção; o e-mail já é
+  comprovado, então refazer o código era atrito que fazia a correção não voltar.
+- **Cargo/função clicável** na ficha: escolhe da lista de cargos já usados
+  (evita "Vigia"/"vigia"/"Vigía") ou digita um novo. Continua texto livre.
+- **Registra Ponto** vira pendência do export Tirvu (em branco, o Tirvu aceita
+  calado e o colaborador nasce sem a marcação).
+
+## [1.81.0] — 2026-07-22
+### Adicionado
+- **Colaboradores mostra o que falta no cadastro**: completude dos importados do
+  Tirvu, para o RH ver de relance quem precisa de dado antes de exportar de volta.
+
+## [1.76.0–1.80.0] — 2026-07-21/22 — DashPlanilha vira o padrão das listas
+### Mudado
+- **Colaboradores, Admissões e Creche migraram para o `DashPlanilha`**:
+  ordenação por qualquer coluna, filtro por coluna, seleção + ações em massa,
+  colunas configuráveis e export CSV — com cards de métrica clicáveis que
+  ativam filtros. Os filtros pesados (posto, busca, status) ficam fora do dash,
+  no topo, alimentando os dados; o dash refina em memória por cima. Passou a ser
+  o padrão de TODA lista nova do RH.
+- **Creche — "mais filhos" sem virar 1:N** (v1.79): reabrir o benefício ativo
+  para acrescentar criança, em vez de largar o `candidato_id unique` e mexer em
+  assinatura/dossiê.
+### Corrigido
+- Cards de Admissões aparecem mesmo com a lista vazia (v1.80, consertou o CI).
+
+## [1.73.0–1.77.0] — 2026-07-21 — Reembolso-Creche: Ondas A/B/C
+
+### Adicionado
+- **Comunicação de estado + saídas** do creche: toda decisão avisa o colaborador
+  por e-mail; **devolver** (reabre a edição), **indeferir** (terminal),
+  **"não faço jus"** (some da fila mas fica no relatório), **suspender/encerrar**,
+  e **desligar o colaborador encerra o benefício ativo**.
+- **KBA nativa**: o gate serve os importados do Tirvu (sem ficha) usando dados
+  imutáveis do cadastro (nascimento + sobrenome), não as fichas de admissão.
+- **Não-respondentes e histórico** no dash, para provar que o elegível foi
+  consultado e não pediu.
+
+## [1.70.0] — 2026-07-20 — Jornadas estruturadas
+### Adicionado
+- Submenu **Jornadas** com parser que PROPÕE a estrutura (escala, horários,
+  turno, adicional noturno, intrajornada, cargo) a partir da descrição — o RH
+  confirma, nunca auto-grava. Sinalizador de duplicidade que só AVISA pares
+  suspeitos (nunca funde: há ~40 erros de digitação nos dados reais). A
+  `descricao` continua canônica — é ela que vai ao Tirvu.
+
+## [1.69.0] — 2026-07-20 — `status` é só fluxo; `situacao` é só vínculo
+
+### Mudado
+- Separados os dois campos que compartilhavam `ativo`/`desligado` e confundiam
+  as telas. Agora: **`status`** é só a fase do funil (convidado → … → aprovado/
+  importado); **`situacao`** é só o vínculo (nulo = admissão, ativo, desligado).
+
+### Legado
+- Os valores **`ativo` e `desligado` do enum `StatusCandidato` ficaram ÓRFÃOS**
+  (não se escreve mais). Não são removidos porque o Postgres não apaga valor de
+  enum sem recriar o tipo; o front (`status.js`) já os ignora. **Não usar em
+  código novo, não fundir os campos.**
+
+## [1.63.0] — 2026-07-21 — Admissões e Colaboradores não vazam mais
+
+### Corrigido
+- **Cada registro aparece numa tela só**: Admissões filtra `situacao IS NULL`,
+  Colaboradores filtra `situacao IS NOT NULL` (antes o mesmo registro vazava nas
+  duas). Escapes simétricos para os casos de fronteira.
+
+## [1.51.0] — 2026-07-20 — Reembolso-Creche (módulo completo)
+### Adicionado
+- Módulo do Reembolso-Creche (IN SEGES/MGI 147/2026): elegibilidade por posto,
+  link público sem enumeração de CPF + KBA, assinatura colaborador→RH pelo
+  multi-signatário, RH vê os documentos de cada criança, datas centralizadas e
+  importador da planilha de incidência de benefícios (assistido).
+
+## [1.55.0–1.61.0] — 2026-07-20 — Talentos, provas e imports
+
+### Adicionado
+- **Banco de Talentos** repaginado (wizard de 3 passos + currículo opcional),
+  com dash próprio, envio de teste avulso e importação da planilha do Microsoft
+  Forms (idempotente).
+- **Provas por cargo**: banco de provas configurável pelo RH (objetivas com
+  correção automática + discursivas), aplicação pública `/p/{token}`, correção
+  no dash. Gabarito nunca vai ao público.
+
+## [1.48.0–1.50.0] — 2026-07-19 — E-mail M365/Gmail em produção
+### Corrigido
+- **Callback OAuth** (Microsoft 365 e Gmail) passou a usar `https` quando o
+  proxy não envia `X-Forwarded-Proto`, e a respeitar o `CF-Visitor`/host público
+  atrás do Cloudflare — sem isso o login OAuth quebrava em produção.
+- Rota de diagnóstico `/api/diag/callback` e versão no `/health` para confirmar
+  qual imagem está no ar.
+
 ## [1.47.0] — 2026-07-19
 
 ### Mudado
