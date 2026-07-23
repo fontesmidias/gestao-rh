@@ -615,6 +615,42 @@ export const rh = {
   crecheBaixarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { headers: authRH() }),
   crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
+
+  // --- Cadastro de Desenvolvimento (Onda B) ---
+  // `status` vazio = a fila de quem espera decisão (pendente + devolvido).
+  desenvolvimentoRegistros: (status = '', candidatoId = '') => {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    if (candidatoId) q.set('candidato_id', candidatoId)
+    const s = q.toString()
+    return req(`/rh/desenvolvimento/registros${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  desenvolvimentoValidar: (id, dados) =>
+    req(`/rh/desenvolvimento/registros/${id}/validar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados || {}) }),
+  desenvolvimentoDevolver: (id, motivo) =>
+    req(`/rh/desenvolvimento/registros/${id}/devolver`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
+  desenvolvimentoRecusar: (id, motivo) =>
+    req(`/rh/desenvolvimento/registros/${id}/recusar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
+  // devolve { validados, barrados } — os barrados vêm COM o motivo, para a tela
+  // dizer quem ficou de fora em vez de sumir com eles
+  desenvolvimentoValidarLote: (ids) =>
+    req('/rh/desenvolvimento/registros/lote/validar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ ids }) }),
+  desenvolvimentoDocumento: (registroId, arquivoId) =>
+    req(`/rh/desenvolvimento/registros/${registroId}/documento/${arquivoId}`,
+        { headers: authRH() }),
+  desenvolvimentoTipos: () => req('/rh/desenvolvimento/tipos', { headers: authRH() }),
+  desenvolvimentoCriarTipo: (dados) =>
+    req('/rh/desenvolvimento/tipos',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  desenvolvimentoEditarTipo: (id, dados) =>
+    req(`/rh/desenvolvimento/tipos/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  desenvolvimentoExcluirTipo: (id) =>
+    req(`/rh/desenvolvimento/tipos/${id}`, { method: 'DELETE', headers: authRH() }),
   // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
   crecheBaixarDocumento: (id, tipo) =>
     req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),
