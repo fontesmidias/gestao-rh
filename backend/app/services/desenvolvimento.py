@@ -102,7 +102,7 @@ def situacao_validade(registro: RegistroDesenvolvimento,
         return "sem_validade"
     if dias < 0:
         return "vencido"
-    limite = registro.tipo.aviso_dias_antes if registro.tipo else 60
+    limite = registro.tipo.aviso_dias_antes if registro.tipo else 90
     return "a_vencer" if dias <= limite else "valido"
 
 

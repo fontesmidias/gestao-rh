@@ -79,9 +79,10 @@ class TipoDesenvolvimento(Base):
     # Documentos que o dossiê deste tipo exige, na ordem em que a entidade
     # formadora pede. Ex. brigada: ["identidade", "certificado_formacao", "aso"]
     documentos_exigidos: Mapped[list | None] = mapped_column(JSON)
-    # Antecedência do aviso de vencimento, em dias (customizável pelo front —
-    # o Bruno sugeriu 60 como padrão).
-    aviso_dias_antes: Mapped[int] = mapped_column(Integer, default=60)
+    # Antecedência do aviso de vencimento, em dias. Padrão 90 (Bruno,
+    # 2026-07-22): é o tempo real de juntar documento, marcar exame e a clínica
+    # abrir turma. Customizável por tipo no painel.
+    aviso_dias_antes: Mapped[int] = mapped_column(Integer, default=90)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                 server_default=func.now())
@@ -160,6 +161,59 @@ class RegistroDesenvolvimento(Base):
     tipo: Mapped[TipoDesenvolvimento] = relationship()
     arquivos: Mapped[list["ArquivoDesenvolvimento"]] = relationship(
         back_populates="registro", cascade="all, delete-orphan")
+
+
+class TurmaReciclagem(Base):
+    """Turma da entidade formadora (Multicursos) para a qual o RH pede matrícula.
+
+    É entidade e não texto solto porque o Bruno quer "clique único": escolhida a
+    turma, o e-mail se monta para TODOS os marcados no dash de uma vez. O RH
+    cadastra a próxima turma quando a clínica avisa a data, ou digita na hora.
+    """
+
+    __tablename__ = "turma_reciclagem"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          default=uuid.uuid4)
+    tipo_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("tipo_desenvolvimento.id"), index=True)
+    entidade: Mapped[str] = mapped_column(String(200), default="Multicursos")
+    inicio_em: Mapped[date] = mapped_column(Date, index=True)
+    periodo: Mapped[str] = mapped_column(String(20), default="noturno")  # diurno|noturno
+    observacao: Mapped[str | None] = mapped_column(Text)
+    # e-mail de destino da solicitação (a clínica pode ter um por turma)
+    email_destino: Mapped[str | None] = mapped_column(String(200))
+    encerrada: Mapped[bool] = mapped_column(Boolean, default=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                server_default=func.now())
+
+
+class SolicitacaoMatricula(Base):
+    """Uma solicitação de matrícula enviada (ou em rascunho) à entidade.
+
+    Guarda o que FOI enviado — assunto, corpo final e para quem —, porque o RH
+    edita o texto antes de mandar e depois precisa provar o que pediu. Uma
+    solicitação cobre N colaboradores (o RH escolhe agrupar ou não).
+    """
+
+    __tablename__ = "solicitacao_matricula"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          default=uuid.uuid4)
+    turma_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("turma_reciclagem.id"), index=True)
+    # snapshot da turma no momento do envio (a turma pode ser editada depois)
+    turma_inicio_em: Mapped[date | None] = mapped_column(Date)
+    turma_periodo: Mapped[str | None] = mapped_column(String(20))
+    destinatarios: Mapped[list | None] = mapped_column(JSON)   # e-mails
+    assunto: Mapped[str | None] = mapped_column(String(300))
+    corpo: Mapped[str | None] = mapped_column(Text)
+    # colaboradores incluídos: [{candidato_id, nome, registro_id}]
+    colaboradores: Mapped[list | None] = mapped_column(JSON)
+    enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enviado_por: Mapped[str | None] = mapped_column(String(200))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                server_default=func.now(), index=True)
 
 
 class ArquivoDesenvolvimento(Base):

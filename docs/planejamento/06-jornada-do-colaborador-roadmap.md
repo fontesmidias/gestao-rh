@@ -134,7 +134,7 @@ em `ocr_ia.py`. Verificado na documentação oficial em 2026-07-22:
 **Custo:** ~2.400 chamadas/ano só na fila de desenvolvimento. Deixa de ser
 detalhe de arquitetura e vira linha de despesa — dimensionar antes de contratar.
 
-### 3.2. Portal do colaborador (extrair o gate do creche)
+### 3.2. Portal do colaborador — `/meu` (desenho aprovado pelo Bruno)
 
 Quatro pedidos batem na mesma porta: o brigadista mandando certificado, o
 colaborador cadastrando curso, o avaliado escrevendo a manifestação da seção 9,
@@ -142,10 +142,56 @@ e o creche que **já entra hoje**.
 
 O gate está pronto, testado e em produção — só está preso dentro do módulo de
 creche: 2FA por e-mail, KBA (`app/services/kba.py`) para quem não tem e-mail,
-resposta idêntica para CPF na base / fora da base (anti-enumeração).
+resposta idêntica para CPF na base / fora da base (anti-enumeração). E a KBA já
+usa dados **nativos** do `Candidato` (nascimento + sobrenome), então funciona
+para o importado do Tirvu que nunca preencheu ficha — que é a maioria dos 1.200.
 
-**Ação:** extrair para um portal do colaborador genérico. Passa a servir ~1.200
-pessoas em vez de ~40 — o gate não muda, o volume sim.
+**Endereço: `/meu`** (aprovado). Uma porta só — o oposto de `/creche`,
+`/desenvolvimento`, `/brigada` como portas separadas, que em seis meses deixaria
+o colaborador sem saber qual é a dele.
+
+```
+/meu → CPF → [2FA por e-mail] ou [KBA, quem não tem e-mail] → Painel
+                                                                │
+   ┌──────────────┬───────────────────┬──────────────┬──────────┘
+   ▼              ▼                   ▼              ▼
+Meus dados   Meu desenvolvimento   Creche      Pendências
+```
+
+**A home é a lista de pendências DELE, não um menu.** Menu é o que o sistema
+quer mostrar; a pessoa entra querendo resolver algo:
+
+> ⚠️ Seu certificado de brigadista vence em 47 dias → Enviar reciclagem
+> 📄 O RH devolveu seu pedido de creche: "Falta a certidão…" → Corrigir
+
+Sem pendência, ela vê o próprio histórico.
+
+**"Meu desenvolvimento" é o currículo dela dentro da empresa**, não um
+formulário de upload: mostra o que mandou, o que o RH validou e o que está em
+análise. É o que sustenta o *"valorizar quem busca se autoaperfeiçoar"* — se a
+pessoa não vê o próprio inventário crescer, a frase não se cumpre e ela não
+volta no sexto mês.
+
+**O brigadista não vê "Portal de Reciclagem"** — vê o mesmo lugar onde mandou a
+NR-35 ano passado, com um aviso em cima. Uma porta, um hábito.
+
+**Escopo do que o colaborador vê** (confirmado pelo Bruno):
+
+| Vê | Não vê |
+|---|---|
+| Os próprios dados cadastrais | Qualquer dado de colega |
+| Os próprios cursos e certificados | — |
+| O **motivo** de uma recusa do RH | — |
+| O status do próprio creche | Notas de avaliação (Onda C tem regra própria) |
+| Prazos e vencimentos dele | |
+
+> O motivo da recusa é **visível ao colaborador** (decisão do Bruno): recusa sem
+> motivo gera ligação para o RH. Consequência para a interface: o campo tem de
+> ser escrito **sabendo que ele lê** — o rótulo no painel do RH avisa isso.
+
+**Migração do creche para dentro do portal: SIM** (aprovado), mas **por último**
+— o creche funciona e está estável; mexer nele antes de o portal provar-se seria
+arriscar o que está bom por consistência visual.
 
 ### 3.3. Autorização por escopo (a terceira cara do sistema)
 
@@ -323,11 +369,66 @@ jornada é canônica e pode conter isso em texto livre.
 
 ### 5.7. Notificação de vencimento
 
-Antecedência **customizável pelo front** (Bruno sugeriu 60 dias como padrão).
-Destinatários: o colaborador **e** o líder de brigada. Consome a matriz de
-notificações da Onda A4.
+Antecedência **customizável pelo front**, padrão **90 dias** (definido pelo
+Bruno em 2026-07-22 — 90, não os 60 cogitados antes: é o tempo real de juntar
+documento, marcar exame e a clínica abrir turma). Destinatários: o colaborador
+**e** o líder de brigada. Consome a matriz de notificações da Onda A4.
 
 Roda em worker Redis/RQ — infra já existe (`app/workers/`, ver `expurgo.py`).
+
+### 5.9. Solicitação de matrícula à Multicursos (fluxo completo)
+
+O ciclo que o Bruno desenhou, ponta a ponta:
+
+```
+[90 dias antes]  worker → e-mail ao colaborador + ao líder de brigada
+       ↓
+[colaborador]    entra no portal /meu, manda identidade + certificado + ASO
+       ↓         (IA pré-preenche; ele confere e confirma)
+       ↓
+[RH valida]      fila de validação — crítico é conferido um a um
+       ↓
+[dash brigada]   RH vê quem está PRONTO, marca quem vai, escolhe a turma
+       ↓
+[rascunho]       sistema monta o e-mail com os dados de cada um + anexos
+       ↓
+[RH confere]     edita o que quiser na tela
+       ↓
+[envia]          e-mail sai para a Multicursos
+```
+
+**Turma é entidade** (`TurmaReciclagem`): data de início, período
+(diurno/noturno), entidade formadora, observação. É o que permite o "clique
+único" — escolhida a turma, o texto se monta para todos os marcados. O RH pode
+cadastrar a próxima turma quando a clínica avisar, ou digitar a data na hora.
+
+**Decisões do Bruno (2026-07-22):**
+
+| Ponto | Decisão |
+|---|---|
+| Agrupamento | **Os dois**: o dash oferece "1 e-mail com os marcados" **e** "1 e-mail para cada". O RH escolhe na hora. |
+| Anexos | **Um PDF por pessoa** (`dossie-<nome>.pdf`), com identidade + certificado + ASO empilhados — a clínica abre um arquivo por candidato. |
+| Documento faltando | **Bloqueia e diz quem falta** ("Maria: falta o ASO"). Não sai dossiê furado. |
+
+**Assunto:** `Solicitação de Matrícula - Reciclagem de Brigadista`
+
+**Corpo (individual)** — texto do Bruno, com as variáveis marcadas:
+
+> Prezados,
+>
+> Solicito, por gentileza, a matrícula do colaborador **{nome}** na turma com
+> início em **{data_turma}**, no período **{periodo}**.
+>
+> Segue em anexo a documentação necessária para a inclusão do colaborador no
+> curso.
+>
+> Fico no aguardo da confirmação da matrícula. Caso seja necessária alguma
+> informação adicional, permaneço à disposição.
+
+**Corpo (em grupo)** — mesma estrutura, no plural, com a lista numerada dos
+colaboradores. O texto é **modelo editável** (mesma ideia dos modelos de
+documento do RH), não string no código: a Multicursos pode mudar de exigência
+e o RH ajusta sem deploy.
 
 ### 5.8. Por que 1.200 pessoas mandariam certificado espontaneamente
 
