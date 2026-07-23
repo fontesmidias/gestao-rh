@@ -436,6 +436,8 @@ export const rh = {
   // Devolve { postos, colunas }. Use api.postos().then(r => r.postos) para a lista.
   postos: (incluirInativos = false) =>
     req(`/rh/postos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
+  // Cargos já usados na base ({ nome, pessoas }), mais frequentes primeiro.
+  cargos: () => req('/rh/cargos', { headers: authRH() }),
   criarPosto: (dados) =>
     req('/rh/postos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarPosto: (id, dados) =>

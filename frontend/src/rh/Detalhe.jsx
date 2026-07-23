@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
@@ -138,6 +138,8 @@ function PostoServico({ dados, setMsg, recarregar }) {
   const [postos, setPostos] = useState(null)
   const [postoId, setPostoId] = useState(dados.posto_servico_id || '')
   const [cargo, setCargo] = useState(dados.cargo_funcao || '')
+  const [cargos, setCargos] = useState([])          // cargos já usados na base
+  const [digitandoCargo, setDigitandoCargo] = useState(false)
   const [salario, setSalario] = useState(dados.salario_base || '')
   const [adicionais, setAdicionais] = useState(dados.adicionais || [])
   const [salvando, setSalvando] = useState(false)
@@ -155,6 +157,21 @@ function PostoServico({ dados, setMsg, recarregar }) {
   useEffect(() => { api.empresas().then(setEmpresas).catch(() => {}) }, [])
   // jornadas do posto escolhido vêm primeiro (ordenação, não filtro)
   useEffect(() => { api.jornadas(postoId || null).then(setJornadas).catch(() => {}) }, [postoId])
+  useEffect(() => { api.cargos().then((r) => setCargos(r.cargos)).catch(() => {}) }, [])
+  // O cargo atual entra na lista mesmo se não vier da API (cargo raro, ou
+  // digitado agora): sem isso o SelectBusca mostraria o campo como vazio.
+  const opcoesCargo = useMemo(() => {
+    const nomes = cargos.map((c) => c.nome)
+    if (cargo && !nomes.includes(cargo)) nomes.unshift(cargo)
+    return [
+      ...nomes.map((n) => {
+        const achado = cargos.find((c) => c.nome === n)
+        return { valor: n, rotulo: n,
+                 extra: achado ? `${achado.pessoas} pessoa(s)` : 'atual' }
+      }),
+      { valor: '__novo', rotulo: '＋ Cargo novo…' },
+    ]
+  }, [cargos, cargo])
   if (!postos) return null
   const extras = (dados.assinaturas || []).filter((a) =>
     !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
@@ -202,8 +219,29 @@ function PostoServico({ dados, setMsg, recarregar }) {
           📄 <strong>{postos.find((p) => p.id === postoId).contrato_ref}</strong>
           <span className="dica-i"> ⓘ</span></span>
       )}
-      <input placeholder="Cargo/função (ex.: Office Boy)" value={cargo}
-             style={{ maxWidth: 260 }} onChange={(e) => setCargo(e.target.value)} />
+      {/* Cargo/função: escolhe da lista já mapeada ou digita um novo (v1.82).
+          Continua string livre no banco — a lista só evita que "Vigia",
+          "vigia" e "Vigía" virem três cargos diferentes nos filtros e nos
+          modelos de documento, que casam por TEXTO. */}
+      {digitandoCargo ? (
+        <span className="rh-cargo-novo">
+          <input placeholder="Cargo/função novo (ex.: Office Boy)" value={cargo}
+                 autoFocus style={{ maxWidth: 240 }}
+                 onChange={(e) => setCargo(e.target.value)} />
+          <button type="button" className="btn-secundario btn-mini"
+                  title="Voltar para a lista de cargos já cadastrados"
+                  onClick={() => setDigitandoCargo(false)}>↩ lista</button>
+        </span>
+      ) : (
+        <SelectBusca
+          style={{ maxWidth: 260 }} valor={cargo}
+          vazioRotulo="— cargo/função —" placeholder="Buscar cargo…"
+          opcoes={opcoesCargo}
+          aoEscolher={(v) => {
+            if (v === '__novo') { setCargo(''); setDigitandoCargo(true); return }
+            setCargo(v)
+          }} />
+      )}
       <input placeholder="Salário base (ex.: R$ 1.500,00)" value={salario}
              style={{ maxWidth: 200 }} onChange={(e) => setSalario(e.target.value)} />
       <select value={empresaId} style={{ maxWidth: 220 }}
@@ -253,13 +291,23 @@ function PostoServico({ dados, setMsg, recarregar }) {
           <button className="btn-link" onClick={() => setNovaJornada(null)}>cancelar</button>
         </div>
       )}
+      {/* Registra ponto é obrigatório para o Tirvu (v1.82): em branco, o
+          colaborador nasce lá sem a marcação e ninguém percebe. Marca-se o
+          campo em âmbar em vez de travar o salvamento — os importados do Tirvu
+          nasceram sem o campo e não dá para prender a edição deles. */}
       <select value={ponto} style={{ maxWidth: 190 }}
-              title="Se o colaborador registra ponto — sai na planilha do Tirvu"
+              className={ponto === '' ? 'campo-pendente' : undefined}
+              title="Se o colaborador registra ponto — obrigatório na planilha do Tirvu"
               onChange={(e) => setPonto(e.target.value)}>
         <option value="">— registra ponto? —</option>
         <option value="true">Registra ponto: sim</option>
         <option value="false">Registra ponto: não</option>
       </select>
+      {ponto === '' && (
+        <span className="aviso-pendente">
+          ⚠️ Obrigatório para exportar ao Tirvu
+        </span>
+      )}
       <div className="rh-adicionais">
         <span className="explica" style={{ margin: 0, width: '100%' }}>Adicionais
           (entram na ficha junto com cargo e salário):</span>

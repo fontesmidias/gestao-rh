@@ -313,9 +313,12 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
     registrar(db, "envio_concluido", ator="candidato", candidato_id=candidato.id)
     db.commit()
 
-    settings = get_settings()
-    enviar_email(
-        settings.smtp_from,
+    # Quem recebe é configurável no painel (v1.82). Antes ia para `smtp_from`,
+    # a caixa de LOGIN do e-mail — o RH recebia no e-mail pessoal sem poder
+    # mudar. Sem configuração, cai no padrão de sempre.
+    from app.services.notificacoes import avisar
+    avisar(
+        db, "envio_concluido",
         f"📥 Documentação completa: {candidato.nome_completo}",
         f"O candidato {candidato.nome_completo} concluiu o envio da documentação.\n"
         f"Acesse o painel do RH para revisar: {base_url_publica(request)}/rh\n",

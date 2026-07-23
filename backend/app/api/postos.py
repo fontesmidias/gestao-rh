@@ -8,7 +8,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -119,6 +119,27 @@ def listar_postos(incluir_inativos: bool = False,
     postos = db.scalars(consulta).all()
     return {"postos": [_dump_posto(p) for p in postos], "colunas": _colunas(db),
             "documentos_disponiveis": DOCS_ESPECIFICOS_DISPONIVEIS}
+
+
+@router.get("/rh/cargos")
+def listar_cargos(db: Session = Depends(get_db)) -> dict:
+    """Cargos/funções já usados na base, com quantas pessoas os ocupam (v1.82).
+
+    NÃO é tabela: `cargo_funcao` continua string livre no `Candidato` — virar
+    FK quebraria `ModeloDocumento.cargo_alvo`, o filtro do Arquivo e as provas
+    por cargo, que casam por TEXTO. A lista só alimenta o seletor no front: o
+    RH escolhe um existente (evita "Vigia"/"vigia"/"Vigía" virando 3 cargos) ou
+    digita um novo, que passa a aparecer aqui para o próximo.
+
+    Ordenado por frequência (o cargo comum vem primeiro) e depois por nome."""
+    linhas = db.execute(
+        select(Candidato.cargo_funcao, func.count())
+        .where(Candidato.cargo_funcao.isnot(None), Candidato.cargo_funcao != "")
+        .group_by(Candidato.cargo_funcao)
+    ).all()
+    cargos = sorted(({"nome": nome, "pessoas": qtd} for nome, qtd in linhas),
+                    key=lambda c: (-c["pessoas"], c["nome"].lower()))
+    return {"cargos": cargos}
 
 
 @router.put("/rh/postos/colunas")

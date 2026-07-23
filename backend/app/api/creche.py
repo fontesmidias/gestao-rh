@@ -424,11 +424,16 @@ def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
     ben.revisado_por = rh.email
     ben.revisado_em = datetime.now(timezone.utc)
     col = db.get(Candidato, ben.candidato_id)
+    # Link de acesso DIRETO no e-mail (v1.82): o e-mail já é comprovado, então
+    # refazer o 2FA só para corrigir um dado é atrito que faz a correção não
+    # voltar. Emitido antes do commit para entrar na mesma transação.
+    from app.api.creche_publico import emitir_acesso_devolucao
+    token = emitir_acesso_devolucao(db, ben)
     registrar(db, "creche_beneficio_devolvido", ator="rh", ator_detalhe=rh.email,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_devolucao})
     db.commit()
     try:
-        _email_devolucao(ben, col)  # avisa o colaborador que precisa corrigir
+        _email_devolucao(ben, col, token)  # avisa e já leva o link de correção
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -650,24 +655,43 @@ def _url_creche() -> str:
     return f"{get_settings().base_url.rstrip('/')}/creche"
 
 
-def _email_devolucao(ben: BeneficioCreche, col: Candidato) -> None:
+def _email_devolucao(ben: BeneficioCreche, col: Candidato,
+                     token: str | None = None) -> None:
     """Avisa o colaborador que o RH devolveu o levantamento para correção — sem
     isso ele só descobriria se reabrisse o link por acaso (feedback 2026-07-22).
-    Instrui a acessar /creche com o CPF (não expomos link com token por e-mail:
-    o acesso passa pelo 2FA de sempre)."""
+
+    Vai com LINK DIRETO (v1.82, pedido do Bruno): quem foi devolvido já validou
+    o e-mail alguma vez, então refazer o 2FA só para corrigir um dado faz a
+    correção não voltar. O token vale 7 dias e a devolução seguinte derruba o
+    anterior. Sem token (chamada antiga), cai no texto de sempre — entrar pelo
+    CPF continua funcionando."""
     email = ben.email_confirmado or col.email
     if not email:
         return
     nome = col.nome_completo.split()[0].title()
     motivo = ben.motivo_devolucao or "verifique os dados e reenvie."
     url = _url_creche()
+    link = f"{url}?t={token}" if token else url
+    if token:
+        txt_acao = (f"Acesse {link} para corrigir e reenviar — o link entra "
+                    "direto, sem código, e vale 7 dias.")
+        html_acao = (f"<a href='{link}'>Corrigir meu pedido</a> — o link entra "
+                     "direto, sem código, e vale <strong>7 dias</strong>.")
+        rodape_txt = (f"\n\nSe o link expirar, acesse {url} e entre com seu CPF.")
+        rodape_html = (f"Se o link expirar, acesse <a href='{url}'>{url}</a> e "
+                       "entre com seu CPF.")
+    else:
+        txt_acao = f"Acesse {url}, entre com seu CPF, corrija o que for necessário e reenvie."
+        html_acao = f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, corrija e reenvie."
+        rodape_txt, rodape_html = "", None
     enviar_email(
         email,
         "Green House — Reembolso-Creche: seu pedido foi devolvido para correção",
         f"Olá, {nome}!\n\n"
         "Seu levantamento do Reembolso-Creche foi DEVOLVIDO para correção.\n\n"
         f"Motivo: {motivo}\n\n"
-        f"Acesse {url}, entre com seu CPF, corrija o que for necessário e reenvie.\n\n"
+        f"{txt_acao}{rodape_txt}\n\n"
+        "Este link é pessoal — não encaminhe.\n\n"
         "Atenciosamente,\nRH — Green House\n",
         html_moderno(
             "Pedido devolvido para correção",
@@ -676,7 +700,9 @@ def _email_devolucao(ben: BeneficioCreche, col: Candidato) -> None:
                 "Seu levantamento do <strong>Reembolso-Creche</strong> foi "
                 "<strong>devolvido para correção</strong>.",
                 f"<strong>Motivo do RH:</strong> {motivo}",
-                f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, corrija e reenvie.",
+                html_acao,
+                *( [rodape_html] if rodape_html else [] ),
+                "Este link é pessoal — não encaminhe.",
             ],
         ),
     )

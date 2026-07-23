@@ -135,7 +135,18 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
     tid = str(talento.id)
     registrar(db, "talento_cadastrado", ator="publico",
               detalhe={"cargos": cargos, "cidade": talento.cidade})
+    nome_cad, cargos_cad = talento.nome_completo, cargos
     db.commit()
+    # aviso interno configurável (v1.82) — desligado por padrão seria pior:
+    # cadastro de talento que ninguém vê é currículo perdido
+    from app.services.notificacoes import avisar
+    avisar(
+        db, "talento_cadastrado",
+        f"⭐ Banco de Talentos: {nome_cad}",
+        f"{nome_cad} se cadastrou no Banco de Talentos.\n"
+        f"Cargos de interesse: {', '.join(cargos_cad) or '(não informado)'}\n"
+        "Acesse o painel do RH para ver o cadastro.\n",
+    )
     upload_token = _upload_serializer().dumps({"tid": tid})
     return {"ok": True, "id": tid, "upload_token": upload_token}
 

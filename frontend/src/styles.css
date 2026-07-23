@@ -322,6 +322,12 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .rotulo { display: block; font-weight: 700; font-size: .92rem; margin-bottom: .35rem;
           color: var(--tinta); }
 .dica-inline { font-weight: 400; color: #7b8b81; font-style: normal; font-size: .85rem; }
+/* Campo que ainda não foi preenchido e faz falta lá na frente (export do Tirvu,
+   dossiê). Não é ERRO — é lembrete: o RH salva assim mesmo e resolve depois. */
+.campo-pendente { border-color: var(--ambar) !important;
+                  box-shadow: 0 0 0 2px rgba(245, 166, 35, .18); }
+.aviso-pendente { display: inline-flex; align-items: center; gap: .3rem;
+                  font-size: .82rem; color: #9a6a12; }
 input, select, textarea {
   width: 100%; min-height: var(--toque); padding: .7rem .9rem;
   border: 2px solid var(--borda); border-radius: var(--raio-input);
@@ -529,6 +535,8 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-card h3 { font-size: var(--fs-apoio); text-transform: uppercase;
               letter-spacing: .05em; color: var(--tinta-suave); margin-top: 0; }
 .rh-lote { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+/* Cargo novo digitado na hora: input + botão de voltar à lista, lado a lado. */
+.rh-cargo-novo { display: inline-flex; align-items: center; gap: .4rem; }
 .check-slot { width: 22px; height: 22px; min-height: 0; flex-shrink: 0;
               accent-color: var(--verde-escuro); }
 .rh-tabela { width: 100%; background: var(--cartao); border-radius: 12px;
@@ -548,6 +556,19 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
         color: var(--chip-cor, var(--tinta-suave));
         background: color-mix(in srgb, var(--chip-cor, #889) 14%, transparent);
         border: 1px solid color-mix(in srgb, var(--chip-cor, #889) 28%, transparent); }
+/* Matriz de avisos internos (Config): um bloco por evento, com os
+   destinatários como chips removíveis. */
+.aviso-evento { border: 1px solid var(--borda-suave); border-radius: 10px;
+                padding: .7rem .8rem; margin-bottom: .6rem; background: var(--input-bg); }
+.aviso-evento-topo { display: flex; flex-direction: column; gap: .15rem; }
+.aviso-evento-nome { display: flex; align-items: center; gap: .45rem; cursor: pointer; }
+.aviso-evento-destinos { display: flex; flex-wrap: wrap; align-items: center;
+                         gap: .4rem; margin-top: .6rem; }
+.aviso-evento-destinos .chip { --chip-cor: var(--verde-escuro);
+                               display: inline-flex; align-items: center; gap: .35rem; }
+.aviso-evento-destinos .chip button { background: none; border: 0; padding: 0;
+                                      color: inherit; cursor: pointer; font-size: .9em;
+                                      line-height: 1; min-height: 0; }
 .link-copiar { display: block; background: var(--cartao); border-radius: 8px; padding: .45rem .65rem;
                margin-top: .4rem; font-size: .82rem; word-break: break-all;
                border: 1px solid var(--borda); }
@@ -1061,6 +1082,9 @@ body[data-rh-ocupado] { cursor: progress; }
   .rh-lote { flex-wrap: wrap; }
   .rh-lote > button, .rh-lote > .btn-mini { min-height: 44px; }
   .rh-lote > input, .rh-lote > select { width: 100%; max-width: none !important; }
+  /* o cargo é select-busca (div) ou o par input+botão — ambos ocupam a linha */
+  .rh-lote > .select-busca, .rh-cargo-novo { width: 100%; max-width: none !important; }
+  .rh-cargo-novo input { flex: 1; max-width: none !important; }
   .rh-topo > div { display: flex; flex-wrap: wrap; gap: .4rem; width: 100%; }
   .rh-topo h1 { font-size: 1.3rem; }
   .navegacao { flex-wrap: wrap; gap: .5rem; }
