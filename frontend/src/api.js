@@ -737,6 +737,17 @@ export const rh = {
   radarColaborador: (candidatoId, cicloId = '') =>
     req(`/rh/desempenho/colaboradores/${candidatoId}/radar${
       cicloId ? `?ciclo_id=${cicloId}` : ''}`, { headers: authRH() }),
+  // Frequência (ponto do Tirvu) — CONTEXTO, nunca nota
+  pontoColaborador: (candidatoId) =>
+    req(`/rh/desempenho/colaboradores/${candidatoId}/ponto`, { headers: authRH() }),
+  importarPonto: async (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/desempenho/ponto/importar`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
   // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
   crecheBaixarDocumento: (id, tipo) =>
     req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),

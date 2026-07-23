@@ -653,6 +653,18 @@ Tirvu para dar "dados objetivos" ao avaliador.
 > **descartar geolocalização e foto na leitura**, sem persistir. Se um dia forem
 > necessárias, é outro módulo com outra base legal.
 
+**Decisões do Bruno (2026-07-23), que destravam a implementação:**
+
+| Ponto | Decisão |
+|---|---|
+| Papel na avaliação | **Só informação — o gestor interpreta.** Vira CONTEXTO ao lado do formulário (como os Fatos Observados), NÃO nota automática. Impede "número vira nota vira desligamento". |
+| Registro incompleto | **Marcar "incompleto", nunca falta.** `00:00` com entrada é esquecimento de bater a saída (29 linhas assim em 1 mês). |
+| Entrada dos dados | **Upload manual do .xlsx** (como postos/jornadas/incidência). Sem depender de API do Tirvu. |
+
+Casamento por **matrícula** (não há CPF na planilha), normalizando zeros à
+esquerda dos dois lados. Leitura pelo `_ler_linhas_xlsx` zip+XML (openpyxl
+quebra nas planilhas do Tirvu).
+
 ### 6.9. IA no desempenho
 
 Dois usos pedidos: **resumo do desempenho** e **sugestão de PDI** (seção 6 da

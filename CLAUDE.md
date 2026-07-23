@@ -349,6 +349,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   contá-lo como zero (o item não se aplica ao cargo; zerar puniria o avaliado).
   Radar em SVG puro (`RadarCompetencias.jsx`), sem biblioteca — 8 pontos numa
   escala de 1 a 4 não justificam dependência.
+  **Import de ponto do Tirvu** (`services/import_ponto.py`, v1.85): upload do
+  .xlsx (RH › Fatos Observados › Importar ponto), agregado por pessoa/período em
+  `ResumoPonto`, e mostrado como CONTEXTO ao lado do formulário — **nunca nota**
+  (decisão do Bruno: "atraso vira número, número vira nota, nota vira
+  desligamento" é o que isto NÃO pode criar). Três armadilhas dos DADOS REAIS,
+  todas tratadas: (1) NÃO há CPF na planilha → casa por MATRÍCULA normalizando
+  zeros à esquerda dos dois lados ("003035"=="3035"); (2) `00:00` COM entrada é
+  registro INCOMPLETO (esqueceu a saída), NUNCA falta — nos dados reais são 28
+  incompletos vs 1 falta em 1 mês, então tratar tudo como o Tirvu apurou
+  acusaria 28 pessoas injustamente; (3) `Horas Trabalhadas` é a fonte de
+  verdade, não as batidas (há dia sem batida e com horas apuradas) — não deduzir
+  presença dos horários. Geolocalização e foto NÃO são lidas (desproporcional,
+  LGPD). Leitura pelo `_ler_linhas_xlsx` zip+XML. Reimportar o mesmo período
+  substitui, não duplica; quem não casa por matrícula é listado, nunca criado.
 - **Portal do colaborador `/meu`** (`api/portal.py`, `Portal.jsx`): UMA porta
   para tudo que é da pessoa — o oposto de `/creche`, `/desenvolvimento`,
   `/brigada` separados. Gate IDÊNTICO ao do creche (CPF → 2FA por e-mail; sem
