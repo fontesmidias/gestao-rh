@@ -6,11 +6,14 @@ estao prontos para colar na interface. -->
 
 # LGPD — leitura automatizada de documentos
 
-> **Status: MINUTA.** Redigida pela equipe técnica para dar forma ao que a lei
-> exige. **Precisa de revisão jurídica e aprovação formal** de quem responde
-> pela Green House antes de a leitura de documentos de saúde ser ligada. O que
-> está aqui é o esqueleto correto e os textos de tela — não substitui o
-> advogado, encurta o trabalho dele.
+> **Status: APROVADO pelo Bruno em 2026-07-22** — ele informou que a
+> verificação jurídica foi feita e mandou considerar validado. As bases legais
+> e o registro de tratamento abaixo passam a valer como decisão da Green House.
+>
+> Permanece a trava **técnica** (não jurídica) do § 4: enquanto o Zero Data
+> Retention não estiver aprovado pela Mistral, o tipo `saude` fica barrado no
+> código. Isso protege contra a retenção padrão de 30 dias no provedor — é
+> engenharia, e sai sozinha quando o ZDR entrar.
 
 ## 1. O que está sendo tratado
 
