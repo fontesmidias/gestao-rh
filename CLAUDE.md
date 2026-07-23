@@ -314,6 +314,41 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   portal `/meu` → fila do RH → dash de brigada → `matricula_reciclagem.montar`
   (rascunho para conferir) → envio com `dossie_reciclagem.gerar` (1 PDF por
   pessoa, tudo em A4). Incompleto **bloqueia** o envio dizendo quem e o quê.
+- **Gestão de Desempenho** (Onda C, v1.84 — `models/desempenho.py`,
+  `services/desempenho.py`, `api/desempenho.py`, `rh/DesempenhoRH.jsx`,
+  `rh/AvaliacoesRH.jsx`, `rh/FormularioAvaliacao.jsx`): o instrumento é a
+  cartilha `docs/Cartilha do Avaliador e Formulário, de 17-06-2026.pdf`, que já
+  rodava no Microsoft Forms — **as escalas, os 7 indicadores, as 8 competências
+  e as 5 recomendações estão em `services/desempenho.py` palavra por palavra;
+  mudá-los muda o instrumento oficial do RH**. O front NÃO duplica esses textos:
+  pega em `/rh/desempenho/formulario`.
+  **Fatos Observados vêm ANTES do formulário** e rodam sozinhos — são o
+  antídoto do efeito de recência (a cartilha, pág. 3, exige fato observável em
+  vez de rótulo). Ao abrir uma avaliação, os fatos do período aparecem ao lado;
+  ao enviá-la, ficam vinculados (`avaliacao_id`) e viram imutáveis.
+  **O colaborador vê os fatos registrados sobre ele** (portal `/meu`), mas
+  **nunca o autor** — expor o nome viraria queda de braço entre colega e líder.
+  `visivel_em` adia a exibição até a conversa, sem esconder para sempre.
+  **Máquina de estados que NÃO deixa pular o feedback presencial**: rascunho →
+  preenchida → feedback_dado → manifestada → homologada. Homologar direto de
+  `preenchida` é 409: a cartilha (pág. 5) manda conversar, então o sistema
+  exige. A **manifestação do colaborador** (seção 9) tem prazo de
+  `PRAZO_MANIFESTACAO_D` (7d) — sem prazo o direito de resposta seria letra
+  morta, bastando homologar antes de a pessoa ler; passado o prazo, `forcar`
+  libera e fica na auditoria.
+  **Anonimato**: horizontal é agregado e o avaliador NUNCA é revelado ao
+  avaliado; vertical é identificado (é o líder da conversa). O `radar()`
+  SUPRIME o horizontal com menos de `MINIMO_HORIZONTAL` (2) respondentes —
+  agregado de um é o individual com outro nome.
+  **Calibração**: `desvio_do_avaliador()` compara a média dele com a dos
+  DEMAIS (excluir as próprias avaliações é essencial — com poucos avaliadores
+  ele puxaria a média e mascararia o desvio) e devolve "mais generoso"/"mais
+  rigoroso"/"alinhado" a partir de 0,3 numa escala de 1 a 4. **INFORMA o
+  homologador, nunca altera nota**: normalizar com N pequeno é ruído, e
+  distribuição forçada foi VETADA. `media_competencias` ignora N/A em vez de
+  contá-lo como zero (o item não se aplica ao cargo; zerar puniria o avaliado).
+  Radar em SVG puro (`RadarCompetencias.jsx`), sem biblioteca — 8 pontos numa
+  escala de 1 a 4 não justificam dependência.
 - **Portal do colaborador `/meu`** (`api/portal.py`, `Portal.jsx`): UMA porta
   para tudo que é da pessoa — o oposto de `/creche`, `/desenvolvimento`,
   `/brigada` separados. Gate IDÊNTICO ao do creche (CPF → 2FA por e-mail; sem

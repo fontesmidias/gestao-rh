@@ -312,6 +312,86 @@ def _meus_fatos(db: Session, col: Candidato) -> list[dict]:
     ]
 
 
+def _minhas_avaliacoes(db: Session, col: Candidato) -> list[dict]:
+    """As avaliações da pessoa que ela já pode ler.
+
+    Só a partir do FEEDBACK DADO: antes disso a conversa ainda não aconteceu, e
+    a cartilha (pág. 5) manda dar o retorno presencialmente. Deixar a pessoa ler
+    a nota no portal antes da conversa mataria exatamente o que ela pede.
+
+    O AVALIADOR não é revelado quando a relação é horizontal (colega de mesmo
+    nível) — só o vertical, que é o líder com quem ela vai conversar.
+    """
+    from app.models.desempenho import (Avaliacao, RelacaoAvaliador,
+                                       StatusAvaliacao)
+    from app.services.desempenho import PRAZO_MANIFESTACAO_D
+    avaliacoes = db.scalars(
+        select(Avaliacao)
+        .where(Avaliacao.candidato_id == col.id,
+               Avaliacao.status.in_([StatusAvaliacao.feedback_dado,
+                                     StatusAvaliacao.manifestada,
+                                     StatusAvaliacao.homologada]))
+        .order_by(Avaliacao.criado_em.desc())).all()
+    saida = []
+    for a in avaliacoes:
+        prazo = (a.feedback_em + timedelta(days=PRAZO_MANIFESTACAO_D)
+                 if a.feedback_em else None)
+        saida.append({
+            "id": str(a.id),
+            "ocasiao": a.ocasiao.value,
+            "status": a.status.value,
+            "periodo_inicio": a.periodo_inicio.isoformat() if a.periodo_inicio else None,
+            "periodo_fim": a.periodo_fim.isoformat() if a.periodo_fim else None,
+            "feedback_em": a.feedback_em.isoformat() if a.feedback_em else None,
+            "pontos_fortes": a.pontos_fortes,
+            "pontos_desenvolver": a.pontos_desenvolver,
+            "pdi": a.pdi or [],
+            "recomendacao": a.recomendacao,
+            "manifestacao": a.manifestacao,
+            "pode_manifestar": (a.status == StatusAvaliacao.feedback_dado
+                                and (prazo is None or date.today() <= prazo)),
+            "prazo_manifestacao": prazo.isoformat() if prazo else None,
+            # horizontal é anônimo: o colega não é revelado
+            "avaliador": (a.avaliador if a.relacao == RelacaoAvaliador.vertical
+                          else None),
+        })
+    return saida
+
+
+class ManifestacaoIn(BaseModel):
+    texto: str
+
+
+@router.post("/portal/sessao/{token}/avaliacoes/{avaliacao_id}/manifestacao")
+def manifestar(token: str, avaliacao_id: uuid.UUID, payload: ManifestacaoIn,
+               db: Session = Depends(get_db)) -> dict:
+    """Seção 9 da cartilha — o direito de resposta do colaborador.
+
+    "A assinatura do colaborador indica ciência da avaliação, não
+    necessariamente concordância." Aqui é onde a discordância cabe.
+    """
+    from app.models.desempenho import Avaliacao, StatusAvaliacao
+    from app.services.desempenho import PRAZO_MANIFESTACAO_D
+    _, col = _sessao(db, token)
+    a = db.get(Avaliacao, avaliacao_id)
+    if a is None or a.candidato_id != col.id:
+        raise HTTPException(status_code=404, detail="avaliacao_nao_encontrada")
+    if a.status != StatusAvaliacao.feedback_dado:
+        raise HTTPException(status_code=409, detail="fora_do_prazo")
+    if a.feedback_em and date.today() > a.feedback_em + timedelta(
+            days=PRAZO_MANIFESTACAO_D):
+        raise HTTPException(status_code=409, detail="fora_do_prazo")
+    if not (payload.texto or "").strip():
+        raise HTTPException(status_code=422, detail="texto_obrigatorio")
+    a.manifestacao = payload.texto.strip()
+    a.manifestacao_em = datetime.now(timezone.utc)
+    a.status = StatusAvaliacao.manifestada
+    registrar(db, "avaliacao_manifestada", ator="colaborador",
+              candidato_id=col.id)
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/portal/sessao/{token}")
 def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
     """Home do portal: os dados da pessoa, o que ela já mandou e o que falta.
@@ -345,6 +425,7 @@ def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
     posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
     return {
         "fatos": _meus_fatos(db, col),
+        "avaliacoes": _minhas_avaliacoes(db, col),
         "nome": col.nome_completo,
         "primeiro_nome": (col.nome_completo or "").split()[0].title(),
         "cargo": col.cargo_funcao,

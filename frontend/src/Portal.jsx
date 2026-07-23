@@ -153,6 +153,16 @@ function MinhaArea({ token, aoExpirar }) {
         </div>
       )}
 
+      {dados.avaliacoes && dados.avaliacoes.length > 0 && (
+        <div className="rh-card creche-card">
+          <h3 style={{ marginTop: 0 }}>Minhas avaliações</h3>
+          {dados.avaliacoes.map((av) => (
+            <MinhaAvaliacao key={av.id} avaliacao={av} token={token}
+                            aoManifestar={recarregar} />
+          ))}
+        </div>
+      )}
+
       {dados.fatos && dados.fatos.length > 0 && (
         <div className="rh-card creche-card">
           <h3 style={{ marginTop: 0 }}>Registros sobre o meu trabalho</h3>
@@ -221,6 +231,106 @@ function MinhaArea({ token, aoExpirar }) {
           ＋ Enviar curso ou certificado</button>
       </div>
     </>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Minha avaliação + manifestação (seção 9 da cartilha)
+// --------------------------------------------------------------------------
+
+const ROTULO_OCASIAO = {
+  experiencia_30: 'Avaliação de experiência (30 dias)',
+  experiencia_45: 'Avaliação de experiência (45 dias)',
+  experiencia_60: 'Avaliação de experiência (60 dias)',
+  experiencia_90: 'Avaliação de experiência (90 dias)',
+  intermitente: 'Avaliação de intermitente', periodica: 'Avaliação periódica',
+  feedback_pontual: 'Feedback pontual', outro: 'Avaliação',
+}
+
+function MinhaAvaliacao({ avaliacao: av, token, aoManifestar }) {
+  const [texto, setTexto] = useState('')
+  const [escrevendo, setEscrevendo] = useState(false)
+  const [erro, setErro] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+
+  return (
+    <div className="portal-registro">
+      <div className="portal-registro-topo">
+        <strong>{ROTULO_OCASIAO[av.ocasiao] || 'Avaliação'}</strong>
+        {av.feedback_em && <span className="explica" style={{ margin: 0 }}>
+          conversa em {fmtData(av.feedback_em)}</span>}
+      </div>
+
+      {av.pontos_fortes && (
+        <div style={{ marginTop: '.5rem' }}>
+          <strong>Pontos fortes</strong>
+          <div>{av.pontos_fortes}</div>
+        </div>
+      )}
+      {av.pontos_desenvolver && (
+        <div style={{ marginTop: '.5rem' }}>
+          <strong>A desenvolver</strong>
+          <div>{av.pontos_desenvolver}</div>
+        </div>
+      )}
+      {av.pdi && av.pdi.length > 0 && av.pdi.some((p) => p.o_que) && (
+        <div style={{ marginTop: '.5rem' }}>
+          <strong>Plano combinado</strong>
+          <ul style={{ margin: '.2rem 0 0', paddingLeft: '1.1rem' }}>
+            {av.pdi.filter((p) => p.o_que).map((p, i) => (
+              <li key={i}>{p.o_que}{p.acao && ` — ${p.acao}`}
+                {p.prazo && ` (até ${fmtData(p.prazo)})`}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {av.manifestacao && (
+        <div style={{ marginTop: '.6rem' }}>
+          <strong>O que você registrou</strong>
+          <div className="explica" style={{ margin: 0 }}>{av.manifestacao}</div>
+        </div>
+      )}
+
+      {av.pode_manifestar && !av.manifestacao && (
+        <div style={{ marginTop: '.6rem' }}>
+          {!escrevendo ? (
+            <>
+              <p className="explica" style={{ margin: '0 0 .4rem' }}>
+                Você pode registrar a sua opinião sobre esta avaliação —{' '}
+                <strong>concordando ou não</strong>. Fica junto do documento.
+                {av.prazo_manifestacao && ` Prazo: ${fmtData(av.prazo_manifestacao)}.`}
+              </p>
+              <button className="btn-secundario btn-mini"
+                      onClick={() => setEscrevendo(true)}>✍ Escrever minha manifestação</button>
+            </>
+          ) : (
+            <>
+              <label className="campo"><span className="rotulo">Sua manifestação</span>
+                <textarea rows={3} value={texto} autoFocus
+                          placeholder="O que você acha desta avaliação?"
+                          onChange={(e) => setTexto(e.target.value)} /></label>
+              {erro && <div className="alerta">{erro}</div>}
+              <button className="btn-principal btn-mini"
+                      disabled={enviando || !texto.trim()}
+                      onClick={async () => {
+                        setEnviando(true); setErro(null)
+                        try {
+                          await api.manifestar(token, av.id, texto.trim())
+                          aoManifestar()
+                        } catch (e) {
+                          setErro(e.detail === 'fora_do_prazo'
+                            ? 'O prazo para manifestação já passou.'
+                            : 'Não foi possível registrar. Tente de novo.')
+                        } finally { setEnviando(false) }
+                      }}>{enviando ? 'Enviando…' : 'Registrar'}</button>
+              <button className="btn-link" onClick={() => setEscrevendo(false)}>
+                cancelar</button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

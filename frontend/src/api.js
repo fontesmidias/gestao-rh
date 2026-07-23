@@ -227,6 +227,11 @@ export const portal = {
     if (!r.ok) await lancarErro(r)
     return r.json()
   },
+  // Seção 9 da cartilha: o direito de resposta do colaborador. "A assinatura
+  // indica ciência, não necessariamente concordância" — aqui a discordância cabe.
+  manifestar: (t, avaliacaoId, texto) =>
+    req(`/portal/sessao/${t}/avaliacoes/${avaliacaoId}/manifestacao`,
+        { method: 'POST', body: JSON.stringify({ texto }) }),
 }
 
 // --- Testagem (link público /t/{token}: só o nome, resultado visível) ---
@@ -696,6 +701,42 @@ export const rh = {
   desempenhoFormulario: () => req('/rh/desempenho/formulario', { headers: authRH() }),
   desempenhoColaboradores: () =>
     req('/rh/desempenho/colaboradores', { headers: authRH() }),
+
+  // --- Avaliações (formulário da cartilha) ---
+  ciclos: () => req('/rh/desempenho/ciclos', { headers: authRH() }),
+  criarCiclo: (dados) =>
+    req('/rh/desempenho/ciclos',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  encerrarCiclo: (id) =>
+    req(`/rh/desempenho/ciclos/${id}/encerrar`, { method: 'POST', headers: authRH() }),
+  avaliacoes: (filtros = {}) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, v)
+    const s = q.toString()
+    return req(`/rh/desempenho/avaliacoes${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  avaliacao: (id) => req(`/rh/desempenho/avaliacoes/${id}`, { headers: authRH() }),
+  criarAvaliacao: (dados) =>
+    req('/rh/desempenho/avaliacoes',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  salvarAvaliacao: (id, dados) =>
+    req(`/rh/desempenho/avaliacoes/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  enviarAvaliacao: (id) =>
+    req(`/rh/desempenho/avaliacoes/${id}/enviar`, { method: 'POST', headers: authRH() }),
+  registrarFeedback: (id, dados) =>
+    req(`/rh/desempenho/avaliacoes/${id}/feedback`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  homologarAvaliacao: (id, dados) =>
+    req(`/rh/desempenho/avaliacoes/${id}/homologar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // quanto este avaliador difere dos demais — INFORMA o homologador, não altera nota
+  desvioAvaliador: (email, cicloId = '') =>
+    req(`/rh/desempenho/avaliadores/${encodeURIComponent(email)}/desvio${
+      cicloId ? `?ciclo_id=${cicloId}` : ''}`, { headers: authRH() }),
+  radarColaborador: (candidatoId, cicloId = '') =>
+    req(`/rh/desempenho/colaboradores/${candidatoId}/radar${
+      cicloId ? `?ciclo_id=${cicloId}` : ''}`, { headers: authRH() }),
   // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
   crecheBaixarDocumento: (id, tipo) =>
     req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),

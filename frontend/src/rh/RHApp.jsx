@@ -12,6 +12,7 @@ import PostosRH from './PostosRH.jsx'
 import JornadasRH from './JornadasRH.jsx'
 import DesenvolvimentoRH from './DesenvolvimentoRH.jsx'
 import DesempenhoRH from './DesempenhoRH.jsx'
+import AvaliacoesRH from './AvaliacoesRH.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
@@ -244,6 +245,7 @@ const GRUPOS = [
     ['testagem', '🧪', 'Testes'],
     ['desenvolvimento', '🎓', 'Desenvolvimento'],
     ['desempenho', '📌', 'Fatos Observados'],
+    ['avaliacoes', '⭐', 'Avaliações'],
   ]],
   ['Benefícios', [
     ['creche', '🍼', 'Reembolso-Creche'],
@@ -353,6 +355,7 @@ function Painel({ aoSair }) {
         {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
         {pagina === 'desenvolvimento' && <DesenvolvimentoRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'desempenho' && <DesempenhoRH aoVoltar={() => navegar('inicio')} />}
+        {pagina === 'avaliacoes' && <AvaliacoesRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'testagem' && (
           <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
         )}
