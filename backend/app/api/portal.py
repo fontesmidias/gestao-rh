@@ -284,6 +284,34 @@ def _dump_registro(db: Session, r: RegistroDesenvolvimento) -> dict:
     }
 
 
+def _meus_fatos(db: Session, col: Candidato) -> list[dict]:
+    """Os fatos registrados SOBRE a pessoa, que ela tem direito de ver.
+
+    Regra da Onda C: **o colaborador vê o que foi registrado sobre ele**. Sem
+    isso não é gestão de desempenho — é dossiê secreto com interface bonita. E
+    é a visibilidade que muda o comportamento de quem registra, mais do que
+    qualquer política.
+
+    O que ela NÃO vê: **quem** registrou. O autor fica na auditoria e no painel
+    do RH — expor o nome transformaria o registro de fato numa queda de braço
+    entre colega e líder. `visivel_em` permite ao líder segurar o fato até a
+    conversa de feedback, mas não escondê-lo para sempre.
+    """
+    from app.models.desempenho import FatoObservado
+    hoje = date.today()
+    fatos = db.scalars(
+        select(FatoObservado)
+        .where(FatoObservado.candidato_id == col.id)
+        .order_by(FatoObservado.ocorrido_em.desc())).all()
+    return [
+        {"id": str(f.id), "tipo": f.tipo.value, "descricao": f.descricao,
+         "impacto": f.impacto,
+         "ocorrido_em": f.ocorrido_em.isoformat() if f.ocorrido_em else None}
+        for f in fatos
+        if f.visivel_em is None or f.visivel_em <= hoje
+    ]
+
+
 @router.get("/portal/sessao/{token}")
 def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
     """Home do portal: os dados da pessoa, o que ela já mandou e o que falta.
@@ -316,6 +344,7 @@ def ver_sessao(token: str, db: Session = Depends(get_db)) -> dict:
 
     posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
     return {
+        "fatos": _meus_fatos(db, col),
         "nome": col.nome_completo,
         "primeiro_nome": (col.nome_completo or "").split()[0].title(),
         "cargo": col.cargo_funcao,

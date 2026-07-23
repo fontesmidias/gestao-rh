@@ -667,6 +667,35 @@ export const rh = {
         { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   desenvolvimentoDossie: (registroId) =>
     req(`/rh/desenvolvimento/registros/${registroId}/dossie`, { headers: authRH() }),
+
+  // --- Gestão de Desempenho: Fatos Observados (Onda C) ---
+  fatos: (filtros = {}) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, v)
+    const s = q.toString()
+    return req(`/rh/desempenho/fatos${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  criarFato: (dados) =>
+    req('/rh/desempenho/fatos',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarFato: (id, dados) =>
+    req(`/rh/desempenho/fatos/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirFato: (id) =>
+    req(`/rh/desempenho/fatos/${id}`, { method: 'DELETE', headers: authRH() }),
+  subirAnexoFato: async (id, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/desempenho/fatos/${id}/anexo`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  fatoAnexo: (id) => req(`/rh/desempenho/fatos/${id}/anexo`, { headers: authRH() }),
+  // escalas, indicadores e competências da cartilha — o front não duplica os textos
+  desempenhoFormulario: () => req('/rh/desempenho/formulario', { headers: authRH() }),
+  desempenhoColaboradores: () =>
+    req('/rh/desempenho/colaboradores', { headers: authRH() }),
   // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
   crecheBaixarDocumento: (id, tipo) =>
     req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),

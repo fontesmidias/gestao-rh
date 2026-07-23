@@ -11,6 +11,7 @@ import app.models.assinatura  # noqa: F401
 import app.models.beneficio  # noqa: F401
 import app.models.candidato  # noqa: F401
 import app.models.configuracao  # noqa: F401
+import app.models.desempenho  # noqa: F401
 import app.models.desenvolvimento  # noqa: F401
 import app.models.documento  # noqa: F401
 import app.models.evento  # noqa: F401

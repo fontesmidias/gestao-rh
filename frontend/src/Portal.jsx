@@ -153,6 +153,31 @@ function MinhaArea({ token, aoExpirar }) {
         </div>
       )}
 
+      {dados.fatos && dados.fatos.length > 0 && (
+        <div className="rh-card creche-card">
+          <h3 style={{ marginTop: 0 }}>Registros sobre o meu trabalho</h3>
+          <p className="explica">O que suas lideranças registraram no período. Serve de
+            base para a sua avaliação — se algo não confere, fale com o RH.</p>
+          {dados.fatos.map((f) => (
+            <div className="portal-registro" key={f.id}>
+              <div className="portal-registro-topo">
+                <strong>{fmtData(f.ocorrido_em)}</strong>
+                <span className="chip" style={{ '--chip-cor':
+                  f.tipo === 'positivo' ? '#0a8f46'
+                    : f.tipo === 'negativo' ? '#e5484d' : '#889' }}>
+                  {f.tipo === 'positivo' ? 'Positivo'
+                    : f.tipo === 'negativo' ? 'A melhorar' : 'Registro'}</span>
+              </div>
+              <div style={{ marginTop: '.3rem' }}>{f.descricao}</div>
+              {f.impacto && (
+                <div className="explica" style={{ margin: '.2rem 0 0' }}>
+                  Impacto: {f.impacto}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="rh-card creche-card">
         <h3 style={{ marginTop: 0 }}>Meu desenvolvimento</h3>
         <p className="explica">Seus cursos, treinamentos e certificações. Envie o que você
