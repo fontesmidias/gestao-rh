@@ -12,11 +12,16 @@ export default function Formulario({ avaliacaoId, form, homologando,
   const [a, setA] = useState(null)
   const [campos, setCampos] = useState(null)
   const [desvio, setDesvio] = useState(null)
+  const [ponto, setPonto] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [passo, setPasso] = useState(null)   // feedback | homologar
 
   const carregar = () => api.avaliacao(avaliacaoId).then((r) => {
     setA(r)
+    // frequência do período como CONTEXTO — o gestor decide a nota com o dado
+    // na frente, mas o número NUNCA vira nota automática
+    api.pontoColaborador(r.candidato_id)
+      .then((p) => setPonto(p.resumos)).catch(() => {})
     setCampos({
       indicadores: r.indicadores || {}, competencias: r.competencias || {},
       pontos_fortes: r.pontos_fortes || '',
@@ -96,6 +101,36 @@ export default function Formulario({ avaliacaoId, form, homologando,
 
       <div className="rh-conferencia-corpo">
         <div>
+          {ponto.length > 0 && (
+            <>
+              <span className="rh-conferencia-bloco-titulo">Frequência (Tirvu)</span>
+              {ponto.slice(0, 2).map((p) => (
+                <div className="portal-registro" key={p.id}>
+                  <div className="portal-registro-topo">
+                    <strong>{fmt(p.periodo_inicio)} a {fmt(p.periodo_fim)}</strong>
+                    {p.percentual != null && (
+                      <span className="chip" style={{ '--chip-cor':
+                        p.percentual >= 95 ? '#0a8f46' : p.percentual >= 85 ? '#f5a623' : '#e5484d' }}>
+                        {p.percentual}%</span>
+                    )}
+                  </div>
+                  <div className="explica" style={{ margin: '.2rem 0 0' }}>
+                    {p.horas_trabalhadas} de {p.horas_previstas} previstas ·{' '}
+                    {p.faltas} falta(s){p.incompletos > 0 && ` · ${p.incompletos} registro(s) incompleto(s)`}
+                  </div>
+                  {p.incompletos > 0 && (
+                    <div className="explica" style={{ margin: '.15rem 0 0', fontSize: '.8rem' }}>
+                      ⚠️ "Incompleto" = bateu a entrada e esqueceu a saída — <strong>não é falta</strong>.
+                    </div>
+                  )}
+                </div>
+              ))}
+              <p className="explica" style={{ margin: '.1rem 0 .8rem', fontSize: '.8rem' }}>
+                Isto é contexto. Você decide a nota de assiduidade — o número não vira nota sozinho.
+              </p>
+            </>
+          )}
+
           <span className="rh-conferencia-bloco-titulo">Fatos do período</span>
           {(!a.fatos || a.fatos.length === 0) && (
             <p className="explica">Nenhum fato registrado neste período. Registre-os

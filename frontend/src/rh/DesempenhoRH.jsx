@@ -18,6 +18,7 @@ export default function DesempenhoRH({ aoVoltar }) {
   const [msg, setMsg] = useState(null)
   const [novo, setNovo] = useState(false)
   const [editando, setEditando] = useState(null)
+  const [importando, setImportando] = useState(false)
 
   const carregar = () => Promise.all([api.fatos(), api.desempenhoColaboradores()])
     .then(([f, c]) => { setDados(f); setColaboradores(c.colaboradores) })
@@ -72,9 +73,17 @@ export default function DesempenhoRH({ aoVoltar }) {
                   aoFechar={() => { setNovo(false); carregar() }}
                   aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
       )}
-      {!novo && (
-        <button className="btn-principal btn-mini" style={{ marginBottom: '.8rem' }}
-                onClick={() => setNovo(true)}>＋ Registrar fato</button>
+      {importando && (
+        <ImportarPonto aoFechar={() => setImportando(false)}
+                       aoMsg={(m) => setMsg(m)} />
+      )}
+      {!novo && !importando && (
+        <div className="rh-lote" style={{ marginBottom: '.8rem' }}>
+          <button className="btn-principal btn-mini"
+                  onClick={() => setNovo(true)}>＋ Registrar fato</button>
+          <button className="btn-secundario btn-mini"
+                  onClick={() => setImportando(true)}>⬆ Importar ponto do Tirvu</button>
+        </div>
       )}
 
       <DashPlanilha
@@ -206,6 +215,75 @@ function FormFato({ fato, colaboradores, aoFechar, aoErro }) {
         <button className="btn-principal btn-mini" disabled={salvando}
                 onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar fato'}</button>
         <button className="btn-link" onClick={aoFechar}>cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+// Upload do ponto do Tirvu. O dado vira CONTEXTO ao lado do formulário de
+// avaliação — nunca nota. Casa por matrícula; quem não casa é listado.
+function ImportarPonto({ aoFechar, aoMsg }) {
+  const [arquivo, setArquivo] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  return (
+    <div className="rh-conferencia" style={{ marginBottom: '.8rem' }}>
+      <div className="rh-conferencia-topo">
+        <div>
+          <h3>Importar ponto do Tirvu</h3>
+          <span className="explica">Exporte o ponto eletrônico do Tirvu e suba o
+            arquivo aqui. A frequência aparece <strong>ao lado da avaliação</strong>{' '}
+            como contexto — nunca vira nota automática.</span>
+        </div>
+        <button className="btn-secundario btn-mini" onClick={aoFechar}>✕ fechar</button>
+      </div>
+
+      <p className="explica">
+        Um registro <strong>incompleto</strong> (bateu a entrada e esqueceu a saída){' '}
+        <strong>não</strong> é contado como falta — ele aparece separado, para o
+        gestor saber que a pessoa trabalhou. A pessoa é reconhecida pela{' '}
+        <strong>matrícula</strong>; quem não estiver no cadastro fica listado.
+      </p>
+
+      <label className="campo"><span className="rotulo">Planilha de ponto (.xlsx)</span>
+        <input type="file" accept=".xlsx"
+               onChange={(e) => setArquivo(e.target.files[0])} /></label>
+
+      {resultado && (
+        <div className={resultado.nao_casados.length ? 'aviso-inline' : 'sucesso'}>
+          {resultado.importados} colaborador(es) importado(s) de {resultado.total}.
+          {resultado.nao_casados.length > 0 && (
+            <>
+              {' '}{resultado.nao_casados.length} não foram reconhecidos pela matrícula:
+              <ul style={{ margin: '.3rem 0 0', paddingLeft: '1.1rem' }}>
+                {resultado.nao_casados.slice(0, 15).map((n, i) => (
+                  <li key={i}>{n.nome || '(sem nome)'} — matrícula {n.matricula || '—'}</li>
+                ))}
+                {resultado.nao_casados.length > 15
+                  && <li>… e mais {resultado.nao_casados.length - 15}</li>}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="rh-conferencia-acoes">
+        <button className="btn-principal btn-mini" disabled={enviando || !arquivo}
+                onClick={async () => {
+                  setEnviando(true)
+                  try {
+                    const r = await api.importarPonto(arquivo)
+                    setResultado(r)
+                    aoMsg({ tipo: 'ok', texto: `Ponto importado: ${r.importados} de ${r.total}.` })
+                  } catch (e) {
+                    aoMsg({ tipo: 'erro', texto: e.detail === 'planilha_sem_dados'
+                      ? 'A planilha não tem linhas de ponto.'
+                      : e.detail === 'planilha_ilegivel'
+                        ? 'Não foi possível ler o arquivo — confira se é o export do Tirvu.'
+                        : (e.detail || e.message) })
+                  } finally { setEnviando(false) }
+                }}>{enviando ? 'Importando…' : 'Importar'}</button>
       </div>
     </div>
   )

@@ -243,6 +243,108 @@ def baixar_anexo(fato_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
                              f'inline; filename="{f.anexo_nome or "anexo"}"'})
 
 
+# ---------------------------------------------------------------------------
+# Import de ponto (frequência do Tirvu) — CONTEXTO, não nota
+# ---------------------------------------------------------------------------
+
+
+def _casar_matricula(db: Session, matricula_norm: str) -> Candidato | None:
+    """Casa a matrícula do ponto com o cadastro, normalizando zeros à esquerda
+    dos dois lados (a planilha do Tirvu é inconsistente nisso)."""
+    from app.services.import_ponto import matricula_norm as norm
+    if not matricula_norm:
+        return None
+    for c in db.scalars(select(Candidato).where(Candidato.matricula.isnot(None))):
+        if norm(c.matricula) == matricula_norm:
+            return c
+    return None
+
+
+@router.post("/rh/desempenho/ponto/importar")
+async def importar_ponto(arquivo: UploadFile, db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Sobe o .xlsx de ponto do Tirvu e agrega a frequência por pessoa.
+
+    O ponto entra como CONTEXTO para a avaliação — nunca nota. Casa por
+    matrícula; quem não casar fica listado para o RH ver quem ficou de fora
+    (não cria pessoa)."""
+    from app.models.desempenho import ResumoPonto
+    from app.services.import_ponto import agregar, matricula_norm
+    try:
+        conteudo = await arquivo.read()
+        if not conteudo:
+            raise HTTPException(status_code=422, detail="arquivo_vazio")
+    finally:
+        # Starlette faz spool em disco acima de ~1MB e o temp file ficaria no
+        # container com dados de mil pessoas (regra da casa).
+        await arquivo.close()
+
+    try:
+        resumos = agregar(conteudo)
+    except Exception:
+        raise HTTPException(status_code=422, detail="planilha_ilegivel")
+    if not resumos:
+        raise HTTPException(status_code=422, detail="planilha_sem_dados")
+
+    importados, nao_casados = 0, []
+    for r in resumos:
+        col = _casar_matricula(db, matricula_norm(r["matricula"]))
+        if col is None:
+            nao_casados.append({"matricula": r["matricula"], "nome": r["nome"]})
+        # substitui um resumo do MESMO período/pessoa (reimportar não duplica)
+        if col is not None:
+            db.query(ResumoPonto).filter(
+                ResumoPonto.candidato_id == col.id,
+                ResumoPonto.periodo_inicio == r["periodo_inicio"],
+                ResumoPonto.periodo_fim == r["periodo_fim"]).delete()
+        db.add(ResumoPonto(
+            candidato_id=col.id if col else None,
+            matricula=r["matricula"], nome_planilha=r["nome"],
+            periodo_inicio=r["periodo_inicio"], periodo_fim=r["periodo_fim"],
+            dias_com_registro=r["dias_com_registro"],
+            minutos_trabalhados=r["minutos_trabalhados"],
+            minutos_previstos=r["minutos_previstos"],
+            faltas=r["faltas"], incompletos=r["incompletos"],
+            dias_abaixo=r["dias_abaixo"], dias_acima=r["dias_acima"],
+            detalhe=r["detalhe"], importado_por=rh.email))
+        if col is not None:
+            importados += 1
+    registrar(db, "ponto_importado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"pessoas": len(resumos), "casados": importados,
+                       "nao_casados": len(nao_casados)})
+    db.commit()
+    return {"total": len(resumos), "importados": importados,
+            "nao_casados": nao_casados}
+
+
+@router.get("/rh/desempenho/colaboradores/{candidato_id}/ponto")
+def ver_ponto(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Resumos de ponto de uma pessoa, do mais recente para o mais antigo."""
+    from app.models.desempenho import ResumoPonto
+    from app.services.import_ponto import fmt_horas
+    resumos = db.scalars(
+        select(ResumoPonto).where(ResumoPonto.candidato_id == candidato_id)
+        .order_by(ResumoPonto.periodo_inicio.desc())).all()
+    return {"resumos": [_dump_ponto(r, fmt_horas) for r in resumos]}
+
+
+def _dump_ponto(r, fmt_horas) -> dict:
+    pct = (round(r.minutos_trabalhados / r.minutos_previstos * 100)
+           if r.minutos_previstos else None)
+    return {
+        "id": str(r.id),
+        "periodo_inicio": r.periodo_inicio.isoformat(),
+        "periodo_fim": r.periodo_fim.isoformat(),
+        "dias_com_registro": r.dias_com_registro,
+        "horas_trabalhadas": fmt_horas(r.minutos_trabalhados),
+        "horas_previstas": fmt_horas(r.minutos_previstos),
+        "percentual": pct,
+        "faltas": r.faltas, "incompletos": r.incompletos,
+        "dias_abaixo": r.dias_abaixo, "dias_acima": r.dias_acima,
+        "importado_em": r.importado_em.isoformat() if r.importado_em else None,
+    }
+
+
 @router.get("/rh/desempenho/formulario")
 def ver_formulario() -> dict:
     """Escalas, indicadores, competências e recomendações da cartilha — o front

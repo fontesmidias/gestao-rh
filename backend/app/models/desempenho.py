@@ -127,6 +127,46 @@ class CicloAvaliacao(Base):
                                                 server_default=func.now())
 
 
+class ResumoPonto(Base):
+    """Resumo de frequência de UMA pessoa num período, vindo do export de ponto
+    do Tirvu (upload manual do .xlsx).
+
+    É CONTEXTO para o avaliador, **não nota** (decisão do Bruno, 2026-07-23):
+    "atraso vira número, número vira nota, nota vira desligamento" é o risco que
+    isto NÃO pode criar. O gestor lê e decide a nota de assiduidade com o dado
+    na frente.
+
+    A fonte de verdade é `Horas Trabalhadas` (apuração do Tirvu), não as batidas
+    — há dia sem batida nenhuma e com horas apuradas. **Registro incompleto**
+    (bateu entrada, esqueceu a saída) é contado à parte e NUNCA como falta.
+    """
+
+    __tablename__ = "resumo_ponto"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          default=uuid.uuid4)
+    candidato_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("candidato.id"), index=True)
+    # guardados mesmo sem casar com o cadastro, para o RH ver quem ficou de fora
+    matricula: Mapped[str | None] = mapped_column(String(30), index=True)
+    nome_planilha: Mapped[str | None] = mapped_column(String(200))
+    periodo_inicio: Mapped[date] = mapped_column(Date, index=True)
+    periodo_fim: Mapped[date] = mapped_column(Date, index=True)
+    # apuração agregada
+    dias_com_registro: Mapped[int] = mapped_column(Integer, default=0)
+    minutos_trabalhados: Mapped[int] = mapped_column(Integer, default=0)
+    minutos_previstos: Mapped[int] = mapped_column(Integer, default=0)
+    faltas: Mapped[int] = mapped_column(Integer, default=0)           # sem batida E 0h
+    incompletos: Mapped[int] = mapped_column(Integer, default=0)      # bateu entrada, sem saída
+    dias_abaixo: Mapped[int] = mapped_column(Integer, default=0)
+    dias_acima: Mapped[int] = mapped_column(Integer, default=0)
+    # detalhe diário: [{data, situacao, horas, previsto, incompleto}]
+    detalhe: Mapped[list | None] = mapped_column(JSON)
+    importado_por: Mapped[str | None] = mapped_column(String(200))
+    importado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
+                                                   server_default=func.now())
+
+
 class Avaliacao(Base):
     """Uma avaliação de UMA pessoa por UM avaliador — as 11 seções da cartilha
     `docs/Cartilha do Avaliador e Formulário, de 17-06-2026.pdf`.
