@@ -25,6 +25,24 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Sessão do portal do colaborador (/meu): mesma mecânica do acesso_creche,
+    # mas amarrada ao COLABORADOR — é o que permite uma porta só para todos os
+    # módulos, em vez de uma por módulo.
+    op.create_table(
+        "acesso_portal",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("candidato_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("candidato.id"), nullable=False),
+        sa.Column("token_hash", sa.String(64), nullable=False, unique=True),
+        sa.Column("codigo_hash", sa.String(64)),
+        sa.Column("codigo_expira_em", sa.DateTime(timezone=True)),
+        sa.Column("confirmado_em", sa.DateTime(timezone=True)),
+        sa.Column("expira_em", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("criado_em", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_acesso_portal_candidato_id", "acesso_portal", ["candidato_id"])
+    op.create_index("ix_acesso_portal_token_hash", "acesso_portal", ["token_hash"])
+
     op.create_table(
         "turma_reciclagem",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -76,3 +94,4 @@ def downgrade() -> None:
                     server_default="60", existing_type=sa.Integer())
     op.drop_table("solicitacao_matricula")
     op.drop_table("turma_reciclagem")
+    op.drop_table("acesso_portal")
