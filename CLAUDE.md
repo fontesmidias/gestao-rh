@@ -296,6 +296,41 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   cego — regra dos ~40 erros de digitação). Valores compostos (dois sindicatos
   numa célula) ficam como texto p/ decisão humana. `await arquivo.close()` no
   `finally`. Export normalizado p/ carga futura no Tirvu ficou p/ a próxima leva.
+- **Cadastro de Desenvolvimento** (Onda B, v1.83 — `models/desenvolvimento.py`,
+  `api/desenvolvimento.py`, `api/portal.py`, `rh/DesenvolvimentoRH.jsx`): cursos,
+  certificações e reciclagens do colaborador ao longo do vínculo. A tese é *a
+  admissão é o começo do cadastro, não o fim*. **Brigadista NÃO é módulo — é uma
+  CONSULTA** (`/rh/desenvolvimento/brigadistas`): registros de tipo `critico`
+  com validade vencendo. O que separa o certificado de brigada do curso de Excel
+  é `exige_validade` + `critico`, não o tipo em si. **Herança do prazo em 3
+  níveis: posto > cargo > tipo** (`meses_validade_de`) — o mais específico vence.
+  A validade é RECALCULADA e PERSISTIDA na validação do RH: mudar o prazo depois
+  não altera certificado já emitido. **Documento crítico NUNCA entra em
+  aprovação em lote** (`pode_aprovar_em_lote`) e o lote DIZ quem barrou, com
+  nome e motivo — filtrar em silêncio faria o RH achar que aprovou o que não
+  aprovou. Fila com filtro server-side + DashPlanilha por cima (são ~7.200
+  arquivos em 3 anos). Ciclo completo: worker `avisar_vencimentos` (90 dias
+  antes, anti-spam por auditoria, avisa colaborador + líder via matriz) →
+  portal `/meu` → fila do RH → dash de brigada → `matricula_reciclagem.montar`
+  (rascunho para conferir) → envio com `dossie_reciclagem.gerar` (1 PDF por
+  pessoa, tudo em A4). Incompleto **bloqueia** o envio dizendo quem e o quê.
+- **Portal do colaborador `/meu`** (`api/portal.py`, `Portal.jsx`): UMA porta
+  para tudo que é da pessoa — o oposto de `/creche`, `/desenvolvimento`,
+  `/brigada` separados. Gate IDÊNTICO ao do creche (CPF → 2FA por e-mail; sem
+  e-mail, KBA), com `AcessoPortal` amarrado ao COLABORADOR (o `AcessoCreche` é
+  amarrado ao benefício). A home é a lista de PENDÊNCIAS dele, não um menu. O
+  `VerificarIdentidade` do `CrecheLink.jsx` foi EXPORTADO e parametrizado (as 3
+  funções de KBA entram por prop) — reusar, não duplicar. O **motivo da recusa é
+  visível ao colaborador** (decisão do Bruno); o campo no painel do RH avisa
+  isso. Sensibilidade do arquivo é decidida pelo PAPEL, não pelo que o usuário
+  diz.
+- **DashPlanilha — detalhe na linha** (`linhaExpandida`, v1.83): painel abre
+  numa `<tr>` LOGO ABAIXO da linha clicada, nunca no topo da página (feedback do
+  Bruno: "quando clica, tem que abrir perto do nome da pessoa"). O painel NÃO
+  herda a largura da tabela, que rola na horizontal — fica preso à largura
+  visível via `container-type: inline-size` + `position: sticky`. Sem isso,
+  metade dele fica fora da tela. As abas do projeto usam a classe **`ativa`**
+  (não `on`).
 - **Avisos internos = MATRIZ evento × destinatários** (`services/notificacoes.py`,
   v1.82): NUNCA mandar aviso interno direto para `smtp_from` — é a caixa de
   LOGIN, pessoal (foi o que fez o Bruno receber "candidato concluiu o envio" no
@@ -347,6 +382,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   container com CPFs de mil pessoas.
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
   referenciar nas colunas com `create_type=False` (senão DuplicateObject).
+- **Revision id de migration**: NÃO escolher o "próximo da sequência" de olho —
+  vários ids do projeto seguem o padrão `a1b2c3…`/`b2c3d4…` e reusar um que já
+  existe fecha um CICLO no grafo (`Cycle is detected in revisions`), derrubando
+  o `alembic upgrade` inteiro — inclusive o do entrypoint em PRODUÇÃO. Conferir
+  com `grep -rn 'revision = ' migrations/versions/` antes de gravar.
 - **Planilhas do Tirvu**: openpyxl quebra (stylesheet inválido, células sujas).
   Usar o leitor zip+XML `_ler_linhas_xlsx` em `app/api/postos.py`.
 - **fpdf2**: `multi_cell(0, ...)` consecutivos precisam `new_x="LMARGIN",

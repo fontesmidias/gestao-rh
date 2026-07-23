@@ -651,6 +651,22 @@ export const rh = {
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   desenvolvimentoExcluirTipo: (id) =>
     req(`/rh/desenvolvimento/tipos/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Brigada & reciclagem: quem vence, turmas e a solicitação à entidade
+  desenvolvimentoBrigadistas: () =>
+    req('/rh/desenvolvimento/brigadistas', { headers: authRH() }),
+  desenvolvimentoTurmas: () => req('/rh/desenvolvimento/turmas', { headers: authRH() }),
+  desenvolvimentoCriarTurma: (dados) =>
+    req('/rh/desenvolvimento/turmas',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // monta o e-mail para o RH CONFERIR — não envia nada
+  desenvolvimentoRascunhoMatricula: (dados) =>
+    req('/rh/desenvolvimento/matricula/rascunho',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  desenvolvimentoEnviarMatricula: (dados) =>
+    req('/rh/desenvolvimento/matricula/enviar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  desenvolvimentoDossie: (registroId) =>
+    req(`/rh/desenvolvimento/registros/${registroId}/dossie`, { headers: authRH() }),
   // baixam via fetch com Authorization e devolvem blob (para abrir em nova aba)
   crecheBaixarDocumento: (id, tipo) =>
     req(`/rh/creche/levantamentos/${id}/documento/${tipo}`, { headers: authRH() }),

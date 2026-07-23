@@ -414,8 +414,19 @@ def editar_registro(token: str, registro_id: uuid.UUID, payload: RegistroIn,
         r.concluido_em = _data_de(payload.concluido_em)
         r.validade_ate = calcular_validade(
             r.concluido_em, meses_validade_de(db, r.tipo, col))
+    # Reenvio depois de devolvido volta para a fila do RH
+    reenviado = r.status == StatusRegistro.devolvido
+    if reenviado:
+        r.status = StatusRegistro.pendente
     db.commit()
     db.refresh(r)
+    # avisa o RH que entrou (ou voltou) algo na fila — destinatários na matriz
+    from app.services.notificacoes import avisar
+    avisar(db, "desenvolvimento_enviado",
+           f"🎓 {col.nome_completo} enviou um documento",
+           f"{col.nome_completo} {'reenviou' if reenviado else 'enviou'} "
+           f"\"{r.titulo or (r.tipo.nome if r.tipo else 'um documento')}\" "
+           "para validação.\nAcesse o painel do RH › Desenvolvimento.\n")
     return _dump_registro(db, r)
 
 

@@ -52,6 +52,20 @@ EVENTOS: list[dict] = [
         "descricao": "Quando alguém se cadastra pelo formulário público do "
                      "Banco de Talentos.",
     },
+    {
+        "chave": "certificacao_vencendo",
+        "rotulo": "Certificação prestes a vencer",
+        "descricao": "Cópia do aviso que o colaborador recebe quando a "
+                     "certificação está perto de vencer (brigada, NR). Use para "
+                     "avisar o líder de brigada — o colaborador já é avisado "
+                     "sempre.",
+    },
+    {
+        "chave": "desenvolvimento_enviado",
+        "rotulo": "Colaborador enviou curso ou certificado",
+        "descricao": "Quando alguém envia algo novo para o Cadastro de "
+                     "Desenvolvimento e a fila de validação cresce.",
+    },
 ]
 
 CHAVES_VALIDAS = {e["chave"] for e in EVENTOS}

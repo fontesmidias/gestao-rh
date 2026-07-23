@@ -11,7 +11,7 @@ LOTE existe — mas **documento crítico nunca entra nela** (`pode_aprovar_em_lo
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -22,8 +22,9 @@ from app.api.auth_rh import requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato, PostoServico
 from app.models.desenvolvimento import (ArquivoDesenvolvimento, PrazoValidade,
-                                        RegistroDesenvolvimento, StatusRegistro,
-                                        TipoDesenvolvimento)
+                                        RegistroDesenvolvimento,
+                                        SolicitacaoMatricula, StatusRegistro,
+                                        TipoDesenvolvimento, TurmaReciclagem)
 from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services.auditoria import registrar
@@ -417,6 +418,233 @@ def excluir_prazo(prazo_id: uuid.UUID, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="prazo_nao_encontrado")
     db.delete(p)
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Brigadistas: vencimentos, turmas e solicitação de matrícula
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rh/desenvolvimento/brigadistas")
+def listar_brigadistas(db: Session = Depends(get_db)) -> dict:
+    """Quem está com certificação CRÍTICA vencendo — a "consulta" que substitui
+    o módulo de brigadistas.
+
+    Não é tabela nova: são registros validados, de tipo crítico, ordenados pelo
+    que vence primeiro. Traz as pendências de cada um para o RH saber quem já
+    pode ser matriculado."""
+    from app.services.matricula_reciclagem import pendencias_do_dossie
+    registros = db.scalars(
+        select(RegistroDesenvolvimento)
+        .join(TipoDesenvolvimento)
+        .where(TipoDesenvolvimento.critico == True,  # noqa: E712
+               RegistroDesenvolvimento.validade_ate.isnot(None))
+        .order_by(RegistroDesenvolvimento.validade_ate)).all()
+    linhas = []
+    for r in registros:
+        base = _dump(db, r)
+        base["pendencias"] = pendencias_do_dossie(db, r)
+        base["pronto"] = not base["pendencias"]
+        base["dias_para_vencer"] = ((r.validade_ate - date.today()).days
+                                    if r.validade_ate else None)
+        linhas.append(base)
+    return {
+        "brigadistas": linhas,
+        "metricas": {
+            "vencidos": sum(1 for l in linhas if l["situacao_validade"] == "vencido"),
+            "a_vencer": sum(1 for l in linhas if l["situacao_validade"] == "a_vencer"),
+            "prontos": sum(1 for l in linhas if l["pronto"]),
+        },
+    }
+
+
+class TurmaIn(BaseModel):
+    inicio_em: str            # aaaa-mm-dd
+    periodo: str = "noturno"  # diurno | noturno
+    entidade: str = "Multicursos"
+    email_destino: str | None = None
+    observacao: str | None = None
+    tipo_id: uuid.UUID | None = None
+
+
+def _dump_turma(t: TurmaReciclagem) -> dict:
+    return {"id": str(t.id), "entidade": t.entidade,
+            "inicio_em": t.inicio_em.isoformat() if t.inicio_em else None,
+            "periodo": t.periodo, "email_destino": t.email_destino,
+            "observacao": t.observacao, "encerrada": t.encerrada}
+
+
+@router.get("/rh/desenvolvimento/turmas")
+def listar_turmas(db: Session = Depends(get_db)) -> dict:
+    turmas = db.scalars(select(TurmaReciclagem)
+                        .where(TurmaReciclagem.encerrada == False)  # noqa: E712
+                        .order_by(TurmaReciclagem.inicio_em)).all()
+    from app.services.matricula_reciclagem import textos
+    return {"turmas": [_dump_turma(t) for t in turmas], "textos": textos(db)}
+
+
+@router.post("/rh/desenvolvimento/turmas", status_code=201)
+def criar_turma(payload: TurmaIn, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    inicio = _data_de(payload.inicio_em)
+    if inicio is None:
+        raise HTTPException(status_code=422, detail="data_invalida")
+    if payload.periodo not in ("diurno", "noturno"):
+        raise HTTPException(status_code=422, detail="periodo_invalido")
+    t = TurmaReciclagem(
+        inicio_em=inicio, periodo=payload.periodo,
+        entidade=(payload.entidade or "Multicursos").strip(),
+        email_destino=(payload.email_destino or "").strip() or None,
+        observacao=(payload.observacao or "").strip() or None,
+        tipo_id=payload.tipo_id)
+    db.add(t)
+    registrar(db, "reciclagem_turma_criada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"inicio": inicio.isoformat(), "periodo": t.periodo})
+    db.commit()
+    db.refresh(t)
+    return _dump_turma(t)
+
+
+@router.delete("/rh/desenvolvimento/turmas/{turma_id}", status_code=204)
+def encerrar_turma(turma_id: uuid.UUID, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> None:
+    """Encerra (não apaga): a turma pode estar citada numa solicitação enviada."""
+    t = db.get(TurmaReciclagem, turma_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="turma_nao_encontrada")
+    t.encerrada = True
+    db.commit()
+
+
+class RascunhoIn(BaseModel):
+    registro_ids: list[uuid.UUID]
+    turma_id: uuid.UUID | None = None
+    agrupar: bool = True
+    data_turma: str | None = None   # quando não há turma cadastrada
+    periodo: str | None = None
+
+
+@router.post("/rh/desenvolvimento/matricula/rascunho")
+def rascunho_matricula(payload: RascunhoIn, db: Session = Depends(get_db)) -> dict:
+    """Monta o(s) e-mail(s) para o RH conferir ANTES de enviar.
+
+    Não envia nada. Devolve também as pendências de cada pessoa — quem está
+    incompleto **bloqueia** o envio (decisão do Bruno: não sai dossiê furado
+    para a clínica)."""
+    from app.services.matricula_reciclagem import montar
+    registros = [db.get(RegistroDesenvolvimento, rid) for rid in payload.registro_ids]
+    registros = [r for r in registros if r is not None]
+    if not registros:
+        raise HTTPException(status_code=422, detail="nenhum_registro")
+    turma = db.get(TurmaReciclagem, payload.turma_id) if payload.turma_id else None
+    rascunhos = montar(db, registros, turma, payload.agrupar,
+                       data_turma=_data_de(payload.data_turma),
+                       periodo=payload.periodo)
+    incompletos = [{"nome": p["nome"], "pendencias": p["pendencias"]}
+                   for r in rascunhos for p in r["colaboradores"] if p["pendencias"]]
+    return {"rascunhos": rascunhos, "incompletos": incompletos,
+            "pode_enviar": not incompletos}
+
+
+class EnviarMatriculaIn(BaseModel):
+    registro_ids: list[uuid.UUID]
+    destinatarios: list[str]
+    assunto: str
+    corpo: str
+    corpo_html: str | None = None
+    turma_id: uuid.UUID | None = None
+    data_turma: str | None = None
+    periodo: str | None = None
+
+
+@router.post("/rh/desenvolvimento/matricula/enviar")
+def enviar_matricula(payload: EnviarMatriculaIn, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Envia a solicitação com os dossiês em anexo — um PDF por pessoa.
+
+    O texto vem do que o RH conferiu na tela (ele pode ter editado), e é isso
+    que fica guardado: a `SolicitacaoMatricula` é a prova do que foi pedido."""
+    from app.services import dossie_reciclagem
+    from app.services.email import enviar_email
+    from app.services.matricula_reciclagem import pendencias_do_dossie
+
+    registros = [db.get(RegistroDesenvolvimento, rid) for rid in payload.registro_ids]
+    registros = [r for r in registros if r is not None]
+    if not registros:
+        raise HTTPException(status_code=422, detail="nenhum_registro")
+    destinos = [e.strip() for e in payload.destinatarios if e and e.strip()]
+    if not destinos:
+        raise HTTPException(status_code=422, detail="sem_destinatario")
+
+    # trava: ninguém incompleto vai para a clínica
+    faltando = []
+    for r in registros:
+        pend = pendencias_do_dossie(db, r)
+        if pend:
+            col = db.get(Candidato, r.candidato_id)
+            faltando.append({"nome": col.nome_completo if col else "—",
+                             "pendencias": pend})
+    if faltando:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "dossie_incompleto", "faltando": faltando})
+
+    anexos, pessoas = [], []
+    for r in registros:
+        col = db.get(Candidato, r.candidato_id)
+        try:
+            pdf = dossie_reciclagem.gerar(db, r)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail={"erro": "dossie_incompleto",
+                        "faltando": [{"nome": col.nome_completo if col else "—",
+                                      "pendencias": ["documentos ilegíveis"]}]})
+        anexos.append((dossie_reciclagem.nome_arquivo(col), pdf))
+        pessoas.append({"candidato_id": str(r.candidato_id),
+                        "registro_id": str(r.id),
+                        "nome": col.nome_completo if col else "—"})
+
+    turma = db.get(TurmaReciclagem, payload.turma_id) if payload.turma_id else None
+    enviados = 0
+    for destino in destinos:
+        if enviar_email(destino, payload.assunto, payload.corpo,
+                        payload.corpo_html, anexos=anexos):
+            enviados += 1
+
+    sol = SolicitacaoMatricula(
+        turma_id=turma.id if turma else None,
+        turma_inicio_em=(turma.inicio_em if turma else _data_de(payload.data_turma)),
+        turma_periodo=(turma.periodo if turma else payload.periodo),
+        destinatarios=destinos, assunto=payload.assunto, corpo=payload.corpo,
+        colaboradores=pessoas,
+        enviado_em=datetime.now(timezone.utc) if enviados else None,
+        enviado_por=rh.email)
+    db.add(sol)
+    registrar(db, "reciclagem_matricula_solicitada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"pessoas": len(pessoas), "destinos": len(destinos),
+                       "enviados": enviados})
+    db.commit()
+    if not enviados:
+        raise HTTPException(status_code=502, detail="email_nao_enviado")
+    return {"enviados": enviados, "pessoas": len(pessoas),
+            "anexos": [n for n, _ in anexos]}
+
+
+@router.get("/rh/desenvolvimento/registros/{registro_id}/dossie")
+def baixar_dossie(registro_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+    """Prévia do PDF que iria para a clínica — o RH confere antes de mandar."""
+    from app.services import dossie_reciclagem
+    r = db.get(RegistroDesenvolvimento, registro_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="registro_nao_encontrado")
+    col = db.get(Candidato, r.candidato_id)
+    try:
+        pdf = dossie_reciclagem.gerar(db, r)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="dossie_vazio")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'inline; filename="{dossie_reciclagem.nome_arquivo(col)}"'})
 
 
 def _avisar_colaborador(db: Session, r: RegistroDesenvolvimento, acao: str) -> None:

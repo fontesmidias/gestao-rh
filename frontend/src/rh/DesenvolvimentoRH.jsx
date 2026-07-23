@@ -19,10 +19,14 @@ export default function DesenvolvimentoRH({ aoVoltar }) {
       <div className="rh-abas">
         <button className={aba === 'fila' ? 'ativa' : ''} onClick={() => setAba('fila')}>
           Fila de validação</button>
+        <button className={aba === 'brigada' ? 'ativa' : ''} onClick={() => setAba('brigada')}>
+          Brigada &amp; reciclagem</button>
         <button className={aba === 'tipos' ? 'ativa' : ''} onClick={() => setAba('tipos')}>
           Tipos e prazos</button>
       </div>
-      {aba === 'fila' ? <Fila /> : <Tipos />}
+      {aba === 'fila' && <Fila />}
+      {aba === 'brigada' && <Brigada />}
+      {aba === 'tipos' && <Tipos />}
     </section>
   )
 }
@@ -287,11 +291,16 @@ const ROTULO_STATUS = {
 function ChipStatus({ registro: r }) {
   const cores = { pendente: '#f5a623', validado: '#0a8f46',
                   devolvido: '#e5484d', recusado: '#e5484d' }
+  // O PRAZO manda sobre o status: certificado validado que já venceu é um
+  // problema, não uma conquista.
   if (r.status === 'validado' && r.situacao_validade === 'vencido') {
     return <span className="chip" style={{ '--chip-cor': '#e5484d' }}>Vencido</span>
   }
   if (r.status === 'validado' && r.situacao_validade === 'a_vencer') {
     return <span className="chip" style={{ '--chip-cor': '#f5a623' }}>A vencer</span>
+  }
+  if (r.status === 'validado' && r.situacao_validade === 'valido') {
+    return <span className="chip" style={{ '--chip-cor': '#0a8f46' }}>Válido</span>
   }
   return <span className="chip" style={{ '--chip-cor': cores[r.status] }}>
     {ROTULO_STATUS[r.status] || r.status}</span>
@@ -301,6 +310,265 @@ function fmt(iso) {
   if (!iso) return '—'
   const [a, m, d] = iso.split('-')
   return `${d}/${m}/${a}`
+}
+
+// --------------------------------------------------------------------------
+// Brigada & reciclagem — quem vence, quem já pode ser matriculado
+// --------------------------------------------------------------------------
+
+function Brigada() {
+  const [dados, setDados] = useState(null)
+  const [turmas, setTurmas] = useState([])
+  const [msg, setMsg] = useState(null)
+  const [rascunho, setRascunho] = useState(null)   // e-mails montados
+  const [novaTurma, setNovaTurma] = useState(false)
+
+  const carregar = () => Promise.all([
+    api.desenvolvimentoBrigadistas(), api.desenvolvimentoTurmas(),
+  ]).then(([b, t]) => { setDados(b); setTurmas(t.turmas) })
+    .catch((e) => setMsg({ tipo: 'erro', texto: e.detail || e.message }))
+  useEffect(() => { carregar() }, [])
+  if (!dados) return <p className="explica">Carregando…</p>
+
+  const colunas = [
+    { chave: 'colaborador', rotulo: 'Colaborador', ordenavel: true, filtro: 'texto',
+      sempreVisivel: true },
+    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true },
+    { chave: 'cargo', rotulo: 'Cargo', ordenavel: true, filtro: 'texto', quebra: true,
+      oculta: true },
+    { chave: 'validade_ate', rotulo: 'Vence em', ordenavel: true,
+      valor: (l) => l.validade_ate || '',
+      render: (l) => (
+        <span>{fmt(l.validade_ate)}
+          {l.dias_para_vencer != null && (
+            <small style={{ display: 'block', color: 'var(--cinza-txt)' }}>
+              {l.dias_para_vencer >= 0 ? `em ${l.dias_para_vencer} dias`
+                : `há ${-l.dias_para_vencer} dias`}</small>)}
+        </span>) },
+    { chave: 'situacao_validade', rotulo: 'Situação', filtro: 'select',
+      opcoes: ['Vencido', 'A vencer', 'Válido'],
+      valor: (l) => ({ vencido: 'Vencido', a_vencer: 'A vencer',
+                       valido: 'Válido' }[l.situacao_validade] || '—'),
+      render: (l) => <ChipStatus registro={l} /> },
+    { chave: 'pronto', rotulo: 'Dossiê', filtro: 'select',
+      opcoes: ['Pronto', 'Incompleto'],
+      valor: (l) => (l.pronto ? 'Pronto' : 'Incompleto'),
+      quebra: true,
+      render: (l) => (l.pronto
+        ? <span className="chip" style={{ '--chip-cor': '#0a8f46' }}>Pronto</span>
+        : <span className="aviso-pendente">⚠️ falta {l.pendencias.join(', ')}</span>) },
+  ]
+
+  const cards = [
+    { rotulo: 'Vencidos', valor: dados.metricas.vencidos, cor: '#e5484d',
+      filtro: { chave: 'situacao_validade', valor: 'Vencido' } },
+    { rotulo: 'A vencer', valor: dados.metricas.a_vencer, cor: '#f5a623',
+      filtro: { chave: 'situacao_validade', valor: 'A vencer' } },
+    { rotulo: 'Prontos p/ matrícula', valor: dados.metricas.prontos, cor: '#0a8f46',
+      filtro: { chave: 'pronto', valor: 'Pronto' } },
+  ]
+
+  const montar = async (linhas, agrupar) => {
+    setMsg(null)
+    try {
+      const r = await api.desenvolvimentoRascunhoMatricula({
+        registro_ids: linhas.map((l) => l.id),
+        turma_id: turmas[0] ? turmas[0].id : null,
+        agrupar,
+      })
+      setRascunho({ ...r, agrupar, registro_ids: linhas.map((l) => l.id) })
+    } catch (e) { setMsg({ tipo: 'erro', texto: e.detail || e.message }) }
+  }
+
+  return (
+    <>
+      <p className="explica" style={{ marginTop: '.4rem' }}>
+        Quem tem certificação <strong>crítica</strong> vencendo. Marque quem vai para a
+        reciclagem e o sistema monta o e-mail para a entidade formadora, com o dossiê
+        de cada um em anexo.</p>
+      <Msg msg={msg} />
+
+      <div className="rh-card" style={{ marginBottom: '.8rem' }}>
+        <div className="rh-topo" style={{ marginBottom: '.3rem' }}>
+          <strong>Próximas turmas</strong>
+          <button className="btn-secundario btn-mini"
+                  onClick={() => setNovaTurma(!novaTurma)}>
+            {novaTurma ? 'cancelar' : '＋ Nova turma'}</button>
+        </div>
+        {turmas.length === 0 && !novaTurma && (
+          <p className="explica" style={{ margin: 0 }}>Nenhuma turma cadastrada — você
+            pode informar a data na hora de montar o e-mail.</p>
+        )}
+        {turmas.map((t) => (
+          <p className="explica" key={t.id} style={{ margin: '.2rem 0' }}>
+            📅 <strong>{fmt(t.inicio_em)}</strong> · {t.periodo} · {t.entidade}
+            {t.email_destino && ` · ${t.email_destino}`}
+          </p>
+        ))}
+        {novaTurma && (
+          <FormTurma aoFechar={() => { setNovaTurma(false); carregar() }}
+                     aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+        )}
+      </div>
+
+      {rascunho && (
+        <RevisarEmail rascunho={rascunho} turmas={turmas}
+                      aoFechar={() => setRascunho(null)}
+                      aoEnviado={(n) => {
+                        setRascunho(null); carregar()
+                        setMsg({ tipo: 'ok', texto: `Solicitação enviada (${n} destinatário(s)).` })
+                      }}
+                      aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+      )}
+
+      <DashPlanilha
+        id="desenvolvimento-brigada" colunas={colunas} dados={dados.brigadistas}
+        cards={cards} vazio="Ninguém com certificação crítica cadastrada ainda."
+        acoesLinha={(l) => (
+          <button className="btn-secundario btn-mini" onClick={async () => {
+            try {
+              const blob = await api.desenvolvimentoDossie(l.id)
+              const url = URL.createObjectURL(blob)
+              window.open(url, '_blank')
+              setTimeout(() => URL.revokeObjectURL(url), 30000)
+            } catch (e) {
+              setMsg({ tipo: 'erro', texto: e.detail === 'dossie_vazio'
+                ? 'Sem documentos legíveis para montar o dossiê.'
+                : (e.detail || e.message) })
+            }
+          }}>Ver dossiê</button>
+        )}
+        acoesMassa={(linhas) => (
+          <>
+            <button className="btn-principal btn-mini"
+                    onClick={() => montar(linhas, true)}>
+              ✉ Um e-mail com os {linhas.length}</button>
+            <button className="btn-secundario btn-mini"
+                    onClick={() => montar(linhas, false)}>
+              ✉ Um e-mail para cada</button>
+          </>
+        )} />
+    </>
+  )
+}
+
+// Revisão antes do envio: o RH LÊ e edita o texto, depois manda. É o passo que
+// o Bruno pediu — "colocar para gerar o e-mail, conferir e posteriormente enviar".
+function RevisarEmail({ rascunho, turmas, aoFechar, aoEnviado, aoErro }) {
+  const [i, setI] = useState(0)               // qual e-mail (quando é 1 por pessoa)
+  const [edicao, setEdicao] = useState(() =>
+    rascunho.rascunhos.map((r) => ({ ...r, destinatarios: r.destinatarios.join(', ') })))
+  const [enviando, setEnviando] = useState(false)
+  const atual = edicao[i]
+  if (!atual) return null
+
+  const mexer = (campo, valor) =>
+    setEdicao(edicao.map((e, j) => (j === i ? { ...e, [campo]: valor } : e)))
+
+  const enviar = async () => {
+    setEnviando(true)
+    try {
+      let total = 0
+      for (const e of edicao) {
+        const r = await api.desenvolvimentoEnviarMatricula({
+          registro_ids: e.colaboradores.map((p) => p.registro_id),
+          destinatarios: e.destinatarios.split(',').map((x) => x.trim()).filter(Boolean),
+          assunto: e.assunto, corpo: e.corpo, corpo_html: e.corpo_html || null,
+          turma_id: turmas[0] ? turmas[0].id : null,
+        })
+        total += r.enviados
+      }
+      aoEnviado(total)
+    } catch (e) {
+      aoErro(e.detail && e.detail.erro === 'dossie_incompleto'
+        ? `Falta documento de: ${e.detail.faltando.map((f) => f.nome).join(', ')}`
+        : e.detail === 'email_nao_enviado'
+          ? 'O e-mail não pôde ser enviado — confira a configuração de e-mail.'
+          : (e.detail || e.message))
+    } finally { setEnviando(false) }
+  }
+
+  return (
+    <div className="rh-card rh-conferencia" style={{ marginBottom: '.8rem' }}>
+      <div className="rh-conferencia-topo">
+        <div>
+          <h3>Conferir antes de enviar</h3>
+          <span className="explica">
+            {edicao.length > 1
+              ? `E-mail ${i + 1} de ${edicao.length} — um por colaborador`
+              : `Um e-mail com ${atual.colaboradores.length} colaborador(es)`}
+          </span>
+        </div>
+        <button className="btn-secundario btn-mini" onClick={aoFechar}>✕ fechar</button>
+      </div>
+
+      {!rascunho.pode_enviar && (
+        <div className="alerta">
+          <strong>Não dá para enviar ainda.</strong> Falta documento de:{' '}
+          {rascunho.incompletos.map((c) => `${c.nome} (${c.pendencias.join(', ')})`).join('; ')}
+        </div>
+      )}
+
+      <label className="campo"><span className="rotulo">Para</span>
+        <input value={atual.destinatarios} placeholder="matriculas@multicursos.com.br"
+               onChange={(e) => mexer('destinatarios', e.target.value)} /></label>
+      <label className="campo"><span className="rotulo">Assunto</span>
+        <input value={atual.assunto}
+               onChange={(e) => mexer('assunto', e.target.value)} /></label>
+      <label className="campo"><span className="rotulo">Mensagem</span>
+        <textarea rows={12} value={atual.corpo}
+                  onChange={(e) => mexer('corpo', e.target.value)} /></label>
+      <p className="explica">📎 Anexos: {atual.anexos.join(', ')}</p>
+
+      <div className="rh-conferencia-acoes">
+        {edicao.length > 1 && (
+          <>
+            <button className="btn-secundario btn-mini" disabled={i === 0}
+                    onClick={() => setI(i - 1)}>← anterior</button>
+            <button className="btn-secundario btn-mini" disabled={i === edicao.length - 1}
+                    onClick={() => setI(i + 1)}>próximo →</button>
+          </>
+        )}
+        <button className="btn-principal btn-mini"
+                disabled={enviando || !rascunho.pode_enviar
+                          || !atual.destinatarios.trim()}
+                onClick={enviar}>
+          {enviando ? 'Enviando…'
+            : edicao.length > 1 ? `Enviar os ${edicao.length} e-mails` : 'Enviar'}</button>
+      </div>
+    </div>
+  )
+}
+
+function FormTurma({ aoFechar, aoErro }) {
+  const [f, setF] = useState({ inicio_em: '', periodo: 'noturno',
+                               entidade: 'Multicursos', email_destino: '' })
+  const [salvando, setSalvando] = useState(false)
+  return (
+    <div className="linha2" style={{ marginTop: '.5rem' }}>
+      <label className="campo"><span className="rotulo">Início</span>
+        <input type="date" value={f.inicio_em}
+               onChange={(e) => setF({ ...f, inicio_em: e.target.value })} /></label>
+      <label className="campo"><span className="rotulo">Período</span>
+        <select value={f.periodo} onChange={(e) => setF({ ...f, periodo: e.target.value })}>
+          <option value="noturno">Noturno</option>
+          <option value="diurno">Diurno</option>
+        </select></label>
+      <label className="campo"><span className="rotulo">Entidade</span>
+        <input value={f.entidade}
+               onChange={(e) => setF({ ...f, entidade: e.target.value })} /></label>
+      <label className="campo"><span className="rotulo">E-mail da entidade</span>
+        <input type="email" value={f.email_destino} placeholder="matriculas@…"
+               onChange={(e) => setF({ ...f, email_destino: e.target.value })} /></label>
+      <button className="btn-principal btn-mini" disabled={salvando || !f.inicio_em}
+              onClick={async () => {
+                setSalvando(true)
+                try { await api.desenvolvimentoCriarTurma(f); aoFechar() }
+                catch (e) { aoErro(e.detail || e.message) }
+                finally { setSalvando(false) }
+              }}>Salvar turma</button>
+    </div>
+  )
 }
 
 // --------------------------------------------------------------------------

@@ -74,8 +74,11 @@ def _data_br(d: date | None) -> str:
 
 
 def _cpf_fmt(cpf: str | None) -> str:
+    """CPF mascarado. Se não forem 11 dígitos, devolve VAZIO em vez do valor
+    cru: um "CPF" malformado no e-mail da clínica é pior que nenhum — ela
+    tentaria cadastrar com ele."""
     d = "".join(c for c in (cpf or "") if c.isdigit())
-    return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}" if len(d) == 11 else (cpf or "")
+    return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}" if len(d) == 11 else ""
 
 
 _MINUSCULAS = {"de", "da", "do", "das", "dos", "e"}
@@ -102,8 +105,9 @@ def _linha_pessoa(i: int, p: dict) -> str:
     """
     partes = [f"{i}. {p['nome']}"]
     detalhes = []
-    if p.get("cpf"):
-        detalhes.append(f"CPF {_cpf_fmt(p['cpf'])}")
+    cpf = _cpf_fmt(p.get("cpf"))
+    if cpf:
+        detalhes.append(f"CPF {cpf}")
     if p.get("data_nascimento"):
         detalhes.append(f"nascimento {p['data_nascimento']}")
     if p.get("cargo"):
