@@ -1155,6 +1155,26 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
   width: 100cqw; max-width: 100cqw;
 }
 
+/* --- Interruptor da leitura de atestado de saúde (Config) --------------- */
+.rh-zdr { margin-top: 1rem; padding: .9rem 1rem; border-radius: 10px;
+          background: #fff8ec; border: 1px solid #f5d9a8; }
+.rh-zdr-topo { display: flex; justify-content: space-between; align-items: center;
+               gap: 1rem; }
+/* toggle iOS-like, feito só com CSS (o checkbox real fica escondido) */
+.rh-switch { position: relative; display: inline-block; width: 46px; height: 26px;
+             flex: 0 0 auto; }
+.rh-switch input { position: absolute; opacity: 0; width: 100%; height: 100%;
+                   margin: 0; cursor: pointer; z-index: 1; }
+.rh-switch-trilho { position: absolute; inset: 0; border-radius: 999px;
+                    background: #cbd5c8; transition: background .15s; }
+.rh-switch-trilho::before { content: ''; position: absolute; top: 3px; left: 3px;
+                            width: 20px; height: 20px; border-radius: 50%;
+                            background: #fff; transition: transform .15s;
+                            box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.rh-switch input:checked + .rh-switch-trilho { background: var(--verde); }
+.rh-switch input:checked + .rh-switch-trilho::before { transform: translateX(20px); }
+.rh-switch input:disabled + .rh-switch-trilho { opacity: .5; }
+
 /* --- Formulário da cartilha (avaliação de desempenho) ------------------- */
 /* Cada linha: o item à esquerda, a escala como chips à direita. Em tela
    estreita a escala desce para baixo do rótulo, sem espremer os botões. */

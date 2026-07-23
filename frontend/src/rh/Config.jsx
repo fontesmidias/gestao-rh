@@ -56,6 +56,50 @@ function OcrIA() {
       </div>
       <p className="explica">Status: {cfg.chave_definida
         ? '✅ IA ativada (com leitor local de reserva)' : '⭕ usando apenas o leitor local'}</p>
+
+      <div className="rh-zdr">
+        <div className="rh-zdr-topo">
+          <strong>🔒 Leitura automática de atestado de saúde</strong>
+          <label className="rh-switch">
+            <input type="checkbox" checked={!!cfg.zdr_ativo} disabled={ocupado}
+                   onChange={async (e) => {
+                     const ligar = e.target.checked
+                     if (ligar && !window.confirm(
+                       'Ligue isto SÓ depois de a Mistral ter aprovado a "retenção zero" '
+                       + '(Zero Data Retention) no seu plano Scale e você ter assinado o '
+                       + 'contrato de tratamento de dados (DPA).\n\n'
+                       + 'Sem isso, o atestado de saúde ficaria guardado 30 dias no '
+                       + 'servidor da Mistral. Confirmar que já está tudo em ordem?')) return
+                     setMsg(null); setOcupado(true)
+                     try {
+                       const r = await api.salvarOcr({ zdr_ativo: ligar })
+                       setCfg(r)
+                       setMsg({ tipo: ligar ? 'ok' : 'ok', texto: ligar
+                         ? 'Leitura de atestado de saúde LIGADA.'
+                         : 'Leitura de atestado de saúde desligada — o RH digita à mão.' })
+                     } catch (e2) {
+                       setMsg({ tipo: 'erro', texto: `Não foi possível alterar (${e2.detail || e2.message}).` })
+                     } finally { setOcupado(false) }
+                   }} />
+            <span className="rh-switch-trilho" />
+          </label>
+        </div>
+        <p className="explica" style={{ margin: '.4rem 0 0' }}>
+          O atestado de saúde é dado sensível (LGPD). A leitura automática dele fica
+          <strong> desligada por padrão</strong>: o documento é guardado só no nosso
+          servidor e o RH digita a data e a validade à mão. Para ligar a leitura
+          automática, a Mistral precisa ter aprovado a <strong>retenção zero</strong>
+          {' '}(não guardar o documento) no plano Scale, com o contrato de dados (DPA)
+          assinado. Identidade e certificado <strong>não</strong> dependem disso —
+          já são lidos normalmente.
+        </p>
+        <p className="explica" style={{ margin: '.3rem 0 0' }}>
+          Estado: {cfg.zdr_ativo
+            ? '✅ ligada — o atestado de saúde é lido pela IA'
+            : '⭕ desligada — o RH preenche o atestado à mão'}
+        </p>
+      </div>
+
       <Msg msg={msg} />
     </section>
   )

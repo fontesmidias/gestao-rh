@@ -236,22 +236,38 @@ class SmtpIn(BaseModel):
 
 class OcrIn(BaseModel):
     mistral_api_key: str | None = None
+    # Só ligue DEPOIS de a Mistral aprovar o Zero Data Retention no plano Scale:
+    # controla se a leitura por IA pode tocar documento de SAÚDE (atestado).
+    zdr_ativo: bool | None = None
 
 
 @router.get("/rh/config/ocr")
 def ver_ocr(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
     from app.services.ocr_ia import chave_mistral
-    return {"chave_definida": bool(chave_mistral(db))}
+    from app.services.ocr_roteador import zdr_ativo
+    return {"chave_definida": bool(chave_mistral(db)),
+            "zdr_ativo": zdr_ativo(db)}
 
 
 @router.put("/rh/config/ocr")
 def salvar_ocr(payload: OcrIn, db: Session = Depends(get_db),
                rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """Chave da Mistral para o OCR com IA. Chave vazia desliga (volta ao OCR
-    local). A chave nunca aparece em log nem volta na resposta."""
-    gravar_config(db, {"mistral_api_key": (payload.mistral_api_key or "").strip()})
-    registrar(db, "ocr_ia_alterado", ator="rh", ator_detalhe=rh.email,
-              detalhe={"ativado": bool((payload.mistral_api_key or "").strip())})
+    local). A chave nunca aparece em log nem volta na resposta.
+
+    `zdr_ativo` é a trava do documento de SAÚDE: só deve ser ligado depois que a
+    Mistral aprovar o Zero Data Retention no plano Scale — enquanto desligado,
+    atestado de saúde não é enviado para a IA (fica só no MinIO, o RH digita à
+    mão). Guardado como "1"/"" na config, que é o que o `ocr_roteador` lê."""
+    from app.services.ocr_roteador import CHAVE_ZDR
+    if payload.mistral_api_key is not None:
+        gravar_config(db, {"mistral_api_key": (payload.mistral_api_key or "").strip()})
+        registrar(db, "ocr_ia_alterado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"ativado": bool((payload.mistral_api_key or "").strip())})
+    if payload.zdr_ativo is not None:
+        gravar_config(db, {CHAVE_ZDR: "1" if payload.zdr_ativo else ""})
+        registrar(db, "ocr_zdr_alterado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"ativo": payload.zdr_ativo})
     db.commit()
     return ver_ocr(db, rh)
 
