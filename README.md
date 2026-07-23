@@ -38,10 +38,26 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Assinatura da equipe por autorização prévia**: um representante autoriza uma vez (ato de vontade datado), e sua assinatura passa a constar nos documentos daquele modelo — sem carimbo falso
 - **Ordem das fichas configurável** · **re-assinatura granular** quando um dado muda (só as fichas afetadas voltam) · **central de assinaturas** com dashboard de todos os candidatos
 
+### Portal do colaborador (`/meu`) — a vida na empresa, não só a admissão
+- **Uma porta para tudo que é da pessoa**: cursos, certificados, pendências e avaliações, com o mesmo gate sem senha do resto (CPF → 2FA por e-mail; sem e-mail, perguntas de verificação que funcionam até para quem foi importado do Tirvu e nunca preencheu ficha)
+- A home é a **lista de pendências dela** — o que vence, o que o RH devolveu — não um menu
+
+### Desenvolvimento e reciclagem de brigadistas
+- **Cadastro de Desenvolvimento**: o colaborador registra cursos, treinamentos e certificações ao longo do vínculo; tipos configuráveis pelo RH com validade, criticidade e cargos aplicáveis, e prazo por posto/cargo. A IA pré-preenche a partir do documento; a pessoa confere
+- **Fila de validação** com aprovação em lote para o caso fácil — documento crítico (brigada, NR) nunca entra no lote e é conferido um a um
+- **Controle de reciclagem**: quem tem certificação crítica vencendo, com **aviso automático 90 dias antes**, e montagem do e-mail de matrícula à entidade formadora (individual ou em grupo, com o dossiê de cada um em PDF único)
+
+### Avaliação de desempenho (a Cartilha do Avaliador, digitalizada)
+- **Fatos Observados**: a liderança registra na hora o que a pessoa fez, com fato e impacto — antídoto do "esqueci o que ela fez na hora de avaliar". **O colaborador vê os fatos sobre ele, mas nunca quem registrou**
+- **Formulário 360** (11 seções da cartilha) com os fatos e a frequência do período ao lado; vertical (liderança, identificada) e horizontal (pares, **anônima e agregada**). Uma máquina de estados **não deixa pular a conversa de feedback presencial**
+- **Direito de resposta** do colaborador (manifestação, com prazo), **radar** de competências + **timeline** das médias, e **calibração** que informa ao homologador quando um avaliador é mais generoso/rigoroso que os demais — sem alterar nota
+- **Frequência do Tirvu** importada por planilha entra como **contexto**, nunca nota; registro incompleto (esqueceu de bater a saída) jamais é contado como falta
+
 ### Benefícios, testes, arquivo
-- **Reembolso-Creche** (IN SEGES/MGI 147/2026): adesão na admissão + link público de levantamento com 2FA e dossiê
+- **Reembolso-Creche** (IN SEGES/MGI 147/2026): elegibilidade por posto, link público de levantamento com 2FA (ou perguntas de verificação para quem não tem e-mail), assinatura do requerimento e ciclo completo de decisão do RH — aprovar, devolver para correção, indeferir, "não faço jus", suspender/encerrar — com aviso ao colaborador em cada passo
 - **Central de testes**: dashboard de todos os testes (admissão + testagem avulsa), reset, relatório de comportamento; links de testagem anônima onde a pessoa vê o próprio resultado
 - **Arquivo/backup**: inventário com filtros, download individual e **backup em lote** (ZIP por posto/pessoa + planilha XLSX), auditado
+- **DashPlanilha**: componente único de lista do RH (ordenação, filtro por coluna, seleção em massa, colunas configuráveis, export CSV e cards-métrica clicáveis) — o padrão de todas as telas de lista
 
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
@@ -59,7 +75,7 @@ React/Vite (SPA)  ──►  nginx  ──►  FastAPI (Python 3.12)
                                      └── SMTP / Graph API / Gmail API
 ```
 
-- **Backend:** FastAPI · SQLAlchemy 2 · Alembic · fpdf2/pypdf (PDFs) · pytesseract (OCR) · qrcode · openpyxl
+- **Backend:** FastAPI · SQLAlchemy 2 · Alembic · fpdf2/pypdf (PDFs) · pytesseract + Mistral OCR (leitura de documentos, roteada por sensibilidade LGPD) · qrcode · openpyxl (planilhas do Tirvu lidas por zip+XML, que o openpyxl não aguenta)
 - **Frontend:** React 18 · Vite (sem TypeScript) · CSS próprio, sem CDN · tema claro/escuro
 - **Infra:** Docker Compose (variantes IP direto / Traefik / certbot) · imagens no GHCR por CI · Playwright E2E contra a stack completa
 
@@ -114,6 +130,7 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 - Assinatura eletrônica simples (art. 4º, I, Lei 14.063/2020), manifesto de evidências no PDF, verificação pública com dados minimizados (nome e CPF mascarados **fora** do painel)
 - Arquivos excluídos, rejeitados ou substituídos deixam **hash SHA-256 na auditoria** antes de sair do storage; exportações em lote registram a lista de quem foi exportado
 - Coleta fundamentada (LGPD art. 7º e art. 11 para dados de saúde), aviso de privacidade no primeiro acesso, expurgo automático pós-admissão e higienização de dados de terceiros não assinados
+- **Leitura de documentos por IA roteada por sensibilidade**: identidade e certificado são lidos normalmente; **atestado de saúde** (dado sensível) só passa pela IA com o provedor sob Zero Data Retention contratado — uma trava no código, ligável pelo painel, com a base legal registrada em [docs/planejamento/07-lgpd-leitura-automatizada-documentos.md](docs/planejamento/07-lgpd-leitura-automatizada-documentos.md). Geolocalização e foto do ponto eletrônico não são importadas para a avaliação (desproporcional ao fim)
 
 ## 🗺️ Roadmap e histórico
 
@@ -125,7 +142,10 @@ Decisões e roadmap em [docs/planejamento/](docs/planejamento/). Histórico de v
 
 - **Passwordless onboarding**: magic links; returning users verify via CPF + knowledge-based questions; guided in-browser document capture; OCR-assisted forms (consent-based); DISC and situational behavioral tests
 - **Documents & signatures**: letterhead templates with variables; simple e-signatures (Law 14.063/2020) with an embedded evidence manifest and public QR verifier; **multi-party signing in role order** (employee, HR user, external party) consolidating into a final PDF; team signature via prior registered authorization (never a fake stamp)
-- **Workforce, benefits, archive**: unified candidate/employee records; idempotent workforce import; childcare-reimbursement module; unified test dashboard; filtered inventory with bulk ZIP+XLSX backup
+- **Employee self-service portal**: one passwordless door for the worker's whole life at the company — courses, certificates, pending actions and appraisals; works for Tirvu-imported staff who never filled a form, via knowledge-based questions on native record data
+- **Development & brigade recertification**: employees log courses and certifications; configurable types with expiry/criticality/eligible roles; RH validation queue with batch approval (critical docs never batched); automatic 90-day expiry alerts and one-click enrollment e-mail to the training provider with a per-person PDF dossier
+- **Performance appraisals**: the paper "Appraiser Handbook" digitized — real-time observed facts (visible to the employee, author hidden), the 11-section 360° form (vertical named, horizontal anonymous & aggregated), a state machine that won't skip the in-person feedback conversation, the employee's right of reply, a competency radar + score timeline, and evaluator-drift calibration that informs the approver **without changing any score**; time-clock data imported as context, never as a grade
+- **Workforce, benefits, archive**: unified candidate/employee records; idempotent workforce import; full childcare-reimbursement module (per-post eligibility, review lifecycle, signed request); unified test dashboard; filtered inventory with bulk ZIP+XLSX backup
 - **Configurable branding**: company name, legal entity, logo and favicon editable from the panel
 - **Cross-cutting**: full audit trail with before/after and file hashes; universal trash with restore; rate limiting; server-side idempotency; Microsoft 365 / Gmail / SMTP e-mail
 - **Stack**: FastAPI + PostgreSQL + MinIO + Redis, React/Vite, Docker Compose / Portainer, CI-published GHCR images, Playwright E2E
