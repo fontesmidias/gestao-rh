@@ -226,6 +226,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'identidade' && <IdentidadeVisual />}
       {aba === 'organizacao' && <>
         <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
+        <CargosTirvu />
         <BackfillEnderecos />
       </>}
       {aba === 'tags' && <TagsConfig />}
@@ -1223,21 +1224,42 @@ function Auditoria() {
 
 function Empresas() {
   const [empresas, setEmpresas] = useState(null)
-  const [nova, setNova] = useState({ razao_social: '', cnpj: '' })
+  const [nova, setNova] = useState({ razao_social: '', cnpj: '', tirvu_id: '' })
+  const [edicao, setEdicao] = useState({}) // {id: tirvu_id em edição}
   const [msg, setMsg] = useState(null)
   const carregar = () => api.empresas().then(setEmpresas)
   useEffect(() => { carregar().catch(() => setEmpresas([])) }, [])
   if (!empresas) return null
+
+  const salvarId = async (e) => {
+    const tid = (edicao[e.id] ?? e.tirvu_id ?? '').trim()
+    if (tid === (e.tirvu_id || '')) return
+    setMsg(null)
+    try {
+      await api.editarEmpresa(e.id, { razao_social: e.razao_social, cnpj: e.cnpj, tirvu_id: tid || null })
+      setMsg({ tipo: 'ok', texto: `ID Tirvu de "${e.razao_social}" salvo.` })
+      setEdicao((s) => { const n = { ...s }; delete n[e.id]; return n }); carregar()
+    } catch (err) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${err.detail || err.message}).` }) }
+  }
+
   return (
     <div className="rh-card">
       <h3>🏢 Empresas</h3>
-      <p className="explica">Empregadoras que assinam a carteira — saem na coluna
-        "Empresa" da planilha de importação de admissões do Tirvu.</p>
+      <p className="explica">Empregadoras que assinam a carteira. O <strong>ID Tirvu</strong>
+        é o código da empresa na base do Tirvu — a importação de admissões casa por
+        esse ID (sem ele, a coluna Empresa sai vazia e o Tirvu recusa a linha).</p>
       {empresas.length > 0 && (
         <table className="rh-tabela">
-          <thead><tr><th>Razão social</th><th>CNPJ</th></tr></thead>
+          <thead><tr><th>Razão social</th><th>CNPJ</th><th>ID Tirvu</th></tr></thead>
           <tbody>{empresas.map((e) => (
-            <tr key={e.id}><td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td></tr>
+            <tr key={e.id}>
+              <td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td>
+              <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 1"
+                         value={edicao[e.id] ?? e.tirvu_id ?? ''}
+                         onChange={(ev) => setEdicao({ ...edicao, [e.id]: ev.target.value })}
+                         onBlur={() => salvarId(e)}
+                         className={e.tirvu_id ? '' : 'campo-pendente'} /></td>
+            </tr>
           ))}</tbody>
         </table>
       )}
@@ -1248,17 +1270,74 @@ function Empresas() {
         <label className="campo"><span className="rotulo">CNPJ (opcional)</span>
           <input value={nova.cnpj}
                  onChange={(e) => setNova({ ...nova, cnpj: e.target.value })} /></label>
+        <label className="campo"><span className="rotulo">ID Tirvu (opcional)</span>
+          <input value={nova.tirvu_id}
+                 onChange={(e) => setNova({ ...nova, tirvu_id: e.target.value })} /></label>
       </div>
       <button className="btn-secundario" onClick={async () => {
         setMsg(null)
         if (!nova.razao_social.trim()) { setMsg({ tipo: 'erro', texto: 'Informe a razão social.' }); return }
         try {
           await api.criarEmpresa({ razao_social: nova.razao_social.trim(),
-                                   cnpj: nova.cnpj.trim() || null })
-          setNova({ razao_social: '', cnpj: '' }); setMsg({ tipo: 'ok', texto: 'Empresa cadastrada.' })
+                                   cnpj: nova.cnpj.trim() || null,
+                                   tirvu_id: nova.tirvu_id.trim() || null })
+          setNova({ razao_social: '', cnpj: '', tirvu_id: '' }); setMsg({ tipo: 'ok', texto: 'Empresa cadastrada.' })
           carregar()
         } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível criar (${e.detail || e.message}).` }) }
       }}>+ Cadastrar empresa</button>
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+// De-para cargo → ID do Tirvu. Cargo é texto livre; o Tirvu casa por ID. Lista
+// os cargos já usados na base (com contagem) para o RH atribuir o ID de cada um.
+function CargosTirvu() {
+  const [cargos, setCargos] = useState(null)
+  const [edicao, setEdicao] = useState({}) // {cargo_normalizado: tirvu_id}
+  const [msg, setMsg] = useState(null)
+  const carregar = () => api.cargosTirvu().then(setCargos)
+  useEffect(() => { carregar().catch(() => setCargos([])) }, [])
+  if (!cargos) return null
+
+  const salvar = async (c) => {
+    const tid = (edicao[c.cargo_normalizado] ?? c.tirvu_id ?? '').trim()
+    if (tid === (c.tirvu_id || '')) return
+    setMsg(null)
+    try {
+      await api.salvarCargoTirvu({ cargo_rotulo: c.cargo_rotulo, tirvu_id: tid })
+      setMsg({ tipo: 'ok', texto: `ID Tirvu de "${c.cargo_rotulo}" salvo.` })
+      setEdicao((s) => { const n = { ...s }; delete n[c.cargo_normalizado]; return n }); carregar()
+    } catch (err) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${err.detail || err.message}).` }) }
+  }
+
+  const semId = cargos.filter((c) => !c.tirvu_id).length
+  return (
+    <div className="rh-card">
+      <h3>💼 Cargos × ID do Tirvu</h3>
+      <p className="explica">O cargo é texto livre na ficha, mas a importação de admissões
+        do Tirvu casa por <strong>ID numérico</strong> (sem ele, a coluna Cargo sai vazia e
+        o Tirvu recusa). Atribua o ID de cada cargo usado na base — vale para todos os
+        colaboradores com aquele cargo.
+        {semId > 0 && <> <strong style={{ color: 'var(--ambar)' }}>{semId} cargo(s) ainda sem ID.</strong></>}</p>
+      {cargos.length === 0
+        ? <p className="explica">Nenhum cargo cadastrado na base ainda.</p>
+        : (
+          <table className="rh-tabela">
+            <thead><tr><th>Cargo</th><th>Pessoas</th><th>ID Tirvu</th></tr></thead>
+            <tbody>{cargos.map((c) => (
+              <tr key={c.cargo_normalizado}>
+                <td><strong>{c.cargo_rotulo}</strong></td>
+                <td>{c.qtd}</td>
+                <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 50"
+                           value={edicao[c.cargo_normalizado] ?? c.tirvu_id ?? ''}
+                           onChange={(ev) => setEdicao({ ...edicao, [c.cargo_normalizado]: ev.target.value })}
+                           onBlur={() => salvar(c)}
+                           className={c.tirvu_id ? '' : 'campo-pendente'} /></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
       <Msg msg={msg} />
     </div>
   )

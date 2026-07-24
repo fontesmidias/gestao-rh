@@ -56,8 +56,16 @@ export default function JornadasRH({ aoVoltar }) {
   }
 
   const salvarPosto = async (j, postoId) => {
-    try { await api.editarJornada(j.id, { descricao: j.descricao, posto_servico_id: postoId || null }); recarregar() }
+    try { await api.editarJornada(j.id, { descricao: j.descricao, posto_servico_id: postoId || null, tirvu_id: j.tirvu_id || null }); recarregar() }
     catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível vincular o posto (${e.detail || e.message}).` }) }
+  }
+  const salvarTirvuId = async (j, tid) => {
+    const novo = (tid || '').trim()
+    if (novo === (j.tirvu_id || '')) return
+    try {
+      await api.editarJornada(j.id, { descricao: j.descricao, posto_servico_id: j.posto_servico_id || null, tirvu_id: novo || null })
+      recarregar()
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar o ID Tirvu (${e.detail || e.message}).` }) }
   }
   const excluir = async (j) => {
     if (!window.confirm(`Excluir a jornada "${j.descricao}"?`)) return
@@ -79,6 +87,12 @@ export default function JornadasRH({ aoVoltar }) {
         <SelectBusca style={{ minWidth: 160 }} vazioRotulo="— sem posto —" placeholder="Buscar posto…"
           valor={j.posto_servico_id || ''} aoEscolher={(v) => salvarPosto(j, v)}
           opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.nome }))} />) },
+    { chave: 'tirvu_id', rotulo: 'ID Tirvu', filtro: 'texto', valor: (j) => j.tirvu_id || '',
+      render: (j) => (
+        <input style={{ maxWidth: '5.5rem' }} placeholder="ex.: 246" defaultValue={j.tirvu_id || ''}
+               key={j.tirvu_id || ''} onBlur={(e) => salvarTirvuId(j, e.target.value)}
+               className={j.tirvu_id ? '' : 'campo-pendente'}
+               title="Código desta jornada na base do Tirvu — a importação de admissões casa por ele" />) },
     { chave: 'escala', rotulo: 'Escala', ordenavel: true, filtro: 'select',
       opcoes: ESCALAS, valor: (j) => ESCALA_ROT[j.escala] || '' },
     { chave: 'horarios', rotulo: 'Horários', valor: (j) =>

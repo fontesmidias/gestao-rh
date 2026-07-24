@@ -99,6 +99,54 @@ estado = c.get(f"/api/c/{token}/ficha").json()
 assert estado["pessoais"]["nome_completo"] == "José Teste da Silva"
 assert len(estado["dependentes"]) == 1
 
+# 6b) emergência e contatos VISÍVEIS no dump do RH (feedback 2026-07-24: o RH
+# não via os dados de emergência que o candidato preencheu). E o RH consegue
+# EDITAR a emergência pela rota da seção vt-emergencia.
+cid_smoke = convite["candidato"]["id"]
+ficha_rh = c.get(f"/api/rh/candidatos/{cid_smoke}/ficha", headers=rh).json()
+assert ficha_rh["emergencia"]["condicoes_medicas"] == "Nenhuma", ficha_rh["emergencia"]
+assert ficha_rh["emergencia"]["usa_medicamento_continuo"] is False
+assert any(ct["nome_completo"] == "Ana Teste" for ct in ficha_rh["contatos_emergencia"])
+r = c.put(f"/api/rh/candidatos/{cid_smoke}/ficha/vt-emergencia", headers=rh,
+          json={"dados": {"tipo_sanguineo": "O+"}, "motivo": "colaborador informou por telefone"})
+assert r.status_code == 200, r.text
+ficha_rh = c.get(f"/api/rh/candidatos/{cid_smoke}/ficha", headers=rh).json()
+assert ficha_rh["emergencia"]["tipo_sanguineo"] == "O+", ficha_rh["emergencia"]
+
+# 6c) optante do VT => slot do cartão DFTrans (cartao_vt) aparece no checklist.
+# (o caso "optante SEM número" fica em tests/test_slots.py — aqui o candidato
+# tem número, então esta asserção só confirma que o slot existe no fluxo real.)
+chk = c.get(f"/api/c/{token}/documentos").json()
+assert any(s["tipo"] == "cartao_vt" for s in chk["slots"]), [s["tipo"] for s in chk["slots"]]
+
+# 6d) De-para de cargo → ID Tirvu casa por texto NORMALIZADO (acento/caixa).
+# O candidato tem cargo "Auxiliar de Serviços Gerais"; cadastramos o de-para com
+# grafia diferente e provamos que casa (e que remover o ID volta a acusar).
+r = c.put("/api/rh/cargos-tirvu", headers=rh,
+          json={"cargo_rotulo": "AUXILIAR DE SERVICOS GERAIS", "tirvu_id": "77"})
+assert r.status_code == 200 and r.json()["tirvu_id"] == "77", r.text
+lista = c.get("/api/rh/cargos-tirvu", headers=rh).json()
+casou = next(x for x in lista if x["cargo_normalizado"] == "auxiliar de servicos gerais")
+assert casou["tirvu_id"] == "77" and casou["qtd"] >= 1, casou
+# remover o de-para (tirvu_id vazio) tira o mapeamento
+r = c.put("/api/rh/cargos-tirvu", headers=rh,
+          json={"cargo_rotulo": "Auxiliar de Serviços Gerais", "tirvu_id": ""})
+assert r.status_code == 200 and r.json()["tirvu_id"] is None, r.text
+
+# 6e) tirvu_id em empresa e jornada persistem no dump
+emp = c.post("/api/rh/empresas", headers=rh,
+             json={"razao_social": "SMOKE EMPRESA LTDA", "tirvu_id": "1"}).json()
+assert emp["tirvu_id"] == "1", emp
+emp2 = c.put(f"/api/rh/empresas/{emp['id']}", headers=rh,
+             json={"razao_social": "SMOKE EMPRESA LTDA", "tirvu_id": "9"}).json()
+assert emp2["tirvu_id"] == "9", emp2
+jorns = c.get("/api/rh/jornadas", headers=rh).json()
+if jorns:
+    jid = jorns[0]["id"]
+    j2 = c.put(f"/api/rh/jornadas/{jid}", headers=rh,
+               json={"descricao": jorns[0]["descricao"], "tirvu_id": "246"}).json()
+    assert j2["tirvu_id"] == "246", j2
+
 # 7) declaração de veracidade -> aguardando_assinatura
 r = c.post(f"/api/c/{token}/ficha/declaracao")
 assert r.status_code == 200, r.text
@@ -251,6 +299,49 @@ assert r.status_code == 200 and r.content[:4] == b"%PDF"
 from pypdf import PdfReader as _PR
 paginas_dossie = len(_PR(io.BytesIO(r.content)).pages)
 assert paginas_dossie >= 4 + 13, paginas_dossie  # 4 fichas + 13 docs deste candidato
+
+# 14b) REABERTURA CIRÚRGICA pós-aprovação (feedback 2026-07-24): o candidato
+# está APROVADO. Rejeitar um doc deve permitir reenviar SÓ aquele slot, sem
+# reabrir a ficha nem desfazer a aprovação (risco de "desfazer efetivação").
+assert c.get(f"/api/c/{token}").status_code in (200, 409)  # ficha encerrada p/ aprovado
+detalhe = c.get(f"/api/rh/candidatos/{convite['candidato']['id']}", headers=rh).json()
+assert detalhe["status"] == "aprovado"
+slots_aprov = [s for s in detalhe["slots"] if s["status"] == "aprovado"]
+alvo = next(s for s in slots_aprov if s["tipo"] == "cpf_doc")
+outro_aprovado = next(s for s in slots_aprov if s["id"] != alvo["id"])
+# RH reabre o slot aprovado (volta a 'enviado' pois tem arquivo) e então rejeita
+# — este é o fluxo real de "rejeitar um doc de quem já foi aprovado".
+assert c.post(f"/api/rh/slots/{alvo['id']}/reabrir", headers=rh,
+              json={"motivo": "reconferir CPF"}).status_code == 200
+assert c.post(f"/api/rh/slots/{alvo['id']}/rejeitar", headers=rh,
+              json={"motivo": "ilegivel"}).status_code == 200
+# status do candidato NÃO muda (continua aprovado — não reabre o funil)
+assert c.get(f"/api/rh/candidatos/{convite['candidato']['id']}", headers=rh).json()["status"] == "aprovado"
+# (i) a ficha continua TRANCADA para edição do aprovado
+r = c.put(f"/api/c/{token}/ficha/pessoais", json={"nome_completo": "Nao Pode"})
+assert r.status_code == 409 and r.json()["detail"] == "admissao_encerrada", r.text
+# (ii) reenviar um slot JÁ APROVADO é recusado
+r = c.post(f"/api/c/{token}/documentos/{outro_aprovado['id']}/arquivo",
+           files={"arquivo": ("x.jpg", _foto_nitida(), "image/jpeg")})
+assert r.status_code == 409 and r.json()["detail"] == "apenas_documento_rejeitado", r.text
+# (ii-b) a rota de identidade (RG/CNH) tem o MESMO guard — aprovado não reenvia
+# RG já aprovado por ela (C1 da revisão adversária).
+r = c.post(f"/api/c/{token}/documentos/identidade",
+           files={"arquivo": ("rg.jpg", _foto_nitida(), "image/jpeg")})
+assert r.status_code == 409 and r.json()["detail"] == "apenas_documento_rejeitado", r.text
+# (iii) reenviar o slot REJEITADO é aceito
+r = c.post(f"/api/c/{token}/documentos/{alvo['id']}/arquivo",
+           files={"arquivo": ("cpf-novo.jpg", _foto_nitida(), "image/jpeg")})
+assert r.status_code == 200 and r.json()["status"] == "enviado", r.text
+# e concluir-envio NÃO reabre o funil (segue aprovado, não vira envio_concluido)
+r = c.post(f"/api/c/{token}/concluir-envio")
+assert r.status_code == 200 and r.json()["status"] == "aprovado", r.text
+assert c.get(f"/api/rh/candidatos/{convite['candidato']['id']}", headers=rh).json()["status"] == "aprovado"
+# o RH reavalia só aquele slot e reaprova
+detalhe = c.get(f"/api/rh/candidatos/{convite['candidato']['id']}", headers=rh).json()
+slot_reenv = next(s for s in detalhe["slots"] if s["id"] == alvo["id"])
+assert slot_reenv["status"] == "enviado"
+assert c.post(f"/api/rh/slots/{alvo['id']}/aprovar", headers=rh).status_code == 200
 
 # 15) expurgo: nada a expurgar dentro da retenção; forçando retenção 0 dias, expurga
 import app.workers.expurgo as mod_exp

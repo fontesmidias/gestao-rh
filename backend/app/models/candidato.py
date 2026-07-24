@@ -91,6 +91,10 @@ class Empresa(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     razao_social: Mapped[str] = mapped_column(String(200), unique=True)
     cnpj: Mapped[str | None] = mapped_column(String(20))
+    # ID desta empresa na base do Tirvu (feedback 2026-07-24: a importação de
+    # admissões casa a EMPRESA por ID numérico, não pela razão social — texto
+    # "vinha zerado"). O RH cadastra o ID no painel; o export escreve o ID.
+    tirvu_id: Mapped[str | None] = mapped_column(String(30))
     ativa: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -109,6 +113,11 @@ class Jornada(Base):
     # decisão de rubrica), preenchidos por parser-proponente + confirmação
     # humana — nunca alteram o que o Tirvu recebe (feedback 2026-07-22).
     descricao: Mapped[str] = mapped_column(String(300), unique=True)
+    # ID desta jornada na base do Tirvu (feedback 2026-07-24: a importação casa a
+    # JORNADA por ID numérico, não pela descrição — "veio com id zerado"). O RH
+    # cadastra o ID no painel de Jornadas; o export escreve o ID. A `descricao`
+    # continua canônica para todo o resto do sistema.
+    tirvu_id: Mapped[str | None] = mapped_column(String(30))
     posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("posto_servico.id"), nullable=True)
     # --- Estrutura (opcional; proposta pelo parser, confirmada pelo RH) ---
@@ -134,6 +143,27 @@ class Jornada(Base):
     # quando o RH confirmou a proposta do parser (NULL = ainda "a confirmar")
     estruturado_confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ativa: Mapped[bool] = mapped_column(default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CargoTirvu(Base):
+    """De-para cargo (texto livre) → ID do cargo na base do Tirvu (feedback
+    2026-07-24: a importação casa o CARGO por ID numérico; o texto "veio zerado").
+
+    Cargo NÃO vira tabela/FK (o CLAUDE.md avisa: `cargo_alvo`, filtro do Arquivo e
+    provas por cargo casam por TEXTO — virar FK quebraria os três). Este é um mapa
+    LATERAL usado SÓ no export do Tirvu: `cargo_funcao` continua string livre em
+    todo o resto. A chave é o texto NORMALIZADO (minúsculo, sem acento, espaços
+    colapsados) para "Analista"/"analista"/"Analista " casarem no mesmo ID."""
+
+    __tablename__ = "cargo_tirvu"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Texto do cargo normalizado (chave de casamento) — único.
+    cargo_normalizado: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    # Como o RH digitou (para exibir na tela sem desfigurar acento/caixa).
+    cargo_rotulo: Mapped[str] = mapped_column(String(160))
+    tirvu_id: Mapped[str] = mapped_column(String(30))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -284,6 +284,19 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
     return () => clearTimeout(timer)
   }, [dados])
 
+  // Rede de segurança: enquanto houver alteração NÃO gravada (o debounce de
+  // 900ms ainda não disparou, ou o PUT está em andamento), avisa antes de sair.
+  // Sem isso, recarregar ou fechar a aba logo após digitar perde o que foi
+  // preenchido (feedback 2026-07-24: "atualizou a página e os dados de banco
+  // sumiram"). O prompt nativo do beforeunload dá à pessoa a chance de esperar
+  // o salvamento — não dá para fazer um PUT autenticado confiável no unload.
+  useEffect(() => {
+    if (salvo) return
+    const aoSair = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', aoSair)
+    return () => window.removeEventListener('beforeunload', aoSair)
+  }, [salvo])
+
   const setSec = (sec, campo, valor) =>
     setDados((d) => ({ ...d, [sec]: { ...d[sec], [campo]: valor } }))
 

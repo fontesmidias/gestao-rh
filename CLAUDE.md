@@ -128,6 +128,33 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `AutorizacaoEquipe` — representante confirma 1x por código (ato de vontade);
   vira etapa já satisfeita por "autorização prévia" no roteiro do modelo; o
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
+- **Integração Tirvu — CASA POR ID NUMÉRICO, NÃO POR TEXTO** (feedback de campo
+  2026-07-24, REVERTE a premissa de 2026-07-19): o importador do Tirvu casa
+  **Empresa, Posto, Cargo e Jornada por ID numérico** da base dele (empresa
+  GHS=1, posto GHS=49, cargo analista df jr=50, jornada GHS SEDE=246). Colar o
+  TEXTO (razão social, nome do posto, descrição da jornada) fazia o Tirvu gravar
+  ZERO. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
+  (sem linha de exemplo) — por isso a validação de julho aprovou a FORMA e errou
+  o CONTEÚDO. Agora: `PostoServico.tirvu_id` (já existia), `Empresa.tirvu_id` e
+  `Jornada.tirvu_id` (novos), e o de-para `CargoTirvu` (cargo texto→id, casado
+  por `normalizar_cargo`: minúsculo/sem acento/espaços — cargo NÃO vira FK, só um
+  mapa lateral usado no export). `linha_tirvu` escreve o `tirvu_id`; a coluna
+  "Descrição da Jornada de Trabalho" recebe o ID da jornada (apesar do nome).
+  Falta de ID vira PENDÊNCIA (`pendencias_linha` inclui Empresa/Posto/Cargo/
+  Jornada). RH cadastra os IDs em Config→Empresas/Cargos, na página de Jornadas
+  e na página de Postos (input inline `.campo-pendente`/"— sem ID" âmbar quando
+  vazio). Rotas: `/rh/cargos-tirvu` (GET lista cargos usados×ID, PUT upsert;
+  tirvu_id vazio REMOVE o de-para). `PostoIn.tirvu_id` só é gravado na edição se
+  a chave veio no payload (`model_fields_set`) — editar outro campo não apaga o
+  ID. `criar_empresa` no ramo "já existe" preenche o `tirvu_id` se estava vazio.
+  Export re-deriva a CTPS SEMPRE do CPF; se o CPF for inválido/ausente, cai na
+  CTPS gravada (não perde o dado).
+- **CTPS Digital — série = 4 ÚLTIMOS do CPF, número = 7 PRIMEIROS** (feedback
+  2026-07-24, corrige o "0000" anterior): `ctps_do_cpf` devolve `(cpf[:7],
+  cpf[-4:])` — juntos reconstroem o CPF, é assim que o Tirvu importa. O export
+  SEMPRE re-deriva do CPF (ignora o `ctps_numero/serie` gravado, que em fichas
+  antigas é o formato velho CPF+"0000") — NÃO backfilla o banco, NÃO toca PDF
+  assinado. `salvar_documentos` grava o formato novo só para quem preenche agora.
 - **Integração Tirvu (export de admissões)**: `export_tirvu.py` gera o layout
   de 28 colunas em ORDEM FIXA (`COLUNAS_TIRVU`); o Tirvu recusa linha sem
   CTPS/PIS/JORNADA (pré-checagem em `/rh/colaboradores/tirvu-pendencias`). A
@@ -159,9 +186,9 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   quem já foi EFETIVADO (quem está em admissão não tem vínculo a criar lá). Por
   padrão exclui `origem == "importacao"` — quem veio do Tirvu já existe lá
   (`incluir_importados=true` força). O export individual (botão na ficha) fica
-  em `revisao.py` e serve candidato ou colaborador. CTPS Digital =
-  padrão eSocial: número = o PRÓPRIO CPF (11 dígitos), série = "0000" — derivada
-  em `salvar_documentos`, nunca perguntada. Endereço: coleta nova é separada
+  em `revisao.py` e serve candidato ou colaborador. CTPS Digital derivada do CPF
+  (ver armadilha dedicada acima: número = 7 primeiros, série = 4 últimos; export
+  re-deriva), nunca perguntada. Endereço: coleta nova é separada
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
@@ -468,6 +495,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Reabertura CIRÚRGICA de documento pós-aprovação** (feedback 2026-07-24): um
+  candidato `status=aprovado` pode reenviar SÓ um slot que o RH REJEITOU — nunca
+  reabrir a ficha inteira nem mexer num slot já aprovado (isso desfaria dossiê/
+  efetivação). O `status` fica INTACTO em `aprovado` (a rejeição em `revisao.py`
+  já não mexe em aprovado — só `envio_concluido`→`docs_pendentes`). Três guards
+  se sustentam: (1) `documentos.py::enviar_arquivo` E `enviar_identidade`
+  recusam `409 apenas_documento_rejeitado` se `aprovado` e o slot não está
+  `rejeitado` (o guard TEM que estar nas DUAS rotas — RG/CNH sobe pela
+  identidade); (2) `concluir_envio` de um `aprovado` NÃO vira `envio_concluido`
+  (retorna cedo, só avisa o RH que houve reenvio); (3) o gate de EDIÇÃO da ficha
+  (`ficha.py::_candidato_do_token`) continua barrando `aprovado` com
+  `admissao_encerrada` — o de `documentos.py` é aberto de propósito (o checklist
+  serve o aprovado). Fluxo real do RH: reabrir o slot aprovado (`/rh/slots/{id}/
+  reabrir` → volta a `enviado`) e então rejeitar. Front (`CandidatoApp.jsx`): no
+  `admissao_encerrada`, se `api.documentos` tiver slot `rejeitado`, roteia para o
+  checklist. Coberto pelo smoke (etapa 14b, os três riscos).
+- **Emergência editável pelo RH** (feedback 2026-07-24): o candidato preenche a
+  emergência no wizard, mas o RH também vê/corrige em `Detalhe.jsx`
+  (`SECOES_FICHA['vt-emergencia']` lista os 5 campos + exibe os contatos; o
+  backend `rh_ficha.py::editar_secao` já separava vt_/emergência). Campos
+  booleanos (`vt_optante`, `usa_medicamento_continuo`) são `<select>`, NUNCA
+  `<input>` texto — digitar "sim" num input gravaria `false` calado (dado médico).
 - **Jornadas**: tabela própria; import da planilha de escalas do Tirvu (96 abas,
   1 aba = 1 posto, coluna "Jornada" achada pelo cabeçalho) em
   `organizacao.py::_abas_com_jornadas` — zip+XML puro, multi-abas. NUNCA fundir

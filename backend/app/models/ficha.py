@@ -143,9 +143,12 @@ class DocumentosIdentificacao(Base):
     rg_data_expedicao: Mapped[date | None] = mapped_column(Date)
     cpf: Mapped[str | None] = mapped_column(String(11))
     pis_nis_pasep: Mapped[str | None] = mapped_column(String(14))
-    # CTPS Digital (padrão eSocial desde 2019): número = o próprio CPF (11
-    # dígitos), série = "0000". Calculada a partir do CPF — nunca perguntada ao
-    # candidato. Em branco para quem assinou antes desta leva (decisão do Bruno).
+    # CTPS Digital derivada do CPF (feedback de campo 2026-07-24): número = os 7
+    # primeiros dígitos do CPF, série = os 4 últimos (juntos reconstroem o CPF —
+    # é assim que o Tirvu importa). Calculada a partir do CPF, nunca perguntada.
+    # Registros anteriores podem ter o formato antigo (CPF completo + "0000")
+    # gravado aqui; o export do Tirvu SEMPRE re-deriva do CPF, então não depende
+    # deste valor. Em branco para quem assinou antes de ter CPF na ficha.
     ctps_numero: Mapped[str | None] = mapped_column(String(11))
     ctps_serie: Mapped[str | None] = mapped_column(String(5))
     cnh_numero: Mapped[str | None] = mapped_column(String(20))

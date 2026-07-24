@@ -56,7 +56,12 @@ def _slots_aplicaveis(db: Session, candidato: Candidato) -> list[dict]:
         if pessoais.estado_civil in (EstadoCivil.casado, EstadoCivil.uniao_estavel):
             slots.append({"tipo": TipoDocumento.cert_casamento, "obrigatorio": True})
 
-    if vt is not None and vt.optante and vt.cartao_dftrans:
+    # Optante do VT: exige a FOTO do cartão DFTrans. Antes o slot só aparecia se
+    # o candidato TAMBÉM já tivesse digitado o número do cartão — então quem era
+    # optante mas não digitou o número não via onde anexar a foto, e o RH também
+    # não via o slot (feedback 2026-07-24). Agora basta ser optante; o número do
+    # cartão é opcional e independente da foto.
+    if vt is not None and vt.optante:
         slots.append({"tipo": TipoDocumento.cartao_vt, "obrigatorio": True})
 
     for dep in dependentes:
