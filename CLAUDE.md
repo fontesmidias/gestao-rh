@@ -130,20 +130,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
 - **Integração Tirvu — CASA POR ID NUMÉRICO, NÃO POR TEXTO** (feedback de campo
   2026-07-24, REVERTE a premissa de 2026-07-19): o importador do Tirvu casa
-  **Empresa, Posto, Cargo e Jornada por ID numérico** da base dele (empresa
-  GHS=1, posto GHS=49, cargo analista df jr=50, jornada GHS SEDE=246). Colar o
-  TEXTO (razão social, nome do posto, descrição da jornada) fazia o Tirvu gravar
-  ZERO. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
+  **Posto, Cargo e Jornada por ID numérico** da base dele (posto GHS=49, cargo
+  analista df jr=50, jornada GHS SEDE=246). Colar o TEXTO (nome do posto,
+  descrição da jornada) fazia o Tirvu gravar ZERO. **Empresa é FIXA = "1"**
+  (Green House) no export — `EMPRESA_TIRVU_ID` em `export_tirvu.py`; o grupo
+  opera com uma empregadora só (decisão do Bruno 2026-07-24), NÃO depende de
+  cadastro nem vira pendência. A tela de Empresas em Config não pede ID. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
   (sem linha de exemplo) — por isso a validação de julho aprovou a FORMA e errou
-  o CONTEÚDO. Agora: `PostoServico.tirvu_id` (já existia), `Empresa.tirvu_id` e
-  `Jornada.tirvu_id` (novos), e o de-para `CargoTirvu` (cargo texto→id, casado
-  por `normalizar_cargo`: minúsculo/sem acento/espaços — cargo NÃO vira FK, só um
-  mapa lateral usado no export). `linha_tirvu` escreve o `tirvu_id`; a coluna
-  "Descrição da Jornada de Trabalho" recebe o ID da jornada (apesar do nome).
-  Falta de ID vira PENDÊNCIA (`pendencias_linha` inclui Empresa/Posto/Cargo/
-  Jornada). RH cadastra os IDs em Config→Empresas/Cargos, na página de Jornadas
-  e na página de Postos (input inline `.campo-pendente`/"— sem ID" âmbar quando
-  vazio). Rotas: `/rh/cargos-tirvu` (GET lista cargos usados×ID, PUT upsert;
+  o CONTEÚDO. Agora: `PostoServico.tirvu_id` (já existia) e `Jornada.tirvu_id`
+  (novo), e o de-para `CargoTirvu` (cargo texto→id, casado por `normalizar_cargo`:
+  minúsculo/sem acento/espaços — cargo NÃO vira FK, só um mapa lateral usado no
+  export). Há também `Empresa.tirvu_id` (coluna criada na migration) mas ele NÃO
+  é usado — empresa é fixa=1 no export. `linha_tirvu` escreve o `tirvu_id`; a
+  coluna "Descrição da Jornada de Trabalho" recebe o ID da jornada (apesar do
+  nome). Falta de ID vira PENDÊNCIA (`pendencias_linha` inclui Posto/Cargo/
+  Jornada — NÃO Empresa). RH cadastra os IDs de Cargo em Config→Cargos, de
+  Jornada na página de Jornadas e de Posto na página de Postos (input inline
+  `.campo-pendente`/"— sem ID" âmbar quando vazio) — o de Posto vem pronto da
+  importação da planilha de Postos do Tirvu (casa por ID; GHS=49). Rotas: `/rh/cargos-tirvu` (GET lista cargos usados×ID, PUT upsert;
   tirvu_id vazio REMOVE o de-para). `PostoIn.tirvu_id` só é gravado na edição se
   a chave veio no payload (`model_fields_set`) — editar outro campo não apaga o
   ID. `criar_empresa` no ramo "já existe" preenche o `tirvu_id` se estava vazio.

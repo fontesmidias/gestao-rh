@@ -14,7 +14,7 @@ import unicodedata
 
 from sqlalchemy.orm import Session
 
-from app.models.candidato import (Candidato, CargoTirvu, Empresa, Jornada,
+from app.models.candidato import (Candidato, CargoTirvu, Jornada,
                                   PostoServico)
 from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco)
 
@@ -38,6 +38,10 @@ def tirvu_id_do_cargo(db: Session, cargo_funcao) -> str:
     from sqlalchemy import select
     m = db.scalar(select(CargoTirvu).where(CargoTirvu.cargo_normalizado == chave))
     return (m.tirvu_id if m else "") or ""
+
+# A empregadora é sempre a Green House, ID 1 na base do Tirvu (decisão do Bruno
+# 2026-07-24). Fixo no export — não depende de cadastro de empresa.
+EMPRESA_TIRVU_ID = "1"
 
 COLUNAS_TIRVU = [
     "Empresa", "Posto de Serviço", "Matrícula", "Nome Completo", "CPF",
@@ -148,8 +152,8 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     e = db.get(Endereco, c.id)
     d = db.get(DocumentosIdentificacao, c.id)
     posto = db.get(PostoServico, c.posto_servico_id) if c.posto_servico_id else None
-    empresa = db.get(Empresa, c.empresa_id) if c.empresa_id else None
     jornada = db.get(Jornada, c.jornada_id) if c.jornada_id else None
+    # Empresa é fixa (ID 1, Green House) — não precisa buscar do cadastro.
 
     cpf = (d.cpf if d and d.cpf else c.cpf) or ""
     # CTPS para o Tirvu: SEMPRE derivar do CPF (número = 7 primeiros, série = 4
@@ -192,7 +196,10 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     # gravar zero). Escrevemos o `tirvu_id` cadastrado; se faltar, sai vazio e
     # `pendencias_linha` acusa (melhor barrar aqui que subir e o Tirvu zerar).
     return {
-        "Empresa": (empresa.tirvu_id if empresa else "") or "",
+        # Empresa é SEMPRE a Green House = ID 1 no Tirvu (decisão do Bruno
+        # 2026-07-24: o grupo opera com uma empregadora só; não depende de
+        # cadastro nem vira pendência). Se um dia houver outra, trocar aqui.
+        "Empresa": EMPRESA_TIRVU_ID,
         "Posto de Serviço": (posto.tirvu_id if posto else "") or "",
         "Matrícula": matricula,
         "Nome Completo": c.nome_completo or "",
@@ -269,8 +276,7 @@ def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
 # Rótulo amigável do campo na lista de pendências mostrada ao RH (a coluna do
 # layout tem nome técnico; o RH lê o nome do campo como aparece na ficha).
 _ROTULO_PENDENCIA = {
-    # Estes três agora saem como ID do Tirvu; se vazio, o cadastro do ID falta.
-    "Empresa": "ID Tirvu da empresa",
+    # Estes agora saem como ID do Tirvu; se vazio, o cadastro do ID falta.
     "Posto de Serviço": "ID Tirvu do posto",
     "Cargo": "ID Tirvu do cargo",
     "Descrição da Jornada de Trabalho": "ID Tirvu da jornada",
@@ -290,8 +296,9 @@ def pendencias_linha(linha: dict) -> list[str]:
     obrigatório no formulário: exigir na tela travaria a edição dos importados
     do Tirvu, que nasceram sem o campo."""
     faltas = []
+    # "Empresa" não entra: é fixa (ID 1, Green House) — nunca falta.
     for campo in ("Nome Completo", "CPF", "PIS", "CTPS Número",
-                  "Data de Admissão", "Empresa", "Posto de Serviço", "Cargo",
+                  "Data de Admissão", "Posto de Serviço", "Cargo",
                   "Descrição da Jornada de Trabalho", "Registra Ponto (S ou N)"):
         if not linha.get(campo):
             faltas.append(_ROTULO_PENDENCIA.get(campo, campo))
