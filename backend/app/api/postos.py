@@ -90,6 +90,10 @@ class PostoIn(BaseModel):
     nome: str
     sigla: str | None = None
     cnpj: str | None = None
+    # ID deste posto na base do Tirvu (o export de admissões casa por ID). Posto
+    # importado da planilha já vem com ele; posto criado à mão precisa que o RH
+    # informe — senão a coluna Posto do export sai vazia e o Tirvu recusa a linha.
+    tirvu_id: str | None = None
     contrato_ref: str | None = None
     exige_docs_infraero: bool | None = None
     documentos_kit: list[str] | None = None
@@ -177,6 +181,7 @@ def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
     posto = PostoServico(
         nome=nome, sigla=(payload.sigla or "").strip() or None,
         cnpj=(payload.cnpj or "").strip() or None,
+        tirvu_id=(payload.tirvu_id or "").strip() or None,
         contrato_ref=(payload.contrato_ref or "").strip() or None,
         exige_docs_infraero=bool(payload.exige_docs_infraero),
         documentos_kit=[k for k in (payload.documentos_kit or [])
@@ -293,6 +298,10 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
     posto.sigla = (payload.sigla or "").strip() or None
     posto.cnpj = (payload.cnpj or "").strip() or None
     posto.contrato_ref = (payload.contrato_ref or "").strip() or None
+    # tirvu_id só é alterado se a chave veio no payload — uma edição de outro
+    # campo (que omite tirvu_id) NÃO deve apagar o ID já cadastrado.
+    if "tirvu_id" in payload.model_fields_set:
+        posto.tirvu_id = (payload.tirvu_id or "").strip() or None
     if payload.exige_docs_infraero is not None:
         posto.exige_docs_infraero = payload.exige_docs_infraero
     if payload.documentos_kit is not None:

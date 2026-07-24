@@ -4,17 +4,40 @@ redigitar. O Tirvu deduplica por CPF do lado dele (quem já existe é ignorado)
 e RECUSA linha sem CTPS e sem PIS.
 
 Formatos conforme a exportação do próprio Tirvu: CPF com máscara, datas
-dd/mm/aaaa, empresa pela razão social. CTPS segue o padrão eSocial (CTPS
-Digital): número = o próprio CPF (11 dígitos), série = "0000" — derivada aqui
-quando a ficha ainda não a tem gravada."""
+dd/mm/aaaa. CTPS Digital derivada do CPF no formato que o Tirvu importa
+(feedback 2026-07-24): número = os 7 primeiros dígitos do CPF, série = os 4
+últimos (juntos reconstroem o CPF). NÃO é (CPF completo, "0000")."""
 
 import io
 import re
+import unicodedata
 
 from sqlalchemy.orm import Session
 
-from app.models.candidato import Candidato, Empresa, Jornada, PostoServico
+from app.models.candidato import (Candidato, CargoTirvu, Empresa, Jornada,
+                                  PostoServico)
 from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco)
+
+
+def normalizar_cargo(texto) -> str:
+    """Chave de casamento do de-para de cargo: minúsculo, sem acento, espaços
+    colapsados. "Analista DF Jr"/"analista df jr "/"Analista  DF  Jr" → mesma
+    chave, mesmo tirvu_id."""
+    sem_acento = "".join(
+        c for c in unicodedata.normalize("NFKD", str(texto or ""))
+        if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", sem_acento).strip().lower()
+
+
+def tirvu_id_do_cargo(db: Session, cargo_funcao) -> str:
+    """ID do Tirvu para um cargo (texto livre) via de-para `CargoTirvu`. Vazio se
+    o cargo não foi cadastrado — vira pendência na pré-checagem."""
+    chave = normalizar_cargo(cargo_funcao)
+    if not chave:
+        return ""
+    from sqlalchemy import select
+    m = db.scalar(select(CargoTirvu).where(CargoTirvu.cargo_normalizado == chave))
+    return (m.tirvu_id if m else "") or ""
 
 COLUNAS_TIRVU = [
     "Empresa", "Posto de Serviço", "Matrícula", "Nome Completo", "CPF",
@@ -48,11 +71,15 @@ def cep_mascarado(cep) -> str:
 
 
 def ctps_do_cpf(cpf) -> tuple[str, str]:
-    """CTPS Digital (eSocial): número = CPF completo, série = 0000."""
+    """CTPS Digital derivada do CPF, no formato que o Tirvu importa (feedback de
+    campo 2026-07-24): NÚMERO = os 7 primeiros dígitos do CPF, SÉRIE = os 4
+    últimos. Juntos reconstroem o CPF. NÃO é (CPF completo, "0000") — esse era o
+    formato antigo, que o Tirvu recusou ("veio tudo junto, não separou os quatro
+    últimos como série")."""
     d = _so_digitos(cpf)
     if len(d) != 11:
         return "", ""
-    return d, "0000"
+    return d[:7], d[7:]
 
 
 def _data(v) -> str:
@@ -125,11 +152,16 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     jornada = db.get(Jornada, c.jornada_id) if c.jornada_id else None
 
     cpf = (d.cpf if d and d.cpf else c.cpf) or ""
-    ctps_num, ctps_serie = "", ""
-    if d and d.ctps_numero:
-        ctps_num, ctps_serie = d.ctps_numero, d.ctps_serie or "0000"
-    elif cpf:
-        ctps_num, ctps_serie = ctps_do_cpf(cpf)
+    # CTPS para o Tirvu: SEMPRE derivar do CPF (número = 7 primeiros, série = 4
+    # últimos). O que está GRAVADO em ctps_numero/serie pode ser o formato antigo
+    # (CPF completo + "0000") de fichas anteriores a 2026-07-24 — o export não
+    # backfilla o banco nem toca o PDF assinado, apenas gera a planilha certa.
+    # Só cai no gravado se, por algum motivo, não houver CPF.
+    ctps_num, ctps_serie = ctps_do_cpf(cpf) if cpf else ("", "")
+    # Se o CPF é inválido/ausente (derivação vazia) mas há CTPS gravada, usa a
+    # gravada — não perder o dado por causa de um CPF sujo (B1 da revisão).
+    if not ctps_num and d and d.ctps_numero:
+        ctps_num, ctps_serie = d.ctps_numero, d.ctps_serie or ""
 
     sexo = ""
     if p and p.sexo:
@@ -155,13 +187,17 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
 
     matricula = garantir_matricula(db, c) if gerar_matricula else (c.matricula or "")
 
+    # Empresa/Posto/Cargo/Jornada: o importador do Tirvu casa por ID NUMÉRICO da
+    # base dele, não pelo texto (feedback 2026-07-24: colar o texto fez o Tirvu
+    # gravar zero). Escrevemos o `tirvu_id` cadastrado; se faltar, sai vazio e
+    # `pendencias_linha` acusa (melhor barrar aqui que subir e o Tirvu zerar).
     return {
-        "Empresa": empresa.razao_social if empresa else "",
-        "Posto de Serviço": posto.nome if posto else "",
+        "Empresa": (empresa.tirvu_id if empresa else "") or "",
+        "Posto de Serviço": (posto.tirvu_id if posto else "") or "",
         "Matrícula": matricula,
         "Nome Completo": c.nome_completo or "",
         "CPF": cpf_mascarado(cpf),
-        "Cargo": c.cargo_funcao or "",
+        "Cargo": tirvu_id_do_cargo(db, c.cargo_funcao),
         "Data de Nascimento": _data(nascimento),
         "Data de Admissão": _data(c.data_admissao),
         "Sexo (M ou F)": sexo,
@@ -173,7 +209,10 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
         "Salário - Complementar": "",
         "Salário - Extra": "",
         "Data Vigência - Salário": "",
-        "Descrição da Jornada de Trabalho": jornada.descricao if jornada else "",
+        # Apesar do nome "Descrição", o Tirvu casa a jornada por ID (feedback
+        # 2026-07-24: "veio com id zerado, o correto seria 246"). Escreve o
+        # tirvu_id da jornada, não a descrição.
+        "Descrição da Jornada de Trabalho": (jornada.tirvu_id if jornada else "") or "",
         # só dígitos: o front agora guarda mascarado (61) 99999-8888, mas o
         # Tirvu recebe o telefone limpo (como PIS/CPF-sem-máscara alhures)
         "Whatsapp": _so_digitos(c.celular_whatsapp),
@@ -230,7 +269,11 @@ def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
 # Rótulo amigável do campo na lista de pendências mostrada ao RH (a coluna do
 # layout tem nome técnico; o RH lê o nome do campo como aparece na ficha).
 _ROTULO_PENDENCIA = {
-    "Descrição da Jornada de Trabalho": "Jornada de Trabalho",
+    # Estes três agora saem como ID do Tirvu; se vazio, o cadastro do ID falta.
+    "Empresa": "ID Tirvu da empresa",
+    "Posto de Serviço": "ID Tirvu do posto",
+    "Cargo": "ID Tirvu do cargo",
+    "Descrição da Jornada de Trabalho": "ID Tirvu da jornada",
     "Registra Ponto (S ou N)": "Registra Ponto",
 }
 
@@ -248,7 +291,7 @@ def pendencias_linha(linha: dict) -> list[str]:
     do Tirvu, que nasceram sem o campo."""
     faltas = []
     for campo in ("Nome Completo", "CPF", "PIS", "CTPS Número",
-                  "Data de Admissão", "Empresa", "Cargo",
+                  "Data de Admissão", "Empresa", "Posto de Serviço", "Cargo",
                   "Descrição da Jornada de Trabalho", "Registra Ponto (S ou N)"):
         if not linha.get(campo):
             faltas.append(_ROTULO_PENDENCIA.get(campo, campo))

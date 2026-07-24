@@ -73,9 +73,18 @@ def enviar_arquivo(
     candidato = _candidato_do_token(token, db)
     if candidato.status == StatusCandidato.envio_concluido:
         raise HTTPException(status_code=409, detail="envio_ja_concluido")
+    if candidato.status == StatusCandidato.expurgado:
+        raise HTTPException(status_code=409, detail="admissao_encerrada")
     slot = db.get(SlotDocumento, slot_id)
     if slot is None or slot.candidato_id != candidato.id:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    # Reabertura CIRÚRGICA pós-aprovação (feedback 2026-07-24): um candidato já
+    # APROVADO só pode reenviar um slot que o RH REJEITOU — nunca mexer num slot
+    # já aprovado nem reabrir a ficha inteira. O status `aprovado` fica intacto
+    # (não desfaz dossiê/efetivação); o RH reavalia só aquele documento.
+    if (candidato.status == StatusCandidato.aprovado
+            and slot.status != StatusSlot.rejeitado):
+        raise HTTPException(status_code=409, detail="apenas_documento_rejeitado")
 
     lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
     if not lista:
@@ -172,6 +181,8 @@ def enviar_identidade(token: str,
     candidato = _candidato_do_token(token, db)
     if candidato.status == StatusCandidato.envio_concluido:
         raise HTTPException(status_code=409, detail="envio_ja_concluido")
+    if candidato.status == StatusCandidato.expurgado:
+        raise HTTPException(status_code=409, detail="admissao_encerrada")
 
     lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
     if not lista:
@@ -197,6 +208,11 @@ def enviar_identidade(token: str,
         or slots.get(TipoDocumento.rg)
     if slot is None:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    # Mesma contenção cirúrgica do enviar_arquivo: um aprovado só reenvia RG/CNH
+    # se aquele slot foi rejeitado — não pode substituir um já aprovado.
+    if (candidato.status == StatusCandidato.aprovado
+            and slot.status != StatusSlot.rejeitado):
+        raise HTTPException(status_code=409, detail="apenas_documento_rejeitado")
 
     sugestoes = sugestoes_da_cnh(texto) if e_cnh else sugestoes_do_rg(texto)
     _gravar_partes_no_slot(db, candidato, slot, partes, pdf_final, paginas)
@@ -308,6 +324,24 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
     ]
     if faltando:
         raise HTTPException(status_code=422, detail={"faltando": faltando})
+
+    # Reabertura cirúrgica pós-aprovação: se o candidato já estava APROVADO e só
+    # reenviou um documento que fora rejeitado, NÃO reabrimos o funil inteiro
+    # (não vira `envio_concluido`) — a aprovação global fica intacta e o RH
+    # reavalia apenas o slot reenviado. Só avisamos que houve reenvio.
+    if candidato.status == StatusCandidato.aprovado:
+        registrar(db, "documento_reenviado_pos_aprovacao", ator="candidato",
+                  candidato_id=candidato.id)
+        db.commit()
+        from app.services.notificacoes import avisar
+        avisar(
+            db, "envio_concluido",
+            f"🔁 Documento reenviado (já aprovado): {candidato.nome_completo}",
+            f"O colaborador {candidato.nome_completo}, já aprovado, reenviou um "
+            f"documento que havia sido rejeitado. Reavalie no painel do RH: "
+            f"{base_url_publica(request)}/rh\n",
+        )
+        return {"status": candidato.status}
 
     candidato.status = StatusCandidato.envio_concluido
     registrar(db, "envio_concluido", ator="candidato", candidato_id=candidato.id)

@@ -5,7 +5,7 @@ import CheckMestre from '../CheckMestre.jsx'
 import Ajuda from '../Ajuda.jsx'
 import IncidenciaBeneficios from './IncidenciaBeneficios.jsx'
 
-const VAZIO = { nome: '', sigla: '', cnpj: '', contrato_ref: '', exige_docs_infraero: false,
+const VAZIO = { nome: '', sigla: '', cnpj: '', tirvu_id: '', contrato_ref: '', exige_docs_infraero: false,
   documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
 
 // Aba própria de Postos: CRUD, importador da planilha do Tirvu, vínculo de
@@ -94,6 +94,7 @@ export default function PostosRH() {
     if (!edit.nome.trim()) { setMsg({ tipo: 'erro', texto: 'Informe o nome do posto.' }); return }
     const corpo = {
       nome: edit.nome.trim(), sigla: edit.sigla.trim() || null, cnpj: edit.cnpj.trim() || null,
+      tirvu_id: (edit.tirvu_id || '').trim() || null,
       contrato_ref: edit.contrato_ref.trim() || null,
       exige_docs_infraero: !!edit.exige_docs_infraero,
       documentos_kit: edit.documentos_kit || [], atributos: edit.atributos || {},
@@ -250,7 +251,7 @@ export default function PostosRH() {
                          onChange={() => marcarTodos(!todosSelecionados)}
                          title="Selecionar todos os postos visíveis" />
           </th>
-          <th>Sigla</th><th>Nome</th><th>CNPJ</th><th>Contrato</th>
+          <th>Sigla</th><th>Nome</th><th>CNPJ</th><th>ID Tirvu</th><th>Contrato</th>
           {colunas.map((c) => <th key={c}>{c}</th>)}<th></th></tr></thead>
         <tbody>
           {postos.map((p) => {
@@ -266,11 +267,15 @@ export default function PostosRH() {
                   <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}
                     {p.da_direito_creche ? <span title={`Reembolso-creche${p.valor_reembolso_creche ? ': ' + p.valor_reembolso_creche : ''}`}> 🍼</span> : ''}</td>
                   <td>{p.cnpj || '—'}</td>
+                  <td>{p.tirvu_id
+                    ? p.tirvu_id
+                    : <span style={{ color: 'var(--ambar)' }} title="Sem ID do Tirvu — o export sai vazio nesta coluna">— sem ID</span>}</td>
                   <td>{p.contrato_ref || '—'}</td>
                   {colunas.map((c) => <td key={c}>{(p.atributos || {})[c] || '—'}</td>)}
                   <td className="acoes-candidato">
                     <button className="btn-secundario btn-mini" onClick={() => editando ? setEdit(null) : setEdit({
-                      ...p, sigla: p.sigla || '', cnpj: p.cnpj || '', contrato_ref: p.contrato_ref || '',
+                      ...p, sigla: p.sigla || '', cnpj: p.cnpj || '', tirvu_id: p.tirvu_id || '',
+                      contrato_ref: p.contrato_ref || '',
                       documentos_kit: p.documentos_kit || [], atributos: p.atributos || {},
                       da_direito_creche: !!p.da_direito_creche,
                       valor_reembolso_creche: p.valor_reembolso_creche || '',
@@ -321,6 +326,9 @@ function CamposPosto({ edit, setEdit, docsDisp, colunas, salvar, onCancelar }) {
                onChange={(e) => setEdit({ ...edit, sigla: e.target.value })} />
         <input placeholder="CNPJ" value={edit.cnpj}
                onChange={(e) => setEdit({ ...edit, cnpj: e.target.value })} />
+        <input placeholder="ID Tirvu (ex.: 49)" value={edit.tirvu_id || ''}
+               title="Código deste posto na base do Tirvu — o export de admissões casa por ele"
+               onChange={(e) => setEdit({ ...edit, tirvu_id: e.target.value })} />
       </div>
       <input placeholder="Contrato de referência" value={edit.contrato_ref}
              onChange={(e) => setEdit({ ...edit, contrato_ref: e.target.value })} />

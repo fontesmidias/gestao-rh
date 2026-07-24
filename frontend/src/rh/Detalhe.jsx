@@ -433,8 +433,17 @@ const SECOES_FICHA = {
                'titulo_eleitor_numero', 'titulo_eleitor_zona', 'titulo_eleitor_secao'],
   'trabalho-banco': ['tamanho_calca', 'tamanho_camisa', 'tamanho_calcado',
                      'banco', 'pix_tipo', 'pix_chave'],
-  'vt-emergencia': ['vt_optante', 'vt_cartao_dftrans', 'vt_trajeto_descricao'],
+  // VT + emergência: o candidato preenche a emergência no wizard, mas o RH
+  // também precisa ver/corrigir (feedback 2026-07-24: "não apareceu os dados de
+  // emergência para o RH editar"). O backend (rh_ficha.py::editar_secao) já
+  // separa vt_ de emergência e grava em ValeTransporte/FichaEmergencia.
+  'vt-emergencia': ['vt_optante', 'vt_cartao_dftrans', 'vt_trajeto_descricao',
+                    'tipo_sanguineo', 'usa_medicamento_continuo', 'medicamentos',
+                    'condicoes_medicas', 'orientacao_emergencia'],
 }
+// Campos booleanos: o <input> devolve texto; convertê-los para bool no submit
+// (como vt_optante já era). Chave = campo do payload.
+const CAMPOS_BOOL = new Set(['vt_optante', 'usa_medicamento_continuo'])
 const CHAVE_ESTADO = { 'trabalho-banco': 'trabalho_banco' }
 
 function FichaRH({ id, setMsg }) {
@@ -460,8 +469,13 @@ function FichaRH({ id, setMsg }) {
     const s = ficha[CHAVE_ESTADO[secao] || secao] || {}
     if (secao === 'vt-emergencia') {
       const vt = ficha.vt || {}
+      const em = ficha.emergencia || {}
       return { vt_optante: vt.optante, vt_cartao_dftrans: vt.cartao_dftrans,
-               vt_trajeto_descricao: vt.trajeto_descricao }[campo]
+               vt_trajeto_descricao: vt.trajeto_descricao,
+               tipo_sanguineo: em.tipo_sanguineo,
+               usa_medicamento_continuo: em.usa_medicamento_continuo,
+               medicamentos: em.medicamentos, condicoes_medicas: em.condicoes_medicas,
+               orientacao_emergencia: em.orientacao_emergencia }[campo]
     }
     return s[campo]
   }
@@ -479,8 +493,10 @@ function FichaRH({ id, setMsg }) {
       setMsg({ tipo: 'erro', texto: 'Informe o motivo da correção — ele vai para a auditoria.' }); return
     }
     if (!window.confirm('Salvar a correção desta seção?\n\nSe algum documento já assinado exibir um dado alterado, ele será reaberto para o colaborador assinar novamente.')) return
-    if (dados.vt_optante !== undefined && dados.vt_optante !== null) {
-      dados.vt_optante = String(dados.vt_optante).toLowerCase() === 'true'
+    for (const campo of CAMPOS_BOOL) {
+      if (dados[campo] !== undefined && dados[campo] !== null) {
+        dados[campo] = String(dados[campo]).toLowerCase() === 'true'
+      }
     }
     setSalvando(secao); setMsg(null)
     try {
@@ -523,15 +539,40 @@ function FichaRH({ id, setMsg }) {
           {campos.map((campo) => {
             const chave = `${secao}.${campo}`
             const atual = valorAtual(secao, campo)
+            const valorEdit = chave in edicao ? edicao[chave] : (atual ?? '')
+            // Campos booleanos viram <select> — nunca <input> texto: digitar
+            // "sim" num input gravaria false silenciosamente (dado médico em
+            // usa_medicamento_continuo). O submit converte "true"/"false".
+            const ehBool = CAMPOS_BOOL.has(campo)
             return (
               <label className="campo" key={campo}>
                 <span className="rotulo">{campo.replaceAll('_', ' ')}
                   {atual == null || atual === '' ? <em> — vazio</em> : null}</span>
-                <input value={chave in edicao ? edicao[chave] : (atual ?? '')}
-                       onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })} />
+                {ehBool ? (
+                  <select value={valorEdit === '' ? '' : String(valorEdit)}
+                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                    <option value="">— não informado —</option>
+                    <option value="true">Sim</option>
+                    <option value="false">Não</option>
+                  </select>
+                ) : (
+                  <input value={valorEdit}
+                         onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })} />
+                )}
               </label>
             )
           })}
+          {secao === 'vt-emergencia' && (ficha.contatos_emergencia || []).length > 0 && (
+            <div className="explica" style={{ width: '100%' }}>
+              <strong>Contatos de emergência</strong> (preenchidos pelo candidato):
+              <ul style={{ margin: '.3rem 0 0', paddingLeft: '1.1rem' }}>
+                {ficha.contatos_emergencia.map((c) => (
+                  <li key={c.id}>{c.nome_completo} — {c.parentesco} · {c.telefone_celular}
+                    {c.telefone_fixo_endereco ? ` · ${c.telefone_fixo_endereco}` : ''}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <button className="btn-principal btn-mini" disabled={salvando === secao}
                   onClick={() => salvarSecao(secao)}>
             {salvando === secao ? 'Salvando…' : 'Salvar esta seção'}</button>

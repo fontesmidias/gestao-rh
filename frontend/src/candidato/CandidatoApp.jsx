@@ -61,6 +61,16 @@ export default function CandidatoApp() {
               return
             }
           } catch { /* segue para o erro padrão */ }
+          // Reabertura cirúrgica pós-aprovação: mesmo com a ficha encerrada, se o
+          // RH REJEITOU um documento, o candidato precisa reenviar só aquele.
+          try {
+            const chk = await api.documentos(token)
+            if ((chk.slots || []).some((s) => s.status === 'rejeitado')) {
+              setEstado({ status: 'aprovado', pessoais: {} })
+              setTela('documentos')
+              return
+            }
+          } catch { /* segue para o erro padrão */ }
           setErro('encerrada')
           return
         }

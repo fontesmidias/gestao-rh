@@ -248,8 +248,11 @@ def _sincronizar_autodeclaracao_residencia(db, candidato, titular: str) -> None:
 def salvar_documentos(token: str, payload: SecaoDocumentos, db: Session = Depends(get_db)) -> None:
     candidato = _candidato_do_token(token, db)
     docs = _upsert(db, DocumentosIdentificacao, candidato.id, payload)
-    # CTPS Digital (eSocial): número = o próprio CPF, série = 0000. Derivada
-    # aqui, nunca perguntada ao candidato; quem assinou antes fica em branco.
+    # CTPS Digital derivada do CPF (número = 7 primeiros dígitos, série = 4
+    # últimos — formato do Tirvu, feedback 2026-07-24). Nunca perguntada ao
+    # candidato; quem assinou antes fica com o valor antigo (não regravamos o
+    # que já existe). O export do Tirvu sempre re-deriva do CPF, então o gravado
+    # aqui só alimenta o PDF da ficha de quem preenche agora.
     if docs.cpf and not docs.ctps_numero:
         from app.services.export_tirvu import ctps_do_cpf
         docs.ctps_numero, docs.ctps_serie = ctps_do_cpf(docs.cpf)

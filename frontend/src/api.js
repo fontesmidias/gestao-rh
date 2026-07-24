@@ -346,6 +346,12 @@ export const rh = {
   empresas: () => req('/rh/empresas', { headers: authRH() }),
   criarEmpresa: (dados) =>
     req('/rh/empresas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarEmpresa: (id, dados) =>
+    req(`/rh/empresas/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  // De-para cargo → ID do Tirvu (o cargo é texto livre; o Tirvu casa por ID).
+  cargosTirvu: () => req('/rh/cargos-tirvu', { headers: authRH() }),
+  salvarCargoTirvu: (dados) =>
+    req('/rh/cargos-tirvu', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   jornadas: (postoId) =>
     req(`/rh/jornadas${postoId ? `?posto_id=${postoId}` : ''}`, { headers: authRH() }),
   criarJornada: (dados) =>
