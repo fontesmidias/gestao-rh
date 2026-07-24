@@ -11,6 +11,29 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.87.0] — 2026-07-24 — Mini-CRM: anotações e tags no ciclo de vida
+
+### Adicionado
+- **Anotações e tags que acompanham a pessoa** por todo o ciclo de vida
+  (talento → candidato → efetivo → desligado). A memória é feita uma vez e
+  "segue a pessoa" sem cópia: como o talento é preservado e ligado ao candidato
+  por `candidato_id`, as consultas juntam os dois lados (OR em `services/crm.py`).
+- **Anotações**: texto livre + AUTOR (quem lançou, snapshot do nome) + data/hora
+  + anexo opcional (MinIO). Registro de comunicação interna do RH, visível a
+  toda a equipe. Excluível.
+- **Tags**: catálogo com CRUD (Configurações → 🏷️ Tags): nome + cor + ativa.
+  Marcar/desmarcar na pessoa; filtro e coluna no dash do Banco de Talentos.
+  Catálogo único evita "entrevistado"/"Entrevistado" virarem tags diferentes.
+- **Onde aparece**: painel na própria linha do dash de Talentos (botão
+  🗒️ Anotações) e seção recolhível na ficha do candidato/colaborador
+  (`Detalhe.jsx`). Componente único reutilizável `MemoriaPessoa.jsx`.
+
+### Técnico
+- Tabelas `crm_tag`, `crm_pessoa_tag` (N:N, 2 FKs opcionais talento/candidato),
+  `crm_anotacao`. Migration `b7c4d9e1f2a3` (reversível). Sem enum novo.
+- Rotas `/rh/crm/...` (todas restritas ao RH). Tags carregadas em lote no dump
+  de talentos (sem N+1). Autor via `requer_rh` (`rh.id`/`rh.nome`).
+
 ## [1.86.0] — 2026-07-23 — Sistema de design + padronização + bugs de provas
 
 ### Sistema de design (a dor nº1: "toda hora tenho que padronizar")

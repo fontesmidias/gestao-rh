@@ -584,6 +584,44 @@ export const rh = {
       return r.json()
     } finally { saiuRH() }
   },
+  // Mini-CRM: anotações e tags que acompanham a pessoa (talento+candidato).
+  // Passa talento_id OU candidato_id — o backend junta os dois lados.
+  crmMemoria: (pessoa) => {
+    const q = new URLSearchParams(Object.entries(pessoa).filter(([, v]) => v)).toString()
+    return req(`/rh/crm/pessoa?${q}`, { headers: authRH() })
+  },
+  crmTags: (incluirInativas = false) =>
+    req(`/rh/crm/tags${incluirInativas ? '?incluir_inativas=true' : ''}`, { headers: authRH() }),
+  crmCriarTag: (dados) =>
+    req('/rh/crm/tags', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  crmEditarTag: (id, dados) =>
+    req(`/rh/crm/tags/${id}`, { method: 'PATCH', headers: authRH(), body: JSON.stringify(dados) }),
+  crmExcluirTag: (id) =>
+    req(`/rh/crm/tags/${id}`, { method: 'DELETE', headers: authRH() }),
+  crmCriarAnotacao: (dados) =>
+    req('/rh/crm/anotacoes', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  crmExcluirAnotacao: (id) =>
+    req(`/rh/crm/anotacoes/${id}`, { method: 'DELETE', headers: authRH() }),
+  crmAnexarAnotacao: async (id, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/crm/anotacoes/${id}/anexo`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
+  crmAnexo: (id) =>
+    req(`/rh/crm/anotacoes/${id}/anexo`, { headers: authRH() }),  // devolve blob
+  crmMarcarTag: (dados) =>
+    req('/rh/crm/pessoa/tags', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  crmDesmarcarTag: (pessoa, tagId) => {
+    const q = new URLSearchParams({ tag_id: tagId,
+      ...Object.fromEntries(Object.entries(pessoa).filter(([, v]) => v)) }).toString()
+    return req(`/rh/crm/pessoa/tags?${q}`, { method: 'DELETE', headers: authRH() })
+  },
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),

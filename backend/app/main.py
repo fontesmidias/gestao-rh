@@ -24,6 +24,7 @@ from app.api.testagem import router as testagem_router
 from app.api.provas import router as provas_router
 from app.api.modelos import router as modelos_router
 from app.api.talentos import router as talentos_router
+from app.api.crm import router as crm_router
 from app.api.diagnostico import router as diagnostico_router
 from app.api.ficha import router as ficha_router
 from app.api.revisao import router as revisao_router
@@ -122,6 +123,7 @@ app.include_router(testagem_router, prefix="/api")
 app.include_router(provas_router, prefix="/api")
 app.include_router(modelos_router, prefix="/api")
 app.include_router(talentos_router, prefix="/api")
+app.include_router(crm_router, prefix="/api")
 app.include_router(diagnostico_router, prefix="/api")
 app.include_router(assinaturas_router, prefix="/api")
 app.include_router(revisao_router, prefix="/api")

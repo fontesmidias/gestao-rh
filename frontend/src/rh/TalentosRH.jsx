@@ -3,6 +3,7 @@ import { fmtData, fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
+import MemoriaPessoa from './MemoriaPessoa.jsx'
 
 const STATUS = {
   novo: ['Novo', '#5bc0de'],
@@ -24,6 +25,7 @@ const simNao = (v) => v == null ? '—' : v ? 'Sim' : 'Não'
 export default function TalentosRH({ aoAbrir }) {
   const [talentos, setTalentos] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [anotando, setAnotando] = useState(null)   // id do talento com painel de anotações aberto
   const inputPlanilha = useRef(null)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
@@ -108,6 +110,13 @@ export default function TalentosRH({ aoAbrir }) {
         {t.tem_curriculo && <span title="Enviou currículo"> 📎</span>}</>) },
     { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'texto', quebra: true,
       valor: (t) => (t.cargos_interesse?.length ? t.cargos_interesse : (t.cargo_interesse ? [t.cargo_interesse] : [])) },
+    { chave: 'tags', rotulo: 'Tags', filtro: 'texto', quebra: true,
+      // valor = nomes das tags (o DashPlanilha filtra por esse texto)
+      valor: (t) => (t.tags || []).map((g) => g.nome),
+      render: (t) => (t.tags || []).length
+        ? (t.tags || []).map((g) => (
+            <span key={g.id} className="chip" style={{ '--chip-cor': g.cor || undefined }}>{g.nome}</span>))
+        : '—' },
     { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'texto' },
     { chave: 'regioes', rotulo: 'Regiões', oculta: true, quebra: true, valor: (t) => t.regioes || [] },
     { chave: 'tipo_contratacao', rotulo: 'Contratação', filtro: 'select', oculta: true,
@@ -134,6 +143,9 @@ export default function TalentosRH({ aoAbrir }) {
   ]
 
   const acoesLinha = (t) => (<>
+    <button className={`btn-${anotando === t.id ? 'principal' : 'secundario'} btn-mini`}
+            onClick={() => setAnotando(anotando === t.id ? null : t.id)}>
+      🗒️ {anotando === t.id ? 'Fechar' : 'Anotações'}</button>
     {t.email && t.status !== 'convertido' && (
       <button className="btn-secundario btn-mini" onClick={() => enviarTeste(t)}>📝 Teste</button>)}
     {t.status !== 'convertido' && (<>
@@ -180,6 +192,8 @@ export default function TalentosRH({ aoAbrir }) {
       {!talentos ? <p>Carregando…</p> : (
         <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
+                      linhaExpandida={(t) => (anotando === t.id
+                        ? <MemoriaPessoa pessoa={{ talento_id: t.id }} /> : null)}
                       vazio="Nenhum talento cadastrado ainda." />
       )}
     </main>
