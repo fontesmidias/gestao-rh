@@ -206,6 +206,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   server-side (posto via SelectBusca, busca com debounce, status do creche)
   ficam FORA do dash, no topo, alimentando `dados`; o dash refina em memória por
   cima. Ao criar uma lista nova, use o DashPlanilha — não escreva `<table>` à mão.
+- **Mini-CRM — anotações e tags no ciclo de vida** (`models/crm.py`,
+  `services/crm.py`, `api/crm.py`, `frontend/src/rh/MemoriaPessoa.jsx`): memória
+  do RH sobre a PESSOA que atravessa talento → candidato → efetivo → desligado.
+  A pessoa vive em DOIS registros (`talento` e `candidato`, ligados por
+  `talento.candidato_id`; o talento NÃO some ao converter). Por isso `Anotacao` e
+  `PessoaTag` têm DUAS FKs opcionais (`talento_id`/`candidato_id`), uma
+  preenchida por registro. A memória "segue a pessoa" SEM cópia: `escopo_pessoa`
+  descobre o par (talento↔candidato) e as consultas usam OR nas duas chaves
+  (`_predicado`) — nada é movido no `converter`, o elo já está na FK. **Autor**:
+  grava `autor_id` (FK UsuarioRH) E `autor_nome` (SNAPSHOT — não some se o
+  usuário for removido), via `requer_rh`. **Tags**: catálogo com CRUD
+  (Configurações → Tags), `crm_pessoa_tag` N:N idempotente; no dash de Talentos a
+  coluna/filtro de tags vem do dump, carregado EM LOTE (`tags_por_talento`, sem
+  N+1, já unindo talento+candidato). Anexo por anotação no MinIO (prefixo
+  `crm/anotacoes/{id}/`). Rotas `/rh/crm/...` restritas ao RH; a paramétrica
+  `/tags/{tag_id}` fica por ÚLTIMO (senão captura `/pessoa`, `/anotacoes`). UI:
+  `MemoriaPessoa.jsx` reusado no painel `linhaExpandida` do dash de Talentos e na
+  seção recolhível do `Detalhe.jsx`.
 - **Banco de Talentos**: form público (`Talentos.jsx`, rota `/banco-de-talentos`)
   = wizard de 3 passos que substituiu o Microsoft Forms. **Enviar teste avulso**:
   `POST /rh/talentos/{id}/enviar-teste` cria um `LinkTestagem` dedicado

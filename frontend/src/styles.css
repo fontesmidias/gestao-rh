@@ -583,6 +583,29 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
         color: var(--chip-cor, var(--tinta-suave));
         background: color-mix(in srgb, var(--chip-cor, #889) 14%, transparent);
         border: 1px solid color-mix(in srgb, var(--chip-cor, #889) 28%, transparent); }
+
+/* Mini-CRM: anotações + tags da pessoa (MemoriaPessoa.jsx). Tokens; legível nos
+   dois temas (fundo --cartao/--input-bg, texto --tinta). */
+.crm-memoria { display: flex; flex-direction: column; gap: var(--esp-3); }
+.crm-tags-linha { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-2); }
+.crm-tags-catalogo { display: flex; flex-wrap: wrap; gap: var(--esp-2);
+                     padding: var(--esp-2); background: var(--input-bg);
+                     border: 1px solid var(--borda-suave); border-radius: var(--raio-input); }
+.crm-tag-opcao { cursor: pointer; opacity: .6; transition: opacity .12s; }
+.crm-tag-opcao:hover, .crm-tag-opcao.marcada { opacity: 1; }
+.crm-nova { display: flex; flex-direction: column; gap: var(--esp-2); }
+.crm-nova textarea { width: 100%; }
+.crm-nova-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--esp-3); }
+.crm-anexo-label { cursor: pointer; }
+.crm-lista { list-style: none; display: flex; flex-direction: column; gap: var(--esp-2); }
+.crm-item { background: var(--cartao); border: 1px solid var(--borda-suave);
+            border-radius: var(--raio-input); padding: var(--esp-3); }
+.crm-item-topo { display: flex; justify-content: space-between; align-items: center;
+                 gap: var(--esp-2); margin-bottom: var(--esp-1); }
+.crm-item-meta { font-size: var(--fs-apoio); color: var(--cinza-txt); }
+.crm-item-texto { color: var(--tinta); white-space: pre-wrap; word-break: break-word; }
+.crm-badge { margin-left: var(--esp-2); font-size: var(--fs-mini); color: var(--cinza-txt);
+             background: var(--hover); border-radius: var(--raio-chip); padding: .1rem .5rem; }
 /* Matriz de avisos internos (Config): um bloco por evento, com os
    destinatários como chips removíveis. */
 .aviso-evento { border: 1px solid var(--borda-suave); border-radius: 10px;

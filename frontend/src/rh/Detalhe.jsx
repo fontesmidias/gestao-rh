@@ -8,6 +8,7 @@ import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
+import MemoriaPessoa from './MemoriaPessoa.jsx'
 
 const MOTIVOS = [
   ['ilegivel', 'Ilegível'],
@@ -534,6 +535,24 @@ function FichaRH({ id, setMsg }) {
   )
 }
 
+// Anotações + tags do colaborador/candidato: recolhível (tudo que abre, fecha).
+// A memória é a MESMA da pessoa no Banco de Talentos — segue o ciclo de vida.
+function MemoriaColaborador({ id }) {
+  const [aberto, setAberto] = useState(false)
+  return (
+    <div className="rh-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: '.5rem' }}>
+        <strong>🗒️ Anotações e tags</strong>
+        <button className="btn-link" onClick={() => setAberto((v) => !v)}>
+          {aberto ? 'ocultar' : 'ver / adicionar'}</button>
+      </div>
+      {aberto && <div style={{ marginTop: '.6rem' }}>
+        <MemoriaPessoa pessoa={{ candidato_id: id }} /></div>}
+    </div>
+  )
+}
+
 export default function Detalhe({ id, aoVoltar }) {
   const [dados, setDados] = useState(null)
   const [visualizando, setVisualizando] = useState(null) // slot id
@@ -702,6 +721,10 @@ export default function Detalhe({ id, aoVoltar }) {
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
+          Talentos. Recolhível para não poluir a ficha. */}
+      <MemoriaColaborador id={id} />
 
       {/* No desktop, os cards de informação dividem a largura em 2 colunas
           (menos rolagem); no celular continuam empilhados. */}

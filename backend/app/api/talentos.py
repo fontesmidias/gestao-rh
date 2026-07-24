@@ -17,7 +17,7 @@ from app.core.db import get_db
 from app.models.candidato import Candidato
 from app.models.talento import StatusTalento, Talento
 from app.models.usuario_rh import UsuarioRH
-from app.services import storage
+from app.services import crm, storage
 from app.services.auditoria import registrar
 from app.services.email import email_convite, enviar_email
 from app.services.magic_link import emitir_link
@@ -192,7 +192,7 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
 # ---------- RH (protegido) ----------
 
 
-def _dump(t: Talento, teste: dict | None = None) -> dict:
+def _dump(t: Talento, teste: dict | None = None, tags: list | None = None) -> dict:
     return {
         "id": t.id, "nome": t.nome, "email": t.email, "telefone": t.telefone,
         "cargo_interesse": t.cargo_interesse,
@@ -205,6 +205,7 @@ def _dump(t: Talento, teste: dict | None = None) -> dict:
         "consentimento_lgpd_em": t.consentimento_lgpd_em,
         "tem_curriculo": bool(t.curriculo_key), "curriculo_nome": t.curriculo_nome,
         "teste_status": (teste or {}).get("status"),  # None | enviado | em_andamento | concluido
+        "tags": tags or [],   # tags do CRM (do talento E do candidato vinculado)
         "status": t.status.value, "candidato_id": t.candidato_id, "criado_em": t.criado_em,
     }
 
@@ -228,7 +229,9 @@ def listar(status: str | None = None, busca: str | None = None,
     talentos = db.scalars(consulta).all()
     # resumo de teste por talento (1 consulta, sem N+1)
     testes = {t.id: _resumo_teste_talento(db, t.id) for t in talentos}
-    return [_dump(t, testes.get(t.id)) for t in talentos]
+    # tags do CRM em lote (talento + candidato vinculado), sem N+1
+    tags = crm.tags_por_talento(db, list(talentos))
+    return [_dump(t, testes.get(t.id), tags.get(t.id)) for t in talentos]
 
 
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])

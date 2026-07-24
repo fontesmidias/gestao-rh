@@ -200,6 +200,7 @@ const SUBMENUS = [
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
   ['identidade', '🎨 Identidade visual'],
   ['organizacao', '🏢 Empresas e jornadas'],
+  ['tags', '🏷️ Tags'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['sistema', '🛠️ Sistema'],
 ]
@@ -227,6 +228,7 @@ export default function Config({ aoVoltar }) {
         <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
         <BackfillEnderecos />
       </>}
+      {aba === 'tags' && <TagsConfig />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
@@ -1076,6 +1078,100 @@ function Teams() {
                 }}>Enviar teste</button>
       </div>
       <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Catálogo de tags do mini-CRM (nome + cor). Edição inline na própria linha,
+// nunca no topo (padrão da casa — ver 08-sistema-de-design.md). As tags são
+// aplicadas às pessoas no Banco de Talentos e na ficha do colaborador.
+function TagsConfig() {
+  const [tags, setTags] = useState(null)
+  const [editando, setEditando] = useState(null)   // id em edição, ou 'novo'
+  const [msg, setMsg] = useState(null)
+
+  const carregar = () => api.crmTags(true).then(setTags).catch(() => setTags([]))
+  useEffect(() => { carregar() }, [])
+
+  const excluir = async (t) => {
+    if (!window.confirm(`Excluir a tag "${t.nome}"? Ela sai de todas as pessoas marcadas.`)) return
+    try { await api.crmExcluirTag(t.id); carregar() }
+    catch (e) { setMsg({ tipo: 'erro', texto: e.amigavel || e.detail || e.message }) }
+  }
+
+  if (!tags) return <div className="rh-card"><p>Carregando…</p></div>
+  return (
+    <div className="rh-card">
+      <h3>🏷️ Tags</h3>
+      <p className="explica">Rótulos para triar as pessoas no Banco de Talentos e no
+        cadastro — "Já entrevistado", "Currículo lido", "Serve p/ outra vaga". Um
+        catálogo único evita "entrevistado"/"Entrevistado" virarem tags diferentes.</p>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      {editando === 'novo'
+        ? <FormTag aoFechar={() => { setEditando(null); carregar() }}
+                   aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+        : <button className="btn-principal btn-mini" style={{ marginBottom: '.7rem' }}
+                  onClick={() => setEditando('novo')}>＋ Nova tag</button>}
+
+      {tags.length === 0 && <p className="explica">Nenhuma tag cadastrada.</p>}
+      {tags.map((t) => (
+        editando === t.id
+          ? <FormTag key={t.id} tag={t}
+                     aoFechar={() => { setEditando(null); carregar() }}
+                     aoErro={(m) => setMsg({ tipo: 'erro', texto: m })} />
+          : (
+            <div key={t.id} className="rh-topo" style={{ marginBottom: '.4rem' }}>
+              <span className="chip" style={{ '--chip-cor': t.cor || undefined }}>
+                {t.nome}{!t.ativo && ' (inativa)'}</span>
+              <div>
+                <button className="btn-secundario btn-mini" onClick={() => setEditando(t.id)}>Editar</button>
+                <button className="btn-secundario btn-mini" onClick={() => excluir(t)}>Excluir</button>
+              </div>
+            </div>
+          )
+      ))}
+    </div>
+  )
+}
+
+function FormTag({ tag, aoFechar, aoErro }) {
+  const novo = !tag
+  const [nome, setNome] = useState(tag?.nome || '')
+  const [cor, setCor] = useState(tag?.cor || '#16c464')
+  const [ativo, setAtivo] = useState(tag ? tag.ativo : true)
+  const [salvando, setSalvando] = useState(false)
+
+  const salvar = async () => {
+    if (!nome.trim()) { aoErro('Informe o nome da tag.'); return }
+    setSalvando(true)
+    try {
+      const dados = { nome: nome.trim(), cor, ativo }
+      if (novo) await api.crmCriarTag(dados)
+      else await api.crmEditarTag(tag.id, dados)
+      aoFechar()
+    } catch (e) {
+      aoErro(e.detail === 'tag_duplicada' ? 'Já existe uma tag com esse nome.'
+        : (e.amigavel || e.detail || e.message))
+    } finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="rh-card" style={{ background: 'var(--input-bg)', marginBottom: '.6rem' }}>
+      <div className="linha2" style={{ alignItems: 'end' }}>
+        <label className="campo"><span className="rotulo">Nome</span>
+          <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus /></label>
+        <label className="campo" style={{ maxWidth: 120 }}><span className="rotulo">Cor</span>
+          <input type="color" value={cor} onChange={(e) => setCor(e.target.value)} /></label>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '.4rem', margin: '.4rem 0' }}>
+        <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
+        <span>Ativa (aparece para marcar)</span></label>
+      <div className="rh-lote">
+        <button className="btn-principal btn-mini" disabled={salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar'}</button>
+        <button className="btn-link" onClick={aoFechar}>cancelar</button>
+      </div>
     </div>
   )
 }
