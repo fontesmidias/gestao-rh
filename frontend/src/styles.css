@@ -74,11 +74,19 @@
   --sombra-cartao: 0 10px 34px rgba(16, 36, 27, .08);
   --sombra-verde: 0 8px 22px rgba(15, 178, 87, .32);
 
+  /* Esquema padrão claro: o navegador pinta controles NATIVOS (menu suspenso do
+     <select>, scrollbar, date picker) coerentes com o tema. */
+  color-scheme: light;
   font-family: var(--fonte);
 }
 
 /* Tema escuro: ativado por escolha ou pelo modo do aparelho (main.jsx). */
 :root[data-tema='escuro'] {
+  /* Faz o navegador pintar o MENU SUSPENSO NATIVO do <select> (e demais
+     controles do SO) em modo escuro. Sem isto, o dropdown vinha claro sobre o
+     app escuro — texto claro em fundo claro, ilegível (feedback do Bruno). NÃO
+     estilizar <option> à mão: deixar o color-scheme resolver. */
+  color-scheme: dark;
   --verde-suave: #14301f;
   --tinta: #e9f4ec;
   --azul: #e9f4ec;
@@ -240,9 +248,11 @@ a { color: var(--verde-escuro); }
 .dash-tabela td small { white-space: nowrap; }
 /* colunas marcadas com `quebra: true`: texto flui em várias linhas, largura
    limitada — acaba com a rolagem lateral de listas longas (feedback 2026-07-22). */
-.dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra {
+.dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra,
+.rh-tabela th.dash-quebra, .rh-tabela td.dash-quebra {
   white-space: normal; max-width: 22rem; min-width: 10rem; word-break: break-word;
 }
+.rh-tabela td.dash-quebra small { white-space: normal; }
 /* cards de métrica clicáveis: clicar ativa o filtro correspondente (item 3).
    Reusa .rh-metrica; vira botão com estado hover/ativo. */
 /* cards do dash: auto-fit (adapta a qualquer quantidade, não fixo em 6 como o
@@ -476,7 +486,13 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 
 /* ---------- RH (desktop) ---------- */
 .rh-login { max-width: 420px; margin: 12vh auto; }
-.rh-painel { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+/* Wrapper de página do painel do RH: max-width + centragem + RESPIRO. O respiro
+   da página é responsabilidade DESTA primitiva, nunca do módulo. `.pagina` e
+   `.rh-painel` são o mesmo respiro — `.pagina` é o nome semântico para os
+   módulos que renderizam <section> (Desenvolvimento, Desempenho, Avaliações
+   etc.); sem ele o <section> cru cola na borda do .rh-conteudo (que não tem
+   padding lateral no desktop). Ver docs/planejamento/08-sistema-de-design.md. */
+.rh-painel, .pagina { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
 .rh-topo { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
            margin-bottom: 1.1rem; flex-wrap: wrap; }
 .rh-topo > div { display: flex; gap: .6rem; align-items: center; }

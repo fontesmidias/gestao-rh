@@ -102,6 +102,9 @@ function Levantamentos() {
   const [historico, setHistorico] = useState(null) // timeline do benefício aberto
 
   const verHistorico = async (ben) => {
+    // TOGGLE: clicar de novo recolhe. Botão que só abre e nunca fecha entulha a
+    // tela (feedback do Bruno) — padrão da casa "tudo que abre, fecha".
+    if (historico !== null) { setHistorico(null); return }
     setHistorico('carregando')
     try { setHistorico(await api.crecheHistorico(ben.id)) }
     catch { setHistorico([]) }
@@ -360,7 +363,8 @@ function Levantamentos() {
                 ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
                 {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
             <div className="rh-lote" style={{ margin: '0 0 .6rem' }}>
-              <button className="btn-link" onClick={() => verHistorico(b)}>🕘 Ver histórico de decisões</button>
+              <button className="btn-link" onClick={() => verHistorico(b)}>
+                🕘 {historico !== null ? 'Ocultar' : 'Ver'} histórico de decisões</button>
             </div>
             {historico && historico !== 'carregando' && (
               <div className="rh-card" style={{ background: 'var(--hover)', marginBottom: '.6rem' }}>

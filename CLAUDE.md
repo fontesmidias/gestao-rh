@@ -452,6 +452,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Convenções
 
+- **Sistema de design (FONTE CANÔNICA):**
+  `docs/planejamento/08-sistema-de-design.md` — regras de padronização e
+  identidade (o Bruno cansou de padronizar tela a tela). Tela nova NASCE
+  padronizada: renderiza dentro de `.pagina`/`.rh-painel` (o respiro vem da
+  primitiva, não do módulo — `<section>` cru cola na borda); ZERO `style` inline
+  de espaçamento/cor (use os tokens `--esp-*`, `--fs-*`, cores semânticas);
+  editar/criar abre PERTO do item (nunca no topo); nada estoura a tela (tabela em
+  `.dash-scroll`, texto longo em `.dash-quebra`); tudo que abre, fecha (toggle);
+  testar no tema ESCURO (o `color-scheme` no `:root`/`[data-tema='escuro']`
+  conserta o dropdown nativo do `<select>` — NÃO estilizar `<option>` à mão);
+  termos de negócio com `<Ajuda>`. Ao mudar um padrão, atualizar o DOC e este
+  CLAUDE.md. Checklist completo no doc.
 - Idioma: TUDO em pt-BR (código, comentários, commits, UI).
 - Commits direto no `main`: `feat(vX.Y): resumo` + corpo com bullets; uma
   versão por "onda" entregue. Push e acompanhar o CI (`gh run list/view`) —

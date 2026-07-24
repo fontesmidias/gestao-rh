@@ -275,7 +275,7 @@ def _aplicacao(link: LinkProva, aid: uuid.UUID, db: Session) -> AplicacaoProva:
 def _expira_se_estourou(db: Session, a: AplicacaoProva) -> None:
     if (a.status == "em_andamento" and a.prazo_ate
             and a.prazo_ate < datetime.now(timezone.utc)):
-        _corrigir_objetivas(db, a)
+        _fechar_aplicacao(db, a)
         a.status = "expirado"
         a.concluido_em = datetime.now(timezone.utc)
         db.commit()
@@ -295,6 +295,21 @@ def _corrigir_objetivas(db: Session, a: AplicacaoProva) -> None:
         if r and str(r.get("escolha")) == str(q.gabarito):
             peso_ok += q.peso
     a.nota_objetivas = round(100.0 * peso_ok / peso_total, 1) if peso_total else None
+
+
+def _fechar_aplicacao(db: Session, a: AplicacaoProva) -> None:
+    """Fecha a aplicação (conclusão ou expiração): corrige as objetivas e, se a
+    prova NÃO tem discursivas, já grava a nota_final — ela é definitiva, não há
+    o que o RH corrigir. Antes a nota_final só era calculada ao corrigir
+    discursivas, então prova só-objetiva concluída ficava com nota_final=null e
+    aparecia "—" no dash (o RH via a prova feita mas "sem pontuação"). Com
+    discursivas, mantém-se null até a correção (comportamento correto)."""
+    questoes = _questoes(db, a.prova_id)
+    tem_discursiva = any(q.tipo != "objetiva" for q in questoes)
+    if tem_discursiva:
+        _corrigir_objetivas(db, a)
+    else:
+        _recalcular_nota_final(db, a)  # também preenche nota_objetivas
 
 
 @router.get("/p/{token}")
@@ -401,7 +416,7 @@ def concluir_prova(token: str, aid: uuid.UUID, db: Session = Depends(get_db)) ->
         return {"status": a.status}
     if a.status != "em_andamento":
         raise HTTPException(status_code=409, detail="prova_nao_iniciada")
-    _corrigir_objetivas(db, a)
+    _fechar_aplicacao(db, a)
     a.status = "concluido"
     a.concluido_em = datetime.now(timezone.utc)
     db.commit()

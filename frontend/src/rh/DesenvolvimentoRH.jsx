@@ -11,7 +11,7 @@ import DashPlanilha from './DashPlanilha.jsx'
 export default function DesenvolvimentoRH({ aoVoltar }) {
   const [aba, setAba] = useState('fila')
   return (
-    <section>
+    <section className="pagina">
       <div className="rh-topo">
         <h1>🎓 Desenvolvimento</h1>
         <button className="btn-secundario btn-mini" onClick={aoVoltar}>← voltar</button>
@@ -606,17 +606,24 @@ function Tipos() {
         com exceções por cargo ou posto.</p>
       <Msg msg={msg} />
 
-      {editando && (
-        <FormTipo tipo={editando} aoFechar={() => { setEditando(null); carregar() }}
-                  aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
-      )}
-
-      {!editando && (
-        <button className="btn-principal btn-mini" style={{ marginBottom: '.7rem' }}
-                onClick={() => setEditando({ novo: true })}>＋ Novo tipo</button>
-      )}
+      {/* Criar NOVO abre no topo — junto do próprio botão (o gatilho está aqui).
+         EDITAR abre no LUGAR do card (inline), nunca no topo: quem clicou em
+         "Editar" num card lá embaixo não pode ter a tela pulando pro começo
+         (padrão da casa — ver docs/planejamento/08-sistema-de-design.md). */}
+      {editando?.novo
+        ? <FormTipo tipo={editando} aoFechar={() => { setEditando(null); carregar() }}
+                    aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+        : (
+          <button className="btn-principal btn-mini" style={{ marginBottom: '.7rem' }}
+                  onClick={() => setEditando({ novo: true })}>＋ Novo tipo</button>
+        )}
 
       {tipos.map((t) => (
+        editando && editando.id === t.id ? (
+          <FormTipo key={t.id} tipo={editando}
+                    aoFechar={() => { setEditando(null); carregar() }}
+                    aoErro={(m) => setMsg({ tipo: 'erro', texto: m })} />
+        ) : (
         <div className="rh-card" key={t.id} style={{ marginBottom: '.6rem' }}>
           <div className="rh-topo" style={{ marginBottom: '.3rem' }}>
             <h4 style={{ margin: 0 }}>
@@ -647,6 +654,7 @@ function Tipos() {
             </p>
           )}
         </div>
+        )
       ))}
     </>
   )

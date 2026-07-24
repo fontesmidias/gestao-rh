@@ -56,7 +56,7 @@ export default function DesempenhoRH({ aoVoltar }) {
   ]
 
   return (
-    <section>
+    <section className="pagina">
       <div className="rh-topo">
         <h1>📌 Fatos Observados</h1>
         <button className="btn-secundario btn-mini" onClick={aoVoltar}>← voltar</button>

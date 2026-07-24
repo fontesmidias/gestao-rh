@@ -148,7 +148,8 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
                        aoSalvar={recarregar} aoExcluir={() => excluirQ(q)} />
         ))}
         {nova
-          ? <QuestaoNova provaId={p.id} aoSalvar={() => { setNova(null); recarregar() }}
+          ? <QuestaoNova provaId={p.id} tipoInicial={nova}
+                         aoSalvar={() => { setNova(null); recarregar() }}
                          aoCancelar={() => setNova(null)} />
           : (
             <div className="rh-lote" style={{ marginTop: '.6rem' }}>
@@ -189,15 +190,20 @@ function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir }) {
   )
 }
 
-function QuestaoNova({ provaId, aoSalvar, aoCancelar }) {
-  return <FormQuestao provaId={provaId} inicial={null} aoSalvar={aoSalvar} aoCancelar={aoCancelar} />
+function QuestaoNova({ provaId, tipoInicial, aoSalvar, aoCancelar }) {
+  // tipoInicial vem do botão ("objetiva" ou "discursiva"). ANTES o form nascia
+  // sempre objetivo (inicial={null} → tipo 'objetiva'), então o botão de
+  // discursiva caía no form de objetiva (bug relatado pelo Bruno).
+  return <FormQuestao provaId={provaId} inicial={null} tipoInicial={tipoInicial}
+                      aoSalvar={aoSalvar} aoCancelar={aoCancelar} />
 }
 
 // Formulário de questão (nova ou edição). Objetiva: enunciado + opções (a
-// marcada é o gabarito). Discursiva: só enunciado.
-function FormQuestao({ provaId, inicial, aoSalvar, aoCancelar }) {
-  const objetiva = inicial ? inicial.tipo === 'objetiva' : true
-  const [tipo] = useState(inicial?.tipo || 'objetiva')
+// marcada é o gabarito). Discursiva: só enunciado. Em criação, o tipo vem de
+// `tipoInicial` (botão); em edição, do próprio registro.
+function FormQuestao({ provaId, inicial, tipoInicial, aoSalvar, aoCancelar }) {
+  const [tipo] = useState(inicial?.tipo || tipoInicial || 'objetiva')
+  const objetiva = tipo === 'objetiva'
   const [enunciado, setEnunciado] = useState(inicial?.enunciado || '')
   const [peso, setPeso] = useState(inicial?.peso || 1)
   const [opcoes, setOpcoes] = useState(

@@ -1088,24 +1088,34 @@ function Auditoria() {
       <h3>Auditoria</h3>
       <p className="explica">Registro de tudo que acontece no sistema: logins, convites, envios,
         assinaturas, aprovações, alterações de configuração.</p>
+      {/* TOGGLE (abre/fecha) — e a tabela vai dentro de .dash-scroll para ROLAR
+         dentro de si, não estourar a margem da tela: a coluna "Detalhe" é um
+         JSON longo (feedback do Bruno: "estoura as margens laterais"). */}
       {!aberto ? (
         <button className="btn-secundario" onClick={async () => {
-          setEventos(await api.auditoria()); setAberto(true)
+          if (!eventos) setEventos(await api.auditoria())
+          setAberto(true)
         }}>Ver últimos eventos</button>
       ) : !eventos ? <p>Carregando…</p> : (
-        <table className="rh-tabela">
-          <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Detalhe</th></tr></thead>
-          <tbody>
-            {eventos.map((e, i) => (
-              <tr key={i}>
-                <td>{fmtDataHora(e.quando)}</td>
-                <td>{e.acao}</td>
-                <td>{e.ator}{e.ator_detalhe ? ` (${e.ator_detalhe})` : ''}</td>
-                <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <button className="btn-link" style={{ marginBottom: '.5rem' }}
+                  onClick={() => setAberto(false)}>Ocultar eventos</button>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Detalhe</th></tr></thead>
+              <tbody>
+                {eventos.map((e, i) => (
+                  <tr key={i}>
+                    <td>{fmtDataHora(e.quando)}</td>
+                    <td>{e.acao}</td>
+                    <td>{e.ator}{e.ator_detalhe ? ` (${e.ator_detalhe})` : ''}</td>
+                    <td className="dash-quebra"><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )

@@ -83,25 +83,53 @@ function Questionario({ token, aid, titulo, aoConcluir }) {
   const [erro, setErro] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const timerRef = useRef(null)
+  const prazoRef = useRef(null)   // instante-alvo absoluto (ms) do fim da prova
 
   useEffect(() => iniciarTelemetria(token, null, {
     postar: (lote) => api.eventos(token, aid, lote),
     beaconUrl: () => api.eventosUrl(token, aid),
   }), [])
 
+  // Sincroniza o relógio com o SERVIDOR (autoritativo): fixa o instante-alvo do
+  // fim a partir de segundos_restantes. O contador visual passa a derivar desse
+  // alvo, não de decrementos por segundo — assim, se o celular suspende o app
+  // (o setInterval congela), ao voltar o número já aparece certo em vez de
+  // "parecer que o tempo parou" (feedback do Bruno).
+  const sincronizar = (segundos) => {
+    if (segundos == null) return
+    prazoRef.current = Date.now() + segundos * 1000
+    setRestante(Math.max(0, Math.round(segundos)))
+  }
+
   useEffect(() => {
     api.iniciar(token, aid)
       .then(() => api.questoes(token, aid))
-      .then((d) => { setDados(d); setIdx(Math.min(d.respondidas || 0, d.questoes.length - 1)); setRestante(d.segundos_restantes) })
+      .then((d) => { setDados(d); setIdx(Math.min(d.respondidas || 0, d.questoes.length - 1)); sincronizar(d.segundos_restantes) })
       .catch((e) => setErro(e.detail === 'prova_ja_realizada'
         ? 'Esta prova já foi enviada.' : 'Não foi possível carregar. Recarregue a página.'))
   }, [])
 
   useEffect(() => {
-    if (restante == null) return
-    timerRef.current = setInterval(() => setRestante((s) => Math.max(0, s - 1)), 1000)
+    if (restante == null || prazoRef.current == null) return
+    // deriva do instante-alvo absoluto: robusto a suspensão da aba/app
+    timerRef.current = setInterval(() => {
+      setRestante(Math.max(0, Math.round((prazoRef.current - Date.now()) / 1000)))
+    }, 1000)
     return () => clearInterval(timerRef.current)
   }, [restante != null])
+
+  // Ao voltar o foco (voltou de outro app/aba), re-busca o tempo do servidor:
+  // corrige qualquer defasagem do relógio local e detecta expiração imediata.
+  useEffect(() => {
+    const aoVoltar = () => {
+      if (document.visibilityState !== 'visible' || !dados) return
+      api.questoes(token, aid)
+        .then((d) => sincronizar(d.segundos_restantes))
+        .catch(() => {})
+    }
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => document.removeEventListener('visibilitychange', aoVoltar)
+  }, [dados])
 
   useEffect(() => {
     if (restante === 0 && dados) api.concluir(token, aid).then(aoConcluir).catch(() => {})

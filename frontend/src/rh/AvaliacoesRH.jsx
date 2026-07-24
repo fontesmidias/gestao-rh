@@ -13,7 +13,7 @@ import RadarCompetencias from './RadarCompetencias.jsx'
 export default function AvaliacoesRH({ aoVoltar }) {
   const [aba, setAba] = useState('minhas')
   return (
-    <section>
+    <section className="pagina">
       <div className="rh-topo">
         <h1>⭐ Avaliações</h1>
         <button className="btn-secundario btn-mini" onClick={aoVoltar}>← voltar</button>

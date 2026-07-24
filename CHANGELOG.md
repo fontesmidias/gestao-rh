@@ -11,6 +11,43 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.86.0] — 2026-07-23 — Sistema de design + padronização + bugs de provas
+
+### Sistema de design (a dor nº1: "toda hora tenho que padronizar")
+- **Documento de padronização e identidade**
+  (`docs/planejamento/08-sistema-de-design.md`): o guia canônico de padrões —
+  tokens (os `--esp-*`/`--fs-*` já existiam, faltava USÁ-los), primitivas de
+  layout, dark mode, editar-na-linha, overflow, toggle, tooltips, checklist de
+  tela nova. Tela nova nasce padronizada porque consome o sistema.
+- **Primitiva de página `.pagina`**: os módulos novos (Desenvolvimento,
+  Desempenho, Avaliações) renderizavam `<section>` cru sem padding lateral e
+  ficavam "sem respiro". Agora usam `.pagina` (= `.rh-painel`), com respiro.
+- **Dark mode — menu suspenso legível**: faltava `color-scheme` no tema; o
+  dropdown nativo do `<select>` vinha claro sobre o app escuro (ilegível).
+  Corrigido em `:root` e `:root[data-tema='escuro']`.
+- **Editar abre PERTO do item**: em Desenvolvimento → Tipos, editar abria no
+  topo; agora o formulário substitui o card sendo editado.
+- **Histórico que recolhe e não estoura**: o "ver histórico de decisões" (Creche)
+  virou toggle; a auditoria (Configurações) ganhou rolagem contida e quebra de
+  texto — a coluna JSON não estoura mais a margem da tela.
+
+### Provas — 3 correções
+- **Questão discursiva**: o botão "＋ Questão discursiva" caía no formulário de
+  objetiva (nascia sempre objetiva). Agora abre o formulário certo (só
+  enunciado).
+- **Pontuação no dash**: prova só-objetiva concluída mostrava a nota das
+  objetivas mas a **nota final ficava "—"** (só era calculada ao corrigir
+  discursivas). Agora a nota final é gravada na conclusão quando não há
+  discursivas.
+- **Timer no celular**: ao trocar de app, o contador "parava" (era o relógio
+  visual congelando). Agora deriva de um instante-alvo absoluto e
+  re-sincroniza com o servidor ao voltar o foco.
+
+### Análise entregue
+- **Central de Ajuda** (`docs/planejamento/09-central-de-ajuda-analise.md`):
+  comparativo GitBook vs. Notion/Docusaurus/MkDocs/Document360/Confluence etc.,
+  com custos atuais e recomendação para equipe de uma pessoa só.
+
 ## [1.85.0] — 2026-07-23 — Import de ponto + interruptor do atestado
 
 ### Adicionado
