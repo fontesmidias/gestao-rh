@@ -194,6 +194,27 @@ o mesmo botão alterna (o rótulo vira "ocultar/fechar" quando aberto), ou é um
 
 ---
 
+## 6b. Campos de data: SEMPRE com máscara
+
+Todo campo onde a pessoa **digita** uma data usa o componente central
+[`InputData.jsx`](../../frontend/src/InputData.jsx) — nunca um `<input>` livre.
+Ele insere as barras conforme digita (`dd/mm/aaaa`), **valida que a data existe**
+(rejeita 31/02, ano absurdo, data incompleta) e guarda ISO (`aaaa-mm-dd`) por
+baixo. Sem isso, dá para salvar `20122025` cru — foi um bug real (nascimento de
+filho de brigadista gravado errado). As funções de máscara/validação
+(`fmtDataBR`/`isoParaBR`/`brParaISO`) vivem em `fmt.js`, junto de CPF/telefone —
+**não reimplemente máscara de data em lugar nenhum**. Para escolher uma data de
+calendário (sem digitação), `<input type="date">` é aceitável.
+
+## 6c. Barra de filtros: grade compacta, tudo com busca
+
+Listas do RH filtram pela barra do `DashPlanilha` — declare `filtro` na config
+da coluna (`'texto'` ou `'select'`) e a barra se monta sozinha. Ela é uma
+**grade compacta** (vários filtros por linha, rótulo pequeno em cima), nunca uma
+linha por filtro. Todo filtro `'select'` vira `SelectBusca` (começa a digitar e
+a lista filtra) — filtro é funcional, a pessoa não deve rolar 300 opções. Não
+escreva barra de filtro à mão: use a config de colunas do DashPlanilha.
+
 ## 7. Tooltips e ajuda: um padrão só
 
 Dois níveis, ambos por CSS (nunca por estado/onClick), sempre no hover e some ao

@@ -4,6 +4,7 @@ import { Cartao } from './CandidatoApp.jsx'
 import { CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import { fmtCpf, cpfValido, fmtTelefone } from '../fmt.js'
 import Espera from '../Espera.jsx'
+import InputData from '../InputData.jsx'
 import CapturaDocumento from './Camera.jsx'
 
 // cpfValido é reexportado por compatibilidade (Entrar.jsx importava daqui).
@@ -46,44 +47,6 @@ function AvisoCpf({ cpf }) {
 
 // Campo de data digitada com máscara dd/mm/aaaa: muito mais fácil para quem não
 // domina o seletor de calendário do celular. Guarda ISO (aaaa-mm-dd) por baixo.
-function InputData({ valor, onChange }) {
-  const isoParaBr = (iso) => {
-    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || ''
-    const [a, m, d] = iso.split('-')
-    return `${d}/${m}/${a}`
-  }
-  const [texto, setTexto] = useState(isoParaBr(valor))
-  const [erro, setErro] = useState(null)
-
-  const aoDigitar = (e) => {
-    const n = e.target.value.replace(/\D/g, '').slice(0, 8)
-    let fmt = n
-    if (n.length > 4) fmt = `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`
-    else if (n.length > 2) fmt = `${n.slice(0, 2)}/${n.slice(2)}`
-    setTexto(fmt)
-    setErro(null)
-    if (n.length === 8) {
-      const d = Number(n.slice(0, 2)), m = Number(n.slice(2, 4)), a = Number(n.slice(4))
-      const data = new Date(a, m - 1, d)
-      const valida = data.getFullYear() === a && data.getMonth() === m - 1 && data.getDate() === d
-      if (!valida || a < 1900 || a > new Date().getFullYear() + 1) {
-        setErro('Essa data não existe — confira o dia, o mês e o ano.')
-        return
-      }
-      onChange(`${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}`)
-    } else if (valor) {
-      onChange(null)
-    }
-  }
-  return (
-    <>
-      <input inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10}
-             value={texto} onChange={aoDigitar} />
-      {erro && <div className="alerta" style={{ marginTop: '.35rem', padding: '.5rem .75rem' }}>{erro}</div>}
-    </>
-  )
-}
-
 // Foto do RG OU da CNH → OCR sugere o preenchimento. É uma escolha, não uma
 // obrigação: quem preferir digita tudo normalmente. A foto já vale como envio
 // do documento no checklist (mata duas etapas de uma vez).
@@ -836,8 +799,8 @@ function BlocoCreche({ token }) {
         <label className="campo"><span className="rotulo">Nome da criança</span>
           <input value={nova.nome} onChange={(e) => setNova({ ...nova, nome: e.target.value })} /></label>
         <label className="campo"><span className="rotulo">Data de nascimento</span>
-          <input placeholder="dd/mm/aaaa" value={nova.data_nascimento}
-                 onChange={(e) => setNova({ ...nova, data_nascimento: e.target.value })} /></label>
+          <InputData valor={nova.data_nascimento}
+                     onChange={(iso) => setNova({ ...nova, data_nascimento: iso || '' })} /></label>
         <label className="campo"><span className="rotulo">Vínculo</span>
           <select value={nova.parentesco} onChange={(e) => setNova({ ...nova, parentesco: e.target.value })}>
             <option value="filho">Filho(a)</option>

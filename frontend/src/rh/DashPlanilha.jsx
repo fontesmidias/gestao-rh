@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import CheckMestre from '../CheckMestre.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Dash-planilha reutilizável para os módulos do RH: ordenação por qualquer
 // coluna, filtros por coluna, seleção + ações em massa, colunas configuráveis
@@ -119,24 +120,32 @@ export default function DashPlanilha({
           ))}
         </div>
       )}
-      {/* barra de filtros + ações */}
-      <div className="rh-card rh-lote dash-filtros">
+      {/* Barra de filtros: GRADE compacta (não uma-linha-por-filtro), cada
+          filtro com rótulo pequeno em cima. Os 'select' viram SelectBusca —
+          começa a digitar e a lista filtra (feedback do Bruno: "filtro é algo
+          funcional; todos eu possa começar a digitar e ir aparecendo"). Os de
+          texto já filtram ao digitar em memória. Ver 08-sistema-de-design.md. */}
+      <div className="rh-card dash-filtros">
         {colunas.filter((c) => c.filtro).map((c) => (
-          c.filtro === 'select' ? (
-            <select key={c.chave} value={filtros[c.chave] || ''}
-                    onChange={(e) => setFiltros({ ...filtros, [c.chave]: e.target.value })}>
-              <option value="">{c.rotulo}: todos</option>
-              {(c.opcoes || []).map((o) => <option key={o.v ?? o} value={o.v ?? o}>{o.r ?? o}</option>)}
-            </select>
-          ) : (
-            <input key={c.chave} placeholder={c.rotulo} value={filtros[c.chave] || ''}
-                   onChange={(e) => setFiltros({ ...filtros, [c.chave]: e.target.value })}
-                   style={{ maxWidth: 200 }} />
-          )
+          <label key={c.chave} className="dash-filtro">
+            <span className="dash-filtro-rot">{c.rotulo}</span>
+            {c.filtro === 'select' ? (
+              <SelectBusca
+                opcoes={(c.opcoes || []).map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) }))}
+                valor={filtros[c.chave] || ''}
+                aoEscolher={(v) => setFiltros({ ...filtros, [c.chave]: v })}
+                placeholder={`${c.rotulo}…`} vazioRotulo={`${c.rotulo}: todos`}
+                style={{ minWidth: '100%' }} />
+            ) : (
+              <input placeholder={`${c.rotulo}…`} value={filtros[c.chave] || ''}
+                     onChange={(e) => setFiltros({ ...filtros, [c.chave]: e.target.value })} />
+            )}
+          </label>
         ))}
-        <span className="dash-espaco" />
-        <button className="btn-secundario btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
-        <button className="btn-secundario btn-mini" onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
+        <div className="dash-filtros-acoes">
+          <button className="btn-secundario btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
+          <button className="btn-secundario btn-mini" onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
+        </div>
       </div>
 
       {configAberta && (

@@ -11,6 +11,29 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.88.0] — 2026-07-24 — Máscara de data centralizada + filtros compactos
+
+### Corrigido (dado / risco)
+- **Máscara de data `dd/mm/aaaa` em todo campo de data digitável.** O campo de
+  nascimento da criança na creche (link público e wizard) era input LIVRE sem
+  máscara — dava para salvar "20122025" cru como data (bug relatado: nascimento
+  de filho de brigadista gravado errado). Agora todo campo de data usa o
+  componente central `<InputData/>`, que insere as barras conforme digita e
+  **valida que a data existe** (rejeita 31/02, ano absurdo, data incompleta),
+  guardando ISO por baixo. As duas máscaras que existiam duplicadas e privadas
+  (Wizard, Portal) foram unificadas nesse componente + helpers em `fmt.js`
+  (`fmtDataBR`/`isoParaBR`/`brParaISO`), espelhando o padrão de CPF/telefone.
+
+### Melhorado (UX)
+- **Barra de filtros do RH compacta.** Antes cada filtro ocupava uma linha
+  inteira; agora é uma GRADE (vários por linha, rótulo pequeno em cima),
+  aproveitando o espaço sem virar bagunça. Como todas as listas do RH usam o
+  DashPlanilha, a mudança vale para todas de uma vez (Jornadas, Colaboradores,
+  Talentos, Provas, Creche, Desenvolvimento…).
+- **Todo filtro de seleção agora tem busca-ao-digitar.** Os `<select>` nativos
+  da barra viraram `SelectBusca` — começa a digitar e a lista filtra ("filtro é
+  algo funcional"). Os de texto já filtravam ao digitar.
+
 ## [1.87.0] — 2026-07-24 — Mini-CRM: anotações e tags no ciclo de vida
 
 ### Adicionado

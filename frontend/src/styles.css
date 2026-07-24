@@ -236,8 +236,25 @@ a { color: var(--verde-escuro); }
 .talento-nav .btn-principal, .talento-nav .btn-secundario { min-width: 130px; }
 
 /* Dash-planilha reutilizável (RH) */
-.dash-filtros { flex-wrap: wrap; align-items: center; }
-.dash-filtros .dash-espaco { flex: 1; }
+/* Barra de filtros em GRADE compacta: vários filtros por linha, cada um com
+   rótulo pequeno em cima (não uma-linha-por-filtro, que desperdiça espaço —
+   feedback do Bruno com print de referência). auto-fill encaixa quantos couberem;
+   no mobile cai para 1-2 colunas sozinho. */
+.dash-filtros { display: grid; gap: var(--esp-2) var(--esp-3); align-items: end;
+                grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.dash-filtro { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.dash-filtro-rot { font-size: var(--fs-mini); font-weight: 600; color: var(--cinza-txt);
+                   text-transform: uppercase; letter-spacing: .02em;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* compacto na barra: sobrepõe o min-height de toque (50px) dos inputs globais,
+   que aqui deixaria a barra alta demais. O SelectBusca também encolhe. */
+.dash-filtro > input { width: 100%; min-height: 0; padding: .45rem .6rem; font-size: var(--fs-apoio); }
+.dash-filtro > .select-busca { width: 100%; min-width: 0; }
+.dash-filtro > .select-busca .select-busca-campo { min-height: 0; padding: .45rem .6rem;
+                                                    font-size: var(--fs-apoio); }
+/* Ações (CSV, Colunas) ocupam a última faixa da grade, alinhadas à direita. */
+.dash-filtros-acoes { grid-column: 1 / -1; display: flex; justify-content: flex-end;
+                      gap: var(--esp-2); }
 /* rolagem horizontal do dash: a tabela nunca estoura a tela; scrolla dentro
    do próprio container (o corpo da página nunca rola de lado) */
 .dash-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }

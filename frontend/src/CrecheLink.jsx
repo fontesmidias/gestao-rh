@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { creche as api } from './api.js'
 import { fmtTelefone } from './fmt.js'
+import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
 
 // Link público único do levantamento do Reembolso-Creche (IN SEGES/MGI 147/2026).
@@ -328,8 +329,8 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
             <label className="campo"><span className="rotulo">Nome da criança</span>
               <input value={nova.nome} onChange={(e) => setNova({ ...nova, nome: e.target.value })} /></label>
             <label className="campo"><span className="rotulo">Data de nascimento</span>
-              <input placeholder="dd/mm/aaaa" value={nova.data_nascimento}
-                     onChange={(e) => setNova({ ...nova, data_nascimento: e.target.value })} /></label>
+              <InputData valor={nova.data_nascimento}
+                         onChange={(iso) => setNova({ ...nova, data_nascimento: iso || '' })} /></label>
             <label className="campo"><span className="rotulo">Vínculo</span>
               <select value={nova.parentesco} onChange={(e) => setNova({ ...nova, parentesco: e.target.value })}>
                 <option value="filho">Filho(a)</option>
