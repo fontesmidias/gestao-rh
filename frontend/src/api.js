@@ -826,6 +826,21 @@ export const rh = {
     req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'DELETE', headers: authRH() }),
   duplicarQuestao: (provaId, qid) =>
     req(`/rh/provas/${provaId}/questoes/${qid}/duplicar`, { method: 'POST', headers: authRH() }),
+  // Banco de itens (Fase 2): questões reutilizáveis por cargo/senioridade/tags
+  bancoItens: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/banco-itens${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  criarItemBanco: (dados) =>
+    req('/rh/banco-itens', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarItemBanco: (id, dados) =>
+    req(`/rh/banco-itens/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirItemBanco: (id) =>
+    req(`/rh/banco-itens/${id}`, { method: 'DELETE', headers: authRH() }),
+  adicionarDoBanco: (provaId, dados) =>
+    req(`/rh/provas/${provaId}/adicionar-do-banco`, { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  promoverParaBanco: (provaId, qid, dados) =>
+    req(`/rh/provas/${provaId}/questoes/${qid}/promover`, { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   criarLinkProva: (provaId, nome) =>
     req(`/rh/provas/${provaId}/link`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ nome }) }),

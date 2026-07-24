@@ -188,9 +188,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   concluída — senão 403 (o gabarito NÃO vaza em prova de seleção). NUNCA devolve
   nota (segue seleção). **Duplicar (v1.89):** `/rh/provas/{id}/duplicar` (prova
   inteira, nasce "(cópia)" sem links) e `/rh/provas/{id}/questoes/{qid}/duplicar`.
-  **Banco de itens por cargo/senioridade = Fase 2** (NÃO feito): exige a questão
-  deixar de pertencer a UMA prova (hoje `prova_id` é NOT NULL, cascade delete);
-  senioridade não existe no sistema — seria conceito novo.
+  **Banco de itens (Fase 2, v1.90):** `ItemBanco` (`models/prova.py`) é a questão
+  REUTILIZÁVEL — existe SOZINHA (não é `QuestaoProva`), catalogada por `cargo`
+  (string livre), `senioridade` (lista FIXA `SENIORIDADES`: qualquer/junior/
+  pleno/senior — 'qualquer' serve a todos e o filtro casa nível OU 'qualquer') e
+  `tags` (lista de strings do PRÓPRIO item — conteúdo tipo "NR-35"; NÃO o
+  `crm_tag`, que é sobre PESSOAS — domínios separados de propósito). Migração
+  ADITIVA (`item_banco`): NÃO toca `prova_cargo`/`questao_prova`, então as provas
+  existentes NÃO são desmontadas. **Montar prova COPIA (snapshot):**
+  `/rh/provas/{id}/adicionar-do-banco` (manual `item_ids` OU sorteio
+  `quantidade`+filtros) cria `QuestaoProva` a partir do item — editar/excluir o
+  item DEPOIS não muda prova montada nem aplicação em curso (testado). `/promover`
+  copia questão de prova → banco (original permanece). Só ACRESCENTA ao final da
+  prova, nunca remove. Front: aba "🗃️ Banco de itens" (`BancoItens.jsx`, CRUD) +
+  `MontarDoBanco` no editor + botão "→ banco" por questão.
 - **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
   — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
   em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em

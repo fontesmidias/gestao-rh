@@ -17,6 +17,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 
+# Senioridade do item do banco: lista FIXA padronizada (não texto livre, para
+# filtrar sem "pleno"/"Pleno"/"PL"). 'qualquer' = item genérico, serve a todos.
+SENIORIDADES = ("qualquer", "junior", "pleno", "senior")
+
 
 class ProvaCargo(Base):
     """O modelo/template de uma prova (editável pelo RH), opcionalmente por cargo."""
@@ -66,6 +70,36 @@ class QuestaoProva(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     prova: Mapped[ProvaCargo] = relationship(back_populates="questoes")
+
+
+class ItemBanco(Base):
+    """Item do BANCO DE ITENS: uma questão REUTILIZÁVEL, catalogada por cargo,
+    senioridade e tags. Existe SOZINHA (não pertence a nenhuma prova) — é o
+    oposto de QuestaoProva. Montar uma prova a partir do banco COPIA o item para
+    uma QuestaoProva (snapshot): editar o item depois não mexe em prova já
+    montada nem em aplicação em andamento. Torna a confecção de provas escalável
+    sem tocar nas provas existentes.
+
+    Senioridade é lista FIXA (SENIORIDADES) — 'qualquer' = genérico. Tags são
+    lista de strings LIVRE do próprio item (conteúdo: "álgebra", "NR-35"), NÃO o
+    catálogo crm_tag (aquele é sobre PESSOAS — não misturar os domínios)."""
+
+    __tablename__ = "item_banco"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enunciado: Mapped[str] = mapped_column(Text)
+    tipo: Mapped[str] = mapped_column(String(12))  # 'objetiva' | 'discursiva'
+    opcoes: Mapped[list | None] = mapped_column(JSON)     # [{id, texto}] (objetiva)
+    gabarito: Mapped[str | None] = mapped_column(String(40))
+    explicacao: Mapped[str | None] = mapped_column(Text)
+    peso: Mapped[int] = mapped_column(Integer, default=1)
+    cargo: Mapped[str | None] = mapped_column(String(120), index=True)  # string livre; None = genérico
+    senioridade: Mapped[str] = mapped_column(String(12), default="qualquer", index=True)
+    tags: Mapped[list | None] = mapped_column(JSON)       # ["álgebra", ...] (conteúdo)
+    criado_por: Mapped[str | None] = mapped_column(String(200))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now())
 
 
 class LinkProva(Base):
