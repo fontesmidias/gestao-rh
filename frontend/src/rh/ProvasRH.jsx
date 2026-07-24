@@ -2,21 +2,27 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { fmtData } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
+import BancoItens from './BancoItens.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Módulo de PROVAS por cargo: o RH monta provas (objetivas com gabarito +
 // discursivas), gera link de aplicação e corrige. Duas visões: Editor e
 // Aplicações (dash-planilha com correção). O gabarito nunca vai ao candidato.
 export default function ProvasRH() {
-  const [visao, setVisao] = useState('editor')  // editor | aplicacoes
+  const [visao, setVisao] = useState('editor')  // editor | aplicacoes | banco
   return (
     <>
       <div className="rh-card rh-lote" style={{ gap: '.4rem' }}>
         <button className={`btn-mini ${visao === 'editor' ? 'btn-principal' : 'btn-secundario'}`}
                 onClick={() => setVisao('editor')}>📝 Provas</button>
+        <button className={`btn-mini ${visao === 'banco' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => setVisao('banco')}>🗃️ Banco de itens</button>
         <button className={`btn-mini ${visao === 'aplicacoes' ? 'btn-principal' : 'btn-secundario'}`}
                 onClick={() => setVisao('aplicacoes')}>📊 Aplicações & correção</button>
       </div>
-      {visao === 'editor' ? <Editor /> : <Aplicacoes />}
+      {visao === 'editor' && <Editor />}
+      {visao === 'banco' && <BancoItens />}
+      {visao === 'aplicacoes' && <Aplicacoes />}
     </>
   )
 }
@@ -91,6 +97,7 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
   const [p, setP] = useState(prova)
   const [msg, setMsg] = useState(null)
   const [nova, setNova] = useState(null)  // questão sendo criada
+  const [doBanco, setDoBanco] = useState(false)  // painel "adicionar do banco"
 
   const recarregar = async () => { const d = await api.provaDetalhe(p.id); setP(d) }
 
@@ -110,6 +117,14 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
   const duplicarQ = async (q) => {
     try { await api.duplicarQuestao(p.id, q.id); await recarregar() }
     catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao duplicar (${e.detail || e.message}).` }) }
+  }
+  const promoverQ = async (q) => {
+    // herda o cargo da prova; senioridade "qualquer" e sem tags — o RH refina no
+    // Banco de Itens depois. Copia (a questão original permanece na prova).
+    try {
+      await api.promoverParaBanco(p.id, q.id, { cargo: p.cargo || null })
+      setMsg({ tipo: 'ok', texto: 'Questão copiada para o Banco de Itens (ajuste cargo/senioridade/tags lá).' })
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao enviar ao banco (${e.detail || e.message}).` }) }
   }
 
   const gerarLink = async () => {
@@ -168,24 +183,28 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
         {(p.questoes || []).map((q, i) => (
           <QuestaoItem key={q.id} n={i + 1} provaId={p.id} questao={q}
                        aoSalvar={recarregar} aoExcluir={() => excluirQ(q)}
-                       aoDuplicar={() => duplicarQ(q)} />
+                       aoDuplicar={() => duplicarQ(q)} aoPromover={() => promoverQ(q)} />
         ))}
         {nova
           ? <QuestaoNova provaId={p.id} tipoInicial={nova}
                          aoSalvar={() => { setNova(null); recarregar() }}
                          aoCancelar={() => setNova(null)} />
-          : (
-            <div className="rh-lote" style={{ marginTop: '.6rem' }}>
-              <button className="btn-secundario btn-mini" onClick={() => setNova('objetiva')}>+ Questão objetiva</button>
-              <button className="btn-secundario btn-mini" onClick={() => setNova('discursiva')}>+ Questão discursiva</button>
-            </div>
-          )}
+          : doBanco
+            ? <MontarDoBanco provaId={p.id} aoFechar={() => { setDoBanco(false); recarregar() }}
+                             aoErro={(t) => setMsg({ tipo: 'erro', texto: t })} />
+            : (
+              <div className="rh-lote" style={{ marginTop: '.6rem' }}>
+                <button className="btn-secundario btn-mini" onClick={() => setNova('objetiva')}>+ Questão objetiva</button>
+                <button className="btn-secundario btn-mini" onClick={() => setNova('discursiva')}>+ Questão discursiva</button>
+                <button className="btn-secundario btn-mini" onClick={() => setDoBanco(true)}>🗃️ Adicionar do banco</button>
+              </div>
+            )}
       </div>
     </>
   )
 }
 
-function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir, aoDuplicar }) {
+function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir, aoDuplicar, aoPromover }) {
   const [ed, setEd] = useState(false)
   if (ed) return <FormQuestao provaId={provaId} inicial={questao}
                               aoSalvar={() => { setEd(false); aoSalvar() }}
@@ -197,6 +216,7 @@ function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir, aoDuplicar }) {
         <span className="prova-questao-acoes">
           <button className="btn-link" onClick={() => setEd(true)}>editar</button>
           <button className="btn-link" onClick={aoDuplicar}>duplicar</button>
+          <button className="btn-link" onClick={aoPromover} title="Copiar para o banco de itens (reaproveitar em outras provas)">→ banco</button>
           <button className="btn-link" style={{ color: '#d9534f' }} onClick={aoExcluir}>excluir</button>
         </span>
       </div>
@@ -223,6 +243,106 @@ function QuestaoNova({ provaId, tipoInicial, aoSalvar, aoCancelar }) {
   // discursiva caía no form de objetiva (bug relatado pelo Bruno).
   return <FormQuestao provaId={provaId} inicial={null} tipoInicial={tipoInicial}
                       aoSalvar={aoSalvar} aoCancelar={aoCancelar} />
+}
+
+const SEN_ROT = { qualquer: 'Qualquer', junior: 'Júnior', pleno: 'Pleno', senior: 'Sênior' }
+
+// Adicionar questões do BANCO DE ITENS à prova. Dois modos: escolher item a item
+// (checkbox, filtrando) ou sorteio automático (N itens por filtro). Ambos COPIAM
+// os itens para a prova (snapshot) — não desmontam nada do que já existe.
+function MontarDoBanco({ provaId, aoFechar, aoErro }) {
+  const [modo, setModo] = useState('manual')  // manual | sorteio
+  const [dados, setDados] = useState(null)
+  const [filtro, setFiltro] = useState({ cargo: '', senioridade: '', tag: '' })
+  const [marcados, setMarcados] = useState(() => new Set())
+  const [qtd, setQtd] = useState(5)
+  const [salvando, setSalvando] = useState(false)
+
+  const carregar = () => api.bancoItens(filtro).then(setDados).catch(() => setDados({ itens: [] }))
+  useEffect(() => { carregar() }, [filtro.cargo, filtro.senioridade, filtro.tag])
+
+  const alterna = (id) => setMarcados((s) => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+
+  const aplicar = async () => {
+    setSalvando(true)
+    try {
+      if (modo === 'manual') {
+        if (marcados.size === 0) { aoErro('Marque ao menos um item.'); setSalvando(false); return }
+        await api.adicionarDoBanco(provaId, { item_ids: [...marcados] })
+      } else {
+        await api.adicionarDoBanco(provaId, {
+          quantidade: parseInt(qtd, 10) || 1, cargo: filtro.cargo || null,
+          senioridade: filtro.senioridade || null, tag: filtro.tag || null })
+      }
+      aoFechar()
+    } catch (e) {
+      aoErro(e.detail === 'banco_sem_itens_no_filtro' ? 'O banco não tem itens com esse filtro.'
+        : (e.amigavel || e.detail || e.message))
+      setSalvando(false)
+    }
+  }
+
+  if (!dados) return <p className="explica">Carregando o banco…</p>
+  const cargosOpc = (dados.cargos || []).map((c) => ({ valor: c, rotulo: c }))
+  const tagsOpc = (dados.tags || []).map((t) => ({ valor: t, rotulo: t }))
+
+  return (
+    <div className="rh-card" style={{ background: 'var(--input-bg)', marginTop: '.6rem' }}>
+      <div className="rh-lote" style={{ marginBottom: '.5rem' }}>
+        <strong>Adicionar do banco:</strong>
+        <button className={`btn-mini ${modo === 'manual' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => setModo('manual')}>Escolher itens</button>
+        <button className={`btn-mini ${modo === 'sorteio' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => setModo('sorteio')}>Sortear</button>
+        <span className="dash-espaco" style={{ flex: 1 }} />
+        <button className="btn-link" onClick={aoFechar}>cancelar</button>
+      </div>
+
+      <div className="dash-filtros">
+        <label className="dash-filtro"><span className="dash-filtro-rot">Cargo</span>
+          <SelectBusca opcoes={cargosOpc} valor={filtro.cargo}
+                       aoEscolher={(v) => setFiltro({ ...filtro, cargo: v })}
+                       vazioRotulo="Cargo: todos" style={{ minWidth: '100%' }} /></label>
+        <label className="dash-filtro"><span className="dash-filtro-rot">Senioridade</span>
+          <SelectBusca opcoes={(dados.senioridades || []).map((s) => ({ valor: s, rotulo: SEN_ROT[s] || s }))}
+                       valor={filtro.senioridade}
+                       aoEscolher={(v) => setFiltro({ ...filtro, senioridade: v })}
+                       vazioRotulo="Senioridade: todas" style={{ minWidth: '100%' }} /></label>
+        <label className="dash-filtro"><span className="dash-filtro-rot">Tag</span>
+          <SelectBusca opcoes={tagsOpc} valor={filtro.tag}
+                       aoEscolher={(v) => setFiltro({ ...filtro, tag: v })}
+                       vazioRotulo="Tag: todas" style={{ minWidth: '100%' }} /></label>
+      </div>
+
+      {modo === 'sorteio' ? (
+        <div className="rh-lote" style={{ margin: '.6rem 0' }}>
+          <label className="campo" style={{ maxWidth: 160 }}><span className="rotulo">Quantos itens sortear</span>
+            <input type="number" min={1} value={qtd} onChange={(e) => setQtd(e.target.value)} /></label>
+          <span className="explica" style={{ margin: 0 }}>Sorteia do banco conforme os filtros acima
+            ({dados.itens.length} disponível(is)).</span>
+        </div>
+      ) : (
+        <div style={{ maxHeight: '18rem', overflowY: 'auto', margin: '.5rem 0' }}>
+          {dados.itens.length === 0 && <p className="explica">Nenhum item com esses filtros.</p>}
+          {dados.itens.map((it) => (
+            <label key={it.id} style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-start', padding: '.3rem 0' }}>
+              <input type="checkbox" checked={marcados.has(it.id)} onChange={() => alterna(it.id)} />
+              <span>{it.tipo === 'objetiva' ? '☑' : '✎'} {it.enunciado}
+                <small className="explica" style={{ margin: 0 }}>
+                  {' '}· {it.cargo || 'genérico'} · {SEN_ROT[it.senioridade] || it.senioridade}
+                  {(it.tags || []).length ? ` · ${it.tags.join(', ')}` : ''}</small></span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <button className="btn-principal btn-mini" disabled={salvando} onClick={aplicar}>
+        {salvando ? 'Adicionando…'
+          : modo === 'manual' ? `Adicionar ${marcados.size} item(ns)` : `Sortear e adicionar`}</button>
+    </div>
+  )
 }
 
 // Formulário de questão (nova ou edição). Objetiva: enunciado + opções (a

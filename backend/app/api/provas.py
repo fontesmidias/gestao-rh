@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 from app.api.auth_rh import requer_rh
 from app.core.config import base_url_publica, ip_do_cliente
 from app.core.db import get_db
-from app.models.prova import (AplicacaoProva, LinkProva, ProvaCargo, QuestaoProva)
+from app.models.prova import (SENIORIDADES, AplicacaoProva, ItemBanco, LinkProva,
+                              ProvaCargo, QuestaoProva)
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
 from app.services.lixeira import mandar_para_lixeira
@@ -302,6 +303,211 @@ def duplicar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
     registrar(db, "prova_questao_duplicada", ator="rh", ator_detalhe=rh.email)
     db.commit()
     return _dump_questao_rh(nova)
+
+
+# ===========================================================================
+# Banco de itens (Fase 2): questões reutilizáveis por cargo/senioridade/tags.
+# ADITIVO — não toca as provas existentes. Montar prova COPIA o item (snapshot).
+# ===========================================================================
+
+
+def _dump_item(it: ItemBanco) -> dict:
+    return {"id": it.id, "enunciado": it.enunciado, "tipo": it.tipo,
+            "opcoes": it.opcoes or [], "gabarito": it.gabarito,
+            "explicacao": it.explicacao, "peso": it.peso, "cargo": it.cargo,
+            "senioridade": it.senioridade, "tags": it.tags or [],
+            "criado_em": it.criado_em}
+
+
+class ItemIn(BaseModel):
+    enunciado: str
+    tipo: str
+    opcoes: list[dict] | None = None
+    gabarito: str | None = None
+    explicacao: str | None = None
+    peso: int | None = None
+    cargo: str | None = None
+    senioridade: str | None = None
+    tags: list[str] | None = None
+
+
+def _validar_item(payload: ItemIn) -> None:
+    if payload.tipo not in TIPOS_QUESTAO:
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    if not (payload.enunciado or "").strip():
+        raise HTTPException(status_code=422, detail="enunciado_obrigatorio")
+    if payload.senioridade and payload.senioridade not in SENIORIDADES:
+        raise HTTPException(status_code=422, detail="senioridade_invalida")
+    if payload.tipo == "objetiva":
+        opcoes = payload.opcoes or []
+        if len(opcoes) < 2:
+            raise HTTPException(status_code=422, detail="objetiva_precisa_2_opcoes")
+        ids = [str(o.get("id")) for o in opcoes]
+        if payload.gabarito is None or str(payload.gabarito) not in ids:
+            raise HTTPException(status_code=422, detail="gabarito_invalido")
+
+
+def _campos_item(payload: ItemIn) -> dict:
+    return {
+        "enunciado": payload.enunciado.strip(), "tipo": payload.tipo,
+        "opcoes": ([{"id": str(o.get("id")), "texto": str(o.get("texto", "")).strip()}
+                    for o in payload.opcoes] if payload.tipo == "objetiva" else None),
+        "gabarito": str(payload.gabarito) if payload.tipo == "objetiva" else None,
+        "explicacao": (payload.explicacao or "").strip() or None,
+        "peso": max(1, payload.peso or 1),
+        "cargo": (payload.cargo or "").strip()[:120] or None,
+        "senioridade": payload.senioridade or "qualquer",
+        "tags": [t.strip() for t in (payload.tags or []) if t.strip()][:20] or None,
+    }
+
+
+@router.get("/rh/banco-itens", dependencies=[Depends(requer_rh)])
+def listar_itens(cargo: str | None = None, senioridade: str | None = None,
+                 tag: str | None = None, tipo: str | None = None,
+                 db: Session = Depends(get_db)) -> dict:
+    """Lista os itens do banco, filtrando por cargo/senioridade/tag/tipo. Também
+    devolve os cargos e tags existentes (p/ alimentar os seletores do front)."""
+    q = select(ItemBanco).order_by(ItemBanco.criado_em.desc())
+    if cargo:
+        q = q.where(ItemBanco.cargo.ilike(f"%{cargo}%"))
+    if senioridade and senioridade != "qualquer":
+        # 'qualquer' do item serve a todos; então o filtro casa o nível OU genérico
+        q = q.where(ItemBanco.senioridade.in_([senioridade, "qualquer"]))
+    if tipo in TIPOS_QUESTAO:
+        q = q.where(ItemBanco.tipo == tipo)
+    itens = list(db.scalars(q))
+    if tag:
+        alvo = tag.strip().lower()
+        itens = [it for it in itens if any(alvo in (t or "").lower() for t in (it.tags or []))]
+    cargos = sorted({it.cargo for it in db.scalars(select(ItemBanco)) if it.cargo})
+    tags = sorted({t for it in db.scalars(select(ItemBanco)) for t in (it.tags or [])})
+    return {"itens": [_dump_item(it) for it in itens],
+            "cargos": cargos, "tags": tags, "senioridades": list(SENIORIDADES)}
+
+
+@router.post("/rh/banco-itens", status_code=201, dependencies=[Depends(requer_rh)])
+def criar_item(payload: ItemIn, db: Session = Depends(get_db),
+               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    _validar_item(payload)
+    it = ItemBanco(**_campos_item(payload), criado_por=rh.email)
+    db.add(it)
+    registrar(db, "banco_item_criado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"cargo": it.cargo, "senioridade": it.senioridade})
+    db.commit()
+    return _dump_item(it)
+
+
+@router.put("/rh/banco-itens/{item_id}", dependencies=[Depends(requer_rh)])
+def editar_item(item_id: uuid.UUID, payload: ItemIn, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    it = db.get(ItemBanco, item_id)
+    if it is None:
+        raise HTTPException(status_code=404, detail="item_nao_encontrado")
+    _validar_item(payload)
+    for k, v in _campos_item(payload).items():
+        setattr(it, k, v)
+    registrar(db, "banco_item_editado", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return _dump_item(it)
+
+
+@router.delete("/rh/banco-itens/{item_id}", status_code=204, dependencies=[Depends(requer_rh)])
+def excluir_item(item_id: uuid.UUID, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> None:
+    it = db.get(ItemBanco, item_id)
+    if it is None:
+        raise HTTPException(status_code=404, detail="item_nao_encontrado")
+    mandar_para_lixeira(db, it, "item_banco", it.enunciado[:80], rh.email)
+    registrar(db, "banco_item_excluido", ator="rh", ator_detalhe=rh.email)
+    db.delete(it)
+    db.commit()
+
+
+class PromoverIn(BaseModel):
+    cargo: str | None = None
+    senioridade: str | None = None
+    tags: list[str] | None = None
+
+
+@router.post("/rh/provas/{prova_id}/questoes/{questao_id}/promover", status_code=201,
+             dependencies=[Depends(requer_rh)])
+def promover_para_banco(prova_id: uuid.UUID, questao_id: uuid.UUID, payload: PromoverIn,
+                        db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Reaproveita uma questão de uma prova existente: COPIA para o banco de
+    itens (a questão original continua na prova). Cargo/senioridade/tags podem
+    ser informados na promoção; o cargo cai no da prova se não vier."""
+    q = db.get(QuestaoProva, questao_id)
+    if q is None or q.prova_id != prova_id:
+        raise HTTPException(status_code=404, detail="questao_nao_encontrada")
+    if payload.senioridade and payload.senioridade not in SENIORIDADES:
+        raise HTTPException(status_code=422, detail="senioridade_invalida")
+    prova = db.get(ProvaCargo, prova_id)
+    it = ItemBanco(
+        enunciado=q.enunciado, tipo=q.tipo, opcoes=q.opcoes, gabarito=q.gabarito,
+        explicacao=q.explicacao, peso=q.peso,
+        cargo=(payload.cargo or (prova.cargo if prova else None)),
+        senioridade=payload.senioridade or "qualquer",
+        tags=[t.strip() for t in (payload.tags or []) if t.strip()][:20] or None,
+        criado_por=rh.email)
+    db.add(it)
+    registrar(db, "banco_item_promovido", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return _dump_item(it)
+
+
+class MontarIn(BaseModel):
+    item_ids: list[uuid.UUID] | None = None   # escolha manual
+    # ou sorteio automático por filtro:
+    quantidade: int | None = None
+    cargo: str | None = None
+    senioridade: str | None = None
+    tag: str | None = None
+
+
+@router.post("/rh/provas/{prova_id}/adicionar-do-banco", status_code=201,
+             dependencies=[Depends(requer_rh)])
+def adicionar_do_banco(prova_id: uuid.UUID, payload: MontarIn, db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Adiciona itens do banco a uma prova, COPIANDO cada item para uma
+    QuestaoProva (snapshot — editar o item depois não muda a prova). Dois modos:
+    - MANUAL: `item_ids` escolhidos a dedo.
+    - SORTEIO: `quantidade` + filtros (cargo/senioridade/tag) — sorteia do banco.
+    Não desmonta nada existente: só ACRESCENTA questões ao final da prova."""
+    p = db.get(ProvaCargo, prova_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="prova_nao_encontrada")
+
+    if payload.item_ids:
+        itens = [db.get(ItemBanco, i) for i in payload.item_ids]
+        itens = [it for it in itens if it is not None]
+    else:
+        n = max(1, min(100, payload.quantidade or 0))
+        if n == 0:
+            raise HTTPException(status_code=422, detail="informe_itens_ou_quantidade")
+        q = select(ItemBanco)
+        if payload.cargo:
+            q = q.where(ItemBanco.cargo.ilike(f"%{payload.cargo}%"))
+        if payload.senioridade and payload.senioridade != "qualquer":
+            q = q.where(ItemBanco.senioridade.in_([payload.senioridade, "qualquer"]))
+        candidatos = list(db.scalars(q))
+        if payload.tag:
+            alvo = payload.tag.strip().lower()
+            candidatos = [it for it in candidatos
+                          if any(alvo in (t or "").lower() for t in (it.tags or []))]
+        if not candidatos:
+            raise HTTPException(status_code=422, detail="banco_sem_itens_no_filtro")
+        random.shuffle(candidatos)
+        itens = candidatos[:n]
+
+    base = len(_questoes(db, prova_id))
+    for i, it in enumerate(itens):
+        db.add(QuestaoProva(
+            prova_id=prova_id, ordem=base + i, enunciado=it.enunciado, tipo=it.tipo,
+            opcoes=it.opcoes, gabarito=it.gabarito, explicacao=it.explicacao, peso=it.peso))
+    registrar(db, "prova_itens_do_banco", ator="rh", ator_detalhe=rh.email,
+              detalhe={"prova": p.titulo, "qtd": len(itens)})
+    db.commit()
+    return _dump_prova(db, p, com_questoes=True)
 
 
 # ===========================================================================

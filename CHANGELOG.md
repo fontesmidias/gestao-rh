@@ -11,6 +11,28 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.90.0] — 2026-07-24 — Banco de Itens (Provas Fase 2)
+
+### Adicionado
+- **Banco de Itens**: questões REUTILIZÁVEIS, catalogadas por **cargo**,
+  **senioridade** (Júnior/Pleno/Sênior/Qualquer) e **tags** de conteúdo. A ideia
+  é tornar a confecção de provas ESCALÁVEL — catalogar uma vez, montar provas
+  rápido. Nova aba em Provas (🗃️ Banco de itens) com CRUD e filtros.
+- **Montar prova a partir do banco** (na tela de edição da prova, "🗃️ Adicionar
+  do banco"): dois modos — **escolher item a item** (com filtros) ou **sortear**
+  N itens por cargo/senioridade/tag. Em ambos, o item é **copiado** para a prova
+  (snapshot): editar ou excluir o item no banco depois **não altera** provas já
+  montadas nem aplicações em andamento.
+- **Promover questão → banco** ("→ banco" em cada questão da prova): reaproveita
+  uma questão já escrita, copiando-a para o banco (a original permanece na prova).
+
+### Preserva o que existe (pedido do Bruno)
+- Migração **ADITIVA** (`item_banco`, nova tabela) — NÃO toca `prova_cargo` nem
+  `questao_prova`. As provas existentes continuam idênticas, nada é desmontado.
+- Migration `d4f6b8a0c2e1` (reversível). Senioridade é lista fixa (não texto
+  livre, para filtrar sem "pleno"/"Pleno"/"PL"). Tags do item são próprias
+  (conteúdo), separadas do catálogo de tags de PESSOAS do CRM.
+
 ## [1.89.0] — 2026-07-24 — Provas-avançado Fase 1: aleatorização, duplicar, explicação
 
 ### Adicionado
