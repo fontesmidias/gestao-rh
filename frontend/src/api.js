@@ -445,9 +445,15 @@ export const rh = {
   editarFicha: (id, secao, dados, motivo) =>
     req(`/rh/candidatos/${id}/ficha/${secao}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),
+  informativos: (cid) => req(`/rh/candidatos/${cid}/informativos`, { headers: authRH() }),
+  liberarInformativo: (cid) =>
+    req(`/rh/candidatos/${cid}/liberar-informativo`, { method: 'POST', headers: authRH() }),
   inserirArquivo: async (slotId, arquivo, origem) => {
     const fd = new FormData()
-    fd.append('arquivo', arquivo)
+    // aceita 1 arquivo ou vários (FileList/array) — viram um PDF combinado
+    const lista = arquivo?.length != null && typeof arquivo !== 'string'
+      ? Array.from(arquivo) : [arquivo]
+    lista.filter(Boolean).forEach((f) => fd.append('arquivos', f))
     fd.append('origem', origem || 'whatsapp')
     entrouRH()
     try {

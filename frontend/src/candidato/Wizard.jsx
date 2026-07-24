@@ -485,6 +485,30 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           <Campo rotulo="UF"><input maxLength={2} value={en.uf || ''}
             onChange={(e) => setSec('endereco', 'uf', e.target.value.toUpperCase())} /></Campo>
         </div>
+        {/* Comprovante em nome de terceiro → autodeclaração de residência. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.6rem 0 .2rem' }}>
+          <input type="checkbox"
+                 checked={en._terceiro != null ? en._terceiro : !!en.comprovante_titular}
+                 onChange={(e) => {
+                   setSec('endereco', '_terceiro', e.target.checked)
+                   if (!e.target.checked) {
+                     setSec('endereco', 'comprovante_titular', '')
+                     setSec('endereco', 'comprovante_relacao', '')
+                   }
+                 }} />
+          <span>O comprovante de residência <strong>não está no meu nome</strong></span>
+        </label>
+        {(en._terceiro != null ? en._terceiro : !!en.comprovante_titular) && (<>
+          <p className="explica" style={{ margin: '0 0 .4rem' }}>Você vai assinar uma
+            autodeclaração de que reside neste endereço. Informe de quem é o comprovante:</p>
+          <div className="linha2">
+            <Campo rotulo="Nome de quem está no comprovante"><input value={en.comprovante_titular || ''}
+              onChange={(e) => setSec('endereco', 'comprovante_titular', e.target.value)} /></Campo>
+            <Campo rotulo="Sua relação com essa pessoa"><input placeholder="pai, mãe, cônjuge, locador…"
+              value={en.comprovante_relacao || ''}
+              onChange={(e) => setSec('endereco', 'comprovante_relacao', e.target.value)} /></Campo>
+          </div>
+        </>)}
       </>}
 
       {etapa === 2 && <>

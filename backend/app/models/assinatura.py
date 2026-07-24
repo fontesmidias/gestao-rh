@@ -24,6 +24,9 @@ class DocumentoAssinavel(str, enum.Enum):
     # Kit específico da Presidência da República
     ficha_cadastral_terceirizado = "ficha_cadastral_terceirizado"
     oficio_apresentacao_presidencia = "oficio_apresentacao_presidencia"
+    # Autodeclaração de residência: comprovante em nome de terceiro (só quando
+    # o candidato informa titular+relação do comprovante).
+    autodeclaracao_residencia = "autodeclaracao_residencia"
 
 
 # Fichas exigidas de TODO candidato; os demais só existem se o RH os gerar.
@@ -74,4 +77,9 @@ class Assinatura(Base):
     # é criado para o candidato assinar a versão atualizada.
     invalidada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     invalidada_motivo: Mapped[str | None] = mapped_column(String(300))
+    # Informativo de integração só vai ao candidato assinar APÓS o RH disparar
+    # (feedback 2026-07-23). Este doc NASCE com aguardando_liberacao=True e fica
+    # oculto em _docs_exigidos até o RH liberar (`liberar-informativo`), quando
+    # vira False. Todos os demais docs nascem False (liberados) — não muda nada.
+    aguardando_liberacao: Mapped[bool] = mapped_column(default=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

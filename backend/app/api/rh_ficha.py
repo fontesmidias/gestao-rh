@@ -246,39 +246,93 @@ def _nomes_docs(valores: list[str]) -> list[str]:
 @router.post("/rh/slots/{slot_id}/arquivo")
 def inserir_arquivo_rh(
     slot_id: uuid.UUID,
-    arquivo: UploadFile,
+    arquivo: UploadFile | None = None,
+    arquivos: list[UploadFile] | None = None,
     origem: str = Form("whatsapp"),
     db: Session = Depends(get_db),
     rh: UsuarioRH = Depends(requer_rh),
 ) -> dict:
     """Documento que chegou fora do sistema (WhatsApp, e-mail, presencial):
     o RH insere no slot com etiqueta de origem — visível no painel e na
-    auditoria. Passa pelas mesmas validações do envio do candidato."""
-    from app.api.documentos import _gravar_no_slot, _slot_out
+    auditoria. Aceita VÁRIOS arquivos no mesmo tipo (ex.: RG frente+verso, ou
+    substituir docs errados pelos certos) — viram um único PDF combinado, igual
+    ao envio do candidato. Passa pelas mesmas validações."""
+    from app.api.documentos import _gravar_partes_no_slot, _slot_out
+    from app.services.normalizacao import combinar_pdfs
 
     slot = db.get(SlotDocumento, slot_id)
     if slot is None:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
     candidato = db.get(Candidato, slot.candidato_id)
 
-    dados = arquivo.file.read()
+    lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
+    if not lista:
+        raise HTTPException(status_code=422, detail="arquivo_vazio")
+
     try:
-        pdf, paginas = normalizar_para_pdf(arquivo.filename or "arquivo", dados,
-                                           rotulo=slot.tipo.value)
+        partes = []  # (nome, content_type, dados, pdf)
+        for up in lista:
+            dados = up.file.read()
+            pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
+                                         rotulo=slot.tipo.value)
+            partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
+        pdf_final, paginas = combinar_pdfs([p[3] for p in partes])
     except ArquivoInvalido as exc:
         raise HTTPException(status_code=422, detail=exc.codigo) from exc
 
-    _gravar_no_slot(db, candidato, slot, arquivo.filename, arquivo.content_type,
-                    dados, pdf, paginas)
+    _gravar_partes_no_slot(db, candidato, slot, partes, pdf_final, paginas)
     slot.origem_envio = "rh"
     slot.origem_envio_obs = origem.strip()[:120] or "whatsapp"
     registrar(db, "documento_inserido_rh", ator="rh", ator_detalhe=rh.email,
               candidato_id=candidato.id,
               detalhe={"tipo": slot.tipo.value, "origem": slot.origem_envio_obs,
-                       "paginas": paginas})
+                       "paginas": paginas, "arquivos": len(partes)})
     db.commit()
     return _slot_out(slot) | {"origem_envio": slot.origem_envio,
                               "origem_envio_obs": slot.origem_envio_obs}
+
+
+@router.get("/rh/candidatos/{candidato_id}/informativos")
+def listar_informativos(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+    """Informativos de integração do candidato e se estão liberados para assinar.
+    Alimenta o botão de disparo no painel do RH."""
+    from app.api.assinaturas import NOMES_DOC
+    from app.api.postos import DOCS_INFORMATIVO
+    itens = db.scalars(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato_id,
+            Assinatura.documento.in_(DOCS_INFORMATIVO),
+            Assinatura.invalidada_em.is_(None),
+        )
+    ).all()
+    return [{
+        "documento": a.documento.value,
+        "nome": NOMES_DOC.get(a.documento, a.documento.value),
+        "aguardando_liberacao": a.aguardando_liberacao,
+        "assinado": a.assinado_em is not None,
+    } for a in itens]
+
+
+@router.post("/rh/candidatos/{candidato_id}/liberar-informativo")
+def liberar_informativo(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """DISPARA o informativo de integração: libera para o candidato assinar. Só
+    a partir daqui ele aparece no fluxo de assinatura (feedback do Bruno)."""
+    from app.api.postos import DOCS_INFORMATIVO
+    itens = db.scalars(
+        select(Assinatura).where(
+            Assinatura.candidato_id == candidato_id,
+            Assinatura.documento.in_(DOCS_INFORMATIVO),
+            Assinatura.aguardando_liberacao.is_(True),
+            Assinatura.invalidada_em.is_(None),
+        )
+    ).all()
+    for a in itens:
+        a.aguardando_liberacao = False
+    registrar(db, "informativo_liberado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato_id, detalhe={"qtd": len(itens)})
+    db.commit()
+    return {"liberados": len(itens)}
 
 
 @router.post("/rh/candidatos/{candidato_id}/notificar",

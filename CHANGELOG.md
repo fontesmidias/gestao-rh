@@ -11,6 +11,34 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.92.0] — 2026-07-24 — Onda Admissão/Ficha (6 ajustes)
+
+### Adicionado / Corrigido
+- **Cargo obrigatório no link**: o convite passa a exigir o cargo/função (422
+  `cargo_obrigatorio`) — o cargo casa por texto com modelos/provas/arquivo.
+- **Informativo de integração só após o RH disparar**: o informativo (efetivo
+  INFRAERO e intermitente) NASCE bloqueado e só vai ao candidato assinar quando
+  o RH clicar "📨 Liberar" no painel (`aguardando_liberacao`). Enquanto isso,
+  não aparece no fluxo de assinatura. Vale para os dois regimes.
+- **Autodeclaração de residência**: quando o comprovante não está no nome do
+  candidato, ele marca no wizard, informa o titular e a relação (pai/cônjuge/
+  locador…) e assina uma autodeclaração — que só é exigida nesse caso.
+- **Instrução do salário do intermitente**: no campo de salário (ficha), uma
+  nota aparece só quando o regime é intermitente: informe o valor/dia = salário
+  do cargo ÷ 30.
+- **Vários documentos no mesmo tipo (insert manual do RH)**: ao inserir um
+  documento manualmente, o RH pode selecionar vários arquivos de uma vez (ex.:
+  RG frente+verso, ou os documentos certos no lugar dos errados) — viram um PDF
+  combinado, como no envio do candidato.
+- **Matrícula do Tirvu protegida**: reimportar do Tirvu com a coluna "matrícula"
+  vazia não zera mais a matrícula existente (999NNNN ou a real) — só sobrescreve
+  quando vem preenchida. Espelha a proteção que já havia para o nome.
+
+### Técnico
+- `assinatura.aguardando_liberacao`, `endereco.comprovante_titular`/
+  `comprovante_relacao`, enum `documento_assinavel += autodeclaracao_residencia`.
+  Migration `e6a8c0d2f4b1` (reversível). Gerador `gerar_autodeclaracao_residencia`.
+
 ## [1.91.0] — 2026-07-24 — Telemetria das provas visível no RH
 
 ### Corrigido/Melhorado

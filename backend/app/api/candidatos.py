@@ -93,6 +93,10 @@ def criar_candidato(
     # Jornada é obrigatória no convite (feedback 2026-07-21) e precisa existir.
     if jornada_id is None:
         raise HTTPException(status_code=422, detail="jornada_obrigatoria")
+    # Cargo obrigatório no convite (feedback 2026-07-23): o cargo casa por TEXTO
+    # com modelos/provas/arquivo, então precisa ser definido ao gerar o link.
+    if not cargo:
+        raise HTTPException(status_code=422, detail="cargo_obrigatorio")
     if db.get(Jornada, jornada_id) is None:
         raise HTTPException(status_code=404, detail="jornada_nao_encontrada")
     candidato = Candidato(**dados, posto_servico_id=posto_id, jornada_id=jornada_id,

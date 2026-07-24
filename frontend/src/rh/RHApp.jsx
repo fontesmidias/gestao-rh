@@ -383,7 +383,8 @@ function Painel({ aoSair }) {
       {novo && (
         <div className="rh-card">
           <h3>Convidar candidato</h3>
-          <p className="explica">Nome, <strong>posto</strong> e <strong>jornada</strong> são
+          <p className="explica">Nome, <strong>posto</strong>, <strong>jornada</strong> e
+            <strong> cargo</strong> são
             obrigatórios — com base no posto e no regime, os documentos do kit já nascem certos, e a
             jornada evita a pendência que o Tirvu acusa depois. Sem e-mail? Sem problema: o link
             aparece aqui para copiar e mandar pelo WhatsApp.</p>
@@ -418,7 +419,8 @@ function Painel({ aoSair }) {
             </select>
           </div>
           <div className="linha2">
-            <input placeholder="Cargo/função (opcional)"
+            <input placeholder="Cargo/função (obrigatório)"
+                   value={novo.cargo_funcao || ''}
                    onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
             {jornadasConvite.length === 0 && (
               <span className="explica" style={{ margin: 0, alignSelf: 'center' }}>
@@ -473,6 +475,9 @@ function Painel({ aoSair }) {
               if (!novo.jornada_id) {
                 setErroConvite('Escolha a jornada de trabalho (o Tirvu recusa admissão sem jornada). '
                   + 'Se não houver nenhuma, cadastre em Config → Empresas e jornadas.'); return
+              }
+              if (!(novo.cargo_funcao || '').trim()) {
+                setErroConvite('Informe o cargo/função — é obrigatório para gerar o link.'); return
               }
               setEnviandoConvite(true)
               try {

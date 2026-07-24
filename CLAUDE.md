@@ -449,6 +449,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   gerado sob demanda e a ficha antiga deve sair idêntica. O PDF assinado fica
   persistido no MinIO com hash do ato, então reformatar seções não quebra vias
   antigas.
+- **Informativo de integração só após disparo do RH** (v1.92): o informativo
+  (efetivo `informacoes_trabalhador` INFRAERO e intermitente
+  `informativo_intermitente` — conjunto `DOCS_INFORMATIVO` em `postos.py`) NASCE
+  com `Assinatura.aguardando_liberacao=True` no `gerar_docs_do_posto_e_regime` e
+  fica OCULTO em `_docs_exigidos` (filtra `aguardando_liberacao IS False`) até o
+  RH chamar `/rh/candidatos/{id}/liberar-informativo`. Todos os DEMAIS docs
+  nascem `False` (liberados) — comportamento inalterado. Painel:
+  `/informativos` lista + botão "Liberar" no `Detalhe` (`PainelInformativo`).
+- **Autodeclaração de residência** (v1.92, `DocumentoAssinavel.autodeclaracao_residencia`):
+  exigida SÓ quando o comprovante é de terceiro. O candidato preenche
+  `endereco.comprovante_titular`/`comprovante_relacao` no wizard;
+  `_sincronizar_autodeclaracao_residencia` (`ficha.py`, no salvar-endereço) CRIA
+  a Assinatura quando o titular está preenchido e a REMOVE (se ainda não
+  assinada) quando é limpo. Gerador `gerar_autodeclaracao_residencia` usa o
+  helper `_declaracao`. **Cargo obrigatório no convite** (v1.92): 422
+  `cargo_obrigatorio` em `candidatos.py` (o smoke cobre). **Insert manual do RH
+  aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
+  `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
+  (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
 - **Jornadas**: tabela própria; import da planilha de escalas do Tirvu (96 abas,
   1 aba = 1 posto, coluna "Jornada" achada pelo cabeçalho) em
   `organizacao.py::_abas_com_jornadas` — zip+XML puro, multi-abas. NUNCA fundir
