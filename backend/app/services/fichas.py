@@ -1516,9 +1516,44 @@ def _com_marca(gerador):
     return _wrap
 
 
+def gerar_autodeclaracao_residencia(db: Session, candidato: Candidato,
+                                    assinatura: Assinatura | None = None,
+                                    base_url: str | None = None) -> bytes:
+    """Autodeclaração de residência: o comprovante está em nome de TERCEIRO. O
+    candidato declara que reside no endereço e informa o titular do comprovante
+    e o vínculo. Assinável (mesma trilha das fichas)."""
+    e = db.get(Endereco, candidato.id)
+    d = db.get(DocumentosIdentificacao, candidato.id)
+    cpf = d.cpf if d else "-"
+    endereco = ((e.logradouro_numero_complemento if e else None)
+                or (", ".join(filter(None, [
+                    e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf])) if e else None)
+                or "-")
+    titular = (e.comprovante_titular if e else None) or "-"
+    relacao = (e.comprovante_relacao if e else None) or "-"
+
+    pdf = _FichaPDF("AUTODECLARAÇÃO DE RESIDÊNCIA")
+    _nota(pdf, "Documento gerado eletronicamente a partir do Formulário de Admissão Green House.")
+    _declaracao(
+        pdf, "AUTODECLARAÇÃO DE RESIDÊNCIA",
+        f"Eu, {candidato.nome_completo}, inscrito(a) no CPF nº {cpf}, DECLARO, para os "
+        f"devidos fins, que resido no endereço: {endereco}. Declaro ainda que o comprovante "
+        f"de residência apresentado está em nome de {titular} ({relacao}), com quem possuo "
+        "o vínculo indicado, não dispondo de comprovante em meu próprio nome. Assumo total "
+        "responsabilidade pela veracidade desta declaração, estando ciente das sanções legais "
+        "em caso de falsidade (art. 299 do Código Penal).",
+        candidato,
+    )
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, cpf, base_url)
+    return bytes(pdf.output())
+
+
 GERADORES = {
     nome: _com_marca(g) for nome, g in {
         "ficha_cadastro": gerar_ficha_cadastro,
+        "autodeclaracao_residencia": gerar_autodeclaracao_residencia,
         "ficha_emergencia": gerar_ficha_emergencia,
         "termo_vt": gerar_termo_vt,
         "acordo_confidencialidade": gerar_acordo_confidencialidade,

@@ -243,8 +243,14 @@ function PostoServico({ dados, setMsg, recarregar }) {
             setCargo(v)
           }} />
       )}
-      <input placeholder="Salário base (ex.: R$ 1.500,00)" value={salario}
-             style={{ maxWidth: 200 }} onChange={(e) => setSalario(e.target.value)} />
+      <label className="campo" style={{ maxWidth: 240 }}>
+        <input placeholder="Salário base (ex.: R$ 1.500,00)" value={salario}
+               onChange={(e) => setSalario(e.target.value)} />
+        {dados.regime === 'intermitente' && (
+          <small className="explica" style={{ margin: '.2rem 0 0', color: '#7a5b1a' }}>
+            ⚠️ Intermitente: informe o <strong>valor por dia</strong> — salário do cargo
+            ÷ 30 (ex.: cargo R$ 1.500 → R$ 50,00/dia).</small>)}
+      </label>
       <select value={empresaId} style={{ maxWidth: 220 }}
               title="Empregadora que assina a carteira — sai na planilha do Tirvu"
               onChange={(e) => {
@@ -553,6 +559,55 @@ function MemoriaColaborador({ id }) {
   )
 }
 
+// Informativo de integração: o candidato só o vê para assinar DEPOIS que o RH
+// dispara aqui (feedback do Bruno). Some se não houver informativo (efetivo
+// não-INFRAERO). Recolhido quando não há nada pendente.
+function PainelInformativo({ id, setMsg }) {
+  const [itens, setItens] = useState(null)
+  const [liberando, setLiberando] = useState(false)
+  const carregar = () => api.informativos(id).then(setItens).catch(() => setItens([]))
+  useEffect(() => { carregar() }, [id])
+
+  if (!itens || itens.length === 0) return null   // este candidato não tem informativo
+  const pendentes = itens.filter((i) => i.aguardando_liberacao)
+
+  const liberar = async () => {
+    setLiberando(true); setMsg?.(null)
+    try {
+      const r = await api.liberarInformativo(id)
+      setMsg?.({ tipo: 'ok', texto: `Informativo liberado — o candidato já pode assinar (${r.liberados}).` })
+      carregar()
+    } catch (e) {
+      setMsg?.({ tipo: 'erro', texto: `Não foi possível liberar (${e.detail || e.message}).` })
+    } finally { setLiberando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    flexWrap: 'wrap', gap: '.5rem' }}>
+        <strong>📣 Informativo de integração</strong>
+        {pendentes.length > 0 && (
+          <button className="btn-principal btn-mini" disabled={liberando} onClick={liberar}>
+            {liberando ? 'Liberando…' : '📨 Liberar para o candidato assinar'}</button>
+        )}
+      </div>
+      <ul className="fichas-status" style={{ marginTop: '.4rem' }}>
+        {itens.map((i) => (
+          <li key={i.documento}>
+            {i.assinado ? '✅' : i.aguardando_liberacao ? '🔒' : '⏳'} {i.nome}
+            <small> · {i.assinado ? 'assinado'
+              : i.aguardando_liberacao ? 'aguardando você liberar' : 'liberado, aguardando assinatura'}</small>
+          </li>
+        ))}
+      </ul>
+      {pendentes.length > 0 && (
+        <p className="explica" style={{ margin: 0 }}>Enquanto não liberar, o informativo
+          não aparece para o candidato assinar.</p>)}
+    </div>
+  )
+}
+
 export default function Detalhe({ id, aoVoltar }) {
   const [dados, setDados] = useState(null)
   const [visualizando, setVisualizando] = useState(null) // slot id
@@ -600,13 +655,14 @@ export default function Detalhe({ id, aoVoltar }) {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*,.pdf,.doc,.docx'
+    input.multiple = true   // vários arquivos no mesmo tipo → um PDF combinado
     input.onchange = async () => {
-      const arq = input.files[0]
-      if (!arq) return
+      const arqs = input.files
+      if (!arqs || arqs.length === 0) return
       setMsg(null)
       try {
-        await api.inserirArquivo(slot.id, arq, origem.trim() || 'WhatsApp')
-        setMsg({ tipo: 'ok', texto: 'Documento inserido e etiquetado — revise e aprove como de costume.' })
+        await api.inserirArquivo(slot.id, arqs, origem.trim() || 'WhatsApp')
+        setMsg({ tipo: 'ok', texto: `Documento inserido (${arqs.length} arquivo(s), combinados) e etiquetado — revise e aprove.` })
         await recarregar()
       } catch (e) {
         setMsg({ tipo: 'erro', texto: `Não foi possível inserir (${e.detail || e.message}).` })
@@ -725,6 +781,9 @@ export default function Detalhe({ id, aoVoltar }) {
       {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
           Talentos. Recolhível para não poluir a ficha. */}
       <MemoriaColaborador id={id} />
+
+      {/* Informativo de integração: só vai ao candidato assinar após o RH liberar. */}
+      <PainelInformativo id={id} setMsg={setMsg} />
 
       {/* No desktop, os cards de informação dividem a largura em 2 colunas
           (menos rolagem); no celular continuam empilhados. */}

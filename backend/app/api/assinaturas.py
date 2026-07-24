@@ -61,6 +61,9 @@ def _docs_exigidos(db: Session, candidato: Candidato) -> list[DocumentoAssinavel
             Assinatura.documento.notin_(FICHAS_BASE),
             Assinatura.invalidada_em.is_(None),
             Assinatura.solicitacao_etapa_id.is_(None),
+            # informativo bloqueado (aguardando liberação do RH) NÃO aparece
+            # ainda para o candidato assinar.
+            Assinatura.aguardando_liberacao.is_(False),
         )
     ).all()
     from app.services.ordem_assinatura import ordem_fichas
@@ -211,6 +214,8 @@ NOMES_DOC = {
         "Ficha Cadastral de Terceirizado (Presidência)",
     DocumentoAssinavel.oficio_apresentacao_presidencia:
         "Ofício de Apresentação — Presidência da República",
+    DocumentoAssinavel.autodeclaracao_residencia:
+        "Autodeclaração de Residência",
 }
 
 

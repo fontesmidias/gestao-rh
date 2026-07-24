@@ -126,6 +126,12 @@ class Endereco(Base):
     bairro: Mapped[str | None] = mapped_column(String(120))
     cidade: Mapped[str | None] = mapped_column(String(120))
     uf: Mapped[str | None] = mapped_column(String(2))
+    # Comprovante de residência em nome de TERCEIRO: quando preenchido, o
+    # candidato assina uma AUTODECLARAÇÃO de residência (o comprovante não está
+    # no nome dele). `comprovante_titular` = nome de quem consta no comprovante;
+    # `comprovante_relacao` = vínculo (pai/mãe/cônjuge/locador…).
+    comprovante_titular: Mapped[str | None] = mapped_column(String(200))
+    comprovante_relacao: Mapped[str | None] = mapped_column(String(80))
 
 
 class DocumentosIdentificacao(Base):

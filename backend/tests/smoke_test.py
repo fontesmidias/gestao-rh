@@ -41,11 +41,16 @@ assert jr.status_code == 201, jr.text
 jornada_id = jr.json()["id"]
 sem_jornada = c.post("/api/rh/candidatos", headers=rh, json={"nome_completo": "Sem Jornada"})
 assert sem_jornada.status_code == 422 and sem_jornada.json()["detail"] == "jornada_obrigatoria", sem_jornada.text
+# cargo é obrigatório no convite (v1.92)
+sem_cargo = c.post("/api/rh/candidatos", headers=rh,
+                   json={"nome_completo": "Sem Cargo", "jornada_id": jornada_id})
+assert sem_cargo.status_code == 422 and sem_cargo.json()["detail"] == "cargo_obrigatorio", sem_cargo.text
 r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "José Teste da Silva",
     "email": "jose@example.com",
     "celular_whatsapp": "+5561999998888",
     "jornada_id": jornada_id,
+    "cargo_funcao": "Auxiliar de Serviços Gerais",
 })
 assert r.status_code == 201, r.text
 convite = r.json()

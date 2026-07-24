@@ -349,9 +349,13 @@ async def importar_colaboradores(arquivo: UploadFile,
             criados += 1
         else:
             atualizados += 1
-        # aplica campos fixos (não sobrescreve nome vazio)
+        # aplica campos fixos. NÃO sobrescreve com vazio o nome nem a MATRÍCULA:
+        # a matrícula (999NNNN gerada ou a real do Tirvu) é estável e serve de
+        # âncora — uma célula "matricula" em branco na planilha zeraria o
+        # cadastro. O Tirvu reimporta e ATUALIZA a matrícula quando ela vem
+        # preenchida (o setattr abaixo faz isso); só protege contra o vazio.
         for k, val in campos.items():
-            if k == "nome_completo" and not val:
+            if k in ("nome_completo", "matricula") and not val:
                 continue
             setattr(alvo, k, val)
         alvo.situacao = situacao  # vínculo (ativo/desligado) vem do Tirvu

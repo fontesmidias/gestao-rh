@@ -101,6 +101,9 @@ class SecaoEndereco(BaseModel):
     bairro: str | None = None
     cidade: str | None = None
     uf: str | None = None
+    # Comprovante em nome de terceiro → autodeclaração de residência.
+    comprovante_titular: str | None = None
+    comprovante_relacao: str | None = None
 
 
 def _validar_cpf(v):
@@ -219,7 +222,26 @@ def salvar_endereco(token: str, payload: SecaoEndereco, db: Session = Depends(ge
     candidato = _candidato_do_token(token, db)
     _upsert(db, Endereco, candidato.id, payload)
     _marca_preenchendo(candidato)
+    _sincronizar_autodeclaracao_residencia(db, candidato,
+                                           (payload.comprovante_titular or "").strip())
     db.commit()
+
+
+def _sincronizar_autodeclaracao_residencia(db, candidato, titular: str) -> None:
+    """Comprovante em nome de terceiro (titular preenchido) → exige a
+    autodeclaração de residência (cria a Assinatura se não houver). Se o titular
+    for limpo, remove a Assinatura AINDA NÃO assinada (não mexe em já assinada)."""
+    from app.models.assinatura import Assinatura, DocumentoAssinavel
+    doc = DocumentoAssinavel.autodeclaracao_residencia
+    existente = db.scalar(
+        select(Assinatura).where(Assinatura.candidato_id == candidato.id,
+                                 Assinatura.documento == doc,
+                                 Assinatura.invalidada_em.is_(None)))
+    if titular:
+        if existente is None:
+            db.add(Assinatura(candidato_id=candidato.id, documento=doc))
+    elif existente is not None and existente.assinado_em is None:
+        db.delete(existente)   # não é mais aplicável e ainda não foi assinada
 
 
 @router.put("/c/{token}/ficha/documentos", status_code=204)

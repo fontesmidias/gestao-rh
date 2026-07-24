@@ -27,6 +27,11 @@ DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
                  DocumentoAssinavel.informacoes_trabalhador,
                  DocumentoAssinavel.termo_lgpd_infraero)
 
+# Informativos de integração — só vão ao candidato assinar após o RH disparar
+# (efetivo/INFRAERO = informacoes_trabalhador; intermitente = informativo_intermitente).
+DOCS_INFORMATIVO = (DocumentoAssinavel.informacoes_trabalhador,
+                    DocumentoAssinavel.informativo_intermitente)
+
 # Catálogo de documentos ESPECÍFICOS de posto que o RH pode marcar no CRUD.
 # (Bruno: só Presidência e INFRAERO têm kit próprio; os demais usam o padrão.)
 DOCS_ESPECIFICOS_DISPONIVEIS = {
@@ -66,7 +71,11 @@ def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[Docu
     novos = []
     for doc in exigidos:
         if doc not in existentes and doc not in novos:
-            db.add(Assinatura(candidato_id=candidato.id, documento=doc))
+            # Informativo de integração (efetivo/INFRAERO e intermitente) nasce
+            # BLOQUEADO: só vai ao candidato assinar após o RH liberar. Os demais
+            # docs nascem liberados (aguardando_liberacao=False).
+            db.add(Assinatura(candidato_id=candidato.id, documento=doc,
+                              aguardando_liberacao=doc in DOCS_INFORMATIVO))
             novos.append(doc)
     return novos
 
