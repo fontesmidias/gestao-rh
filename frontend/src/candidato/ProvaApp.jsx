@@ -16,6 +16,8 @@ export default function ProvaApp() {
   const [nome, setNome] = useState('')
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(false)
+  const [aidFim, setAidFim] = useState(null)       // aid guardado p/ a revisão pós-prova
+  const [temRevisao, setTemRevisao] = useState(false)
 
   useEffect(() => {
     api.info(token)
@@ -47,6 +49,7 @@ export default function ProvaApp() {
       <h2>Prova enviada!</h2>
       <p className="explica centro">Recebemos suas respostas. Obrigado por participar —
         o RH da Green House dará retorno.</p>
+      {temRevisao && <RevisaoProva token={token} aid={aidFim} />}
     </Casca>)
   if (fase === 'identificar') return (
     <Casca>
@@ -63,7 +66,10 @@ export default function ProvaApp() {
       </form>
     </Casca>)
   return <Questionario token={token} aid={aid} titulo={info?.titulo}
-                       aoConcluir={() => { localStorage.removeItem(chaveAid); setFase('fim') }} />
+                       aoConcluir={(r) => {
+                         localStorage.removeItem(chaveAid)
+                         setAidFim(aid); setTemRevisao(!!r?.tem_revisao); setFase('fim')
+                       }} />
 }
 
 function Casca({ children }) {
@@ -150,7 +156,7 @@ function Questionario({ token, aid, titulo, aoConcluir }) {
     setErro(null); setEnviando(true)
     try {
       await api.responder(token, aid, { questao_id: q.id, escolha: r.escolha, texto: r.texto })
-      if (ultima) { await api.concluir(token, aid); await aoConcluir() }
+      if (ultima) { const fim = await api.concluir(token, aid); await aoConcluir(fim) }
       else setIdx(idx + 1)
     } catch (e) {
       setErro(`Não foi possível salvar (${e.detail || e.message}). Tente de novo.`)
@@ -184,6 +190,57 @@ function Questionario({ token, aid, titulo, aoConcluir }) {
         <button className="btn-principal btn-mini" disabled={!completa || enviando} onClick={proximo}>
           {ultima ? 'Concluir e enviar' : 'Próximo »'}</button>
       </div>
+    </div>
+  )
+}
+
+// Revisão pós-prova (só quando a prova permite mostrar_explicacao). Mostra
+// gabarito + explicação de cada questão para o participante APRENDER — nunca a
+// nota (isso continua restrito ao RH). Carregada sob demanda (um clique).
+function RevisaoProva({ token, aid }) {
+  const [itens, setItens] = useState(null)
+  const [aberto, setAberto] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  const carregar = async () => {
+    setAberto(true)
+    try { const r = await api.revisao(token, aid); setItens(r.itens) }
+    catch { setErro('Não foi possível carregar a revisão agora.') }
+  }
+
+  if (!aberto) return (
+    <button className="btn-secundario" style={{ marginTop: '1rem' }} onClick={carregar}>
+      📖 Ver o gabarito e as explicações</button>
+  )
+  if (erro) return <div className="alerta" style={{ marginTop: '1rem' }}>{erro}</div>
+  if (!itens) return <p className="explica centro" style={{ marginTop: '1rem' }}>Carregando…</p>
+
+  return (
+    <div className="prova-revisao" style={{ marginTop: '1rem', textAlign: 'left' }}>
+      {itens.map((it, i) => (
+        <div className="prova-questao" key={i}>
+          <strong>{i + 1}. {it.enunciado}</strong>
+          {it.tipo === 'objetiva' ? (
+            <ul className="prova-opcoes">
+              {(it.opcoes || []).map((o) => {
+                const correta = o.id === it.gabarito
+                const escolhida = o.id === it.escolha
+                return (
+                  <li key={o.id} className={correta ? 'certa' : (escolhida ? 'errada' : '')}>
+                    {correta ? '✔ ' : (escolhida ? '✗ ' : '')}{o.texto}
+                    {escolhida && !correta && <small className="explica"> (sua resposta)</small>}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="explica">Sua resposta: {it.resposta || '—'} · correção manual do RH.</p>
+          )}
+          {it.explicacao && (
+            <small className="explica" style={{ margin: '.2rem 0 0', display: 'block' }}>💡 {it.explicacao}</small>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

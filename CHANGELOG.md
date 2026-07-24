@@ -11,6 +11,34 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.89.0] — 2026-07-24 — Provas-avançado Fase 1: aleatorização, duplicar, explicação
+
+### Adicionado
+- **Aleatorização das provas** (interruptor por prova): embaralha a ordem das
+  questões E das alternativas para cada participante, com semente ESTÁVEL por
+  aplicação — recarregar a página não reembaralha (o candidato não se perde). A
+  correção casa por id da opção, então embaralhar a exibição **nunca altera a
+  nota** (testado). Prova didática com sequência proposital fica com o
+  embaralhamento desligado.
+- **Explicação da resposta** (campo opcional por questão) + **flag por prova**
+  "mostrar ao participante". Ao terminar, se a prova permite, o participante vê
+  uma revisão com o gabarito e a explicação de cada questão (didática). Prova de
+  seleção fica com a flag desligada e a revisão é bloqueada (403) — o gabarito
+  nunca vaza. A nota continua restrita ao RH em qualquer caso.
+- **Duplicar prova inteira** e **duplicar questão**: clona título/config e todas
+  as questões (com gabarito e explicação); a cópia da prova nasce como "(cópia)"
+  sem links/aplicações. Botões na lista de provas e em cada questão.
+
+### Técnico
+- `prova_cargo.embaralhar`/`mostrar_explicacao`, `questao_prova.explicacao`,
+  `aplicacao_prova.seed`. Migration `c3e5a7f9b1d2` (reversível, sem enum).
+- Embaralhamento determinístico por seed (`_publicas_ordenadas`): sub-seed por
+  questão para as opções não permutarem todas igual. Rotas novas:
+  `/rh/provas/{id}/duplicar`, `/rh/provas/{id}/questoes/{qid}/duplicar`,
+  `/p/{token}/a/{aid}/revisao`.
+- **Banco de itens por cargo/senioridade fica para a Fase 2** (rearquitetura: a
+  questão deixaria de pertencer a uma única prova).
+
 ## [1.88.0] — 2026-07-24 — Máscara de data centralizada + filtros compactos
 
 ### Corrigido (dado / risco)

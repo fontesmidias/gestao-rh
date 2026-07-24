@@ -5,6 +5,7 @@ automáticas + discursivas do RH).
 Segurança: o GABARITO das objetivas nunca aparece em rota pública — só no CRUD do
 RH e na correção. O participante não vê a própria nota (é seleção)."""
 
+import random
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,7 +37,8 @@ TIPOS_QUESTAO = {"objetiva", "discursiva"}
 def _dump_questao_rh(q: QuestaoProva) -> dict:
     """Versão do RH — INCLUI o gabarito (para editar/corrigir)."""
     return {"id": q.id, "ordem": q.ordem, "enunciado": q.enunciado, "tipo": q.tipo,
-            "opcoes": q.opcoes or [], "gabarito": q.gabarito, "peso": q.peso}
+            "opcoes": q.opcoes or [], "gabarito": q.gabarito, "peso": q.peso,
+            "explicacao": q.explicacao}
 
 
 def _questao_publica(q: QuestaoProva) -> dict:
@@ -51,10 +53,31 @@ def _questoes(db: Session, prova_id: uuid.UUID) -> list[QuestaoProva]:
                       .order_by(QuestaoProva.ordem, QuestaoProva.criado_em)).all()
 
 
+def _publicas_ordenadas(questoes: list[QuestaoProva], embaralhar: bool,
+                        seed: int | None) -> list[dict]:
+    """Versões públicas das questões, na ordem que o PARTICIPANTE vê.
+
+    Sem embaralhar: ordem fixa (a de _questoes). Embaralhando: permuta as
+    questões E as opções de cada uma de forma DETERMINÍSTICA pela seed — mesma
+    seed → mesma ordem sempre (recarregar não reembaralha). A correção casa por
+    id da opção (não por posição), então embaralhar a EXIBIÇÃO nunca altera a
+    nota. Cada questão usa uma sub-seed distinta (seed + índice) para as opções
+    não embaralharem todas igual."""
+    pubs = [_questao_publica(q) for q in questoes]
+    if not embaralhar or seed is None:
+        return pubs
+    random.Random(seed).shuffle(pubs)   # permuta a ordem das questões
+    for i, pub in enumerate(pubs):
+        if pub.get("opcoes"):
+            random.Random(seed + i + 1).shuffle(pub["opcoes"])  # e das opções
+    return pubs
+
+
 def _dump_prova(db: Session, p: ProvaCargo, com_questoes: bool = False) -> dict:
     qs = _questoes(db, p.id)
     d = {"id": p.id, "titulo": p.titulo, "cargo": p.cargo, "descricao": p.descricao,
          "tempo_segundos": p.tempo_segundos, "ativa": p.ativa,
+         "embaralhar": p.embaralhar, "mostrar_explicacao": p.mostrar_explicacao,
          "qtd_questoes": len(qs),
          "qtd_objetivas": sum(1 for q in qs if q.tipo == "objetiva"),
          "qtd_discursivas": sum(1 for q in qs if q.tipo == "discursiva"),
@@ -81,6 +104,8 @@ class ProvaIn(BaseModel):
     descricao: str | None = None
     tempo_segundos: int | None = None
     ativa: bool | None = None
+    embaralhar: bool | None = None
+    mostrar_explicacao: bool | None = None
 
 
 @router.post("/rh/provas", status_code=201, dependencies=[Depends(requer_rh)])
@@ -93,6 +118,8 @@ def criar_prova(payload: ProvaIn, db: Session = Depends(get_db),
                    descricao=(payload.descricao or "").strip() or None,
                    tempo_segundos=max(60, min(14400, payload.tempo_segundos or 1800)),
                    ativa=True if payload.ativa is None else payload.ativa,
+                   embaralhar=bool(payload.embaralhar),
+                   mostrar_explicacao=bool(payload.mostrar_explicacao),
                    criado_por=rh.email)
     db.add(p)
     registrar(db, "prova_criada", ator="rh", ator_detalhe=rh.email,
@@ -125,6 +152,10 @@ def editar_prova(prova_id: uuid.UUID, payload: ProvaIn, db: Session = Depends(ge
         p.tempo_segundos = max(60, min(14400, payload.tempo_segundos))
     if payload.ativa is not None:
         p.ativa = payload.ativa
+    if payload.embaralhar is not None:
+        p.embaralhar = payload.embaralhar
+    if payload.mostrar_explicacao is not None:
+        p.mostrar_explicacao = payload.mostrar_explicacao
     registrar(db, "prova_editada", ator="rh", ator_detalhe=rh.email, detalhe={"titulo": p.titulo})
     db.commit()
     return _dump_prova(db, p, com_questoes=True)
@@ -142,6 +173,32 @@ def excluir_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
     db.commit()
 
 
+@router.post("/rh/provas/{prova_id}/duplicar", status_code=201,
+             dependencies=[Depends(requer_rh)])
+def duplicar_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Clona a prova inteira (config + todas as questões, com gabarito e
+    explicação). A cópia nasce com título "(cópia)" e as MESMAS questões, mas
+    sem links/aplicações (é um novo modelo)."""
+    p = db.get(ProvaCargo, prova_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="prova_nao_encontrada")
+    nova = ProvaCargo(
+        titulo=f"{p.titulo} (cópia)"[:200], cargo=p.cargo, descricao=p.descricao,
+        tempo_segundos=p.tempo_segundos, ativa=p.ativa, embaralhar=p.embaralhar,
+        mostrar_explicacao=p.mostrar_explicacao, criado_por=rh.email)
+    db.add(nova)
+    db.flush()
+    for q in _questoes(db, prova_id):
+        db.add(QuestaoProva(
+            prova_id=nova.id, ordem=q.ordem, enunciado=q.enunciado, tipo=q.tipo,
+            opcoes=q.opcoes, gabarito=q.gabarito, explicacao=q.explicacao, peso=q.peso))
+    registrar(db, "prova_duplicada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"origem": p.titulo, "nova": nova.titulo})
+    db.commit()
+    return _dump_prova(db, nova, com_questoes=True)
+
+
 # ===========================================================================
 # Questões de uma prova (RH)
 # ===========================================================================
@@ -152,6 +209,7 @@ class QuestaoIn(BaseModel):
     tipo: str                        # objetiva | discursiva
     opcoes: list[dict] | None = None  # [{id, texto}] (objetiva)
     gabarito: str | None = None       # id da opção certa (objetiva)
+    explicacao: str | None = None     # por que a resposta é correta (opcional)
     peso: int | None = None
     ordem: int | None = None
 
@@ -185,6 +243,7 @@ def criar_questao(prova_id: uuid.UUID, payload: QuestaoIn, db: Session = Depends
         opcoes=([{"id": str(o.get("id")), "texto": str(o.get("texto", "")).strip()}
                  for o in payload.opcoes] if payload.tipo == "objetiva" else None),
         gabarito=(str(payload.gabarito) if payload.tipo == "objetiva" else None),
+        explicacao=(payload.explicacao or "").strip() or None,
         peso=max(1, payload.peso or 1))
     db.add(q)
     registrar(db, "prova_questao_criada", ator="rh", ator_detalhe=rh.email,
@@ -205,6 +264,7 @@ def editar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID, payload: QuestaoI
     q.opcoes = ([{"id": str(o.get("id")), "texto": str(o.get("texto", "")).strip()}
                  for o in payload.opcoes] if payload.tipo == "objetiva" else None)
     q.gabarito = str(payload.gabarito) if payload.tipo == "objetiva" else None
+    q.explicacao = (payload.explicacao or "").strip() or None
     q.peso = max(1, payload.peso or 1)
     if payload.ordem is not None:
         q.ordem = payload.ordem
@@ -223,6 +283,25 @@ def excluir_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
     db.delete(q)
     registrar(db, "prova_questao_excluida", ator="rh", ator_detalhe=rh.email)
     db.commit()
+
+
+@router.post("/rh/provas/{prova_id}/questoes/{questao_id}/duplicar", status_code=201,
+             dependencies=[Depends(requer_rh)])
+def duplicar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
+                     db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Clona uma questão na MESMA prova (enunciado, opções, gabarito, explicação,
+    peso). A cópia entra ao final da ordem."""
+    q = db.get(QuestaoProva, questao_id)
+    if q is None or q.prova_id != prova_id:
+        raise HTTPException(status_code=404, detail="questao_nao_encontrada")
+    nova = QuestaoProva(
+        prova_id=prova_id, ordem=len(_questoes(db, prova_id)),
+        enunciado=q.enunciado, tipo=q.tipo, opcoes=q.opcoes, gabarito=q.gabarito,
+        explicacao=q.explicacao, peso=q.peso)
+    db.add(nova)
+    registrar(db, "prova_questao_duplicada", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return _dump_questao_rh(nova)
 
 
 # ===========================================================================
@@ -354,6 +433,8 @@ def iniciar_prova(token: str, aid: uuid.UUID, db: Session = Depends(get_db)) -> 
     a.status = "em_andamento"
     a.iniciado_em = datetime.now(timezone.utc)
     a.prazo_ate = a.iniciado_em + timedelta(seconds=p.tempo_segundos if p else 1800)
+    if a.seed is None:   # semente do embaralhamento, fixa a partir daqui
+        a.seed = secrets.randbelow(2**31)
     db.commit()
     return _dump_aplicacao(db, a)
 
@@ -374,7 +455,9 @@ def questoes_prova(token: str, aid: uuid.UUID, db: Session = Depends(get_db)) ->
     _expira_se_estourou(db, a)
     if a.status != "em_andamento":
         raise HTTPException(status_code=409, detail="prova_nao_iniciada")
-    qs = [_questao_publica(q) for q in _questoes(db, a.prova_id)]  # SEM gabarito
+    p = db.get(ProvaCargo, a.prova_id)
+    qs = _publicas_ordenadas(_questoes(db, a.prova_id),   # SEM gabarito
+                             bool(p and p.embaralhar), a.seed)
     return {"questoes": qs, **_dump_aplicacao(db, a)}
 
 
@@ -420,8 +503,39 @@ def concluir_prova(token: str, aid: uuid.UUID, db: Session = Depends(get_db)) ->
     a.status = "concluido"
     a.concluido_em = datetime.now(timezone.utc)
     db.commit()
-    # o participante NÃO recebe a nota (é seleção — restrita ao RH)
-    return {"status": a.status}
+    # o participante NÃO recebe a nota (é seleção — restrita ao RH). Mas se a
+    # prova permitir, ele pode rever gabarito+explicação (didática).
+    p = db.get(ProvaCargo, a.prova_id)
+    return {"status": a.status, "tem_revisao": bool(p and p.mostrar_explicacao)}
+
+
+@router.get("/p/{token}/a/{aid}/revisao")
+def revisao_prova(token: str, aid: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Revisão pós-prova para o PARTICIPANTE: gabarito + explicação de cada
+    questão. SÓ liberada se a prova tem mostrar_explicacao E a aplicação já
+    terminou. NÃO devolve nota (continua seleção — nota é só do RH). Para prova
+    de seleção (flag desligada), responde 403 e nada vaza."""
+    link = _link(token, db, exigir_ativo=False)
+    a = _aplicacao(link, aid, db)
+    if a.status not in ("concluido", "expirado"):
+        raise HTTPException(status_code=409, detail="prova_nao_concluida")
+    p = db.get(ProvaCargo, a.prova_id)
+    if not (p and p.mostrar_explicacao):
+        raise HTTPException(status_code=403, detail="revisao_indisponivel")
+    escolhas = {str(r.get("questao_id")): r for r in (a.respostas or [])}
+    itens = []
+    for q in _questoes(db, a.prova_id):
+        r = escolhas.get(str(q.id)) or {}
+        item = {"enunciado": q.enunciado, "tipo": q.tipo, "explicacao": q.explicacao}
+        if q.tipo == "objetiva":
+            item["opcoes"] = q.opcoes or []
+            item["gabarito"] = q.gabarito
+            item["escolha"] = r.get("escolha")
+            item["acertou"] = str(r.get("escolha")) == str(q.gabarito) if r else False
+        else:
+            item["resposta"] = r.get("texto") or ""
+        itens.append(item)
+    return {"itens": itens}
 
 
 class EventosIn(BaseModel):

@@ -44,6 +44,10 @@ function Editor() {
     try { await api.excluirProva(p.id); setAberta(null); await recarregar() }
     catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao excluir (${e.detail || e.message}).` }) }
   }
+  const duplicar = async (p) => {
+    try { const nova = await api.duplicarProva(p.id); await recarregar(); abrir(nova.id) }
+    catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao duplicar (${e.detail || e.message}).` }) }
+  }
 
   if (aberta) return <EditorProva prova={aberta} aoVoltar={() => { setAberta(null); recarregar() }}
                                   aoSalvarMeta={abrir} />
@@ -71,6 +75,7 @@ function Editor() {
                 <td>{p.ativa ? '✅' : '🚫'}</td>
                 <td className="acoes-candidato">
                   <button className="btn-secundario btn-mini" onClick={() => abrir(p.id)}>Editar</button>
+                  <button className="btn-secundario btn-mini" onClick={() => duplicar(p)}>Duplicar</button>
                   <button className="btn-link" style={{ color: '#d9534f' }} onClick={() => excluir(p)}>Excluir</button>
                 </td>
               </tr>
@@ -92,7 +97,8 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
   const salvarMeta = async () => {
     try {
       await api.editarProva(p.id, { titulo: p.titulo, cargo: p.cargo, descricao: p.descricao,
-        tempo_segundos: p.tempo_segundos, ativa: p.ativa })
+        tempo_segundos: p.tempo_segundos, ativa: p.ativa,
+        embaralhar: p.embaralhar, mostrar_explicacao: p.mostrar_explicacao })
       setMsg({ tipo: 'ok', texto: 'Prova salva.' })
     } catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao salvar (${e.detail || e.message}).` }) }
   }
@@ -100,6 +106,10 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
     if (!window.confirm('Excluir esta questão?')) return
     try { await api.excluirQuestao(p.id, q.id); await recarregar() }
     catch (e) { setMsg({ tipo: 'erro', texto: `Falha (${e.detail || e.message}).` }) }
+  }
+  const duplicarQ = async (q) => {
+    try { await api.duplicarQuestao(p.id, q.id); await recarregar() }
+    catch (e) { setMsg({ tipo: 'erro', texto: `Falha ao duplicar (${e.detail || e.message}).` }) }
   }
 
   const gerarLink = async () => {
@@ -138,6 +148,18 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
         </div>
         <label className="campo"><span className="rotulo">Descrição / instruções (opcional)</span>
           <textarea rows={2} value={p.descricao || ''} onChange={(e) => setP({ ...p, descricao: e.target.value })} /></label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.2rem 0' }}>
+          <input type="checkbox" checked={!!p.embaralhar}
+                 onChange={(e) => setP({ ...p, embaralhar: e.target.checked })} />
+          <span>Embaralhar a ordem das questões e das alternativas para cada
+            participante <small className="explica" style={{ margin: 0 }}>(anti-cola;
+            a nota não muda)</small></span></label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.2rem 0' }}>
+          <input type="checkbox" checked={!!p.mostrar_explicacao}
+                 onChange={(e) => setP({ ...p, mostrar_explicacao: e.target.checked })} />
+          <span>Ao terminar, mostrar ao participante o gabarito e a explicação de
+            cada questão <small className="explica" style={{ margin: 0 }}>(didática;
+            deixe DESLIGADO em prova de seleção)</small></span></label>
         <button className="btn-principal btn-mini" onClick={salvarMeta}>Salvar dados da prova</button>
       </div>
 
@@ -145,7 +167,8 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
         <h3>Questões ({p.questoes?.length || 0})</h3>
         {(p.questoes || []).map((q, i) => (
           <QuestaoItem key={q.id} n={i + 1} provaId={p.id} questao={q}
-                       aoSalvar={recarregar} aoExcluir={() => excluirQ(q)} />
+                       aoSalvar={recarregar} aoExcluir={() => excluirQ(q)}
+                       aoDuplicar={() => duplicarQ(q)} />
         ))}
         {nova
           ? <QuestaoNova provaId={p.id} tipoInicial={nova}
@@ -162,7 +185,7 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
   )
 }
 
-function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir }) {
+function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir, aoDuplicar }) {
   const [ed, setEd] = useState(false)
   if (ed) return <FormQuestao provaId={provaId} inicial={questao}
                               aoSalvar={() => { setEd(false); aoSalvar() }}
@@ -173,6 +196,7 @@ function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir }) {
         <strong>{n}. {questao.tipo === 'objetiva' ? '☑' : '✎'} {questao.enunciado}</strong>
         <span className="prova-questao-acoes">
           <button className="btn-link" onClick={() => setEd(true)}>editar</button>
+          <button className="btn-link" onClick={aoDuplicar}>duplicar</button>
           <button className="btn-link" style={{ color: '#d9534f' }} onClick={aoExcluir}>excluir</button>
         </span>
       </div>
@@ -183,6 +207,9 @@ function QuestaoItem({ n, provaId, questao, aoSalvar, aoExcluir }) {
               {o.id === questao.gabarito ? '✔ ' : ''}{o.texto}</li>
           ))}
         </ul>
+      )}
+      {questao.explicacao && (
+        <small className="explica" style={{ margin: '.2rem 0 0' }}>💡 {questao.explicacao}</small>
       )}
       <small className="explica" style={{ margin: 0 }}>Peso {questao.peso}
         {questao.tipo === 'discursiva' ? ' · correção manual' : ''}</small>
@@ -209,6 +236,7 @@ function FormQuestao({ provaId, inicial, tipoInicial, aoSalvar, aoCancelar }) {
   const [opcoes, setOpcoes] = useState(
     inicial?.opcoes?.length ? inicial.opcoes : [{ id: 'a', texto: '' }, { id: 'b', texto: '' }])
   const [gabarito, setGabarito] = useState(inicial?.gabarito || 'a')
+  const [explicacao, setExplicacao] = useState(inicial?.explicacao || '')
   const [erro, setErro] = useState(null)
 
   const letra = (i) => String.fromCharCode(97 + i)
@@ -218,7 +246,8 @@ function FormQuestao({ provaId, inicial, tipoInicial, aoSalvar, aoCancelar }) {
 
   const salvar = async () => {
     if (!enunciado.trim()) { setErro('Escreva o enunciado.'); return }
-    const dados = { enunciado, tipo, peso: parseInt(peso, 10) || 1 }
+    const dados = { enunciado, tipo, peso: parseInt(peso, 10) || 1,
+                    explicacao: explicacao.trim() || null }
     if (tipo === 'objetiva') {
       const limpas = opcoes.filter((o) => o.texto.trim()).map((o, i) => ({ id: letra(i), texto: o.texto.trim() }))
       if (limpas.length < 2) { setErro('Informe ao menos 2 opções.'); return }
@@ -254,6 +283,9 @@ function FormQuestao({ provaId, inicial, tipoInicial, aoSalvar, aoCancelar }) {
           <button className="btn-link" onClick={addOpcao}>+ opção</button>
         </div>
       )}
+      <label className="campo"><span className="rotulo">Explicação da resposta (opcional)</span>
+        <textarea rows={2} value={explicacao} placeholder="Por que a resposta correta é a correta — só aparece ao participante se a prova permitir mostrar."
+                  onChange={(e) => setExplicacao(e.target.value)} /></label>
       <label className="campo" style={{ maxWidth: 120 }}><span className="rotulo">Peso</span>
         <input type="number" min={1} value={peso} onChange={(e) => setPeso(e.target.value)} /></label>
       {erro && <div className="alerta">{erro}</div>}

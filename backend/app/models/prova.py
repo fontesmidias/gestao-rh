@@ -29,6 +29,13 @@ class ProvaCargo(Base):
     descricao: Mapped[str | None] = mapped_column(Text)
     tempo_segundos: Mapped[int] = mapped_column(Integer, default=1800)  # timer (30 min padrão)
     ativa: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Aleatorização: embaralha ordem de questões E alternativas por participante
+    # (seed estável por aplicação — recarregar não reembaralha). Interruptor por
+    # prova: prova didática com sequência proposital fica com False.
+    embaralhar: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Ao concluir, o participante vê o gabarito + explicação de cada questão?
+    # Seleção: False (não vaza gabarito). Treinamento/didática: True.
+    mostrar_explicacao: Mapped[bool] = mapped_column(Boolean, default=False)
     criado_por: Mapped[str | None] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     atualizado_em: Mapped[datetime | None] = mapped_column(
@@ -52,6 +59,9 @@ class QuestaoProva(Base):
     tipo: Mapped[str] = mapped_column(String(12))  # 'objetiva' | 'discursiva'
     opcoes: Mapped[list | None] = mapped_column(JSON)     # [{id, texto}] (objetiva)
     gabarito: Mapped[str | None] = mapped_column(String(40))  # id da opção certa (objetiva)
+    # Explicação opcional da resposta (por que a correta é correta). Só vai ao
+    # participante se ProvaCargo.mostrar_explicacao — nunca vaza na aplicação.
+    explicacao: Mapped[str | None] = mapped_column(Text)
     peso: Mapped[int] = mapped_column(Integer, default=1)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -91,6 +101,10 @@ class AplicacaoProva(Base):
     iniciado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     prazo_ate: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Semente do embaralhamento: gerada no início, torna a ordem de questões e
+    # alternativas ESTÁVEL para este participante (mesma seed → mesma ordem). A
+    # correção casa por id, então embaralhar a exibição não afeta a nota.
+    seed: Mapped[int | None] = mapped_column(Integer)
     respostas: Mapped[list] = mapped_column(JSON, default=list)  # [{questao_id, escolha|texto}]
     eventos: Mapped[list] = mapped_column(JSON, default=list)    # telemetria
     # notas (0-100). objetivas: automática; discursivas: do RH; final: combinada.

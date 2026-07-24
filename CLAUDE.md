@@ -176,6 +176,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rotas**: as rotas de aplicação são `/rh/provas-aplicacoes` (hífen!) e NÃO
   `/rh/provas/aplicacoes` — senão o `aplicacoes` vira `{prova_id}` UUID e dá 422.
   A correção do RH usa o DashPlanilha. Link pode ir a um talento (`LinkProva.talento_id`).
+  **Aleatorização (v1.89):** `ProvaCargo.embaralhar` embaralha ordem de questões
+  E opções por participante, com `AplicacaoProva.seed` (gerada no `iniciar`,
+  ESTÁVEL — recarregar não reembaralha). `_publicas_ordenadas` permuta com
+  `random.Random(seed)` (sub-seed `seed+i` por questão p/ as opções não
+  embaralharem todas igual). SEGURO porque a correção casa por ID da opção
+  (`escolha == gabarito`), não por posição — embaralhar a exibição NUNCA muda a
+  nota (testado). **Explicação (v1.89):** `QuestaoProva.explicacao` (opcional) +
+  `ProvaCargo.mostrar_explicacao`. A rota `/p/{token}/a/{aid}/revisao` devolve
+  gabarito+explicação ao PARTICIPANTE só se a flag estiver ligada E a aplicação
+  concluída — senão 403 (o gabarito NÃO vaza em prova de seleção). NUNCA devolve
+  nota (segue seleção). **Duplicar (v1.89):** `/rh/provas/{id}/duplicar` (prova
+  inteira, nasce "(cópia)" sem links) e `/rh/provas/{id}/questoes/{qid}/duplicar`.
+  **Banco de itens por cargo/senioridade = Fase 2** (NÃO feito): exige a questão
+  deixar de pertencer a UMA prova (hoje `prova_id` é NOT NULL, cascade delete);
+  senioridade não existe no sistema — seria conceito novo.
 - **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
   — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
   em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em

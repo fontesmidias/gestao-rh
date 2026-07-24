@@ -303,6 +303,7 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .prova-opcoes { list-style: none; padding: 0; margin: .4rem 0; }
 .prova-opcoes li { padding: .18rem 0; font-size: .9rem; color: var(--texto-suave, #47554d); }
 .prova-opcoes li.certa { color: var(--verde-escuro); font-weight: 600; }
+.prova-opcoes li.errada { color: var(--erro); text-decoration: line-through; }
 .prova-opcoes-ed { margin: .5rem 0; }
 .prova-opcao-linha { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
 .prova-opcao-linha input[type="radio"] { width: auto; min-height: 0; flex-shrink: 0; accent-color: var(--verde-vivo); }

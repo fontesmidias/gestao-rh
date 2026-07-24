@@ -261,6 +261,7 @@ export const prova = {
   responder: (t, aid, dados) =>
     req(`/p/${t}/a/${aid}/responder`, { method: 'POST', body: JSON.stringify(dados) }),
   concluir: (t, aid) => req(`/p/${t}/a/${aid}/concluir`, { method: 'POST' }),
+  revisao: (t, aid) => req(`/p/${t}/a/${aid}/revisao`),
   eventos: (t, aid, eventos) =>
     req(`/p/${t}/a/${aid}/eventos`, { method: 'POST', body: JSON.stringify({ eventos }) }),
   eventosUrl: (t, aid) => `${BASE}/p/${t}/a/${aid}/eventos`,
@@ -815,12 +816,16 @@ export const rh = {
   editarProva: (id, dados) =>
     req(`/rh/provas/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirProva: (id) => req(`/rh/provas/${id}`, { method: 'DELETE', headers: authRH() }),
+  duplicarProva: (id) =>
+    req(`/rh/provas/${id}/duplicar`, { method: 'POST', headers: authRH() }),
   criarQuestao: (provaId, dados) =>
     req(`/rh/provas/${provaId}/questoes`, { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarQuestao: (provaId, qid, dados) =>
     req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirQuestao: (provaId, qid) =>
     req(`/rh/provas/${provaId}/questoes/${qid}`, { method: 'DELETE', headers: authRH() }),
+  duplicarQuestao: (provaId, qid) =>
+    req(`/rh/provas/${provaId}/questoes/${qid}/duplicar`, { method: 'POST', headers: authRH() }),
   criarLinkProva: (provaId, nome) =>
     req(`/rh/provas/${provaId}/link`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ nome }) }),
