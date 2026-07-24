@@ -11,6 +11,20 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.91.0] — 2026-07-24 — Telemetria das provas visível no RH
+
+### Corrigido/Melhorado
+- **O relatório de comportamento das provas agora aparece.** A telemetria (troca
+  de aba/app, tempo fora da tela, tentativas de print, copiar/colar, quedas de
+  conexão) já era coletada durante a prova, mas só existia no banco — não era
+  exibida (feedback do Bruno: "por que não aparecem os dados de telemetria?").
+  Agora:
+  - **No dash de aplicações**: coluna "Comportamento" com um selo (✓ limpo / ⚠️ N)
+    e o detalhe no tooltip; ordenável pela quantidade de alertas.
+  - **No detalhe da aplicação**: card "🖥️ Comportamento na tela" com o relatório
+    completo (cada métrica, destacando as que têm ocorrência).
+- É **indício**, não prova de fraude — o RH decide; nunca vira nota.
+
 ## [1.90.0] — 2026-07-24 — Banco de Itens (Provas Fase 2)
 
 ### Adicionado

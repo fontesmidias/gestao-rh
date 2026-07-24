@@ -459,6 +459,22 @@ function Aplicacoes() {
       render: (a) => a.precisa_correcao
         ? <span className="chip" style={{ '--chip-cor': '#d9534f' }}>corrigir</span>
         : (a.discursivas_total ? '✅' : '—') },
+    { chave: 'comportamento', rotulo: 'Comportamento', ordenavel: true,
+      valor: (a) => a.alertas_comportamento ?? 0,
+      render: (a) => {
+        const n = a.alertas_comportamento || 0
+        const c = a.comportamento || {}
+        if (!a.comportamento) return <span className="explica">—</span>
+        const partes = []
+        if (c.saidas_da_tela) partes.push(`${c.saidas_da_tela}× saiu da tela`)
+        if (c.segundos_fora_da_tela) partes.push(`${c.segundos_fora_da_tela}s fora`)
+        if (c.tentativas_print) partes.push(`${c.tentativas_print}× print`)
+        if (c.copiar_colar) partes.push(`${c.copiar_colar}× copiar/colar`)
+        if (c.quedas_de_conexao) partes.push(`${c.quedas_de_conexao}× caiu a conexão`)
+        return n > 0
+          ? <span className="chip" style={{ '--chip-cor': '#d9534f' }} title={partes.join(' · ')}>⚠️ {n}</span>
+          : <span className="chip" style={{ '--chip-cor': '#0fb257' }} title="Sem sinais de saída/cópia">✓ limpo</span>
+      } },
     { chave: 'criado_em', rotulo: 'Quando', ordenavel: true, valor: (a) => a.criado_em,
       render: (a) => fmtData(a.criado_em) },
   ]
@@ -475,6 +491,46 @@ function Aplicacoes() {
                       acoesLinha={acoesLinha} vazio="Nenhuma prova aplicada ainda." />
       )}
     </>
+  )
+}
+
+// Relatório de comportamento (telemetria coletada durante a prova). Os dados
+// SEMPRE foram coletados; agora aparecem no RH (dash + este detalhe). Um número
+// alto de saídas/print/cópia sugere prova comprometida — mas é só INDÍCIO, o RH
+// decide. NÃO é nota.
+function RelatorioComportamento({ c }) {
+  if (!c) return (
+    <div className="rh-card">
+      <h3>🖥️ Comportamento na tela</h3>
+      <p className="explica">Sem telemetria registrada nesta aplicação.</p>
+    </div>
+  )
+  const linhas = [
+    ['Saídas da tela (trocou de aba/app)', c.saidas_da_tela, c.saidas_da_tela > 0],
+    ['Tempo fora da tela', c.segundos_fora_da_tela ? `${c.segundos_fora_da_tela}s` : '0s', c.segundos_fora_da_tela > 0],
+    ['Tentativas de print', c.tentativas_print, c.tentativas_print > 0],
+    ['Copiar / colar / recortar', c.copiar_colar, c.copiar_colar > 0],
+    ['Quedas de conexão', c.quedas_de_conexao, c.quedas_de_conexao > 0],
+  ]
+  const limpo = !(c.saidas_da_tela || c.tentativas_print || c.copiar_colar)
+  return (
+    <div className="rh-card">
+      <h3>🖥️ Comportamento na tela {limpo
+        ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✓ sem sinais</span>
+        : <span className="chip" style={{ '--chip-cor': '#d9534f' }}>⚠️ requer atenção</span>}</h3>
+      <p className="explica">Registrado durante a prova — <strong>indício</strong>, não prova de
+        fraude. {c.total_eventos} evento(s) capturado(s).</p>
+      <table className="rh-tabela">
+        <tbody>
+          {linhas.map(([rot, val, alerta]) => (
+            <tr key={rot}>
+              <td>{rot}</td>
+              <td style={{ fontWeight: 700, color: alerta ? '#d9534f' : 'inherit' }}>{val ?? 0}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -514,6 +570,8 @@ function Correcao({ aplicacao, aoVoltar }) {
           {' · '}Final: <strong>{salvo ?? '—'}</strong></span>
       </div>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      <RelatorioComportamento c={a.comportamento} />
 
       <div className="rh-card">
         <h3>{a.nome} — {a.prova_titulo}</h3>

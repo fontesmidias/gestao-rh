@@ -805,10 +805,20 @@ def _recalcular_nota_final(db: Session, a: AplicacaoProva) -> None:
 
 
 def _dump_aplicacao_rh(db: Session, a: AplicacaoProva, com_respostas: bool = False) -> dict:
+    from app.api.testes import _resumo_eventos
     p = db.get(ProvaCargo, a.prova_id)
     questoes = _questoes(db, a.prova_id)
     disc = [q for q in questoes if q.tipo == "discursiva"]
     corrigidas = len((a.correcao_discursivas or {}))
+    comportamento = _resumo_eventos(a.eventos or [])
+    # Sinalizador compacto de integridade para o DASH (a telemetria JÁ era
+    # coletada, mas só aparecia no detalhe — feedback do Bruno). Conta os sinais
+    # que sugerem "prova comprometida": saídas da tela, print, copiar/colar.
+    alertas = 0
+    if comportamento:
+        alertas = (comportamento.get("saidas_da_tela", 0)
+                   + comportamento.get("tentativas_print", 0)
+                   + comportamento.get("copiar_colar", 0))
     d = {
         "id": a.id, "nome": a.nome, "prova_id": a.prova_id,
         "prova_titulo": p.titulo if p else "—", "cargo": p.cargo if p else None,
@@ -817,6 +827,9 @@ def _dump_aplicacao_rh(db: Session, a: AplicacaoProva, com_respostas: bool = Fal
         "nota_final": a.nota_final,
         "discursivas_total": len(disc), "discursivas_corrigidas": corrigidas,
         "precisa_correcao": a.status in ("concluido", "expirado") and corrigidas < len(disc),
+        # comportamento no DASH: resumo sempre presente + contagem de alertas
+        "comportamento": comportamento,
+        "alertas_comportamento": alertas,
         "criado_em": a.criado_em,
     }
     if com_respostas:
@@ -835,8 +848,7 @@ def _dump_aplicacao_rh(db: Session, a: AplicacaoProva, com_respostas: bool = Fal
                 item["resposta"] = r.get("texto") or ""
                 item["correcao"] = correcao.get(str(q.id)) or {}
             d["questoes"].append(item)
-        from app.api.testes import _resumo_eventos
-        d["comportamento"] = _resumo_eventos(a.eventos or [])
+        # comportamento já está no dump base (agora aparece no dash também)
     return d
 
 
