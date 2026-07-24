@@ -125,8 +125,19 @@ Isso faz o navegador pintar os controles nativos (dropdown do select, scrollbar,
 date picker) no esquema certo automaticamente. **Nunca remova essa linha** e
 **nunca** estilize `<option>` com cores fixas — deixe o `color-scheme` cuidar.
 
+**Armadilha do "token fantasma":** `var(--verde-claro, #eaf5ec)` referencia um
+token que **não existe** — então o fallback fixo `#eaf5ec` (claro) vale nos DOIS
+temas. No dark mode isso vira texto claro sobre fundo claro, ilegível (foi o bug
+do dropdown `.select-busca`). **Nunca dependa de fallback de cor fixa.** Use
+sempre um token que existe e inverte com o tema — para realce de item/hover, o
+`--verde-suave` (claro no light, escuro no dark) é o certo, e fixe o texto num
+token (`--tinta`), não deixe herdar. Componentes CUSTOMIZADOS (dropdown próprio,
+`.select-busca`) **não** são cobertos pelo `color-scheme` — só os nativos são;
+estes você estiliza à mão com tokens que invertem.
+
 Ao criar tela nova: teste no claro **e** no escuro antes de dar por pronta.
-Abrir um `<select>` no escuro é o teste mínimo.
+Abrir um `<select>` nativo E um dropdown customizado (`.select-busca`) no escuro
+é o teste mínimo.
 
 ---
 
