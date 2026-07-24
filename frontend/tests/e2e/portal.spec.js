@@ -85,6 +85,10 @@ async function criarConvite(request, dados) {
     expect(jr.status()).toBe(201)
     dados = { ...dados, jornada_id: (await jr.json()).id }
   }
+  // Cargo é obrigatório no convite (v1.92) — injeta um padrão se o teste não passou.
+  if (!dados.cargo_funcao) {
+    dados = { ...dados, cargo_funcao: 'Auxiliar de Serviços Gerais' }
+  }
   const convite = await request.post('/api/rh/candidatos', {
     headers: auth, data: dados,
   })
