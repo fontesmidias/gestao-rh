@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { portal as api } from './api.js'
 import { VerificarIdentidade } from './CrecheLink.jsx'
+import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
 
 // Portal do colaborador (/meu) — UMA porta para tudo que é da pessoa.
@@ -353,7 +354,7 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
   const [campos, setCampos] = useState({
     titulo: registro.titulo || '', instituicao: registro.instituicao || '',
     carga_horaria: registro.carga_horaria || '',
-    concluido_em: registro.concluido_em ? fmtData(registro.concluido_em) : '',
+    concluido_em: registro.concluido_em || '',   // ISO; o InputData exibe em BR
   })
   const [docs, setDocs] = useState(registro.documentos || [])
   const [lidos, setLidos] = useState({})     // papel -> aviso da leitura
@@ -386,7 +387,7 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
         titulo: atual.titulo,
         instituicao: atual.instituicao || s.instituicao || '',
         carga_horaria: atual.carga_horaria || s.carga_horaria || '',
-        concluido_em: atual.concluido_em || (s.concluido_em ? fmtData(s.concluido_em) : ''),
+        concluido_em: atual.concluido_em || s.concluido_em || '',
       }))
       setLidos((a) => ({ ...a, [papel]: avisoLeitura(r.leitura, s) }))
     } catch (e) {
@@ -454,8 +455,8 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
           <input value={campos.carga_horaria} placeholder="Ex.: 20h"
                  onChange={(e) => setCampos({ ...campos, carga_horaria: e.target.value })} /></label>
         <label className="campo"><span className="rotulo">Data de conclusão</span>
-          <input inputMode="numeric" placeholder="dd/mm/aaaa" value={campos.concluido_em}
-                 onChange={(e) => setCampos({ ...campos, concluido_em: mascaraData(e.target.value) })} /></label>
+          <InputData valor={campos.concluido_em}
+                     onChange={(iso) => setCampos({ ...campos, concluido_em: iso || '' })} /></label>
       </div>
 
       {faltando.length > 0 && (
@@ -482,13 +483,6 @@ function avisoLeitura(motivo, sugestoes) {
 
 function comData(campos) {
   return { ...campos, concluido_em: campos.concluido_em || null }
-}
-
-function mascaraData(v) {
-  const d = v.replace(/\D/g, '').slice(0, 8)
-  if (d.length <= 2) return d
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
 }
 
 function SituacaoChip({ registro: r }) {

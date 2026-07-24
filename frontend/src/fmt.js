@@ -58,3 +58,38 @@ export const telefoneValido = (v) => {
   if (n.length === 11 && n[2] !== '9') return false
   return true
 }
+
+// ---------------------------------------------------------------------------
+// DATA (dd/mm/aaaa) — máscara e validação CENTRALIZADAS. Antes havia DUAS
+// máscaras duplicadas e privadas (Wizard `InputData`, Portal `mascaraData`) e
+// vários inputs de data SEM máscara nenhuma — daí o bug "20122025" salvo cru
+// como data de nascimento de criança na creche. Agora tudo passa por aqui e
+// pelo componente <InputData/>. Espelha o padrão de CPF/telefone acima.
+// ---------------------------------------------------------------------------
+
+// Máscara conforme digita: insere as barras em dd/mm/aaaa (trunca em 8 dígitos).
+export const fmtDataBR = (v) => {
+  const n = soDigitos(v).slice(0, 8)
+  if (n.length <= 2) return n
+  if (n.length <= 4) return `${n.slice(0, 2)}/${n.slice(2)}`
+  return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`
+}
+
+// ISO (aaaa-mm-dd) -> BR (dd/mm/aaaa) para exibir num campo mascarado.
+export const isoParaBR = (iso) => {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || ''
+  const [a, m, d] = iso.split('-')
+  return `${d}/${m}/${a}`
+}
+
+// BR (dd/mm/aaaa) -> ISO (aaaa-mm-dd) SE for uma data real; senão null.
+// Rejeita "31/02", "20122025" incompleto, ano fora de 1900..(atual+1).
+export const brParaISO = (br) => {
+  const n = soDigitos(br)
+  if (n.length !== 8) return null
+  const d = Number(n.slice(0, 2)), m = Number(n.slice(2, 4)), a = Number(n.slice(4))
+  const data = new Date(a, m - 1, d)
+  const real = data.getFullYear() === a && data.getMonth() === m - 1 && data.getDate() === d
+  if (!real || a < 1900 || a > new Date().getFullYear() + 1) return null
+  return `${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}`
+}
