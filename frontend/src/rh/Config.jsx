@@ -1224,42 +1224,21 @@ function Auditoria() {
 
 function Empresas() {
   const [empresas, setEmpresas] = useState(null)
-  const [nova, setNova] = useState({ razao_social: '', cnpj: '', tirvu_id: '' })
-  const [edicao, setEdicao] = useState({}) // {id: tirvu_id em edição}
+  const [nova, setNova] = useState({ razao_social: '', cnpj: '' })
   const [msg, setMsg] = useState(null)
   const carregar = () => api.empresas().then(setEmpresas)
   useEffect(() => { carregar().catch(() => setEmpresas([])) }, [])
   if (!empresas) return null
-
-  const salvarId = async (e) => {
-    const tid = (edicao[e.id] ?? e.tirvu_id ?? '').trim()
-    if (tid === (e.tirvu_id || '')) return
-    setMsg(null)
-    try {
-      await api.editarEmpresa(e.id, { razao_social: e.razao_social, cnpj: e.cnpj, tirvu_id: tid || null })
-      setMsg({ tipo: 'ok', texto: `ID Tirvu de "${e.razao_social}" salvo.` })
-      setEdicao((s) => { const n = { ...s }; delete n[e.id]; return n }); carregar()
-    } catch (err) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${err.detail || err.message}).` }) }
-  }
-
   return (
     <div className="rh-card">
       <h3>🏢 Empresas</h3>
-      <p className="explica">Empregadoras que assinam a carteira. O <strong>ID Tirvu</strong>
-        é o código da empresa na base do Tirvu — a importação de admissões casa por
-        esse ID (sem ele, a coluna Empresa sai vazia e o Tirvu recusa a linha).</p>
+      <p className="explica">Empregadoras que assinam a carteira. No export do Tirvu a
+        empresa é sempre a Green House (ID 1) — não precisa cadastrar ID aqui.</p>
       {empresas.length > 0 && (
         <table className="rh-tabela">
-          <thead><tr><th>Razão social</th><th>CNPJ</th><th>ID Tirvu</th></tr></thead>
+          <thead><tr><th>Razão social</th><th>CNPJ</th></tr></thead>
           <tbody>{empresas.map((e) => (
-            <tr key={e.id}>
-              <td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td>
-              <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 1"
-                         value={edicao[e.id] ?? e.tirvu_id ?? ''}
-                         onChange={(ev) => setEdicao({ ...edicao, [e.id]: ev.target.value })}
-                         onBlur={() => salvarId(e)}
-                         className={e.tirvu_id ? '' : 'campo-pendente'} /></td>
-            </tr>
+            <tr key={e.id}><td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td></tr>
           ))}</tbody>
         </table>
       )}
@@ -1270,18 +1249,14 @@ function Empresas() {
         <label className="campo"><span className="rotulo">CNPJ (opcional)</span>
           <input value={nova.cnpj}
                  onChange={(e) => setNova({ ...nova, cnpj: e.target.value })} /></label>
-        <label className="campo"><span className="rotulo">ID Tirvu (opcional)</span>
-          <input value={nova.tirvu_id}
-                 onChange={(e) => setNova({ ...nova, tirvu_id: e.target.value })} /></label>
       </div>
       <button className="btn-secundario" onClick={async () => {
         setMsg(null)
         if (!nova.razao_social.trim()) { setMsg({ tipo: 'erro', texto: 'Informe a razão social.' }); return }
         try {
           await api.criarEmpresa({ razao_social: nova.razao_social.trim(),
-                                   cnpj: nova.cnpj.trim() || null,
-                                   tirvu_id: nova.tirvu_id.trim() || null })
-          setNova({ razao_social: '', cnpj: '', tirvu_id: '' }); setMsg({ tipo: 'ok', texto: 'Empresa cadastrada.' })
+                                   cnpj: nova.cnpj.trim() || null })
+          setNova({ razao_social: '', cnpj: '' }); setMsg({ tipo: 'ok', texto: 'Empresa cadastrada.' })
           carregar()
         } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível criar (${e.detail || e.message}).` }) }
       }}>+ Cadastrar empresa</button>

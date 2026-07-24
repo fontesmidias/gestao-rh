@@ -75,7 +75,8 @@ db = _DBFake(objetos, cargo_id="50")
 
 linha = t.linha_tirvu(db, cand, gerar_matricula=False)
 
-# Empresa/Posto/Cargo/Jornada saem como ID NUMÉRICO — não o texto (bug 2026-07-24)
+# Posto/Cargo/Jornada saem como ID NUMÉRICO — não o texto (bug 2026-07-24)
+# Empresa é FIXA = "1" (Green House), independente de cadastro.
 assert linha["Empresa"] == "1", linha["Empresa"]
 assert linha["Posto de Serviço"] == "49", linha["Posto de Serviço"]
 assert linha["Cargo"] == "50", linha["Cargo"]
@@ -115,15 +116,15 @@ linha_sj = t.linha_tirvu(_DBFake(objs_sujo, cargo_id="50"), cand_cpf_sujo,
 assert linha_sj["CTPS Número"] == "7777", linha_sj["CTPS Número"]
 
 
-# ---- pendência quando o ID do Tirvu falta ----
+# ---- pendência quando o ID do Tirvu falta (posto/cargo/jornada; empresa NÃO) ----
 db_sem_ids = _DBFake({**objetos,
-                      ("Empresa", "e1"): _Stub(tirvu_id=None, razao_social="X"),
                       ("Jornada", "j1"): _Stub(tirvu_id=None, descricao="Y"),
                       ("PostoServico", "p1"): _Stub(tirvu_id=None, nome="Z")},
                      cargo_id=None)
 linha2 = t.linha_tirvu(db_sem_ids, cand, gerar_matricula=False)
 pend = t.pendencias_linha(linha2)
-assert "ID Tirvu da empresa" in pend, pend
+assert linha2["Empresa"] == "1"  # empresa é fixa, nunca falta
+assert "ID Tirvu da empresa" not in pend, pend
 assert "ID Tirvu do posto" in pend, pend
 assert "ID Tirvu do cargo" in pend, pend
 assert "ID Tirvu da jornada" in pend, pend

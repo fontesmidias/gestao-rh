@@ -133,13 +133,7 @@ r = c.put("/api/rh/cargos-tirvu", headers=rh,
           json={"cargo_rotulo": "Auxiliar de Serviços Gerais", "tirvu_id": ""})
 assert r.status_code == 200 and r.json()["tirvu_id"] is None, r.text
 
-# 6e) tirvu_id em empresa e jornada persistem no dump
-emp = c.post("/api/rh/empresas", headers=rh,
-             json={"razao_social": "SMOKE EMPRESA LTDA", "tirvu_id": "1"}).json()
-assert emp["tirvu_id"] == "1", emp
-emp2 = c.put(f"/api/rh/empresas/{emp['id']}", headers=rh,
-             json={"razao_social": "SMOKE EMPRESA LTDA", "tirvu_id": "9"}).json()
-assert emp2["tirvu_id"] == "9", emp2
+# 6e) tirvu_id em jornada persiste no dump (empresa é fixa=1, não tem ID no export)
 jorns = c.get("/api/rh/jornadas", headers=rh).json()
 if jorns:
     jid = jorns[0]["id"]
