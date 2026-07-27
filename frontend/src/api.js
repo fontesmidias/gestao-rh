@@ -637,6 +637,7 @@ export const rh = {
   },
   // Reembolso-Creche (IN 147/2026)
   crecheResumo: () => req('/rh/creche/resumo', { headers: authRH() }),
+  crecheTentativasSemAcesso: () => req('/rh/creche/tentativas-sem-acesso', { headers: authRH() }),
   exportarCreche: () => req('/rh/creche/exportar', { headers: authRH() }),
   crecheLevantamentos: (status) =>
     req(`/rh/creche/levantamentos${status ? `?status=${status}` : ''}`, { headers: authRH() }),

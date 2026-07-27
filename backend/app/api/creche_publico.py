@@ -192,7 +192,23 @@ def iniciar(payload: IniciarIn, request: Request, db: Session = Depends(get_db))
     exigir(f"creche-ini:cpf:{cpf}", maximo=5, janela_s=900)
 
     colaborador = _colaborador_por_cpf(db, cpf)
-    if colaborador is not None and colaborador.email:
+    # Auditoria do RESULTADO (invisível ao usuário — a resposta abaixo é sempre a
+    # mesma, anti-enumeração intacto). Serve ao relatório do RH para distinguir
+    # "CPF realmente fora da base" de bug: quem tentou e não casou, ou casou mas
+    # está sem e-mail (e por isso foi empurrado à KBA e pode ter falhado). O CPF
+    # completo vai no detalhe de propósito — a auditoria é restrita ao RH.
+    from app.services.auditoria import registrar
+    if colaborador is None:
+        registrar(db, "creche_iniciar_sem_match", ator="colaborador",
+                  detalhe={"cpf": _cpf_fmt(cpf), "ip": ip_do_cliente(request)})
+        db.commit()
+    elif not colaborador.email:
+        registrar(db, "creche_iniciar_sem_email", ator="colaborador",
+                  candidato_id=colaborador.id,
+                  detalhe={"cpf": _cpf_fmt(cpf), "nome": colaborador.nome_completo,
+                           "situacao": colaborador.situacao})
+        db.commit()
+    else:
         ben = _beneficio(db, colaborador)
         db.commit()
         _gerar_e_enviar_codigo(db, colaborador, ben, colaborador.email)
