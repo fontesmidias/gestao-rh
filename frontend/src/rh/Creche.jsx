@@ -44,12 +44,69 @@ export default function Creche({ aoVoltar }) {
                 onClick={() => setAba('postos')}>Elegibilidade por posto<Ajuda termo="elegibilidade" /></button>
         <button className={aba === 'pendentes' ? 'ativa' : ''}
                 onClick={() => setAba('pendentes')}>Pendentes de resposta</button>
+        <button className={aba === 'sem-acesso' ? 'ativa' : ''}
+                onClick={() => setAba('sem-acesso')}>Não conseguiram acessar</button>
       </div>
 
       {aba === 'levantamentos' ? <Levantamentos />
         : aba === 'pendentes' ? <Pendentes />
+        : aba === 'sem-acesso' ? <SemAcesso />
         : <PorPosto />}
     </main>
+  )
+}
+
+// Relatório das tentativas de acesso ao creche que NÃO geraram código (feedback
+// 2026-07-27: colaboradores reais relataram "CPF não está na base"). O gate
+// público responde igual para todos (anti-enumeração), então é AQUI que o RH vê
+// a verdade e decide se é bug/dado errado ou realmente fora da base.
+function SemAcesso() {
+  const [lista, setLista] = useState(null)
+  const [erro, setErro] = useState(null)
+  useEffect(() => {
+    api.crecheTentativasSemAcesso()
+      .then(setLista)
+      .catch(() => setErro('Não foi possível carregar o relatório.'))
+  }, [])
+  if (erro) return <div className="rh-card"><p className="erro">{erro}</p></div>
+  if (!lista) return <div className="rh-card"><p>Carregando…</p></div>
+
+  return (
+    <div className="rh-card">
+      <p className="explica">Quem digitou o CPF no link do creche mas <strong>não recebeu o
+        código</strong>. Como o sistema responde igual para todos (para não revelar quem está na
+        base), este é o único lugar onde você vê o que de fato aconteceu:</p>
+      <ul className="explica" style={{ marginTop: 0 }}>
+        <li><strong>CPF não encontrado</strong>: o CPF digitado não casou com nenhum cadastro. Pode
+          estar realmente fora da base, ou cadastrado errado/incompleto (ex.: zero à esquerda
+          perdido na planilha). Confira na base de colaboradores.</li>
+        <li><strong>Sem e-mail cadastrado</strong>: o CPF casou, mas o cadastro não tem e-mail — a
+          pessoa foi para a verificação por perguntas e pode ter travado. Cadastre o e-mail dela.</li>
+      </ul>
+      {lista.length === 0
+        ? <p>Nenhuma tentativa sem acesso registrada. 👍</p>
+        : (
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr>
+                <th>CPF</th><th>Motivo</th><th>Nome / situação</th>
+                <th>Tentativas</th><th>Última tentativa</th>
+              </tr></thead>
+              <tbody>{lista.map((t) => (
+                <tr key={t.cpf}>
+                  <td><strong>{t.cpf}</strong></td>
+                  <td>{t.motivo === 'sem_email'
+                    ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}>Sem e-mail cadastrado</span>
+                    : <span className="chip" style={{ '--chip-cor': '#c0392b' }}>CPF não encontrado</span>}</td>
+                  <td>{t.nome ? <>{t.nome}{t.situacao ? <small> · {t.situacao}</small> : ''}</> : '—'}</td>
+                  <td>{t.tentativas}</td>
+                  <td>{t.ultima ? fmtDataHora(t.ultima) : '—'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+    </div>
   )
 }
 

@@ -362,6 +362,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   Contenção: o token dá acesso a UM benefício, e `add_crianca`/`enviar` recusam
   409 fora de `levantamento` — link vazado após a aprovação não edita nada. A
   emissão fica na auditoria (`creche_acesso_direto_emitido`), NUNCA o token.
+  **Relatório "Não conseguiram acessar"** (feedback 2026-07-27): o gate público
+  responde IGUAL para todos (anti-enumeração), então o RH não sabia se um CPF
+  estava mesmo fora da base ou se era bug. `/creche/iniciar` agora AUDITA o
+  resultado sem vazar ao usuário: `creche_iniciar_sem_match` (CPF não casou —
+  fora da base OU cadastrado errado/sem 11 dígitos) e `creche_iniciar_sem_email`
+  (casou mas sem e-mail → foi p/ KBA e pode ter travado; grava nome+situação). O
+  CPF completo vai no `detalhe` de propósito (auditoria é só do RH). Relatório em
+  `/rh/creche/tentativas-sem-acesso` (agrega por CPF) + aba na tela de Creche. NÃO
+  é o casamento por máscara que falha — a query casa `IN [com_máscara, só_dígitos]`
+  (testado); a causa real é cadastro sem e-mail ou CPF errado/ausente.
 - **Incidência de Benefícios** (`incidencia_beneficios.py`): a planilha do RH
   (abas PÚBLICO/PRIVADO) normaliza os postos no padrão `CLIENTE - Nº CONTRATO -
   OBJETO` e define a elegibilidade creche pela coluna "Reembolso creche/Mês". Lê

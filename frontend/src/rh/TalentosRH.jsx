@@ -106,8 +106,13 @@ export default function TalentosRH({ aoAbrir }) {
 
   const colunas = [
     { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
-      render: (t) => (<><strong>{t.nome}</strong><br /><small>{t.email || t.telefone || '—'}</small>
+      render: (t) => (<><strong>{t.nome}</strong><br /><small>{t.email || '—'}</small>
         {t.tem_curriculo && <span title="Enviou currículo"> 📎</span>}</>) },
+    // Telefone em coluna própria — sem ele o RH não tem como contatar o talento
+    // (antes só aparecia como fallback do e-mail no Nome, então sumia p/ quem
+    // tinha e-mail). O dump já traz `telefone`.
+    { chave: 'telefone', rotulo: 'Telefone', filtro: 'texto',
+      render: (t) => t.telefone || '—' },
     { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'texto', quebra: true,
       valor: (t) => (t.cargos_interesse?.length ? t.cargos_interesse : (t.cargo_interesse ? [t.cargo_interesse] : [])) },
     { chave: 'tags', rotulo: 'Tags', filtro: 'texto', quebra: true,

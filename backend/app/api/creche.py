@@ -306,6 +306,54 @@ def historico_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db
     } for e in eventos]
 
 
+@router.get("/rh/creche/tentativas-sem-acesso")
+def tentativas_sem_acesso(db: Session = Depends(get_db),
+                          _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Relatório das tentativas de acesso ao creche que NÃO resultaram em código
+    enviado — para o RH distinguir "CPF realmente fora da base" de bug/dado
+    errado (feedback 2026-07-27: colaboradores reais relataram 'CPF não está na
+    base'). O gate público responde igual para todos (anti-enumeração), então
+    ISTO é o único lugar onde o RH vê o que de fato aconteceu.
+
+    Dois motivos:
+    - `sem_match`: o CPF digitado NÃO casou com nenhum registro. Pode ser CPF
+      realmente fora da base OU cadastrado errado/incompleto (ex.: zero à
+      esquerda perdido na planilha, virou registro sem CPF). O RH confere.
+    - `sem_email`: o CPF casou, mas o registro está SEM e-mail — a pessoa foi
+      empurrada para a verificação por perguntas (KBA) e pode ter falhado. Basta
+      o RH cadastrar o e-mail (aqui aparece nome e situação para localizar).
+
+    Agrupa por CPF, com a contagem e a última tentativa (mais recente primeiro)."""
+    from app.models.evento import EventoAuditoria
+    eventos = db.scalars(
+        select(EventoAuditoria)
+        .where(EventoAuditoria.acao.in_(
+            ["creche_iniciar_sem_match", "creche_iniciar_sem_email"]))
+        .order_by(EventoAuditoria.criado_em.desc())).all()
+    por_cpf: dict[str, dict] = {}
+    for e in eventos:
+        d = e.detalhe or {}
+        cpf = d.get("cpf") or "—"
+        item = por_cpf.get(cpf)
+        if item is None:
+            por_cpf[cpf] = {
+                "cpf": cpf,
+                "motivo": ("sem_email" if e.acao == "creche_iniciar_sem_email"
+                           else "sem_match"),
+                "nome": d.get("nome"), "situacao": d.get("situacao"),
+                "tentativas": 1, "ultima": e.criado_em, "primeira": e.criado_em,
+            }
+        else:
+            item["tentativas"] += 1
+            item["primeira"] = e.criado_em  # como vem desc, o último visto é o + antigo
+            # se em alguma tentativa casou (sem_email), esse motivo prevalece
+            if e.acao == "creche_iniciar_sem_email":
+                item["motivo"] = "sem_email"
+                item["nome"] = item["nome"] or d.get("nome")
+                item["situacao"] = item["situacao"] or d.get("situacao")
+    return list(por_cpf.values())
+
+
 class AtivarIn(BaseModel):
     dia_entrega_mensal: int | None = None
     valor_reembolso: str | None = None
