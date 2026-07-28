@@ -286,6 +286,47 @@ def testar_ocr(db: Session = Depends(get_db),
     return {"ok": True, "texto_lido": texto[:120]}
 
 
+# ---------- Groq (Minutário de mensagens + Match de vagas) ----------
+
+
+class GroqIn(BaseModel):
+    groq_api_key: str | None = None
+
+
+@router.get("/rh/config/groq")
+def ver_groq(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.ia_texto import chave_groq
+    return {"chave_definida": bool(chave_groq(db))}
+
+
+@router.put("/rh/config/groq")
+def salvar_groq(payload: GroqIn, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Chave da Groq para o Minutário de mensagens e o Match de vagas. Chave
+    vazia desliga os dois módulos. A chave nunca aparece em log nem volta na
+    resposta — mesmo padrão do OCR (ver salvar_ocr)."""
+    if payload.groq_api_key is not None:
+        gravar_config(db, {"groq_api_key": (payload.groq_api_key or "").strip()})
+        registrar(db, "groq_alterado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"ativado": bool((payload.groq_api_key or "").strip())})
+    db.commit()
+    return ver_groq(db, rh)
+
+
+@router.post("/rh/config/groq/testar")
+def testar_groq_rota(db: Session = Depends(get_db),
+                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.ia_texto import chave_groq, testar_groq
+    chave = chave_groq(db)
+    if not chave:
+        raise HTTPException(status_code=422, detail="chave_nao_configurada")
+    try:
+        texto = testar_groq(chave)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "texto_lido": texto[:120]}
+
+
 @router.get("/rh/config/smtp")
 def ver_smtp(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
     cfg = smtp_config(db)

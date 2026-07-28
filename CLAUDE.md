@@ -244,6 +244,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   duplicada (descrição idêntica após limpar a sujeira, IDs diferentes).
   `Jornada.descricao` é `unique=True` — a rota de confirmar CASA por
   descrição normalizada antes de decidir criar vs. atualizar, nunca duplica.
+- **Camada de IA de texto** (`services/ia_texto.py`, v1.98): Groq
+  configurável (mesmo padrão do OCR — chave na config dinâmica, nunca em log,
+  nunca devolvida ao painel), usada pelo **Minutário de Mensagens** e (v1.99)
+  pelo **Match de Vagas**. `gerar_texto`/`gerar_json` são as únicas portas de
+  entrada — trocar de provedor no futuro é mudar SÓ este arquivo.
+- **Minutário de Mensagens** (`models/minutario.py`, `api/minutario.py`,
+  `MinutarioRH.jsx`, v1.98): modelos de mensagem (CRUD, reusa o catálogo
+  `Tag` do mini-CRM) + composição assistida por IA a partir de campos da
+  VAGA. **`ComporMensagemIn` não tem NENHUM campo de candidato** (nome,
+  telefone, e-mail, CPF) — é garantia estrutural, não checagem em runtime; a
+  substituição de `{{marcadores}}` no texto acontece DEPOIS, no servidor.
+  Texto sempre volta editável — nunca envia sozinho. Envio por copiar +
+  link `wa.me`, sem integração com a API oficial do WhatsApp. **Armadilha
+  pega por teste** (`test_minutario_prompt.py`): o fallback de "mensagem
+  genérica" tem que disparar por falta de CONTEÚDO (campos da vaga ou modelo
+  de referência) — o campo `tom` é só estilo e não pode, sozinho, evitar o
+  fallback (senão o RH preenche só o tom e a IA recebe um prompt sem
+  instrução nenhuma do que escrever).
 - **Provas por cargo** (`models/prova.py`, `api/provas.py`, `ProvasRH.jsx`,
   `ProvaApp.jsx`): banco de provas CONFIGURÁVEL pelo RH (diferente do DISC/
   situacional, gabarito fixo no código). Questões objetivas (opções {id,texto} +
@@ -631,7 +649,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   o Starlette faz spool em disco acima de ~1MB e o temp file ficaria no
   container com CPFs de mil pessoas.
 - **Migrations com ENUM**: criar o tipo com `.create(checkfirst=True)` e
-  referenciar nas colunas com `create_type=False` (senão DuplicateObject).
+  referenciar nas colunas com `create_type=False` (senão DuplicateObject). **Use
+  `postgresql.ENUM(..., create_type=False)` do dialeto — não `sa.Enum(...,
+  create_type=False)` genérico** (v1.98, mordeu de verdade): o `sa.Enum`
+  genérico não respeita a flag ao criar a tabela na mesma migration —
+  `op.create_table` dispara `CREATE TYPE` de novo via evento DDL mesmo com
+  `create_type=False` no construtor, e o `.create(checkfirst=True)` explícito
+  anterior já tinha criado, dando `DuplicateObject`. Sintoma enganoso: o erro
+  diz "type already exists" mesmo quando `\dT+` no banco mostra que não existe
+  — é a MESMA migration tentando criar duas vezes (uma explícita, uma via
+  DDL da tabela), não um resíduo de execução anterior. Ver
+  `migrations/versions/a9d3f6b18c42_talento.py` (funciona) vs. o que quebrou em
+  `c4d5e6f7a8b9_minutario.py` antes da correção.
 - **Revision id de migration**: NÃO escolher o "próximo da sequência" de olho —
   vários ids do projeto seguem o padrão `a1b2c3…`/`b2c3d4…` e reusar um que já
   existe fecha um CICLO no grafo (`Cycle is detected in revisions`), derrubando

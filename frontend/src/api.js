@@ -572,6 +572,21 @@ export const rh = {
   salvarOcr: (dados) =>
     req('/rh/config/ocr', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarOcr: () => req('/rh/config/ocr/testar', { method: 'POST', headers: authRH() }),
+  verGroq: () => req('/rh/config/groq', { headers: authRH() }),
+  salvarGroq: (dados) =>
+    req('/rh/config/groq', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarGroq: () => req('/rh/config/groq/testar', { method: 'POST', headers: authRH() }),
+  // Minutário de mensagens (v1.98)
+  minutarioModelos: (incluirInativos) =>
+    req(`/rh/minutario/modelos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
+  minutarioCriarModelo: (dados) =>
+    req('/rh/minutario/modelos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  minutarioEditarModelo: (id, dados) =>
+    req(`/rh/minutario/modelos/${id}`, { method: 'PATCH', headers: authRH(), body: JSON.stringify(dados) }),
+  minutarioExcluirModelo: (id) =>
+    req(`/rh/minutario/modelos/${id}`, { method: 'DELETE', headers: authRH() }),
+  minutarioCompor: (dados) =>
+    req('/rh/minutario/compor', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   verSmtp: () => req('/rh/config/smtp', { headers: authRH() }),
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

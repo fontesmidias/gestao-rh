@@ -107,6 +107,60 @@ function OcrIA() {
   )
 }
 
+// Groq — camada de IA de texto usada pelo Minutário de mensagens e pelo Match
+// de vagas do Banco de Talentos (v1.98/v1.99). Mesmo padrão do OCR acima:
+// chave na config dinâmica, nunca devolvida, teste de conexão.
+function GroqIA() {
+  const [cfg, setCfg] = useState(null)
+  const [chave, setChave] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+
+  const carregar = () => api.verGroq().then(setCfg).catch(() => {})
+  useEffect(() => { carregar() }, [])
+  if (!cfg) return null
+
+  return (
+    <section className="rh-card">
+      <h3>🤖 Groq (Minutário de mensagens e Match de vagas)</h3>
+      <p className="explica">Gera o texto das mensagens do Minutário e a nota de aderência do
+        Match de vagas. Crie uma chave gratuita em console.groq.com → API Keys e cole abaixo.
+        Sem chave, os dois módulos ficam indisponíveis (nada quebra no resto do sistema).</p>
+      <div className="linha2">
+        <InputSenha placeholder={cfg.chave_definida ? 'Chave (já definida)' : 'Chave da API Groq'}
+                    value={chave} onChange={(e) => setChave(e.target.value)} />
+        <span>
+          <button className="btn-principal btn-mini" disabled={ocupado} onClick={async () => {
+            setMsg(null); setOcupado(true)
+            try {
+              const r = await api.salvarGroq({ groq_api_key: chave.trim() })
+              setCfg(r); setChave('')
+              setMsg({ tipo: 'ok', texto: r.chave_definida
+                ? 'Chave salva — use "Testar conexão" para confirmar.'
+                : 'Groq desligado (Minutário e Match ficam indisponíveis).' })
+            } catch (e) {
+              setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+            } finally { setOcupado(false) }
+          }}>Salvar</button>{' '}
+          <button className="btn-secundario btn-mini" disabled={ocupado || !cfg.chave_definida}
+                  onClick={async () => {
+                    setMsg(null); setOcupado(true)
+                    try {
+                      const r = await api.testarGroq()
+                      setMsg({ tipo: 'ok', texto: `A IA respondeu: "${r.texto_lido}" — funcionando!` })
+                    } catch (e) {
+                      setMsg({ tipo: 'erro', texto: `Teste falhou: ${e.detail || e.message}` })
+                    } finally { setOcupado(false) }
+                  }}>Testar conexão</button>
+        </span>
+      </div>
+      <p className="explica">Status: {cfg.chave_definida
+        ? '✅ ativado' : '⭕ desligado — Minutário e Match indisponíveis'}</p>
+      <Msg msg={msg} />
+    </section>
+  )
+}
+
 function Msg({ msg }) {
   if (!msg) return null
   return <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>
@@ -238,7 +292,8 @@ export default function Config({ aoVoltar }) {
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
-        <div className="rh-grid-2"><OcrIA /><AvisosInternos /></div>
+        <div className="rh-grid-2"><OcrIA /><GroqIA /></div>
+        <div className="rh-grid-2"><AvisosInternos /></div>
         <Teams />
       </>}
       {aba === 'sistema' && <><Lixeira /><ErrosRecentes /><Auditoria /></>}

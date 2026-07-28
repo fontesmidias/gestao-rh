@@ -11,6 +11,37 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.98.0] — 2026-07-28 — Onda C1: Minutário de Mensagens
+
+### Adicionado
+- **Minutário de Mensagens** (Recrutamento → 💬 Minutário de Mensagens):
+  modelos de mensagem (CRUD) para WhatsApp/e-mail + composição assistida por
+  IA (Groq). O RH preenche campos da VAGA (tom, cargo, regime, salário,
+  local, escala, jornada, horário, requisitos obrigatórios/desejáveis,
+  instruções, prazo) — **nenhum dado de candidato** entra na chamada à IA. O
+  texto gerado sempre volta editável antes de qualquer envio: a IA propõe, o
+  RH aprova. Envio por **copiar o texto** ou por um **link do WhatsApp**
+  (`wa.me`) já com a mensagem pronta — sem integração com a API oficial do
+  WhatsApp (decisão consciente: `wa.me` entrega o essencial sem o custo e a
+  dependência de uma conta Business verificada).
+  - Modelos reusam o catálogo de **tags** do mini-CRM para categorizar.
+  - Groq configurável em Configurações → E-mail e integrações (mesmo padrão
+    do OCR com Mistral: chave na config dinâmica, nunca devolvida, botão de
+    teste de conexão).
+
+### Técnico
+- `app/services/ia_texto.py`: camada de geração de texto, provedor
+  configurável (Groq por padrão) — usada também pelo Match de Vagas (C2).
+  Trocar de provedor no futuro é mudar este arquivo só.
+- `app/models/minutario.py`, migration `c4d5e6f7a8b9`.
+- Bug pego pelo teste novo (`test_minutario_prompt.py`) e corrigido antes de
+  ir ao ar: preencher **só** o campo Tom gerava um prompt sem nenhuma
+  instrução de conteúdo (o fallback genérico só disparava quando também
+  faltava o tom). Corrigido: o fallback dispara por falta de CONTEÚDO
+  (campos da vaga ou modelo de referência), o tom é só estilo.
+- Testado com Playwright contra ambiente efêmero: composição, erro amigável
+  sem chave configurada, CRUD de modelo, e a tela de config do Groq.
+
 ## [1.97.0] — 2026-07-28 — Onda B: 16ª leva de feedbacks (3 itens)
 
 ### Adicionado
