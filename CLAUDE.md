@@ -244,11 +244,31 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   duplicada (descrição idêntica após limpar a sujeira, IDs diferentes).
   `Jornada.descricao` é `unique=True` — a rota de confirmar CASA por
   descrição normalizada antes de decidir criar vs. atualizar, nunca duplica.
-- **Camada de IA de texto** (`services/ia_texto.py`, v1.98): Groq
-  configurável (mesmo padrão do OCR — chave na config dinâmica, nunca em log,
-  nunca devolvida ao painel), usada pelo **Minutário de Mensagens** e (v1.99)
-  pelo **Match de Vagas**. `gerar_texto`/`gerar_json` são as únicas portas de
-  entrada — trocar de provedor no futuro é mudar SÓ este arquivo.
+- **Camada de IA de texto** (`services/ia_texto.py`, v2.00): CADEIA de
+  provedores — **OpenRouter (principal) → Groq (reserva)**, chaves na config
+  dinâmica (nunca em log, nunca devolvidas ao painel). `gerar_texto`/
+  `gerar_json` são as únicas portas de entrada; trocar/acrescentar provedor é
+  mexer SÓ neste arquivo (lista `PROVEDORES`).
+  **ERRO TRANSITÓRIO ≠ PERMANENTE — armadilha que derrubou 112 de 131
+  análises em 2026-07-28**: antes, `except Exception` convertia um HTTP 429
+  (cota, resolve em segundos) no MESMO erro de um 401 (chave inválida,
+  permanente), e o chamador desistia de tudo. Agora: `CotaExcedidaError`
+  (transitório, com `espera_s` vindo do header `Retry-After`) vs.
+  `IndisponivelError` (permanente). **Nunca** volte a tratar os dois igual.
+  `esperar_cota=True` é só para o WORKER (ninguém esperando na tela): dorme o
+  tempo pedido e retoma, em vez de trocar de provedor na hora.
+  Testar chave usa `so_provedor=` — testar a chave da Groq NÃO pode mandá-la
+  ao OpenRouter.
+- **Fila de tarefas** (`services/fila.py`, v2.00): Redis + RQ. O ecossistema
+  já tinha Redis e um container `worker` rodando `rq worker ... default`
+  desde a v1.83, mas **ninguém nunca enfileirou nada** — os workers antigos
+  (expurgo, avisar_vencimentos, expirar_roteiros) são cron, não passam pela
+  fila. Use `fila.enfileirar(funcao, *args)` para qualquer trabalho que
+  possa passar de ~30s. **O nginx corta request acima de 60s** (`location
+  /api/` usa o default; a exceção de 600s existe só para
+  `/api/rh/arquivo/lote`) — trabalho longo NÃO pode ser síncrono. As funções
+  enfileiráveis ficam em `app/workers/*.py` com assinatura simples (só ids,
+  nunca objeto do SQLAlchemy — o RQ serializa a referência, não o código).
 - **Minutário de Mensagens** (`models/minutario.py`, `api/minutario.py`,
   `MinutarioRH.jsx`, v1.98): modelos de mensagem (CRUD, reusa o catálogo
   `Tag` do mini-CRM) + composição assistida por IA a partir de campos da
@@ -298,6 +318,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   recrutamento" — a triagem por IA é uso primário, não secundário; o
   formulário público ganhou uma frase de transparência (não é condição de
   aceite, o consentimento já existente basta).
+- **Match de Vagas — desenho ASSÍNCRONO e persistido** (v2.00,
+  `models/match.py`, `services/curriculo_indexacao.py`, `workers/match.py`):
+  reescrito depois de um incidente real — 131 talentos, 18 analisados; 67s
+  depois, 2. Quatro regras que NÃO devem ser revertidas:
+  1. **O ranqueamento NUNCA é síncrono.** `POST /ranquear` devolve 202 +
+     `processamento_id` e enfileira; o worker processa. O RH continua usando
+     o sistema, e o nginx não corta (60s).
+  2. **Texto do currículo é extraído UMA VEZ, no upload**
+     (`CurriculoTexto`), já minimizado. O currículo não muda depois de
+     enviado — reler 131 a cada clique era desperdício e garantia de
+     timeout. Backfill em `/rh/curriculos/indexar` cobre o histórico.
+  3. **Análise é reaproveitada por (vaga, talento)** — clicar de novo é
+     praticamente grátis. `reanalisar=True` força refazer. Cuidado: há
+     `UNIQUE(vaga_id, talento_id)`, então reanalisar precisa ATUALIZAR o
+     registro existente, nunca inserir outro (bug pego por teste).
+  4. **Ninguém some em silêncio** (`ResultadoAnalise`): sem currículo,
+     currículo ilegível, aguardando IA e erro são resultados GRAVADOS e
+     exibidos com o motivo — não ausência. Cota estourada marca os
+     pendentes como `ia_indisponivel` para retomar na próxima rodada, em vez
+     de desistir do lote.
+  O status do talento (`novo → em_analise`) muda em **ato de atenção do RH**
+  (abrir currículo ou anotações, ver `talentos.py::marcar_em_analise`) e
+  deliberadamente **NÃO** no ranqueamento em massa — marcar 131 de uma vez
+  recriaria o problema de "todo mundo com o mesmo rótulo".
 - **Provas por cargo** (`models/prova.py`, `api/provas.py`, `ProvasRH.jsx`,
   `ProvaApp.jsx`): banco de provas CONFIGURÁVEL pelo RH (diferente do DISC/
   situacional, gabarito fixo no código). Questões objetivas (opções {id,texto} +

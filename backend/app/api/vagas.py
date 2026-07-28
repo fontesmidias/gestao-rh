@@ -16,16 +16,17 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
 from app.core.db import get_db
+from app.models.match import (AnaliseTalento, ProcessamentoMatch,
+                              StatusProcessamento)
 from app.models.talento import Talento
 from app.models.usuario_rh import UsuarioRH
 from app.models.vaga import Vaga
 from app.services.auditoria import registrar
-from app.services.match_vagas import ranquear_talentos
 
 router = APIRouter(tags=["vagas"], dependencies=[Depends(requer_rh)])
 
@@ -119,32 +120,156 @@ def excluir_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
 
 
 class RanquearIn(BaseModel):
-    talento_ids: list[uuid.UUID] = []  # vazio = todos os talentos não-arquivados
+    # True = ignora análises já feitas e refaz tudo (botão "reanalisar").
+    # Por padrão REAPROVEITA o que já foi analisado para esta vaga — clicar
+    # de novo é praticamente grátis (decisão do Bruno, 2026-07-28). Era a
+    # repetição do custo que transformou 18 análises em 2 na 2ª rodada.
+    reanalisar: bool = False
 
 
-@router.post("/rh/vagas/{vaga_id}/ranquear")
+@router.post("/rh/vagas/{vaga_id}/ranquear", status_code=202)
 def ranquear(vaga_id: uuid.UUID, payload: RanquearIn, db: Session = Depends(get_db),
             rh: UsuarioRH = Depends(requer_rh)) -> dict:
-    """Ranqueia os talentos por aderência à vaga: filtro estruturado local
-    primeiro (barato), depois leitura do currículo por IA (quando houver
-    currículo e chave configurada). A IA NUNCA decide sozinha — devolve nota
-    + justificativa, o RH convoca. Auditoria registra QUANTOS currículos
-    foram processados, NUNCA o conteúdo."""
+    """ENFILEIRA o ranqueamento e devolve na hora (202) — o RH continua
+    usando o sistema enquanto a análise roda em segundo plano.
+
+    Antes (v1.99) isso era síncrono: 131 talentos com OCR jamais caberiam nos
+    60s de timeout do nginx, e um único HTTP 429 desligava a IA para todos os
+    talentos restantes. Agora o worker processa devagar, esperando a cota
+    quando precisa, e o resultado aparece na aba Resultados."""
+    from app.services import fila
+    from app.workers.match import ranquear as tarefa_ranquear
+
     vaga = db.get(Vaga, vaga_id)
     if vaga is None:
         raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
 
-    if payload.talento_ids:
-        talentos = [t for tid in payload.talento_ids if (t := db.get(Talento, tid)) is not None]
-    else:
-        talentos = list(db.scalars(
-            select(Talento).where(Talento.status != "arquivado")))
+    # Já existe um processamento em andamento para esta vaga? Não empilha.
+    em_andamento = db.scalar(select(ProcessamentoMatch).where(
+        ProcessamentoMatch.vaga_id == vaga_id,
+        ProcessamentoMatch.status.in_([StatusProcessamento.na_fila,
+                                       StatusProcessamento.processando])))
+    if em_andamento is not None:
+        return {"processamento_id": em_andamento.id, "status": em_andamento.status.value,
+                "ja_em_andamento": True}
 
-    resultado = ranquear_talentos(vaga, talentos)
+    if not fila.fila_disponivel():
+        raise HTTPException(status_code=503, detail="fila_indisponivel")
 
-    registrar(db, "vaga_ranqueada", ator="rh", ator_detalhe=rh.email,
-              detalhe={"vaga": str(vaga_id), "total_talentos": len(talentos),
-                       "curriculos_analisados": resultado["curriculos_analisados"],
-                       "curriculos_suspeitos": resultado["curriculos_suspeitos"]})
+    proc = ProcessamentoMatch(vaga_id=vaga_id, solicitado_por=rh.email)
+    db.add(proc)
+    db.flush()
+    registrar(db, "vaga_ranqueamento_enfileirado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"vaga": str(vaga_id), "processamento": str(proc.id),
+                       "reanalisar": payload.reanalisar})
     db.commit()
-    return resultado
+
+    fila.enfileirar(tarefa_ranquear, str(proc.id), payload.reanalisar)
+    return {"processamento_id": proc.id, "status": proc.status.value,
+            "ja_em_andamento": False}
+
+
+@router.get("/rh/curriculos/indexacao")
+def status_indexacao(db: Session = Depends(get_db)) -> dict:
+    """Quantos currículos já tiveram o texto extraído. O ranqueamento só
+    consegue analisar quem está indexado — se este número estiver baixo, é
+    aqui que está o gargalo, não na IA."""
+    from app.models.match import CurriculoTexto
+
+    total_talentos = db.scalar(select(func.count()).select_from(Talento)) or 0
+    com_curriculo = db.scalar(select(func.count()).select_from(Talento)
+                              .where(Talento.curriculo_key.isnot(None))) or 0
+    indexados = db.scalar(select(func.count()).select_from(CurriculoTexto)
+                          .where(CurriculoTexto.legivel.is_(True))) or 0
+    ilegiveis = db.scalar(select(func.count()).select_from(CurriculoTexto)
+                          .where(CurriculoTexto.legivel.is_(False),
+                                 CurriculoTexto.motivo_falha.isnot(None),
+                                 CurriculoTexto.motivo_falha != "sem_curriculo")) or 0
+    return {"total_talentos": total_talentos, "com_curriculo": com_curriculo,
+            "indexados": indexados, "ilegiveis": ilegiveis,
+            "pendentes": max(0, com_curriculo - indexados - ilegiveis)}
+
+
+@router.post("/rh/curriculos/indexar", status_code=202)
+def enfileirar_backfill(db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Enfileira a extração de texto dos currículos que ainda não foram
+    lidos (os que já estavam na base antes da v2.00). Roda em background,
+    devagar — OCR tem custo."""
+    from app.services import fila
+    from app.workers.match import backfill_curriculos
+
+    if not fila.fila_disponivel():
+        raise HTTPException(status_code=503, detail="fila_indisponivel")
+    fila.enfileirar(backfill_curriculos)
+    registrar(db, "curriculos_backfill_enfileirado", ator="rh", ator_detalhe=rh.email)
+    db.commit()
+    return {"enfileirado": True}
+
+
+@router.get("/rh/vagas/{vaga_id}/processamentos")
+def listar_processamentos(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+    """Histórico de ranqueamentos da vaga (a aba Resultados lista por aqui)."""
+    procs = db.scalars(select(ProcessamentoMatch)
+                       .where(ProcessamentoMatch.vaga_id == vaga_id)
+                       .order_by(ProcessamentoMatch.criado_em.desc())).all()
+    return [_dump_processamento(p) for p in procs]
+
+
+def _dump_processamento(p: ProcessamentoMatch) -> dict:
+    return {
+        "id": p.id, "vaga_id": p.vaga_id, "status": p.status.value,
+        "total_talentos": p.total_talentos, "processados": p.processados,
+        "analisados_ia": p.analisados_ia, "reaproveitados": p.reaproveitados,
+        "sem_curriculo": p.sem_curriculo, "ilegiveis": p.ilegiveis,
+        "suspeitos": p.suspeitos, "observacao": p.observacao,
+        "solicitado_por": p.solicitado_por,
+        "criado_em": p.criado_em, "concluido_em": p.concluido_em,
+    }
+
+
+@router.get("/rh/vagas/{vaga_id}/resultado")
+def resultado(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Resultado consolidado da vaga: o processamento mais recente + a lista
+    de pessoas com o MOTIVO de cada uma estar onde está.
+
+    Ninguém some em silêncio — quem não tem currículo, quem tem currículo
+    ilegível e quem ficou sem análise por cota aparecem todos, identificados
+    (mesma regra do lote de documento crítico)."""
+    vaga = db.get(Vaga, vaga_id)
+    if vaga is None:
+        raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
+
+    proc = db.scalar(select(ProcessamentoMatch)
+                     .where(ProcessamentoMatch.vaga_id == vaga_id)
+                     .order_by(ProcessamentoMatch.criado_em.desc()).limit(1))
+
+    analises = db.scalars(select(AnaliseTalento)
+                          .where(AnaliseTalento.vaga_id == vaga_id)).all()
+    talentos = {t.id: t for t in db.scalars(select(Talento))}
+
+    itens = []
+    for a in analises:
+        t = talentos.get(a.talento_id)
+        if t is None:
+            continue
+        itens.append({
+            "talento_id": a.talento_id, "nome": t.nome,
+            "cargo_interesse": t.cargo_interesse,
+            "cidade": t.cidade, "telefone": t.telefone, "email": t.email,
+            "resultado": a.resultado.value, "nota": a.nota,
+            "atende_obrigatorios": a.atende_obrigatorios,
+            "justificativa": a.justificativa, "bate_filtro": a.bate_filtro,
+            "curriculo_suspeito": a.curriculo_suspeito,
+            "detalhe_falha": a.detalhe_falha,
+            "tem_curriculo": bool(t.curriculo_key),
+            "status_talento": t.status.value,
+        })
+
+    # Ordena: nota desc (quem tem), depois quem bate o filtro estruturado.
+    itens.sort(key=lambda i: (i["nota"] if i["nota"] is not None else -1,
+                              i["bate_filtro"]), reverse=True)
+
+    return {"vaga": _dump_vaga(vaga),
+            "processamento": _dump_processamento(proc) if proc else None,
+            "itens": itens}

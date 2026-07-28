@@ -596,9 +596,21 @@ export const rh = {
     req(`/rh/vagas/${id}`, { method: 'PATCH', headers: authRH(), body: JSON.stringify(dados) }),
   excluirVaga: (id) =>
     req(`/rh/vagas/${id}`, { method: 'DELETE', headers: authRH() }),
-  ranquearVaga: (id, talentoIds = []) =>
+  // Ranqueamento é ASSÍNCRONO (v2.00): devolve 202 + processamento_id e o
+  // trabalho roda no worker. O RH continua usando o sistema e vê o resultado
+  // na aba Resultados.
+  ranquearVaga: (id, reanalisar = false) =>
     req(`/rh/vagas/${id}/ranquear`, { method: 'POST', headers: authRH(),
-                                      body: JSON.stringify({ talento_ids: talentoIds }) }),
+                                      body: JSON.stringify({ reanalisar }) }),
+  resultadoVaga: (id) => req(`/rh/vagas/${id}/resultado`, { headers: authRH() }),
+  processamentosVaga: (id) => req(`/rh/vagas/${id}/processamentos`, { headers: authRH() }),
+  statusIndexacaoCurriculos: () => req('/rh/curriculos/indexacao', { headers: authRH() }),
+  indexarCurriculos: () =>
+    req('/rh/curriculos/indexar', { method: 'POST', headers: authRH() }),
+  salvarOpenRouter: (dados) =>
+    req('/rh/config/openrouter', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  testarOpenRouter: () =>
+    req('/rh/config/openrouter/testar', { method: 'POST', headers: authRH() }),
   verSmtp: () => req('/rh/config/smtp', { headers: authRH() }),
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

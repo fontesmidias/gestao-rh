@@ -97,6 +97,21 @@ def memoria_da_pessoa(talento_id: uuid.UUID | None = None,
     vínculo (a memória feita no talento segue para o candidato)."""
     _escopo_ou_422(talento_id, candidato_id)
     escopo = crm.escopo_pessoa(db, talento_id=talento_id, candidato_id=candidato_id)
+
+    # Abrir as anotações de um talento é ATO DE ATENÇÃO do RH: tira a pessoa
+    # de "Novo" (v2.00 — antes todos ficavam "Novo" para sempre e o campo não
+    # discriminava quem já tinha sido olhado). Nunca falha a leitura por
+    # causa disso.
+    if talento_id is not None:
+        try:
+            from app.api.talentos import marcar_em_analise
+            from app.models.talento import Talento
+            talento = db.get(Talento, talento_id)
+            if talento is not None and marcar_em_analise(db, talento):
+                db.commit()
+        except Exception:
+            db.rollback()
+
     return {
         "anotacoes": [crm.dump_anotacao(a) for a in crm.anotacoes_da_pessoa(db, escopo)],
         "tags": [crm.dump_tag(t) for t in crm.tags_da_pessoa(db, escopo)],

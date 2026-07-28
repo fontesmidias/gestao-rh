@@ -1,0 +1,156 @@
+"""Teste da cadeia de provedores de IA (services/ia_texto.py) — sem rede.
+
+Cobre o incidente de 2026-07-28: um HTTP 429 (cota, transitório) era tratado
+igual a um 401 (chave inválida, permanente), e o Match de Vagas desligava a
+IA para todos os talentos restantes — 131 viraram 18 analisados, e 2 na
+tentativa seguinte.
+
+Rode: PYTHONPATH=. .venv/Scripts/python.exe tests/test_ia_texto_cadeia.py
+"""
+
+import os
+
+os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://x:x@localhost/x")
+os.environ.setdefault("SECRET_KEY", "x")
+os.environ.setdefault("BASE_URL", "http://x")
+
+from unittest.mock import patch
+
+import httpx
+
+from app.services import ia_texto
+from app.services.ia_texto import CotaExcedidaError, IndisponivelError
+
+
+def _resposta(status, corpo=None, headers=None):
+    return httpx.Response(status_code=status, json=corpo or {}, headers=headers or {},
+                          request=httpx.Request("POST", "http://x"))
+
+
+_OK = {"choices": [{"message": {"content": "resposta boa"}}], "usage": {"total_tokens": 10}}
+
+
+# ---------- 429 é TRANSITÓRIO e traz o tempo de espera do header ----------
+
+def test_429_vira_cota_excedida_com_retry_after():
+    chamadas = []
+
+    def fake_post(url, **kw):
+        chamadas.append(url)
+        return _resposta(429, headers={"Retry-After": "45"})
+
+    with patch.object(ia_texto, "_ler_chave", lambda cfg, db=None: "chave-x"), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        try:
+            ia_texto.gerar_texto("s", "u")
+            raise AssertionError("deveria ter levantado CotaExcedidaError")
+        except CotaExcedidaError as exc:
+            assert exc.espera_s == 45.0, exc.espera_s
+    # tentou os DOIS provedores antes de desistir (não parou no primeiro)
+    assert any("openrouter" in u for u in chamadas), chamadas
+    assert any("groq" in u for u in chamadas), chamadas
+
+
+# ---------- 401 é PERMANENTE — não é confundido com cota ----------
+
+def test_401_vira_indisponivel_nao_cota():
+    with patch.object(ia_texto, "_ler_chave", lambda cfg, db=None: "chave-x"), \
+         patch.object(ia_texto.httpx, "post", lambda url, **kw: _resposta(401)):
+        try:
+            ia_texto.gerar_texto("s", "u")
+            raise AssertionError("deveria ter levantado IndisponivelError")
+        except CotaExcedidaError:
+            raise AssertionError("401 NÃO pode virar CotaExcedidaError")
+        except IndisponivelError:
+            pass
+
+
+# ---------- Fallback: OpenRouter falha, Groq assume ----------
+
+def test_fallback_para_groq_quando_openrouter_falha():
+    def fake_post(url, **kw):
+        if "openrouter" in url:
+            return _resposta(429, headers={"Retry-After": "60"})
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", lambda cfg, db=None: "chave-x"), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        assert ia_texto.gerar_texto("s", "u") == "resposta boa"
+
+
+# ---------- Sem nenhuma chave configurada ----------
+
+def test_sem_chave_alguma():
+    with patch.object(ia_texto, "_ler_chave", lambda cfg, db=None: None):
+        try:
+            ia_texto.gerar_texto("s", "u")
+            raise AssertionError("deveria ter levantado IndisponivelError")
+        except IndisponivelError as exc:
+            assert "chave_nao_configurada" in str(exc)
+
+
+# ---------- Só uma chave configurada: usa a que existe ----------
+
+def test_so_groq_configurado():
+    def fake_chave(cfg, db=None):
+        return "chave-groq" if cfg == "groq_api_key" else None
+
+    urls = []
+
+    def fake_post(url, **kw):
+        urls.append(url)
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", fake_chave), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        assert ia_texto.gerar_texto("s", "u") == "resposta boa"
+    assert all("groq" in u for u in urls), urls
+
+
+# ---------- esperar_cota=True (worker): espera e retoma no MESMO provedor ----------
+
+def test_worker_espera_e_retoma():
+    tentativas = {"n": 0}
+
+    def fake_post(url, **kw):
+        tentativas["n"] += 1
+        if tentativas["n"] == 1:
+            return _resposta(429, headers={"Retry-After": "1"})
+        return _resposta(200, _OK)
+
+    dormiu = []
+    with patch.object(ia_texto, "_ler_chave", lambda cfg, db=None: "chave-x"), \
+         patch.object(ia_texto.httpx, "post", fake_post), \
+         patch.object(ia_texto.time, "sleep", lambda s: dormiu.append(s)):
+        assert ia_texto.gerar_texto("s", "u", esperar_cota=True) == "resposta boa"
+    assert dormiu == [1.0], dormiu   # respeitou o Retry-After, não o backoff padrão
+
+
+# ---------- Teste de chave manda para o provedor CERTO ----------
+
+def test_testar_chave_vai_ao_provedor_certo():
+    urls = []
+
+    def fake_post(url, **kw):
+        urls.append(url)
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto.httpx, "post", fake_post):
+        ia_texto.testar_groq("chave-groq-do-rh")
+    assert len(urls) == 1 and "groq" in urls[0], urls
+
+    urls.clear()
+    with patch.object(ia_texto.httpx, "post", fake_post):
+        ia_texto.testar_openrouter("chave-openrouter-do-rh")
+    assert len(urls) == 1 and "openrouter" in urls[0], urls
+
+
+test_429_vira_cota_excedida_com_retry_after()
+test_401_vira_indisponivel_nao_cota()
+test_fallback_para_groq_quando_openrouter_falha()
+test_sem_chave_alguma()
+test_so_groq_configurado()
+test_worker_espera_e_retoma()
+test_testar_chave_vai_ao_provedor_certo()
+
+print("test_ia_texto_cadeia: OK")

@@ -11,6 +11,79 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.00.0] — 2026-07-28 — Match de Vagas assíncrono e multi-provedor
+
+Correção do incidente do mesmo dia: o RH ranqueou 131 talentos e só 18 foram
+analisados; 67 segundos depois, na segunda tentativa, só 2. Plano completo e
+diagnóstico em `docs/planejamento/10-match-vagas-assincrono.md`.
+
+### Corrigido
+- **Cota da IA derrubava a análise inteira.** Um HTTP 429 (limite de uso —
+  transitório, resolve em segundos) era convertido no MESMO erro de um 401
+  (chave inválida — permanente), e um `kill switch` irreversível pulava
+  todos os talentos restantes. Agora `CotaExcedidaError` é distinto de
+  `IndisponivelError`, o `Retry-After` do provedor é respeitado, e o worker
+  espera e retoma em vez de desistir do lote.
+- **Nada era persistido**: cada clique refazia as 131 análises e pagava tudo
+  de novo — foi por isso que a 2ª rodada foi *pior* que a 1ª. Agora o
+  resultado é gravado e reaproveitado; clicar de novo é praticamente grátis
+  (botão "Reanalisar tudo" força quando você quiser).
+- **Mensagem desonesta**: a tela dizia "IA indisponível", que o RH lia como
+  "caiu, vou tentar de novo" — e o segundo clique piorava tudo. Agora diz
+  que o limite de uso foi atingido e em quanto tempo tentar.
+- **Currículo `.heic` (foto de iPhone) era 100% ilegível**: o upload aceitava,
+  mas faltava `pillow-heif` e o erro era engolido. Também corrigido:
+  currículo com `curriculo_nome` NULL (importados de planilha) caía em
+  "formato desconhecido" mesmo com o arquivo certo no MinIO.
+- **Todos os talentos ficavam "Novo" para sempre** — nada movia o status.
+  Agora `novo → em_analise` quando o RH pratica um **ato de atenção**: abrir
+  o currículo ou as anotações da pessoa. Deliberadamente **não** no
+  ranqueamento em massa: marcar 131 de uma vez recriaria o mesmo problema
+  com outro rótulo.
+
+### Adicionado
+- **Ranqueamento assíncrono** na fila Redis/RQ que já existia no ecossistema
+  e estava ociosa desde a v1.83. O RH clica e continua usando o sistema; o
+  worker processa devagar, esperando cota quando precisa. Resolve também o
+  timeout de 60s do nginx, que 131 análises jamais respeitariam.
+- **Cadeia de provedores de IA**: **OpenRouter principal → Groq reserva**. Se
+  um falha ou estoura cota, o outro assume automaticamente.
+- **Aba de Resultados** — prestação de contas, não barra de progresso. Cada
+  pessoa aparece com o MOTIVO de estar onde está: analisado (com nota e
+  justificativa), sem currículo, currículo ilegível (com o formato),
+  aguardando IA, ou com alerta de trecho suspeito. Ninguém some em silêncio
+  — mesma regra do lote de documento crítico.
+- **Painel de leitura de currículos**: quantos talentos existem, quantos têm
+  currículo, quantos foram lidos e quantos são ilegíveis. Se este número
+  estiver baixo, o gargalo está aí e não na IA.
+- **Texto do currículo extraído uma vez, no upload** (Mistral OCR com
+  fallback local), guardado **já minimizado** (sem CPF/RG/telefone/e-mail/
+  CEP) e reaproveitado em todos os ranqueamentos. Botão de backfill para os
+  currículos que já estavam na base.
+- **Dados do cadastro entram na análise** junto com o currículo (cargo,
+  região, escolaridade, experiência informada) — pedido do Bruno.
+- **Aviso interno por e-mail ao terminar**, pela matriz de eventos (evento
+  novo `match_vagas_concluido`), nunca direto para o `smtp_from`.
+
+### Técnico
+- `app/models/match.py` (CurriculoTexto, ProcessamentoMatch, AnaliseTalento),
+  migration `e6f7a8b9c0d1`; `app/services/fila.py` (primeiro uso real da fila
+  RQ), `app/services/curriculo_indexacao.py`, `app/workers/match.py`.
+- Testes novos: `test_ia_texto_cadeia.py` (7 cenários — 429 vs 401, fallback
+  entre provedores, espera do worker, teste de chave no provedor certo) e
+  `test_match_persistencia.py` (reaproveitamento sem chamar IA, `reanalisar`
+  sem duplicar, cota sem sumir com ninguém, retomada). `test_match_vagas.py`
+  reescrito para a arquitetura nova.
+- Dois bugs pegos pelos próprios testes antes de ir ao ar: `reanalisar=True`
+  violava a constraint `UNIQUE(vaga_id, talento_id)` ao reinserir em vez de
+  atualizar; e a aba de Resultados ficava presa em "Carregando…" por um
+  `useEffect` que se realimentava.
+
+### Pergunta aberta
+Quantos dos 131 talentos têm currículo anexado? O painel de leitura agora
+responde isso na tela. Se forem poucos, o gargalo não é IA — é que quase
+ninguém anexa currículo, e isso se resolve no formulário público.
+
 ## [1.99.0] — 2026-07-28 — Onda C2: Match de Vagas × Banco de Talentos
 
 ### Adicionado

@@ -2,6 +2,7 @@
 em candidato pelo RH. O formulário público substitui o Microsoft Forms de
 pré-cadastro: multi-etapas, campos ricos e currículo opcional (PDF/foto/Word)."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -23,6 +24,7 @@ from app.services.email import email_convite, enviar_email
 from app.services.magic_link import emitir_link
 
 router = APIRouter(tags=["talentos"])
+log = logging.getLogger(__name__)
 
 UPLOAD_SALT = "talento-curriculo"
 UPLOAD_TTL_S = 1800  # 30 min para anexar o currículo ao cadastro recém-criado
@@ -186,6 +188,20 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
     registrar(db, "talento_curriculo_enviado", ator="publico",
               detalhe={"talento": t.nome, "ext": ext})
     db.commit()
+
+    # Extrai o texto do currículo AGORA, em background (v2.00): o currículo
+    # não muda depois do upload, então relê-lo a cada ranqueamento era
+    # desperdício — e com OCR garantia de estourar o timeout do nginx.
+    # Falha ao enfileirar não pode derrubar o upload do candidato: o backfill
+    # pega depois.
+    try:
+        from app.services import fila
+        from app.workers.match import indexar_curriculo
+        fila.enfileirar(indexar_curriculo, str(t.id))
+    except Exception:
+        log.warning("Não foi possível enfileirar a indexação do currículo do "
+                    "talento %s — o backfill cobre depois.", t.id)
+
     return {"ok": True}
 
 
@@ -234,6 +250,23 @@ def listar(status: str | None = None, busca: str | None = None,
     return [_dump(t, testes.get(t.id), tags.get(t.id)) for t in talentos]
 
 
+def marcar_em_analise(db: Session, talento: Talento) -> bool:
+    """`novo` → `em_analise` quando o RH pratica um ATO DE ATENÇÃO sobre a
+    pessoa: abrir o currículo ou as anotações dela (v2.00).
+
+    Antes NADA movia esse status — só o clique manual e a conversão — então
+    os 131 talentos ficavam todos "Novo" para sempre e o campo não
+    discriminava nada (feedback do Bruno, 2026-07-28).
+
+    NÃO é chamado pelo ranqueamento em massa de propósito: marcar 131 pessoas
+    de uma vez recriaria o mesmo problema com outro rótulo. O status é sobre
+    o RH ter olhado, não sobre a máquina ter processado."""
+    if talento.status != StatusTalento.novo:
+        return False
+    talento.status = StatusTalento.em_analise
+    return True
+
+
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])
 def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
                      rh: UsuarioRH = Depends(requer_rh)) -> Response:
@@ -245,6 +278,7 @@ def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
     key, nome, ct = t.curriculo_key, t.curriculo_nome or "curriculo", t.curriculo_tipo
     registrar(db, "talento_curriculo_visto", ator="rh", ator_detalhe=rh.email,
               detalhe={"talento": t.nome})
+    marcar_em_analise(db, t)   # abrir o currículo é ato de atenção
     db.commit()
     try:
         conteudo = storage.ler(key)

@@ -66,6 +66,14 @@ EVENTOS: list[dict] = [
         "descricao": "Quando alguém envia algo novo para o Cadastro de "
                      "Desenvolvimento e a fila de validação cresce.",
     },
+    {
+        "chave": "match_vagas_concluido",
+        "rotulo": "Match de Vagas: ranqueamento concluído",
+        "descricao": "Quando termina o ranqueamento de uma vaga contra o "
+                     "Banco de Talentos. A análise roda em segundo plano e "
+                     "pode levar minutos — este aviso diz que o resultado "
+                     "está pronto na aba Resultados.",
+    },
 ]
 
 CHAVES_VALIDAS = {e["chave"] for e in EVENTOS}
