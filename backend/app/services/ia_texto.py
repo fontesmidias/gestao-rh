@@ -192,6 +192,17 @@ def _chamar_provedor(provedor: dict, modelo: str, mensagens: list[dict], *,
                         provedor["nome"], modelo)
         raise IndisponivelError("resposta_invalida") from exc
 
+    # HTTP 200 mas sem conteúdo ÚTIL (content null/vazio) — acontece com modelos
+    # de "reasoning" que gastam o orçamento de tokens no raciocínio e devolvem o
+    # content vazio. Vira DADO inválido: cai para o próximo modelo/provedor.
+    # NUNCA devolver None/"" ao chamador — `gerar_texto[:120]` (teste),
+    # `gerar_json`→json.loads (Match) e o `.strip()` do Minutário estouram com
+    # None. Foi o 500 'erro_interno' de 2026-07-28 ao testar a chave.
+    if not (texto and texto.strip()):
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=resposta_vazia",
+                        provedor["nome"], modelo)
+        raise IndisponivelError("resposta_vazia")
+
     telemetria.info("ia_texto provedor=%s modelo=%s tokens=%s ok=1", provedor["nome"],
                     modelo, dados.get("usage", {}).get("total_tokens", "-"))
     return texto
@@ -297,9 +308,12 @@ def _testar(chave: str, provedor: str, rotulo: str, onde: str) -> str:
     inexistente (404) diz para conferir os MODELOS, não a chave — senão a causa
     real (o `:free` que sumiu) fica escondida atrás de um falso 'chave errada'."""
     try:
+        # max_tokens folgado: modelos de reasoning gastam tokens no raciocínio e,
+        # com orçamento apertado (era 30), devolvem content vazio — o que virava
+        # falha na hora de testar uma chave que, na verdade, funciona.
         return gerar_texto("Responda em português, em uma frase curta.",
                            "Diga apenas: conexão funcionando.",
-                           chave=chave, max_tokens=30, so_provedor=provedor)
+                           chave=chave, max_tokens=200, so_provedor=provedor)
     except CotaExcedidaError as exc:
         raise RuntimeError(f"A chave do {rotulo} funciona, mas o limite de uso está "
                            f"esgotado agora (tente em ~{int(exc.espera_s)}s).") from exc
@@ -316,9 +330,10 @@ def _testar(chave: str, provedor: str, rotulo: str, onde: str) -> str:
                          "política de dados em openrouter.ai/settings/privacy. ")
             raise RuntimeError(f"O {rotulo} respondeu {cod.replace('http_', 'HTTP ')}. "
                                f"{dica}(A chave em si parece válida.)") from exc
-        if cod == "resposta_invalida":
-            raise RuntimeError(f"O {rotulo} respondeu num formato inesperado. "
-                               f"Tente de novo; se persistir, troque o modelo.") from exc
+        if cod in ("resposta_invalida", "resposta_vazia"):
+            raise RuntimeError(f"O {rotulo} respondeu vazio ou em formato inesperado "
+                               f"(a chave parece válida). Troque o modelo — o "
+                               f"configurado pode não caber nesta tarefa.") from exc
         raise RuntimeError(f"O {rotulo} não respondeu (rede ou serviço fora do ar). "
                            f"Tente de novo em instantes.") from exc
 
