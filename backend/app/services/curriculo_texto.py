@@ -69,6 +69,11 @@ def _texto_imagem(dados: bytes, ext: str) -> str:
     try:
         import pytesseract
         from PIL import Image
+
+        # importar normalizacao registra o decodificador de HEIC (foto de
+        # iPhone) — sem isso, Image.open falha em .heic
+        import app.services.normalizacao  # noqa: F401
+
         img = Image.open(io.BytesIO(dados))
         img.thumbnail((2000, 2000))
         return pytesseract.image_to_string(img.convert("L"), lang="por")

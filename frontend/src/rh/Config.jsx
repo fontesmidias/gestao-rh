@@ -107,12 +107,15 @@ function OcrIA() {
   )
 }
 
-// Groq — camada de IA de texto usada pelo Minutário de mensagens e pelo Match
-// de vagas do Banco de Talentos (v1.98/v1.99). Mesmo padrão do OCR acima:
-// chave na config dinâmica, nunca devolvida, teste de conexão.
+// IA de texto (v2.00): OpenRouter é o PRINCIPAL, Groq é a RESERVA. Se o
+// principal falhar ou estourar cota, o reserva assume automaticamente — foi
+// justamente uma cota estourada da Groq que derrubou 112 das 131 análises do
+// Match em 2026-07-28. Mesmo padrão do OCR: chave na config dinâmica, nunca
+// devolvida ao painel, com teste de conexão.
 function GroqIA() {
   const [cfg, setCfg] = useState(null)
-  const [chave, setChave] = useState('')
+  const [chaveOr, setChaveOr] = useState('')
+  const [chaveGroq, setChaveGroq] = useState('')
   const [msg, setMsg] = useState(null)
   const [ocupado, setOcupado] = useState(false)
 
@@ -120,42 +123,65 @@ function GroqIA() {
   useEffect(() => { carregar() }, [])
   if (!cfg) return null
 
+  const acao = async (fn, aoOk) => {
+    setMsg(null); setOcupado(true)
+    try { aoOk(await fn()) }
+    catch (e) { setMsg({ tipo: 'erro', texto: `${e.detail || e.message}` }) }
+    finally { setOcupado(false) }
+  }
+
   return (
     <section className="rh-card">
-      <h3>🤖 Groq (Minutário de mensagens e Match de vagas)</h3>
+      <h3>🤖 IA de texto (Minutário e Match de vagas)</h3>
       <p className="explica">Gera o texto das mensagens do Minutário e a nota de aderência do
-        Match de vagas. Crie uma chave gratuita em console.groq.com → API Keys e cole abaixo.
-        Sem chave, os dois módulos ficam indisponíveis (nada quebra no resto do sistema).</p>
-      <div className="linha2">
-        <InputSenha placeholder={cfg.chave_definida ? 'Chave (já definida)' : 'Chave da API Groq'}
-                    value={chave} onChange={(e) => setChave(e.target.value)} />
-        <span>
-          <button className="btn-principal btn-mini" disabled={ocupado} onClick={async () => {
-            setMsg(null); setOcupado(true)
-            try {
-              const r = await api.salvarGroq({ groq_api_key: chave.trim() })
-              setCfg(r); setChave('')
-              setMsg({ tipo: 'ok', texto: r.chave_definida
-                ? 'Chave salva — use "Testar conexão" para confirmar.'
-                : 'Groq desligado (Minutário e Match ficam indisponíveis).' })
-            } catch (e) {
-              setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
-            } finally { setOcupado(false) }
-          }}>Salvar</button>{' '}
-          <button className="btn-secundario btn-mini" disabled={ocupado || !cfg.chave_definida}
-                  onClick={async () => {
-                    setMsg(null); setOcupado(true)
-                    try {
-                      const r = await api.testarGroq()
-                      setMsg({ tipo: 'ok', texto: `A IA respondeu: "${r.texto_lido}" — funcionando!` })
-                    } catch (e) {
-                      setMsg({ tipo: 'erro', texto: `Teste falhou: ${e.detail || e.message}` })
-                    } finally { setOcupado(false) }
-                  }}>Testar conexão</button>
-        </span>
+        Match de vagas. O <strong>OpenRouter é o principal</strong> e a <strong>Groq é a
+        reserva</strong>: se um estourar o limite de uso, o outro assume sozinho. Ter os dois
+        configurados é o que evita uma análise parar no meio.</p>
+
+      <label className="campo"><span className="rotulo">OpenRouter (principal) — openrouter.ai/keys</span>
+        <InputSenha placeholder={cfg.openrouter_definida ? 'Chave (já definida)' : 'Chave da API OpenRouter'}
+                    value={chaveOr} onChange={(e) => setChaveOr(e.target.value)} /></label>
+      <div className="rh-lote">
+        <button className="btn-principal btn-mini" disabled={ocupado} onClick={() =>
+          acao(() => api.salvarOpenRouter({ openrouter_api_key: chaveOr.trim() }), (r) => {
+            setCfg(r); setChaveOr('')
+            setMsg({ tipo: 'ok', texto: r.openrouter_definida
+              ? 'Chave do OpenRouter salva — use "Testar" para confirmar.'
+              : 'OpenRouter desligado (a Groq assume, se estiver configurada).' })
+          })}>Salvar</button>
+        <button className="btn-secundario btn-mini" disabled={ocupado || !cfg.openrouter_definida}
+                onClick={() => acao(api.testarOpenRouter, (r) =>
+                  setMsg({ tipo: 'ok', texto: `OpenRouter respondeu: "${r.texto_lido}"` }))}>
+          Testar</button>
+        <span className="explica" style={{ margin: 0 }}>
+          {cfg.openrouter_definida ? '✅ configurado' : '⭕ não configurado'}</span>
       </div>
-      <p className="explica">Status: {cfg.chave_definida
-        ? '✅ ativado' : '⭕ desligado — Minutário e Match indisponíveis'}</p>
+
+      <label className="campo" style={{ marginTop: '.6rem' }}>
+        <span className="rotulo">Groq (reserva) — console.groq.com → API Keys</span>
+        <InputSenha placeholder={cfg.chave_definida ? 'Chave (já definida)' : 'Chave da API Groq'}
+                    value={chaveGroq} onChange={(e) => setChaveGroq(e.target.value)} /></label>
+      <div className="rh-lote">
+        <button className="btn-principal btn-mini" disabled={ocupado} onClick={() =>
+          acao(() => api.salvarGroq({ groq_api_key: chaveGroq.trim() }), (r) => {
+            setCfg(r); setChaveGroq('')
+            setMsg({ tipo: 'ok', texto: r.chave_definida
+              ? 'Chave da Groq salva — use "Testar" para confirmar.'
+              : 'Groq desligada.' })
+          })}>Salvar</button>
+        <button className="btn-secundario btn-mini" disabled={ocupado || !cfg.chave_definida}
+                onClick={() => acao(api.testarGroq, (r) =>
+                  setMsg({ tipo: 'ok', texto: `Groq respondeu: "${r.texto_lido}"` }))}>
+          Testar</button>
+        <span className="explica" style={{ margin: 0 }}>
+          {cfg.chave_definida ? '✅ configurada' : '⭕ não configurada'}</span>
+      </div>
+
+      {!cfg.openrouter_definida && !cfg.chave_definida && (
+        <div className="alerta" style={{ marginTop: '.5rem' }}>
+          Sem nenhuma das duas, o Minutário e o Match de vagas ficam indisponíveis
+          (o resto do sistema não é afetado).</div>
+      )}
       <Msg msg={msg} />
     </section>
   )

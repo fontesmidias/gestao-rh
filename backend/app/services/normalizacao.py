@@ -16,6 +16,18 @@ from pypdf import PdfReader
 
 log = logging.getLogger(__name__)
 
+# HEIC (foto de iPhone) — o Pillow puro NÃO decodifica, então `.heic` era
+# aceito no upload e ficava ILEGÍVEL depois: falhava no Image.open e o erro
+# era engolido (descoberto no diagnóstico de 2026-07-28). Registrado aqui, no
+# módulo central de imagem, para valer na API e no worker.
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+except Exception as _exc:  # pragma: no cover - ambiente sem a lib
+    log.warning("pillow-heif indisponível (%s) — arquivos .heic não serão lidos.",
+                type(_exc).__name__)
+
 MAX_BYTES = 50 * 1024 * 1024
 _EXT_IMAGEM = {".jpg", ".jpeg", ".png", ".heic", ".webp", ".bmp"}
 _EXT_WORD = {".doc", ".docx", ".odt", ".rtf"}
