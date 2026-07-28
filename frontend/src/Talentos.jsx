@@ -189,6 +189,13 @@ export default function BancoDeTalentos() {
                 conforme a <strong>LGPD</strong> (Lei nº 13.709/2018). Posso pedir a exclusão
                 a qualquer momento pelo e-mail rh@greenhousedf.com.br. *</span>
             </label>
+            {/* Higiene de transparência (v1.99, feedback 2026-07-27): avisa
+                que a triagem pode usar IA, sem ser condição extra de aceite —
+                o consentimento acima já cobre a finalidade de recrutamento. */}
+            <p className="explica" style={{ marginTop: '.4rem' }}>
+              Seus dados e currículo podem ser analisados por ferramenta de inteligência
+              artificial para triagem — a decisão final é sempre do RH.
+            </p>
           </fieldset>
         )}
 

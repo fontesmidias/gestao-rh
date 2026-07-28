@@ -11,6 +11,66 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.99.0] — 2026-07-28 — Onda C2: Match de Vagas × Banco de Talentos
+
+### Adicionado
+- **Match de Vagas** (Recrutamento → 🧩 Match de Vagas): o RH cadastra a vaga
+  (título, descrição, cargo, região, regime, salário, requisitos
+  obrigatórios/desejáveis) e o sistema ranqueia os talentos do Banco de
+  Talentos por aderência — filtro estruturado local primeiro (cargo/região,
+  sem custo de IA), depois leitura do currículo pela IA (nota + justificativa
+  em campos fixos). **A IA nunca decide sozinha**: ordena e explica; quem
+  convoca é o RH. Resultado no DashPlanilha (ordenável, filtrável, com a
+  justificativa no detalhe da linha).
+- **Base legal LGPD verificada**: o termo do Banco de Talentos já autoriza
+  "tratar os dados para fins de recrutamento" — cobre a triagem por IA
+  (uso primário da finalidade, não secundário). Formulário público ganhou
+  uma frase de transparência avisando que dados e currículo podem ser
+  analisados por IA, com decisão final sempre do RH.
+- **Minimização antes do envio à IA**: CPF, RG, telefone, e-mail e CEP são
+  removidos do texto do currículo antes de qualquer chamada — nenhum desses
+  ajuda a avaliar aderência a uma vaga.
+
+### Segurança — currículo é entrada hostil
+- Achado do próprio Bruno durante a revisão do roadmap (não estava no plano
+  original): o currículo é upload público de gente desconhecida, e o texto
+  extraído dele vai direto para dentro de um prompt de IA — é **entrada
+  hostil**, não dado. Ataque real e documentado no mercado ("white text
+  resume injection"): texto em fonte branca/corpo 1 no fim do currículo
+  instruindo o modelo a dar nota máxima. É falha silenciosa (ranking
+  adulterado parece idêntico a um legítimo) e questão de **justiça do
+  processo seletivo** — quem sabe o truque passa na frente de quem não sabe.
+- **5 camadas de defesa** (`services/anti_prompt_injection.py`), nenhuma
+  sozinha resolve: delimitador aleatório por chamada, saída estruturada
+  (JSON, nunca texto livre), teto de tamanho, detecção de padrão suspeito
+  com **alerta visível ao RH** (nunca filtro em silêncio — mesmo princípio
+  do lote de documento crítico), e texto invisível reportado como sinal.
+  Currículo suspeito aparece marcado "⚠️ suspeito" no ranking, com o texto
+  neutralizado antes de chegar à IA — nunca escondido do RH.
+- Regra geral registrada no CLAUDE.md para todo texto de origem externa que
+  chegar a um modelo daqui para frente: é dado, nunca instrução.
+
+### Técnico
+- `app/models/vaga.py`, `app/api/vagas.py`, migration `d5e6f7a8b9c0`.
+- `app/services/curriculo_texto.py`: extração de texto (PDF via
+  pypdf/Mistral OCR, imagem via Tesseract/Mistral OCR, DOC/DOCX via
+  LibreOffice+PDF) + minimização de PII. Nunca inventa nota para currículo
+  ilegível.
+- `app/services/match_vagas.py`: orquestra filtro estruturado + análise por
+  IA, usando `ia_texto.py` (Groq) e `anti_prompt_injection.py`.
+- Testes novos: `test_anti_prompt_injection.py` (5 padrões de ataque
+  detectados, 3 currículos limpos sem falso positivo, teto de tamanho,
+  resistência a fechamento de delimitador) e `test_match_vagas.py` (prova
+  que o prompt que chega à IA não contém o comando de ataque íntegro, mesmo
+  com IA mockada "honesta" — a defesa está na preparação do texto, não no
+  bom comportamento do modelo).
+- Groq mantido nos dois módulos de IA (C1 e C2) — decisão consciente do
+  Bruno, contra a recomendação inicial de provedor com retenção zero;
+  minimização é a proteção que resta.
+- Validado com Playwright contra ambiente efêmero: CRUD de vaga, ranking
+  real (talento com cargo compatível sobe para o topo da lista), e teste
+  end-to-end confirmando que o filtro estruturado funciona corretamente.
+
 ## [1.98.0] — 2026-07-28 — Onda C1: Minutário de Mensagens
 
 ### Adicionado
