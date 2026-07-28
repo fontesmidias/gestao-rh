@@ -10,6 +10,7 @@ import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
+import Modal from '../Modal.jsx'
 import { OPCOES } from '../candidato/Wizard.jsx'
 
 const MOTIVOS = [
@@ -662,20 +663,25 @@ function FichaRH({ id }) {
   )
 }
 
-// Anotações + tags do colaborador/candidato: recolhível (tudo que abre, fecha).
-// A memória é a MESMA da pessoa no Banco de Talentos — segue o ciclo de vida.
-function MemoriaColaborador({ id }) {
+// Anotações + tags do colaborador/candidato, num MODAL (v1.97 — antes era um
+// recolhível inline; o conteúdo tem anexo+histórico e texto longo, que é
+// justamente o caso em que o sistema de design admite modal ancorado em vez
+// de inline. A memória é a MESMA da pessoa no Banco de Talentos — segue o
+// ciclo de vida.
+function MemoriaColaborador({ id, nome }) {
   const [aberto, setAberto] = useState(false)
   return (
     <div className="rh-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     flexWrap: 'wrap', gap: '.5rem' }}>
         <strong>🗒️ Anotações e tags</strong>
-        <button className="btn-link" onClick={() => setAberto((v) => !v)}>
-          {aberto ? 'ocultar' : 'ver / adicionar'}</button>
+        <button className="btn-link" onClick={() => setAberto(true)}>ver / adicionar</button>
       </div>
-      {aberto && <div style={{ marginTop: '.6rem' }}>
-        <MemoriaPessoa pessoa={{ candidato_id: id }} /></div>}
+      {aberto && (
+        <Modal titulo={`🗒️ Anotações — ${nome}`} aoFechar={() => setAberto(false)}>
+          <MemoriaPessoa pessoa={{ candidato_id: id }} />
+        </Modal>
+      )}
     </div>
   )
 }
@@ -901,7 +907,7 @@ export default function Detalhe({ id, aoVoltar }) {
 
       {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
           Talentos. Recolhível para não poluir a ficha. */}
-      <MemoriaColaborador id={id} />
+      <MemoriaColaborador id={id} nome={dados.nome_completo} />
 
       {/* Informativo de integração: só vai ao candidato assinar após o RH liberar. */}
       <PainelInformativo id={id} setMsg={setMsg} />

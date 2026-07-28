@@ -32,9 +32,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [busca, setBusca] = useState('')
   const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState(null)
-  const [aviso, setAviso] = useState(null)
   const timer = useRef(null)
-  const inputArquivo = useRef(null)
 
   const carregar = (f = {}) => {
     api.colaboradores({
@@ -52,28 +50,6 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     setBusca(texto)
     clearTimeout(timer.current)
     timer.current = setTimeout(() => carregar({ busca: texto }), 400)
-  }
-
-  const importar = async (arquivo) => {
-    if (!arquivo) return
-    setErro(null); setAviso(null)
-    try {
-      const r = await comAmpulheta('Importando a base de colaboradores…',
-                                   () => api.importarColaboradores(arquivo))
-      setAviso(`Importação concluída: ${r.criados} novo(s), ${r.atualizados} atualizado(s)`
-        + (r.sem_cpf ? `, ${r.sem_cpf} linha(s) sem CPF ignorada(s)` : '')
-        + `. Base total: ${r.total_base}.`)
-      carregar()
-      api.postos().then((rp) => setPostos(rp.postos || [])).catch(() => {})
-    } catch (e) {
-      setErro(e.detail === 'sem_coluna_cpf'
-        ? 'A planilha precisa de uma coluna "CPF". Confira o arquivo do Tirvu.'
-        : e.detail === 'arquivo_invalido' || e.detail === 'planilha_vazia'
-        ? 'Arquivo inválido ou vazio. Exporte novamente do Tirvu em .xlsx.'
-        : 'A importação falhou. Tente novamente — se persistir, veja a auditoria.')
-    } finally {
-      if (inputArquivo.current) inputArquivo.current.value = ''
-    }
   }
 
   const exportar = async () => {
@@ -333,10 +309,6 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>👥 Colaboradores</h1>
         <div style={{ display: 'flex', gap: '.5rem' }}>
-          <input ref={inputArquivo} type="file" accept=".xlsx" hidden
-                 onChange={(e) => importar(e.target.files?.[0])} />
-          <button className="btn-secundario btn-mini"
-                  onClick={() => inputArquivo.current?.click()}>⬆ Importar base</button>
           <button className="btn-secundario btn-mini" disabled={!lista?.length}
                   title="Planilha no layout de importação de admissões do Tirvu (28 colunas)"
                   onClick={exportarTirvu}>⬆ Exportar p/ Tirvu</button>
@@ -344,9 +316,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                   onClick={exportar}>{exportando ? 'Gerando…' : '⬇ Exportar Excel'}</button>
         </div>
       </header>
-      <p className="explica">Importe a base ativa do <strong>Tirvu (.xlsx)</strong> — a importação é
-        <strong> por CPF</strong> (rodar de novo atualiza, não duplica). Clique nos cards para filtrar;
-        ordene e filtre por qualquer coluna. Contém dados pessoais e de saúde — trate conforme a LGPD.</p>
+      <p className="explica">Clique nos cards para filtrar; ordene e filtre por qualquer coluna.
+        Contém dados pessoais e de saúde — trate conforme a LGPD. Para importar a base do Tirvu em
+        massa, veja <strong>Configurações → 📥 Importações</strong>.</p>
 
       {/* filtros de topo SERVER-SIDE (recarregam a base) */}
       <div className="rh-card rh-lote">
@@ -363,8 +335,6 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       </div>
 
       {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
-      {aviso && <div className="alerta" style={{ borderColor: 'var(--verde)',
-                     background: 'var(--verde-suave)', color: 'var(--verde-escuro)' }}>{aviso}</div>}
       {erro && <div className="alerta">{erro}</div>}
 
       {!lista ? <p>Carregando…</p> : (

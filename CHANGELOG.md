@@ -11,6 +11,42 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.97.0] — 2026-07-28 — Onda B: 16ª leva de feedbacks (3 itens)
+
+### Adicionado
+- **URL própria para cada tela do painel do RH** (react-router estava
+  instalado mas nunca usado dentro de `/rh/*`): menu lateral agora usa
+  `<NavLink>` (`/rh/colaboradores`, `/rh/config`…) e cada pessoa aberta ganha
+  `/rh/candidato/<id>`. Isso resolve de graça o que o botão direito não
+  oferecia — Ctrl+clique e "abrir em nova aba" funcionam porque o React
+  Router intercepta só o clique simples. F5 na ficha de alguém mantém a
+  mesma tela (antes sempre voltava para Admissões).
+- **Modal (primeiro do projeto) para as anotações do mini-CRM**: o inline
+  dentro da linha da tabela estava espremido (rolava na horizontal) — o
+  sistema de design (`08-sistema-de-design.md`) foi revisado no *princípio*,
+  não ganhou uma exceção: "editar perto do item" agora admite inline **ou**
+  modal ancorado (quando há anexo + histórico + texto longo). O modal
+  reaproveita o padrão de fechar do `SelectBusca` (clique fora, Escape),
+  mostra o nome da pessoa no cabeçalho, e tem foco preso.
+  - **Editar anotação** (antes só criar/excluir): `PATCH
+    /rh/crm/anotacoes/{id}`. O autor original nunca é sobrescrito — grava-se
+    o editor e a data à parte (`editado_por`/`editado_quando`).
+- **Central de Importações** (Configurações → 📥 Importações): os 6 uploads
+  de planilha do RH (Colaboradores, Postos, Jornadas ×2, Talentos, Ponto)
+  saíram das telas de origem e agora vivem só aqui, com instruções e o que
+  acontece com duplicados — nenhuma lógica de importação foi duplicada, só a
+  UI foi centralizada. As telas de origem ganharam um link de cortesia. A
+  Incidência de Benefícios (fluxo de 2 passos com decisões linha a linha) e a
+  padronização de cargos/jornadas por texto colado continuam em tela própria
+  — a central aponta para elas, não as reimplementa.
+
+### Técnico
+- `frontend/src/Modal.jsx`, `frontend/src/rh/Importacoes.jsx`.
+- Migration `b3c4d5e6f7a8`: `crm_anotacao.editado_em`/`editor_nome`.
+- Testado manualmente com Playwright contra ambiente efêmero: navegação por
+  URL, F5 na ficha, modal (criar/editar/fechar por Escape e clique fora), e
+  upload real de planilha de Postos pela central nova (118 postos criados).
+
 ## [1.96.0] — 2026-07-27 — Onda A: 16ª leva de feedbacks (3 itens)
 
 Roadmap completo e revisão adversária (party-mode) em

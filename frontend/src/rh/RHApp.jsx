@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { fmtData, fmtTelefone } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
@@ -258,9 +259,12 @@ const GRUPOS = [
   ]],
 ]
 
-function Sidebar({ pagina, navegar, aoSair }) {
+// Menu com URL própria por tela (feedback 2026-07-27: "gostaria de abrir as
+// coisas em outra aba" — sem <Link>/<NavLink> o navegador não tem link
+// nenhum para oferecer no botão direito). Ctrl+clique e "abrir em nova aba"
+// passam a funcionar de graça: o React Router intercepta só o clique simples.
+function Sidebar({ aoSair }) {
   const [movelAberto, setMovelAberto] = useState(false)
-  const irPara = (fn) => { fn(); setMovelAberto(false) }
   const nome = localStorage.getItem('rh_nome') || ''
   return (
     <>
@@ -282,11 +286,12 @@ function Sidebar({ pagina, navegar, aoSair }) {
             <div className="rh-sidebar-grupo" key={titulo}>
               <span className="rh-sidebar-grupo-titulo">{titulo}</span>
               {itens.map(([id, icone, rotulo]) => (
-                <button key={id} className={`rh-sidebar-item ${pagina === id ? 'ativo' : ''}`}
-                        onClick={() => irPara(() => navegar(id))}>
+                <NavLink key={id} to={id === 'inicio' ? '/rh' : `/rh/${id}`} end
+                         className={({ isActive }) => `rh-sidebar-item ${isActive ? 'ativo' : ''}`}
+                         onClick={() => setMovelAberto(false)}>
                   <span className="rh-sidebar-icone">{icone}</span>
                   <span>{rotulo}</span>
-                </button>
+                </NavLink>
               ))}
             </div>
           ))}
@@ -303,16 +308,35 @@ function Sidebar({ pagina, navegar, aoSair }) {
   )
 }
 
+// Splat /rh/* reservado em App.jsx: cada tela do menu ganha URL própria
+// (/rh/colaboradores, /rh/config…) e a pessoa aberta também (/rh/candidato/:id)
+// — antes tudo era um único useState('inicio'), então botão direito não tinha
+// link pra oferecer, F5 sempre voltava para Admissões, e não dava pra abrir
+// duas pessoas em duas abas (feedback 2026-07-27).
 function Painel({ aoSair }) {
+  return (
+    <Routes>
+      <Route path="candidato/:id" element={<PainelConteudo aoSair={aoSair} />} />
+      <Route path=":pagina" element={<PainelConteudo aoSair={aoSair} />} />
+      <Route path="" element={<PainelConteudo aoSair={aoSair} />} />
+    </Routes>
+  )
+}
+
+function PainelConteudo({ aoSair }) {
+  const navigate = useNavigate()
+  const { pagina: paginaUrl, id: candidatoUrl } = useParams()
+  const pagina = paginaUrl || 'inicio'
+  // A URL é a fonte de verdade de qual pessoa está aberta — nada de estado
+  // local duplicado (navegação direta, Voltar do navegador, tudo bate certo).
+  const selecionado = candidatoUrl || null
   const [candidatos, setCandidatos] = useState(null)
   const [metricas, setMetricas] = useState(null)
-  const [selecionado, setSelecionado] = useState(null)
   const [novo, setNovo] = useState(null) // form de novo candidato
   const [postos, setPostos] = useState([])
   const [convite, setConvite] = useState(null)
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
-  const [pagina, setPagina] = useState('inicio') // inicio | colaboradores | config…
   const [filtros, setFiltros] = useState({ status: '', busca: '', posto_id: '' })
 
   const recarregar = (f = filtros) => {
@@ -354,20 +378,20 @@ function Painel({ aoSair }) {
     api.jornadas(novo.posto_id || null).then(setJornadasConvite).catch(() => setJornadasConvite([]))
   }, [novo?.posto_id, novo === null])
 
-  const navegar = (destino) => {
-    setPagina(destino)
-    setSelecionado(null)
-    if (destino === 'inicio') recarregar()
-  }
+  // aoAbrir/aoAbrirPessoa das telas filhas navegam para a URL da pessoa —
+  // Ctrl+clique não se aplica aqui (é callback, não <a>), mas o histórico e o
+  // F5 passam a funcionar, e a URL fica compartilhável.
+  const navegar = (destino) => navigate(destino === 'inicio' ? '/rh' : `/rh/${destino}`)
+  const abrirPessoa = (id) => navigate(`/rh/candidato/${id}`)
+  const voltarDaPessoa = () => { navigate('/rh'); recarregar() }
 
   return (
     <div className="rh-layout">
-      <Sidebar pagina={pagina} navegar={navegar} aoSair={aoSair} />
+      <Sidebar aoSair={aoSair} />
       <div className="rh-conteudo">
         {pagina === 'config' && <Config aoVoltar={() => navegar('inicio')} />}
         {pagina === 'colaboradores' && (
-          <Colaboradores aoVoltar={() => navegar('inicio')}
-                         aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
+          <Colaboradores aoVoltar={() => navegar('inicio')} aoAbrir={abrirPessoa} />
         )}
         {pagina === 'postos' && <PostosRH />}
         {pagina === 'jornadas' && <JornadasRH aoVoltar={() => navegar('inicio')} />}
@@ -375,20 +399,13 @@ function Painel({ aoSair }) {
         {pagina === 'desenvolvimento' && <DesenvolvimentoRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'desempenho' && <DesempenhoRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'avaliacoes' && <AvaliacoesRH aoVoltar={() => navegar('inicio')} />}
-        {pagina === 'testagem' && (
-          <TestagemRH aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
-        )}
+        {pagina === 'testagem' && <TestagemRH aoAbrirPessoa={abrirPessoa} />}
         {pagina === 'arquivo' && <Arquivo />}
         {pagina === 'modelos' && <Modelos />}
-        {pagina === 'assinaturas' && (
-          <Assinaturas aoAbrirPessoa={(id) => { setPagina('inicio'); setSelecionado(id) }} />
-        )}
-        {pagina === 'talentos' && (
-          <TalentosRH aoAbrir={(id) => { setPagina('inicio'); setSelecionado(id) }} />
-        )}
-        {pagina === 'inicio' && selecionado && (
-          <Detalhe id={selecionado}
-                   aoVoltar={() => { setSelecionado(null); recarregar() }} />
+        {pagina === 'assinaturas' && <Assinaturas aoAbrirPessoa={abrirPessoa} />}
+        {pagina === 'talentos' && <TalentosRH aoAbrir={abrirPessoa} />}
+        {selecionado && (
+          <Detalhe id={selecionado} aoVoltar={voltarDaPessoa} />
         )}
         {pagina === 'inicio' && !selecionado && (
     <main className="rh-painel">
@@ -586,7 +603,7 @@ function Painel({ aoSair }) {
       {!candidatos ? <p>Carregando…</p> : (
         <DashPlanilha id="admissoes" colunas={COLUNAS_ADMISSAO()}
                       dados={candidatos} cards={cardsAdmissao(candidatos, metricas)}
-                      acoesLinha={(c) => acoesAdmissao(c, setSelecionado)}
+                      acoesLinha={(c) => acoesAdmissao(c, abrirPessoa)}
                       vazio={(filtros.busca || filtros.status || filtros.posto_id)
                         ? 'Nenhuma admissão com esses filtros.'
                         : 'Nenhum candidato ainda. Toque em "+ Novo candidato" para enviar o primeiro convite.'} />

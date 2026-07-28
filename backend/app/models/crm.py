@@ -79,3 +79,7 @@ class Anotacao(Base):
     anexo_nome: Mapped[str | None] = mapped_column(String(200))
     anexo_tipo: Mapped[str | None] = mapped_column(String(100))   # content-type
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Edição (v1.97, feedback 2026-07-27): o AUTOR original (acima) NUNCA é
+    # sobrescrito por quem editou depois — registra-se o editor à parte.
+    editado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    editor_nome: Mapped[str | None] = mapped_column(String(200))   # SNAPSHOT do editor

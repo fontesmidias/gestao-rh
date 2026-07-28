@@ -145,19 +145,34 @@ Abrir um `<select>` nativo E um dropdown customizado (`.select-busca`) no escuro
 
 Regra de negócio de UX, decidida com o Bruno e repetida em várias levas:
 **quando a pessoa clica para editar/detalhar algo numa lista, o formulário abre
-NA PRÓPRIA LINHA, logo abaixo do item — nunca no topo da página.** Abrir no topo
-tira a pessoa do contexto: ela clicou no fulano lá embaixo e a tela pula pro
-começo.
+PERTO DO ITEM — nunca no topo da página.** Abrir no topo tira a pessoa do
+contexto: ela clicou no fulano lá embaixo e a tela pula pro começo.
 
-- Em listas com [`DashPlanilha`](../../frontend/src/rh/DashPlanilha.jsx): use a
-  prop `linhaExpandida` — o painel abre numa `<tr>` logo abaixo da linha clicada
-  (padrão desde v1.83).
+**"Perto do item" admite DUAS formas** (revisado em v1.97, feedback
+2026-07-27 — anotações do CRM):
+
+1. **Inline, na própria linha** — a forma padrão, para conteúdo **curto** que
+   cabe numa linha de tabela ou card. Em listas com
+   [`DashPlanilha`](../../frontend/src/rh/DashPlanilha.jsx): use a prop
+   `linhaExpandida` — o painel abre numa `<tr>` logo abaixo da linha clicada
+   (padrão desde v1.83). Catálogos que são cards empilhados (não tabela): o
+   form inline abre junto do card sendo editado.
+2. **Modal ANCORADO** ([`Modal.jsx`](../../frontend/src/Modal.jsx)) — quando o
+   conteúdo tem **anexo + histórico + texto longo**, que não cabe espremido
+   numa linha (ex.: anotações do mini-CRM, que rolavam na horizontal dentro da
+   tabela). O modal mostra o nome da pessoa/item no cabeçalho — não perde o
+   contexto, só ganha espaço. **Continua proibido** o formulário solto no topo
+   da página, sem âncora nenhuma ao item.
+
+Critério de escolha: se o conteúdo cabe numa linha sem rolagem, é inline. Se
+tem anexo, histórico de itens, ou texto que precisa de `<textarea>` maior, é
+modal. Na dúvida, comece inline — só migre para modal se o inline atual
+estiver comprovadamente ruim (espremido, rolando, difícil de usar).
+
 - **Criar registro novo** também deve abrir perto do gatilho, não no topo
   distante. Se o botão "＋ Novo" está acima da tabela, o form pode abrir ali
   colado ao botão — o que não pode é o form aparecer no topo enquanto a pessoa
   rolou a lista pra baixo.
-- Catálogos que são cards empilhados (não tabela): o form inline abre junto do
-  card sendo editado.
 
 Abas ativas usam a classe **`ativa`** (não `on`, não `active`).
 
@@ -259,7 +274,7 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Zero `style={{ margin/padding/... }}` inline de espaçamento — usei tokens.
 - [ ] Zero `#hex` no JSX — usei tokens de cor semânticos.
 - [ ] Lista é `DashPlanilha`, não `<table>` à mão.
-- [ ] Editar/criar abre **perto do item**, não no topo.
+- [ ] Editar/criar abre **perto do item** — inline ou modal ancorado — nunca solto no topo.
 - [ ] Nada estoura a tela na horizontal (testei numa largura de celular).
 - [ ] Tudo que abre, fecha (toggle).
 - [ ] Testei no **tema escuro**, inclusive abrindo um `<select>`.
