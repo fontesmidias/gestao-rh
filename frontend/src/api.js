@@ -587,6 +587,18 @@ export const rh = {
     req(`/rh/minutario/modelos/${id}`, { method: 'DELETE', headers: authRH() }),
   minutarioCompor: (dados) =>
     req('/rh/minutario/compor', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // Match de Vagas × Banco de Talentos (v1.99)
+  vagas: (incluirInativas) =>
+    req(`/rh/vagas${incluirInativas ? '?incluir_inativas=true' : ''}`, { headers: authRH() }),
+  criarVaga: (dados) =>
+    req('/rh/vagas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarVaga: (id, dados) =>
+    req(`/rh/vagas/${id}`, { method: 'PATCH', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirVaga: (id) =>
+    req(`/rh/vagas/${id}`, { method: 'DELETE', headers: authRH() }),
+  ranquearVaga: (id, talentoIds = []) =>
+    req(`/rh/vagas/${id}/ranquear`, { method: 'POST', headers: authRH(),
+                                      body: JSON.stringify({ talento_ids: talentoIds }) }),
   verSmtp: () => req('/rh/config/smtp', { headers: authRH() }),
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

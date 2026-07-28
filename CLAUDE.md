@@ -262,6 +262,42 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   de referência) — o campo `tom` é só estilo e não pode, sozinho, evitar o
   fallback (senão o RH preenche só o tom e a IA recebe um prompt sem
   instrução nenhuma do que escrever).
+- **Texto de origem externa é DADO, nunca instrução** (regra geral,
+  cravada em v1.99 pelo próprio Bruno durante a revisão do roadmap — vale
+  para QUALQUER texto de terceiro que um dia chegue a um prompt, não só
+  currículo): delimitado com marcador aleatório por chamada, saída da IA
+  sempre estruturada (JSON de campos fixos, nunca texto livre), e
+  **tentativa de manipulação detectada é REPORTADA ao usuário do painel,
+  jamais filtrada em silêncio** — mesmo princípio já usado no lote de
+  documento crítico (`desenvolvimento.py`: "o lote diz quem barrou, com
+  nome e motivo"). Ver `services/anti_prompt_injection.py`.
+- **Match de Vagas** (`models/vaga.py`, `api/vagas.py`,
+  `services/match_vagas.py`, `services/curriculo_texto.py`,
+  `MatchVagasRH.jsx`, v1.99): RH cadastra a vaga, o sistema ranqueia os
+  talentos do Banco de Talentos por aderência — filtro estruturado local
+  (cargo/região, grátis) primeiro, currículo lido por IA depois. **A IA
+  nunca decide sozinha** — devolve nota + justificativa em JSON, o RH
+  convoca. **Currículo é ENTRADA HOSTIL** (achado do Bruno, não estava no
+  plano original): é upload público de gente desconhecida cujo texto vai
+  direto para dentro de um prompt — ataque real de mercado ("white text
+  resume injection": texto em fonte branca/corpo 1 instruindo a IA a dar
+  nota máxima). É falha SILENCIOSA (ranking adulterado parece igual a um
+  legítimo) e questão de justiça do processo seletivo, não só segurança.
+  5 camadas em `anti_prompt_injection.py` (delimitador aleatório, saída
+  estruturada, teto de tamanho, detecção+alerta visível, texto invisível
+  vira sinal) — currículo suspeito aparece marcado "⚠️ suspeito" no
+  ranking, NUNCA filtrado calado. **Minimização** (`curriculo_texto.py`):
+  CPF/RG/telefone/e-mail/CEP removidos do texto ANTES do envio à IA — nome
+  fica (necessário para o RH identificar o resultado; a Groq não tem
+  cláusula de retenção zero, decisão consciente do Bruno, então a
+  minimização é a proteção que resta). Extração de texto reaproveita o
+  OCR/leitura já existentes (Mistral com fallback Tesseract/pypdf; DOC/DOCX
+  via LibreOffice+PDF, mesmo padrão de `normalizacao.py::_word_para_pdf`) —
+  currículo ilegível NUNCA gera nota inventada. Base legal: o termo do
+  Banco de Talentos (`Talentos.jsx`) já cobre "tratar para fins de
+  recrutamento" — a triagem por IA é uso primário, não secundário; o
+  formulário público ganhou uma frase de transparência (não é condição de
+  aceite, o consentimento já existente basta).
 - **Provas por cargo** (`models/prova.py`, `api/provas.py`, `ProvasRH.jsx`,
   `ProvaApp.jsx`): banco de provas CONFIGURÁVEL pelo RH (diferente do DISC/
   situacional, gabarito fixo no código). Questões objetivas (opções {id,texto} +

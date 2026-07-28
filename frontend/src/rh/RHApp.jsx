@@ -21,6 +21,7 @@ import Arquivo from './Arquivo.jsx'
 import Modelos from './Modelos.jsx'
 import Assinaturas from './Assinaturas.jsx'
 import MinutarioRH from './MinutarioRH.jsx'
+import MatchVagasRH from './MatchVagasRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -255,6 +256,7 @@ const GRUPOS = [
   ['Recrutamento', [
     ['talentos', '🎯', 'Banco de Talentos'],
     ['minutario', '💬', 'Minutário de Mensagens'],
+    ['match-vagas', '🧩', 'Match de Vagas'],
   ]],
   ['Sistema', [
     ['config', '⚙️', 'Configurações'],
@@ -407,6 +409,7 @@ function PainelConteudo({ aoSair }) {
         {pagina === 'assinaturas' && <Assinaturas aoAbrirPessoa={abrirPessoa} />}
         {pagina === 'talentos' && <TalentosRH aoAbrir={abrirPessoa} />}
         {pagina === 'minutario' && <MinutarioRH />}
+        {pagina === 'match-vagas' && <MatchVagasRH />}
         {selecionado && (
           <Detalhe id={selecionado} aoVoltar={voltarDaPessoa} />
         )}

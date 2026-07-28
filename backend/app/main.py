@@ -38,6 +38,7 @@ from app.api.marca import router as marca_router
 from app.api.organizacao import router as organizacao_router
 from app.api.rh_ficha import router as rh_ficha_router
 from app.api.minutario import router as minutario_router
+from app.api.vagas import router as vagas_router
 from app.api.health import router as health_router
 from app.core.bootstrap import criar_admin_inicial
 from app.core.config import get_settings, ip_do_cliente
@@ -156,3 +157,4 @@ app.include_router(autorizacao_equipe_router, prefix="/api")
 app.include_router(marca_router, prefix="/api")
 app.include_router(organizacao_router, prefix="/api")
 app.include_router(minutario_router, prefix="/api")
+app.include_router(vagas_router, prefix="/api")
