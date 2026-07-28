@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import ip_do_cliente
+from app.core.config import base_url_publica, get_settings, ip_do_cliente
 from app.core.db import get_db
 from app.models.candidato import Candidato, PostoServico
 from app.models.desenvolvimento import (AcessoPortal, ArquivoDesenvolvimento,
@@ -90,36 +90,75 @@ def _sessao(db: Session, token: str) -> tuple[AcessoPortal, Candidato]:
 # ---------------------------------------------------------------------------
 
 
+@router.get("/portal/retomar/{token}")
+def retomar(token: str, db: Session = Depends(get_db)) -> dict:
+    """De quem é a tentativa por trás do `?t=` — sem autenticar (ver a gêmea em
+    ``creche_publico.retomar``, mesma regra: o link identifica, o código
+    autentica). Devolve só primeiro nome e 4 últimos dígitos do CPF."""
+    ac = db.scalar(select(AcessoPortal).where(AcessoPortal.token_hash == _hash(token)))
+    if ac is None or ac.expira_em < datetime.now(timezone.utc):
+        raise HTTPException(status_code=404, detail="link_expirado")
+    col = db.get(Candidato, ac.candidato_id)
+    if col is None:
+        raise HTTPException(status_code=404, detail="link_expirado")
+    nome = (col.nome_completo or "").split()
+    return {
+        "primeiro_nome": nome[0].title() if nome else "",
+        "cpf_final": _digitos(col.cpf or "")[-4:],
+        "pode_entrar": ac.confirmado_em is not None,
+        "aguardando_codigo": ac.confirmado_em is None,
+    }
+
+
 class IniciarIn(BaseModel):
     cpf: str
 
 
-def _gerar_e_enviar_codigo(db: Session, col: Candidato, email: str) -> None:
+def _gerar_e_enviar_codigo(db: Session, col: Candidato, email: str,
+                           base_url: str | None = None) -> None:
+    """Código 2FA + token de RETOMADA no mesmo e-mail (feedback 2026-07-28).
+
+    Mesma correção do creche: o `token_hash` nascia com um placeholder e o
+    token real só existia depois de acertar o código, então sair do webview do
+    app de e-mail para ler o código zerava a tentativa. O link do e-mail agora
+    identifica a pessoa desde o envio — mas quem autentica continua sendo o
+    código (ver ``retomar``).
+    """
     codigo = f"{secrets.randbelow(10**6):06d}"
+    token = secrets.token_urlsafe(32)
     db.add(AcessoPortal(
         candidato_id=col.id,
-        token_hash=_hash(secrets.token_urlsafe(32)),  # placeholder até confirmar
+        token_hash=_hash(token),
         codigo_hash=_hash(codigo),
         codigo_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
         expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H)))
     registrar(db, "portal_codigo_enviado", ator="colaborador", candidato_id=col.id)
     db.commit()
-    _enviar_codigo(email, col.nome_completo, codigo)
+    url = f"{base_url or get_settings().base_url}/meu?t={token}"
+    _enviar_codigo(email, col.nome_completo, codigo, url)
 
 
-def _enviar_codigo(email: str, nome: str, codigo: str) -> None:
+def _enviar_codigo(email: str, nome: str, codigo: str, url: str | None = None) -> None:
     from app.services.email import enviar_email, html_moderno
     primeiro = (nome or "").split()[0].title() if nome else ""
+    volte = ("Terminou de ler? Toque no link abaixo para voltar e digitar o "
+             f"código:\n{url}\n\n" if url else "")
     enviar_email(
         email, "Green House — seu código de acesso",
-        f"Olá, {primeiro}!\n\nSeu código de acesso é {codigo}.\n"
-        f"Ele vale por {CODIGO_TTL_MIN} minutos.\n\n"
+        f"Olá, {primeiro}!\n\nSeu código de acesso é {codigo}.\n\n"
+        + volte
+        + f"Ele vale por {CODIGO_TTL_MIN} minutos.\n\n"
         "Se não foi você que pediu, ignore este e-mail.\n",
         html_moderno("Seu código de acesso",
                      [f"Olá, <strong>{primeiro}</strong>!",
                       "Use o código abaixo para entrar no seu portal.",
+                      "Anote o código e toque no botão para voltar e digitá-lo."
+                      if url else
+                      f"O código vale por {CODIGO_TTL_MIN} minutos.",
                       f"O código vale por {CODIGO_TTL_MIN} minutos."],
-                     destaque=codigo))
+                     destaque=codigo,
+                     botao_texto="Voltar e digitar o código" if url else None,
+                     botao_url=url))
 
 
 @router.post("/portal/iniciar")
@@ -135,7 +174,7 @@ def iniciar(payload: IniciarIn, request: Request, db: Session = Depends(get_db))
 
     col = _colaborador_por_cpf(db, cpf)
     if col is not None and col.email:
-        _gerar_e_enviar_codigo(db, col, col.email)
+        _gerar_e_enviar_codigo(db, col, col.email, base_url_publica(request))
 
     return {
         "pode_verificar_identidade": True,
@@ -146,16 +185,28 @@ def iniciar(payload: IniciarIn, request: Request, db: Session = Depends(get_db))
 
 
 class ConfirmarIn(BaseModel):
-    cpf: str
+    cpf: str | None = None
     codigo: str
+    # token do link do e-mail: quem voltou por ele não redigita o CPF
+    retomada: str | None = None
 
 
 @router.post("/portal/confirmar")
 def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
     from app.services.limite import exigir
-    cpf = _digitos(payload.cpf)
+    cpf = _digitos(payload.cpf or "")
+    col = None
+    if payload.retomada:
+        # Identifica a tentativa; quem autentica continua sendo o código.
+        ac_ret = db.scalar(select(AcessoPortal)
+                           .where(AcessoPortal.token_hash == _hash(payload.retomada)))
+        if ac_ret is not None and ac_ret.expira_em >= datetime.now(timezone.utc):
+            col = db.get(Candidato, ac_ret.candidato_id)
+            if col is not None:
+                cpf = _digitos(col.cpf or "") or cpf
     exigir(f"portal-2fa:cpf:{cpf}", maximo=10, janela_s=900)
-    col = _colaborador_por_cpf(db, cpf)
+    if col is None:
+        col = _colaborador_por_cpf(db, cpf)
     if col is None:
         raise HTTPException(status_code=422, detail="codigo_invalido")
     ac = db.scalars(
@@ -232,7 +283,8 @@ class KbaEmailIn(BaseModel):
 
 
 @router.post("/portal/kba/definir-email")
-def kba_definir_email(payload: KbaEmailIn, db: Session = Depends(get_db)) -> dict:
+def kba_definir_email(payload: KbaEmailIn, request: Request,
+                      db: Session = Depends(get_db)) -> dict:
     """Com a identidade provada, cadastra/atualiza o e-mail e manda o código."""
     try:
         dados = kba.serializer(KBA_SALT).loads(payload.autorizacao,
@@ -253,7 +305,7 @@ def kba_definir_email(payload: KbaEmailIn, db: Session = Depends(get_db)) -> dic
     registrar(db, "portal_email_cadastrado", ator="colaborador", candidato_id=col.id,
               detalhe={"via": "kba"})
     db.commit()
-    _gerar_e_enviar_codigo(db, col, email)
+    _gerar_e_enviar_codigo(db, col, email, base_url_publica(request))
     return {"enviado": True}
 
 

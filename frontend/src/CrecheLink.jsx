@@ -9,20 +9,47 @@ import logo from './assets/logo.png'
 // Quem não tem e-mail cadastrado: CPF -> verificar identidade (KBA) -> cadastrar
 // e-mail -> código 2FA. A resposta do /iniciar nunca revela se o CPF é da base.
 export default function CrecheLink() {
-  // ?t=<token> no link do e-mail de devolução (v1.82): o RH devolveu para
-  // correção e o e-mail já é comprovado, então entra direto — sem refazer o
-  // 2FA. O token vale 7 dias e é derrubado se o RH devolver de novo.
+  // ?t=<token> tem DOIS usos (v2.03):
+  // 1. e-mail de devolução (v1.82): o RH devolveu para correção, o e-mail já é
+  //    comprovado, então entra direto — o backend nasce com confirmado_em.
+  // 2. e-mail do CÓDIGO: o link identifica quem é, mas NÃO autentica — a pessoa
+  //    volta por ele depois de sair para ler o código (o app de e-mail abre o
+  //    site numa janela que morre ao trocar de tela) e só precisa digitar o
+  //    código, sem recomeçar do CPF.
+  // Quem manda é o `pode_entrar` do backend, não o front.
   const tokenUrl = new URLSearchParams(window.location.search).get('t')
-  const [etapa, setEtapa] = useState(tokenUrl ? 'sessao' : 'cpf') // cpf | codigo | kba | sessao | enviado
+  const [etapa, setEtapa] = useState(tokenUrl ? 'retomando' : 'cpf') // cpf | codigo | kba | sessao | enviado | retomando
   const [cpf, setCpf] = useState('')
   const [codigo, setCodigo] = useState('')
-  const [token, setToken] = useState(tokenUrl || null)
+  const [token, setToken] = useState(null)
+  const [retomada, setRetomada] = useState(null) // {primeiro_nome, cpf_final}
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(false)
 
-  // tira o token da barra de endereço (histórico, print, ombro do colega)
+  // Resolve o ?t= no backend. O token NÃO fica na barra de endereço depois de
+  // usado (histórico, print, ombro do colega), mas só limpamos DEPOIS de saber
+  // o que ele é — antes, apagar a URL era o que impedia o botão "voltar" de
+  // recuperar a tentativa.
   useEffect(() => {
-    if (tokenUrl) window.history.replaceState({}, '', window.location.pathname)
+    if (!tokenUrl) return
+    let vivo = true
+    ;(async () => {
+      try {
+        const r = await api.retomar(tokenUrl)
+        if (!vivo) return
+        setRetomada(r)
+        if (r.pode_entrar) { setToken(tokenUrl); setEtapa('sessao') }
+        else setEtapa('codigo')
+      } catch {
+        if (!vivo) return
+        // link vencido/desconhecido cai na entrada normal, nunca em tela morta
+        setEtapa('cpf')
+        setErro('Esse link expirou. Informe seu CPF para receber um novo código.')
+      } finally {
+        if (vivo) window.history.replaceState({}, '', window.location.pathname)
+      }
+    })()
+    return () => { vivo = false }
   }, [])
 
   const iniciar = async (e) => {
@@ -39,7 +66,9 @@ export default function CrecheLink() {
   const confirmar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
     try {
-      const r = await api.confirmar(cpf, codigo)
+      // Quem chegou pelo link do e-mail não digitou o CPF nesta tela — o
+      // backend reconhece o token e devolve o CPF por ele.
+      const r = await api.confirmar(cpf, codigo, tokenUrl || undefined)
       setToken(r.token); setEtapa('sessao')
     } catch (err) {
       setErro(err.detail === 'codigo_invalido'
@@ -71,11 +100,25 @@ export default function CrecheLink() {
         </form>
       )}
 
+      {etapa === 'retomando' && (
+        <div className="rh-card creche-card centro">
+          <p className="explica">Um instante — estamos reconhecendo o seu link…</p>
+        </div>
+      )}
+
       {etapa === 'codigo' && (
         <form className="rh-card creche-card" onSubmit={confirmar}>
           <h2>Digite o código</h2>
-          <p className="explica">Enviamos um código de 6 dígitos ao seu e-mail. <strong>Verifique também
-            a caixa de spam</strong> — às vezes a mensagem vai para lá.</p>
+          {retomada ? (
+            <p className="explica">Bem-vindo de volta, <strong>{retomada.primeiro_nome}</strong>!
+              Enviamos um código de 6 dígitos para o e-mail do CPF terminado em
+              {' '}<strong>{retomada.cpf_final}</strong>. <strong>Verifique também a caixa de
+              spam</strong>. Se precisar sair para ler o código, volte por este mesmo link
+              do e-mail — você não perde o que já fez.</p>
+          ) : (
+            <p className="explica">Enviamos um código de 6 dígitos ao seu e-mail. <strong>Verifique também
+              a caixa de spam</strong> — às vezes a mensagem vai para lá.</p>
+          )}
           <label className="campo"><span className="rotulo">Código de confirmação</span>
             <input inputMode="numeric" maxLength={6} placeholder="000000" value={codigo} autoFocus
                    style={{ letterSpacing: '.4em', textAlign: 'center', fontSize: '1.4rem' }}
@@ -83,11 +126,14 @@ export default function CrecheLink() {
           {erro && <div className="alerta">{erro}</div>}
           <button className="btn-principal" disabled={carregando || codigo.length < 6}>
             {carregando ? 'Confirmando…' : 'Confirmar'}</button>
+          {/* A KBA precisa do CPF digitado; quem entrou pelo link não digitou
+              (só temos os 4 últimos dígitos), então o caminho é informar o CPF. */}
           <button type="button" className="btn-link"
-                  onClick={() => { setEtapa('kba'); setErro(null) }}>
+                  onClick={() => { setErro(null); setEtapa(cpf ? 'kba' : 'cpf') }}>
             Não recebi o código / não tenho e-mail cadastrado</button>
-          <button type="button" className="btn-link" onClick={() => { setEtapa('cpf'); setCodigo('') }}>
-            ← voltar</button>
+          <button type="button" className="btn-link"
+                  onClick={() => { setEtapa('cpf'); setCodigo(''); setRetomada(null) }}>
+            ← informar outro CPF</button>
         </form>
       )}
 
