@@ -19,6 +19,7 @@ from app.services import storage
 from app.services.auditoria import registrar
 from app.services.dossie import DossieIncompleto, gerar_dossie
 from app.services.email import enviar_email, html_moderno
+from app.services.magic_link import emitir_link
 
 router = APIRouter(tags=["revisao-rh"], dependencies=[Depends(requer_rh)])
 
@@ -300,7 +301,8 @@ class LoteRejeitarIn(BaseModel):
 
 
 @router.post("/rh/slots/lote/rejeitar")
-def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
+def rejeitar_lote(payload: LoteRejeitarIn, request: Request,
+                  db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """Rejeita vários documentos; o candidato recebe UM e-mail listando tudo."""
     rejeitados_por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
@@ -328,6 +330,9 @@ def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
             candidato.status = StatusCandidato.docs_pendentes
         total += len(slots)
         lista = "\n".join(f"  - {s.tipo.value.replace('_', ' ')}" for s in slots)
+        # Um link NOVO por candidato (ver comentário em ``rejeitar``): o e-mail
+        # mandava acessar "o mesmo link da sua admissão" sem link nenhum.
+        link = emitir_link(db, candidato, base_url_publica(request)) if candidato.email else None
         enviar_email(
             candidato.email,
             "Green House — documentos precisam ser reenviados",
@@ -336,8 +341,10 @@ def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
             f"({_MOTIVO_LEGIVEL[payload.motivo]}"
             + (f" — {payload.observacao}" if payload.observacao else "") + "):\n"
             f"{lista}\n\n"
-            "Acesse o mesmo link da sua admissão e reenvie-os HOJE. Sua contratação fica "
-            "parada até esse reenvio.\n\nAtenciosamente,\nRH — Green House\n",
+            + (f"Acesse e reenvie-os HOJE:\n{link}\n\n" if link
+               else "Acesse o link da sua admissão e reenvie-os HOJE.\n\n")
+            + "Sua contratação fica parada até esse reenvio.\n\n"
+            "Atenciosamente,\nRH — Green House\n",
             html_moderno(
                 "Documentos precisam ser reenviados",
                 [
@@ -348,9 +355,10 @@ def rejeitar_lote(payload: LoteRejeitarIn, db: Session = Depends(get_db),
                     + "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
                     + "".join(f"<li>{s.tipo.value.replace('_', ' ')}</li>" for s in slots)
                     + "</ul>",
-                    "Acesse o mesmo link da sua admissão e <strong>reenvie-os HOJE</strong>. "
                     "Sua contratação fica parada até esse reenvio.",
                 ],
+                botao_texto="Reenviar os documentos",
+                botao_url=link,
             ),
         )
     db.commit()
@@ -394,7 +402,8 @@ _MOTIVO_LEGIVEL = {
 
 
 @router.post("/rh/slots/{slot_id}/rejeitar")
-def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_db),
+def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, request: Request,
+             db: Session = Depends(get_db),
              rh: UsuarioRH = Depends(requer_rh)) -> dict:
     slot = _slot_para_revisar(slot_id, db)
     slot.status = StatusSlot.rejeitado
@@ -415,6 +424,10 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_
     registrar(db, "documento_rejeitado", ator="rh", ator_detalhe=rh.email,
               candidato_id=slot.candidato_id,
               detalhe={"tipo": slot.tipo.value, "motivo": payload.motivo.value})
+    # Link NOVO no próprio e-mail: mandar "acesse o mesmo link da sua admissão"
+    # sem link obrigava a pessoa a garimpar um e-mail de até 72h atrás — e se
+    # aquele já tinha expirado, ela ficava presa (feedback de campo 2026-07-28).
+    link = emitir_link(db, candidato, base_url_publica(request)) if candidato.email else None
     db.commit()
 
     enviar_email(
@@ -424,8 +437,10 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_
         f"Um dos seus documentos precisa ser enviado novamente: "
         f"{_MOTIVO_LEGIVEL[payload.motivo]}"
         + (f" ({payload.observacao})" if payload.observacao else "")
-        + ".\n\nAcesse o mesmo link da sua admissão e reenvie esse documento HOJE. "
-          "Sua contratação fica parada até esse reenvio — não deixe para depois.\n",
+        + ".\n\n"
+        + (f"Acesse e reenvie esse documento HOJE:\n{link}\n\n" if link
+           else "Acesse o link da sua admissão e reenvie esse documento HOJE.\n\n")
+        + "Sua contratação fica parada até esse reenvio — não deixe para depois.\n",
         html_moderno(
             "Um documento precisa ser reenviado",
             [
@@ -433,9 +448,10 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, db: Session = Depends(get_
                 f"Um dos seus documentos precisa ser enviado novamente: "
                 f"<strong>{_MOTIVO_LEGIVEL[payload.motivo]}</strong>"
                 + (f" ({payload.observacao})" if payload.observacao else "") + ".",
-                "Acesse o mesmo link da sua admissão e <strong>reenvie esse documento "
-                "HOJE</strong>. Sua contratação fica parada até esse reenvio.",
+                "Sua contratação fica parada até esse reenvio — não deixe para depois.",
             ],
+            botao_texto="Reenviar esse documento",
+            botao_url=link,
         ),
     )
     return {"status": slot.status}

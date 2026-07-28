@@ -47,8 +47,22 @@ export default function Entrar() {
 
   const pedirEmail = async () => {
     setErro(null); setCarregando(true)
-    try { await entrada.linkEmail(numeros) } catch { /* resposta é sempre a mesma */ }
-    setCarregando(false); setFase('email-enviado')
+    try {
+      await entrada.linkEmail(numeros)
+      setFase('email-enviado')
+    } catch (er) {
+      // CPF inexistente e CPF válido respondem IGUAL (anti-enumeração), por isso
+      // o sucesso é indiferente ao resultado. Mas falha de INFRAESTRUTURA (5xx,
+      // rede) não pode virar a tela de "confira seu e-mail": em 2026-07-28 a
+      // rota respondia 500 e o front mostrava sucesso, então a pessoa esperava
+      // um e-mail que nunca saiu — e pedia de novo, em looping.
+      if (er.status >= 500 || !er.status) {
+        setErro('Não conseguimos enviar agora. Tente de novo em alguns minutos '
+              + 'ou fale com o RH.')
+      } else {
+        setFase('email-enviado')
+      }
+    } finally { setCarregando(false) }
   }
 
   if (fase === 'email-enviado') return (

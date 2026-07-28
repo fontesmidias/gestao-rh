@@ -700,6 +700,26 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Todo e-mail que MANDA a pessoa voltar ao sistema leva o link junto** (v2.02,
+  feedback 2026-07-28): os e-mails de rejeição (`revisao.py::rejeitar` e
+  `::rejeitar_lote`) diziam "acesse o mesmo link da sua admissão" e **não
+  mandavam link nenhum** — a pessoa tinha que garimpar um e-mail de até 72h
+  atrás e, se aquele já tinha expirado, ficava presa. Agora emitem
+  `emitir_link()` novo (padrão que `rh_ficha.py:259/:435` já usava) e passam
+  `botao_url` ao `html_moderno`. Duas armadilhas ao copiar esse padrão: a rota
+  precisa receber `request` (o `base_url_publica` monta a URL pública), e
+  candidato SEM e-mail deixa `link=None` — o corpo em texto puro precisa de ramo
+  alternativo, senão sai "Acesse: None" (o HTML já se protege sozinho, o texto
+  não). Coberto por `tests/test_email_reenvio_link.py`.
+- **`catch` vazio anti-enumeração não pode engolir erro de INFRA** (v2.02, o
+  defeito que escondeu os outros dois por semanas): `Entrar.jsx::pedirEmail`
+  fazia `try { ... } catch {}` e mostrava "📬 Confira seu e-mail" **mesmo com
+  HTTP 500** — sucesso mentiroso, a pessoa esperava um e-mail que nunca saiu e
+  pedia de novo, em looping. A resposta idêntica para CPF que existe e que não
+  existe continua CERTA (anti-enumeração), mas 5xx/rede tem que virar erro
+  visível. É a MESMA lição da v2.00 (erro transitório ≠ permanente) numa
+  terceira variação: **erro de negócio ≠ erro de infraestrutura**. Ao escrever
+  `catch` silencioso, sempre pergunte qual falha ele está escondendo.
 - **Reabertura CIRÚRGICA de documento pós-aprovação** (feedback 2026-07-24): um
   candidato `status=aprovado` pode reenviar SÓ um slot que o RH REJEITOU — nunca
   reabrir a ficha inteira nem mexer num slot já aprovado (isso desfaria dossiê/
