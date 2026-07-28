@@ -11,6 +11,30 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.01.0] — 2026-07-28 — Modelos de IA configuráveis e à prova de "`:free` sumiu"
+
+Salvar a chave do OpenRouter mostrava "não respondeu ou recusou a chave"
+mesmo com a chave correta.
+
+### Corrigido
+- **Modelo `:free` do OpenRouter é volátil.** `meta-llama/llama-3.3-70b-instruct:free`
+  foi removido do catálogo do OpenRouter; chamar um modelo inexistente devolve
+  404, que o painel exibia como "recusou a chave" — escondendo a causa real (a
+  chave estava certa, o modelo é que sumiu).
+- **Mensagem de erro do painel agora distingue os motivos.** "Recusou a chave"
+  só aparece em 401/403; um 404 diz "modelo indisponível — confira os modelos" +
+  dica da política de dados do OpenRouter. Baseado em `IndisponivelError.codigo`.
+
+### Adicionado
+- **Lista de modelos por provedor com fallback interno.** Cada provedor tenta
+  seus modelos em ordem; se um falha (404, cota…), cai no próximo modelo do
+  MESMO provedor antes de trocar de provedor. Só 401/403 pula o provedor inteiro.
+  Padrões free novos, ambos com suporte a JSON (exigido pelo Match):
+  `google/gemma-4-31b-it:free` → `openai/gpt-oss-20b:free`.
+- **Modelos editáveis no painel** (Config → IA de texto): quando um id sumir de
+  novo, o RH corrige em segundos, sem deploy. Chaves `openrouter_modelos`/
+  `groq_modelos` na config dinâmica; vazio volta aos padrões do código.
+
 ## [2.00.0] — 2026-07-28 — Match de Vagas assíncrono e multi-provedor
 
 Correção do incidente do mesmo dia: o RH ranqueou 131 talentos e só 18 foram

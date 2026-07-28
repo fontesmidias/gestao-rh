@@ -116,10 +116,16 @@ function GroqIA() {
   const [cfg, setCfg] = useState(null)
   const [chaveOr, setChaveOr] = useState('')
   const [chaveGroq, setChaveGroq] = useState('')
+  const [modelosOr, setModelosOr] = useState('')
+  const [modelosGroq, setModelosGroq] = useState('')
   const [msg, setMsg] = useState(null)
   const [ocupado, setOcupado] = useState(false)
 
-  const carregar = () => api.verGroq().then(setCfg).catch(() => {})
+  const carregar = () => api.verGroq().then((r) => {
+    setCfg(r)
+    setModelosOr(r.openrouter_modelos || '')
+    setModelosGroq(r.groq_modelos || '')
+  }).catch(() => {})
   useEffect(() => { carregar() }, [])
   if (!cfg) return null
 
@@ -157,6 +163,21 @@ function GroqIA() {
           {cfg.openrouter_definida ? '✅ configurado' : '⭕ não configurado'}</span>
       </div>
 
+      <label className="campo" style={{ marginTop: '.4rem' }}>
+        <span className="rotulo">Modelos do OpenRouter (em ordem — o 2º é usado se o 1º falhar)</span>
+        <input value={modelosOr} onChange={(e) => setModelosOr(e.target.value)}
+               placeholder="google/gemma-4-31b-it:free, openai/gpt-oss-20b:free" /></label>
+      <div className="rh-lote">
+        <button className="btn-secundario btn-mini" disabled={ocupado} onClick={() =>
+          acao(() => api.salvarOpenRouter({ openrouter_modelos: modelosOr }), (r) => {
+            setCfg(r); setModelosOr(r.openrouter_modelos || '')
+            setMsg({ tipo: 'ok', texto: 'Modelos do OpenRouter salvos — use "Testar" para confirmar.' })
+          })}>Salvar modelos</button>
+        <span className="explica" style={{ margin: 0 }}>
+          Separe por vírgula. Vazio volta aos padrões. Modelos free podem exigir
+          liberar a política de dados em openrouter.ai/settings/privacy.</span>
+      </div>
+
       <label className="campo" style={{ marginTop: '.6rem' }}>
         <span className="rotulo">Groq (reserva) — console.groq.com → API Keys</span>
         <InputSenha placeholder={cfg.chave_definida ? 'Chave (já definida)' : 'Chave da API Groq'}
@@ -175,6 +196,20 @@ function GroqIA() {
           Testar</button>
         <span className="explica" style={{ margin: 0 }}>
           {cfg.chave_definida ? '✅ configurada' : '⭕ não configurada'}</span>
+      </div>
+
+      <label className="campo" style={{ marginTop: '.4rem' }}>
+        <span className="rotulo">Modelos da Groq (em ordem — o 2º é usado se o 1º falhar)</span>
+        <input value={modelosGroq} onChange={(e) => setModelosGroq(e.target.value)}
+               placeholder="llama-3.3-70b-versatile" /></label>
+      <div className="rh-lote">
+        <button className="btn-secundario btn-mini" disabled={ocupado} onClick={() =>
+          acao(() => api.salvarGroq({ groq_modelos: modelosGroq }), (r) => {
+            setCfg(r); setModelosGroq(r.groq_modelos || '')
+            setMsg({ tipo: 'ok', texto: 'Modelos da Groq salvos — use "Testar" para confirmar.' })
+          })}>Salvar modelos</button>
+        <span className="explica" style={{ margin: 0 }}>
+          Separe por vírgula. Vazio volta aos padrões.</span>
       </div>
 
       {!cfg.openrouter_definida && !cfg.chave_definida && (

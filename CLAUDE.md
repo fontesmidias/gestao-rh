@@ -259,6 +259,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   tempo pedido e retoma, em vez de trocar de provedor na hora.
   Testar chave usa `so_provedor=` — testar a chave da Groq NÃO pode mandá-la
   ao OpenRouter.
+  **MODELO `:free` do OpenRouter É VOLÁTIL — some/renomeia sem aviso
+  (mordeu em 2026-07-28)**: `meta-llama/llama-3.3-70b-instruct:free` deixou de
+  existir e TODO teste de chave virava um falso "recusou a chave" — a chave
+  estava certa, o modelo é que sumiu (404). Duas defesas: (1) cada provedor tem
+  uma LISTA de modelos em ordem (`modelos_padrao`), tentados um a um —
+  `IndisponivelError` de um modelo (404/400) cai no PRÓXIMO MODELO do mesmo
+  provedor; só `chave_recusada` (401/403) pula o provedor inteiro (a chave é do
+  provedor, nenhum modelo dele passaria). (2) A lista é editável no painel
+  (Config → IA de texto, chaves `openrouter_modelos`/`groq_modelos` na config
+  dinâmica; `_modelos_do_provedor` lê o override ou cai no padrão) — quando um id
+  sumir de novo, o RH corrige em segundos, sem deploy. Padrões que suportam
+  `response_format: json_object` (exigido pelo Match via `gerar_json`):
+  `google/gemma-4-31b-it:free` → `openai/gpt-oss-20b:free`. **A mensagem de erro
+  do painel DISTINGUE os motivos** (`IndisponivelError.codigo`): "recusou a
+  chave" SÓ para 401/403; 404 diz "modelo indisponível, confira os modelos" +
+  dica da política de dados do OpenRouter (modelos free às vezes exigem liberar
+  em openrouter.ai/settings/privacy). NÃO volte ao genérico "não respondeu ou
+  recusou a chave" — ele escondia a causa real.
 - **Fila de tarefas** (`services/fila.py`, v2.00): Redis + RQ. O ecossistema
   já tinha Redis e um container `worker` rodando `rq worker ... default`
   desde a v1.83, mas **ninguém nunca enfileirou nada** — os workers antigos
