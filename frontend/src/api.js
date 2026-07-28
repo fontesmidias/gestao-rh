@@ -136,6 +136,8 @@ export const candidato = {
   excluirArquivo: (t, slotId) =>
     req(`/c/${t}/documentos/${slotId}/arquivo`, { method: 'DELETE' }),
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),
+  // desfaz o "CONCLUÍ MEU ENVIO" enquanto o RH não revisou nada
+  reabrirEnvio: (t) => req(`/c/${t}/reabrir-envio`, { method: 'POST' }),
   // Testes (DISC / situacional) — respondidos antes do cadastro
   testes: (t) => req(`/c/${t}/testes`),
   testesIdentificar: (t, dados) =>

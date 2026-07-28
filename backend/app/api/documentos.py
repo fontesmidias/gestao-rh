@@ -358,3 +358,34 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
         f"Acesse o painel do RH para revisar: {base_url_publica(request)}/rh\n",
     )
     return {"status": candidato.status}
+
+
+@router.post("/c/{token}/reabrir-envio")
+def reabrir_envio(token: str, db: Session = Depends(get_db)) -> dict:
+    """Desfaz o 'CONCLUÍ MEU ENVIO' — mas só enquanto o RH não olhou nada.
+
+    Feedback 2026-07-28: a pessoa clica em concluir, percebe na hora que mandou
+    o documento errado e não tem como voltar; o checklist congela em
+    `envio_concluido` e só o RH reabre. Quem tem menos recurso é justamente
+    quem mais erra no envio e menos consegue pedir socorro.
+
+    Guarda (condição do Vex): se QUALQUER slot já foi revisado (aprovado,
+    rejeitado ou dispensado), a porta não reabre — trocar um documento que o RH
+    já analisou faria a análise dele valer para um arquivo que não existe mais.
+    Nesse caso o caminho continua sendo o RH reabrir o slot específico.
+    """
+    candidato = _candidato_do_token(token, db)
+    if candidato.status != StatusCandidato.envio_concluido:
+        raise HTTPException(status_code=409, detail="envio_nao_concluido")
+    slots = db.scalars(select(SlotDocumento)
+                       .where(SlotDocumento.candidato_id == candidato.id)).all()
+    revisados = [s for s in slots if s.status in (StatusSlot.aprovado,
+                                                  StatusSlot.rejeitado,
+                                                  StatusSlot.dispensado)]
+    if revisados:
+        raise HTTPException(status_code=409, detail="rh_ja_revisou")
+    candidato.status = StatusCandidato.docs_pendentes
+    registrar(db, "envio_reaberto_pelo_candidato", ator="candidato",
+              candidato_id=candidato.id)
+    db.commit()
+    return {"status": candidato.status}
