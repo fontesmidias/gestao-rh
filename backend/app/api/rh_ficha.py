@@ -15,8 +15,9 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -80,6 +81,26 @@ def invalidar_assinaturas_afetadas(db: Session, candidato: Candidato, secao: str
 class EdicaoSecaoIn(BaseModel):
     dados: dict
     motivo: str
+
+
+# Campos de coluna curta (String(2)/(8)/(4)) onde o RH digitando com máscara ou
+# por extenso ("Distrito Federal", "70000-000") estourava DataError no commit —
+# 500 mudo (feedback de campo 2026-07-27). Normaliza ANTES da validação do
+# Pydantic, espelhando o que a rota do candidato já faz com o CPF.
+_CAMPOS_UF = ("uf", "naturalidade_uf", "cnh_uf")
+_CAMPOS_CEP = ("cep",)
+
+
+def _normalizar_entrada(dados: dict) -> dict:
+    saida = dict(dados)
+    for campo in _CAMPOS_UF:
+        if campo in saida and isinstance(saida[campo], str):
+            saida[campo] = saida[campo].strip().upper()[:2] or None
+    for campo in _CAMPOS_CEP:
+        if campo in saida and isinstance(saida[campo], str):
+            numeros = "".join(c for c in saida[campo] if c.isdigit())
+            saida[campo] = numeros or None
+    return saida
 
 
 @router.get("/rh/candidatos/{candidato_id}/ficha")
@@ -153,7 +174,20 @@ def editar_secao(
     if secao not in schemas:
         raise HTTPException(status_code=404, detail="secao_desconhecida")
     schema, modelo = schemas[secao]
-    dados = schema(**payload.dados).model_dump(exclude_unset=True)
+
+    bruto = _normalizar_entrada(payload.dados)
+    try:
+        dados = schema(**bruto).model_dump(exclude_unset=True)
+    except ValidationError as exc:
+        # A validação deste endpoint roda manualmente (payload.dados é um dict
+        # livre — o FastAPI não valida o conteúdo), então uma ValidationError
+        # do Pydantic NÃO é RequestValidationError e escaparia como 500 mudo
+        # sem este catch (feedback de campo 2026-07-27: "não salva e não diz
+        # o motivo"). Devolve 422 com o mesmo formato de {loc, msg, type} que
+        # o handler global de RequestValidationError já usa (main.py).
+        erros = [{"loc": [str(p) for p in e.get("loc", [])], "msg": e.get("msg", ""),
+                  "type": e.get("type", "")} for e in exc.errors()]
+        raise HTTPException(status_code=422, detail=erros) from exc
     if not dados:
         raise HTTPException(status_code=422, detail="nada_para_alterar")
 
@@ -189,6 +223,28 @@ def editar_secao(
     if not mudancas:
         raise HTTPException(status_code=422, detail="nada_para_alterar")
     campos = sorted(mudancas.keys())
+
+    # Valida os dados no BANCO antes de qualquer outra escrita. Precisa vir
+    # ANTES de registrar()/invalidar_assinaturas_afetadas: registrar() faz seu
+    # próprio db.flush() e engole exceção (auditoria nunca derruba a ação
+    # principal) — se o DataError disparasse ali, a sessão ficava com rollback
+    # pendente e a query seguinte (invalidar_assinaturas_afetadas) estourava
+    # PendingRollbackError em vez do 422 que o RH precisa ver.
+    try:
+        db.flush()
+    except DataError as exc:
+        # Estourou no banco (ex.: tipo_sanguineo "A positivo" em coluna
+        # String(4)) — sem este catch, o handler global de main.py devolve
+        # 500 genérico e o RH não sabe qual campo corrigir. O texto real do
+        # driver NUNCA vai ao cliente (pode conter o valor que estourou).
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["dados", c], "msg": "Valor não suportado para este campo "
+                     "(muito longo ou em formato inesperado).", "type": "value_error"}
+                    for c in campos],
+        ) from exc
+
     registrar(db, "ficha_editada_rh", ator="rh", ator_detalhe=rh.email,
               candidato_id=candidato.id,
               detalhe={"secao": secao, "motivo": payload.motivo.strip(),

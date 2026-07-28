@@ -3,6 +3,7 @@ import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
+import { comAmpulheta } from '../Carregando.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -227,6 +228,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'organizacao' && <>
         <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
         <CargosTirvu />
+        <PadronizacaoTirvuTxt />
         <BackfillEnderecos />
       </>}
       {aba === 'tags' && <TagsConfig />}
@@ -1313,6 +1315,157 @@ function CargosTirvu() {
             ))}</tbody>
           </table>
         )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Padronização em massa: cargos/jornadas colados da tela do Tirvu (feedback
+// de campo 2026-07-27: "tive problemas para subir cadastro em massa para o
+// Tirvu por conta das padronizações... tenho que fazer muita coisa
+// manualmente"). O RH copia a lista inteira da tela do Tirvu (Cargos ou
+// Jornadas) num .txt; preview PROPÕE o casamento, e SÓ grava o que for
+// confirmado linha a linha — nunca merge cego (mesma regra da Incidência de
+// Benefícios). Ver docs/planejamento/09-roadmap-feedbacks-16a-leva.md, item A2.
+function PadronizacaoTirvuTxt() {
+  return (
+    <div className="rh-card">
+      <h3>📋 Padronizar cargos e jornadas em massa (colar da tela do Tirvu)</h3>
+      <p className="explica">Copie a lista inteira da tela <strong>Cargos</strong> ou
+        <strong> Jornadas</strong> do Tirvu (Ctrl+A, Ctrl+C na tabela) e cole abaixo. O
+        sistema PROPÕE o ID de cada um; você revisa e confirma linha a linha — nada é
+        gravado sem confirmação, e cargos/jornadas ambíguos (mesmo texto, IDs diferentes)
+        ficam destacados para você decidir.</p>
+      <div className="rh-grid-2">
+        <ImportarTirvuTxt tipo="cargos" titulo="Cargos" />
+        <ImportarTirvuTxt tipo="jornadas" titulo="Jornadas" />
+      </div>
+    </div>
+  )
+}
+
+function ImportarTirvuTxt({ tipo, titulo }) {
+  const [texto, setTexto] = useState('')
+  const [propostas, setPropostas] = useState(null) // resultado do preview
+  const [selecionadas, setSelecionadas] = useState({}) // {tirvu_id: bool}
+  const [msg, setMsg] = useState(null)
+  const [resultado, setResultado] = useState(null)
+
+  const ehCargo = tipo === 'cargos'
+
+  const analisar = async () => {
+    if (!texto.trim()) return
+    setMsg(null); setResultado(null); setPropostas(null)
+    try {
+      const r = await comAmpulheta('Analisando…', () => ehCargo
+        ? api.previewCargosTirvuTxt(texto)
+        : api.previewJornadasTirvuTxt(texto))
+      setPropostas(r)
+      const marcadas = {}
+      r.propostas.forEach((p) => { marcadas[p.tirvu_id] = p.aplicar_sugerido })
+      setSelecionadas(marcadas)
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível analisar (${err.detail || err.message}).` })
+    }
+  }
+
+  const confirmar = async () => {
+    const itens = propostas.propostas
+      .filter((p) => selecionadas[p.tirvu_id])
+      .map((p) => ehCargo
+        ? { tirvu_id: p.tirvu_id, cargo: p.cargo, aplicar: true }
+        : { tirvu_id: p.tirvu_id, descricao: p.descricao, escala: p.escala,
+           tratamento: p.tratamento, aplicar: true })
+    if (!itens.length) {
+      setMsg({ tipo: 'erro', texto: 'Nenhuma linha selecionada para gravar.' }); return
+    }
+    setMsg(null)
+    try {
+      const r = await comAmpulheta('Gravando…', () => ehCargo
+        ? api.confirmarCargosTirvuTxt(itens)
+        : api.confirmarJornadasTirvuTxt(itens))
+      setResultado(r)
+      setPropostas(null); setTexto(''); setSelecionadas({})
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível gravar (${err.detail || err.message}).` })
+    }
+  }
+
+  const marcarTodas = (valor) => {
+    const m = {}
+    propostas.propostas.forEach((p) => { m[p.tirvu_id] = valor })
+    setSelecionadas(m)
+  }
+
+  return (
+    <div>
+      <strong>{titulo}</strong>
+      {!propostas && (
+        <>
+          <textarea rows={6} style={{ width: '100%', marginTop: '.4rem', fontFamily: 'monospace', fontSize: '.8rem' }}
+                    placeholder={`Cole aqui o texto copiado da tela de ${titulo} do Tirvu…`}
+                    value={texto} onChange={(e) => setTexto(e.target.value)} />
+          <button className="btn-secundario btn-mini" style={{ marginTop: '.4rem' }}
+                  disabled={!texto.trim()} onClick={analisar}>🔍 Analisar</button>
+        </>
+      )}
+      {propostas && (
+        <>
+          <p className="explica">
+            {propostas.total} registro(s) encontrado(s)
+            {ehCargo ? `, ${propostas.ativos} ativo(s)` : ''}.
+            {(ehCargo ? propostas.homonimos : propostas.duplicatas) > 0 && (
+              <> <strong style={{ color: 'var(--ambar)' }}>
+                {ehCargo ? propostas.homonimos : propostas.duplicatas} caso(s) ambíguo(s)
+                — revise antes de marcar.</strong></>
+            )}
+          </p>
+          <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.4rem' }}>
+            <button className="btn-link" onClick={() => marcarTodas(true)}>marcar sugeridas</button>
+            <button className="btn-link" onClick={() => marcarTodas(false)}>desmarcar todas</button>
+          </div>
+          <div className="dash-scroll" style={{ maxHeight: 340, overflowY: 'auto' }}>
+            <table className="rh-tabela">
+              <thead><tr>
+                <th></th><th>ID Tirvu</th>
+                <th>{ehCargo ? 'Cargo' : 'Descrição'}</th>
+                {ehCargo ? <th>CBO</th> : <th>Escala</th>}
+                <th>Situação</th>
+              </tr></thead>
+              <tbody>{propostas.propostas.map((p) => {
+                const ambiguo = ehCargo ? p.homonimo : p.duplicata
+                return (
+                  <tr key={p.tirvu_id} className={ambiguo ? 'linha-ambigua' : ''}>
+                    <td><input type="checkbox" checked={!!selecionadas[p.tirvu_id]}
+                               onChange={(e) => setSelecionadas({ ...selecionadas, [p.tirvu_id]: e.target.checked })} /></td>
+                    <td>{p.tirvu_id}</td>
+                    <td>{ehCargo ? p.cargo : p.descricao}</td>
+                    <td>{ehCargo ? p.cbo : p.escala}</td>
+                    <td>
+                      {ambiguo && <span title="Mesmo texto com mais de um ID — decida qual usar">⚠️ ambíguo</span>}
+                      {!ambiguo && p.diverge && <span title="Já existe um ID diferente cadastrado">🔁 substitui {p.tirvu_id_atual}</span>}
+                      {!ambiguo && !p.diverge && ehCargo && p.pessoas_usando > 0 && <span>{p.pessoas_usando} pessoa(s)</span>}
+                      {!ambiguo && !p.diverge && !ehCargo && p.existe_na_base && <span>já cadastrada</span>}
+                      {!ambiguo && !p.diverge && !ehCargo && !p.existe_na_base && <span>nova</span>}
+                    </td>
+                  </tr>
+                )
+              })}</tbody>
+            </table>
+          </div>
+          <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
+            <button className="btn-principal btn-mini" onClick={confirmar}>
+              ✅ Gravar selecionadas ({Object.values(selecionadas).filter(Boolean).length})</button>
+            <button className="btn-secundario btn-mini" onClick={() => { setPropostas(null); setTexto('') }}>cancelar</button>
+          </div>
+        </>
+      )}
+      {resultado && (
+        <p className="sucesso" style={{ marginTop: '.5rem' }}>
+          {ehCargo
+            ? `${resultado.gravados} de-para(s) de cargo gravado(s).`
+            : `${resultado.criadas} jornada(s) criada(s), ${resultado.atualizadas} atualizada(s).`}</p>
+      )}
       <Msg msg={msg} />
     </div>
   )

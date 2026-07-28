@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -81,6 +82,23 @@ async def log_422(request: Request, exc: RequestValidationError):
     ]
     telemetria.warning("422 path=%s erros=%s corpo=%r", request.url.path, erros, corpo)
     return JSONResponse(status_code=422, content={"detail": erros})
+
+
+@app.exception_handler(Exception)
+async def log_erro_interno(request: Request, exc: Exception):
+    """Rede de segurança contra erro não tratado (ex.: ValidationError manual,
+    DataError de truncamento de coluna) — sem isso, o Starlette devolve 500 em
+    texto puro e o front não tem o que mostrar ao RH (feedback de campo
+    2026-07-27: "não salva e não diz o motivo").
+
+    NUNCA ecoar str(exc) ao cliente: a mensagem de erro do Postgres para
+    truncamento de coluna inclui o VALOR que estourou — num sistema de RH isso
+    pode ser CPF. O motivo real vai só para o log; o cliente recebe um id de
+    correlação para localizá-lo."""
+    correlacao = uuid.uuid4().hex[:12]
+    telemetria.exception("erro_interno id=%s path=%s", correlacao, request.url.path)
+    return JSONResponse(status_code=500,
+                        content={"detail": "erro_interno", "id": correlacao})
 
 
 @app.middleware("http")

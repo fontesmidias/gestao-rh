@@ -41,8 +41,9 @@ async function buscar(url, opcoes) {
 // quando o corpo não é JSON (413 do proxy vem em HTML) ou o detail é
 // estruturado (422 de validação do FastAPI vem como lista).
 async function lancarErro(r) {
-  let detail
-  try { detail = (await r.json()).detail } catch { detail = null }
+  let detailBruto
+  try { detailBruto = (await r.json()).detail } catch { detailBruto = null }
+  let detail = detailBruto
   if (typeof detail !== 'string') {
     if (r.status === 413) detail = 'arquivo_grande_demais'
     else if (r.status === 422) detail = 'dados_invalidos'
@@ -51,6 +52,11 @@ async function lancarErro(r) {
   const erro = new Error(detail)
   erro.status = r.status
   erro.detail = detail
+  // Se o backend mandou uma LISTA estruturada [{loc, msg, type}] (422 de
+  // validação, ou o 422 de campo do rh_ficha.py), preserva em e.campos — antes
+  // isso era descartado e trocado pela string genérica 'dados_invalidos',
+  // deixando o RH sem saber qual campo corrigir (feedback de campo 2026-07-27).
+  erro.campos = Array.isArray(detailBruto) ? detailBruto : null
   // Mensagem amigável para códigos globais conhecidos (o call-site pode usar
   // e.amigavel quando quiser, ou continua com e.detail). A trava de duplo-clique
   // devolve 409 ja_em_processamento — o RH clicou de novo enquanto processava.
@@ -58,6 +64,7 @@ async function lancarErro(r) {
     ja_em_processamento: 'Esta ação já está sendo processada — aguarde um instante.',
     muitas_tentativas: 'Muitas tentativas seguidas. Aguarde alguns minutos.',
     sem_conexao: 'Sem conexão. Verifique a internet e tente de novo.',
+    erro_interno: 'Ocorreu um erro inesperado. Tente novamente; se persistir, avise o suporte.',
   }
   erro.amigavel = AMIGAVEIS[detail] || null
   throw erro
@@ -387,6 +394,17 @@ export const rh = {
       return r.json()
     } finally { saiuRH() }
   },
+  // Padronização em massa: cargos/jornadas colados da tela do Tirvu
+  // (feedback 2026-07-27) — preview PROPÕE, o RH decide linha a linha,
+  // confirmar GRAVA só o que foi marcado (nunca merge cego).
+  previewCargosTirvuTxt: (texto) =>
+    req('/rh/tirvu-txt/preview-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
+  confirmarCargosTirvuTxt: (itens) =>
+    req('/rh/tirvu-txt/confirmar-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
+  previewJornadasTirvuTxt: (texto) =>
+    req('/rh/tirvu-txt/preview-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
+  confirmarJornadasTirvuTxt: (itens) =>
+    req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Export em massa vive em Colaboradores: só vai para o Tirvu quem já foi
   // efetivado. Por padrão exclui os importados (já existem lá).
   pendenciasTirvu: (filtros = {}) => {

@@ -90,6 +90,32 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 - **Rotas FastAPI**: declarar rotas específicas (`/lote/...`, `/massa/...`)
   ANTES das paramétricas (`/{id}`), senão o literal vira UUID inválido (422).
+- **Rota com `dados: dict` livre burla a validação do FastAPI** (v1.96,
+  `rh_ficha.py::editar_secao`): quando o corpo é tipado como `BaseModel` com um
+  campo `dict`, o FastAPI NÃO valida o conteúdo — a validação manual
+  (`schema(**payload.dados)`) roda DEPOIS, fora do ciclo normal. Uma
+  `pydantic.ValidationError` levantada ali **não é** `RequestValidationError`
+  e escapa como HTTP 500 em texto puro (era o bug "não salva e não diz o
+  motivo"). Envolver em `try/except ValidationError` e devolver 422 manual
+  sempre que uma rota validar um dict à mão. Há também um
+  `@app.exception_handler(Exception)` global em `main.py` como rede de
+  segurança — mas ele NUNCA ecoa `str(exc)` ao cliente (a mensagem de erro do
+  Postgres para coluna truncada contém o VALOR que estourou, ex. CPF); devolve
+  só `{"erro": "interno", "id": "<correlação>"}`, o motivo real fica no log.
+- **`registrar()` (auditoria) faz `db.flush()` e ENGOLE exceção** — se o
+  flush dela disparar um `DataError` (dado inválido de uma escrita anterior
+  ainda não persistida), a sessão fica com rollback pendente e a PRÓXIMA
+  operação de banco estoura `PendingRollbackError` em vez do erro real. Por
+  isso: sempre validar (via `db.flush()` protegido) os dados da AÇÃO PRINCIPAL
+  antes de chamar `registrar()` — nunca depois.
+- **Mensagem de erro/sucesso do formulário do RH tem que ficar PERTO do botão
+  que a gerou** — um `setMsg` que sobe pro componente pai e renderiza no topo
+  da tela vale nada se o RH está com um `<details>` aberto e rolado até o
+  fundo (é invisível na prática, mesmo aparecendo no DOM). Ficha do RH
+  corrigido nisso (v1.96): mensagem local por seção, dentro do próprio
+  `<details>`. Ver também: `await recarregar()` (ou similar) DENTRO do `try`
+  de uma ação — se o recarregamento falhar depois de um salvamento bem
+  sucedido, o `catch` reporta falha quando na verdade salvou.
 - **Assinaturas**: documentos fixos usam o enum `DocumentoAssinavel`; documentos
   de MODELO do RH usam a chave `modelo-<assinatura_id>` nas rotas, com SNAPSHOT
   de título/corpo no registro `Assinatura` (editar o modelo não muda o que a
@@ -196,6 +222,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Padronização em massa de cargos/jornadas do Tirvu** (v1.96,
+  `services/importar_tirvu_txt.py`, rotas `/rh/tirvu-txt/*`, tela em
+  Config→Empresas e jornadas): resolve a causa raiz das pendências manuais do
+  export — o RH cola o texto copiado direto da TELA do Tirvu (não é upload de
+  arquivo) e o sistema PROPÕE o de-para; nunca grava sozinho (preview →
+  confirmar, mesma mecânica da Incidência de Benefícios). O texto colado é
+  `ID\tCampos...` por linha, com "lixo" de UI (avatar, responsável, data)
+  intercalado — filtra por `^\d+\t`. **Contagem do cabeçalho** ("Lista de
+  Cargos 111") é conferida contra o total parseado — cópia parcial da tela
+  vira erro, não importação incompleta silenciosa. **Sujeira conhecida**: a
+  descrição de jornada às vezes vem com "Sem vínculos"/"N vínculos" colado
+  no FIM sem separador (é a coluna seguinte da tela que grudou na cópia) —
+  `limpar_descricao_jornada` remove antes de casar. **Cargo homônimo com 2+
+  IDs ATIVOS no Tirvu NUNCA é auto-resolvido** (ex. real: "AUXILIAR DE
+  SERVIÇOS GERAIS" tem CBO 514225=limpeza e 763125=produção, 87 pessoas na
+  base usam o mesmo texto) — o de-para é por TEXTO normalizado
+  (`cargo_funcao` não é FK), então o sistema não tem como saber qual pessoa é
+  qual; fica marcado "⚠️ ambíguo" na tela, o RH decide caso a caso ou nem
+  marca (a importação segue sem aquele item). Mesma regra para jornada
+  duplicada (descrição idêntica após limpar a sujeira, IDs diferentes).
+  `Jornada.descricao` é `unique=True` — a rota de confirmar CASA por
+  descrição normalizada antes de decidir criar vs. atualizar, nunca duplica.
 - **Provas por cargo** (`models/prova.py`, `api/provas.py`, `ProvasRH.jsx`,
   `ProvaApp.jsx`): banco de provas CONFIGURÁVEL pelo RH (diferente do DISC/
   situacional, gabarito fixo no código). Questões objetivas (opções {id,texto} +

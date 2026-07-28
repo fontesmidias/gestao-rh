@@ -591,3 +591,185 @@ async def importar_jornadas(arquivo: UploadFile, db: Session = Depends(get_db),
         "abas_casadas_com_posto": len(abas_casadas),
         "abas_sem_posto": abas_sem_posto,
     }
+
+
+# ======================================================================
+# Padronização em massa: cargos e jornadas colados da tela do Tirvu
+# (feedback de campo 2026-07-27) — preview PROPÕE, o RH confirma linha a
+# linha, nunca grava sozinho (mesma regra da Incidência de Benefícios).
+# Ver docs/planejamento/09-roadmap-feedbacks-16a-leva.md, item A2.
+# ======================================================================
+
+class TxtIn(BaseModel):
+    texto: str
+
+
+@router.post("/rh/tirvu-txt/preview-cargos")
+def preview_cargos_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
+    """Lê o texto colado da tela 'Cargos' do Tirvu e PROPÕE o de-para —
+    não grava nada. Sinaliza cópia parcial (contagem do cabeçalho) e cargos
+    homônimos com 2+ IDs ativos (o RH decide qual usar; nunca funde
+    sozinho)."""
+    from app.services.export_tirvu import normalizar_cargo
+    from app.services.importar_tirvu_txt import (ContagemInvalida,
+                                                  detectar_homonimos_cargo,
+                                                  normalizar_texto,
+                                                  parsear_cargos)
+
+    try:
+        itens = parsear_cargos(dados.texto)
+    except ContagemInvalida as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not itens:
+        raise HTTPException(status_code=422, detail="nenhum_registro_encontrado")
+
+    homonimos = {g.chave_normalizada for g in detectar_homonimos_cargo(itens)}
+    existentes = {m.cargo_normalizado: m for m in db.scalars(select(CargoTirvu)).all()}
+    # Quantas pessoas usam cada cargo hoje — para o RH priorizar a revisão
+    # (o caso grave é o homônimo com muita gente na base, não o sem uso).
+    contagem_uso: dict[str, int] = {}
+    for (cargo,) in db.execute(
+            select(Candidato.cargo_funcao).where(Candidato.cargo_funcao.isnot(None))).all():
+        chave = normalizar_cargo(cargo)
+        if chave:
+            contagem_uso[chave] = contagem_uso.get(chave, 0) + 1
+
+    propostas = []
+    for it in itens:
+        if it.status != "ATIVO":
+            continue  # inativo no Tirvu nunca é proposto — mesmo raciocínio do R3
+        chave = normalizar_texto(it.cargo)
+        atual = existentes.get(chave)
+        propostas.append({
+            "tirvu_id": it.tirvu_id, "cargo": it.cargo, "cbo": it.cbo,
+            "chave_normalizada": chave,
+            "tirvu_id_atual": atual.tirvu_id if atual else None,
+            "diverge": bool(atual and atual.tirvu_id != it.tirvu_id),
+            "homonimo": chave in homonimos,
+            "pessoas_usando": contagem_uso.get(chave, 0),
+            # sugerido para auto-aplicar SE não houver ambiguidade nem
+            # divergência com o que já está gravado à mão
+            "aplicar_sugerido": chave not in homonimos and not (atual and atual.tirvu_id != it.tirvu_id),
+        })
+    return {"total": len(itens), "ativos": len(propostas),
+            "homonimos": len(homonimos), "propostas": propostas}
+
+
+class ConfirmarCargoItem(BaseModel):
+    tirvu_id: str
+    cargo: str
+    aplicar: bool = True
+
+
+class ConfirmarCargosIn(BaseModel):
+    itens: list[ConfirmarCargoItem]
+
+
+@router.post("/rh/tirvu-txt/confirmar-cargos")
+def confirmar_cargos_tirvu(dados: ConfirmarCargosIn, db: Session = Depends(get_db),
+                           rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Grava SÓ os itens com aplicar=True — a revisão humana já aconteceu no
+    front (preview + decisão linha a linha)."""
+    from app.services.export_tirvu import normalizar_cargo
+
+    gravados = 0
+    for item in dados.itens:
+        if not item.aplicar:
+            continue
+        chave = normalizar_cargo(item.cargo)
+        if not chave:
+            continue
+        m = db.scalar(select(CargoTirvu).where(CargoTirvu.cargo_normalizado == chave))
+        if m:
+            m.tirvu_id = item.tirvu_id
+            m.cargo_rotulo = item.cargo.strip()
+        else:
+            db.add(CargoTirvu(cargo_normalizado=chave, cargo_rotulo=item.cargo.strip(),
+                              tirvu_id=item.tirvu_id))
+        gravados += 1
+    registrar(db, "cargos_tirvu_importados_em_massa", ator="rh", ator_detalhe=rh.email,
+              detalhe={"gravados": gravados, "total_enviado": len(dados.itens)})
+    db.commit()
+    return {"gravados": gravados}
+
+
+@router.post("/rh/tirvu-txt/preview-jornadas")
+def preview_jornadas_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
+    """Lê o texto colado da tela 'Jornadas' do Tirvu e PROPÕE o de-para de
+    tirvu_id — não grava nada. Casa por descrição já limpa da sujeira de
+    'vínculos'; sinaliza duplicatas (nunca funde sozinho)."""
+    from app.services.importar_tirvu_txt import (ContagemInvalida,
+                                                  detectar_duplicatas_jornada,
+                                                  normalizar_texto,
+                                                  parsear_jornadas)
+
+    try:
+        itens = parsear_jornadas(dados.texto)
+    except ContagemInvalida as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not itens:
+        raise HTTPException(status_code=422, detail="nenhum_registro_encontrado")
+
+    duplicatas = {g.chave_normalizada for g in detectar_duplicatas_jornada(itens)}
+    existentes = {_norm(j.descricao): j for j in db.scalars(select(Jornada)).all()}
+
+    propostas = []
+    for it in itens:
+        chave_norm = normalizar_texto(it.descricao)
+        atual = existentes.get(_norm(it.descricao))
+        propostas.append({
+            "tirvu_id": it.tirvu_id, "descricao": it.descricao,
+            "escala": it.escala, "tratamento": it.tratamento,
+            "existe_na_base": atual is not None,
+            "tirvu_id_atual": atual.tirvu_id if atual else None,
+            "diverge": bool(atual and atual.tirvu_id and atual.tirvu_id != it.tirvu_id),
+            "duplicata": chave_norm in duplicatas,
+            "aplicar_sugerido": chave_norm not in duplicatas
+                and not (atual and atual.tirvu_id and atual.tirvu_id != it.tirvu_id),
+        })
+    return {"total": len(itens), "duplicatas": len(duplicatas), "propostas": propostas}
+
+
+class ConfirmarJornadaItem(BaseModel):
+    tirvu_id: str
+    descricao: str
+    escala: str = ""
+    tratamento: str = ""
+    aplicar: bool = True
+
+
+class ConfirmarJornadasIn(BaseModel):
+    itens: list[ConfirmarJornadaItem]
+
+
+@router.post("/rh/tirvu-txt/confirmar-jornadas")
+def confirmar_jornadas_tirvu(dados: ConfirmarJornadasIn, db: Session = Depends(get_db),
+                             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Grava SÓ os itens com aplicar=True: se a jornada já existe (por
+    descrição normalizada), atualiza o tirvu_id; senão CRIA a jornada nova com
+    a descrição já limpa e o tirvu_id. Nunca funde duas descrições
+    diferentes."""
+    existentes = {_norm(j.descricao): j for j in db.scalars(select(Jornada)).all()}
+    criadas = 0
+    atualizadas = 0
+    for item in dados.itens:
+        if not item.aplicar:
+            continue
+        descricao = item.descricao.strip()
+        if not descricao:
+            continue
+        atual = existentes.get(_norm(descricao))
+        if atual:
+            if atual.tirvu_id != item.tirvu_id:
+                atual.tirvu_id = item.tirvu_id
+                atualizadas += 1
+        else:
+            nova = Jornada(descricao=descricao, tirvu_id=item.tirvu_id)
+            db.add(nova)
+            existentes[_norm(descricao)] = nova
+            criadas += 1
+    registrar(db, "jornadas_tirvu_importadas_em_massa", ator="rh", ator_detalhe=rh.email,
+              detalhe={"criadas": criadas, "atualizadas": atualizadas,
+                       "total_enviado": len(dados.itens)})
+    db.commit()
+    return {"criadas": criadas, "atualizadas": atualizadas}

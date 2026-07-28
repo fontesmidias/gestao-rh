@@ -21,7 +21,9 @@ const GENERO_DESCRICOES = [
   ['nao_informar', 'Prefiro não informar', 'Opção de privacidade para quem escolhe não compartilhar essa informação.'],
 ]
 
-const OPCOES = {
+// Exportado para reuso em telas do RH (ex.: Detalhe.jsx) que editam os mesmos
+// enums — evita traduzir os valores duas vezes (feedback de campo 2026-07-27).
+export const OPCOES = {
   sexo: [['feminino', 'Feminino'], ['masculino', 'Masculino']],
   cor_raca: [['branca', 'Branca'], ['preta', 'Preta'], ['parda', 'Parda'],
              ['amarela', 'Amarela'], ['indigena', 'Indígena']],
@@ -35,6 +37,7 @@ const OPCOES = {
                  ['pos_graduacao', 'Pós-graduação']],
   pix_tipo: [['cpf', 'CPF'], ['celular', 'Celular'], ['email', 'E-mail'], ['aleatoria', 'Chave aleatória']],
   parentesco: [['conjuge', 'Cônjuge/companheiro(a)'], ['filho', 'Filho(a)'], ['menor_guarda', 'Menor sob guarda']],
+  identidade_genero: GENERO_DESCRICOES.map(([v, r]) => [v, r]),
 }
 
 // Dígitos verificadores do CPF (algoritmo oficial da Receita).

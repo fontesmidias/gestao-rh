@@ -1047,6 +1047,11 @@ body[data-rh-ocupado] { cursor: progress; }
   background: var(--verde-suave);
   border-top: 2px solid var(--verde);
 }
+/* Linha ambígua na revisão de importação em massa (ex.: cargo/jornada com
+   mais de um ID do Tirvu) — precisa de decisão humana antes de marcar. */
+.rh-tabela tr.linha-ambigua > td {
+  background: var(--erro-suave);
+}
 .rh-tabela tr.linha-form-inline > td {
   background: var(--verde-suave);
   padding: 0;

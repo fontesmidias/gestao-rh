@@ -11,6 +11,64 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [1.96.0] — 2026-07-27 — Onda A: 16ª leva de feedbacks (3 itens)
+
+Roadmap completo e revisão adversária (party-mode) em
+`docs/planejamento/09-roadmap-feedbacks-16a-leva.md`. Ordem de execução
+`A3 → A1 → A2` (torneira antes do balde: estanca a entrada de cargo digitado
+livre antes de limpar o de-para em massa).
+
+### Corrigido
+- **Ficha do RH não salvava e não dizia o motivo** (bug silencioso): uma
+  `ValidationError` do Pydantic era levantada FORA do ciclo de validação do
+  FastAPI (o corpo da rota é um dict livre) e escapava como **HTTP 500 em
+  texto puro** — o front não tinha detalhe algum para mostrar. Corrigido em
+  6 frentes:
+  - Handler global `@app.exception_handler(Exception)` em `main.py`: qualquer
+    erro não tratado agora devolve `{"erro": "interno", "id": "<correlação>"}`
+    — **nunca** o texto real da exceção (que pode conter o valor que estourou
+    no banco, ex.: CPF).
+  - `rh_ficha.py::editar_secao` captura a `ValidationError` e devolve 422 com
+    `[{loc, msg, type}]`, e captura `DataError` do commit (coluna truncada:
+    UF por extenso, CEP com hífen, tipo sanguíneo longo) nomeando o campo.
+  - Normalização de entrada: UF vira 2 letras maiúsculas, CEP vira só dígitos,
+    antes da validação — mesmo padrão que o CPF já tinha.
+  - `api.js` para de descartar a lista estruturada de erros do Pydantic
+    (`e.campos`), em vez de trocá-la pela string genérica `dados_invalidos`.
+  - Mensagem de erro/sucesso passa a ser **local à seção** (`<details>`), não
+    mais um banner ~19 blocos JSX acima do formulário e fora do viewport.
+  - Corrigido também: sucesso não é mais mascarado como falha quando o
+    recarregamento pós-salvamento falha (o `await carregar()` estava dentro
+    do `try`).
+  - Formulário ganhou os campos que faltavam para o RH destravar uma ficha
+    presa na declaração final: sexo, identidade de gênero, cor/raça,
+    nacionalidade, estado civil, escolaridade, PCD, logradouro/número/
+    complemento separados. Datas viram `<InputData>` com máscara, enums e UF
+    viram `<select>` — nunca mais texto livre para esses campos.
+
+### Adicionado
+- **Cargo do convite é lista com busca**, igual ao seletor já usado na ficha
+  do colaborador — evita "Vigia"/"vigia"/"Vigía" virando cargos distintos.
+  Só frontend; `cargo_funcao` continua string livre.
+- **Padronização em massa de cargos e jornadas do Tirvu**: o RH cola o texto
+  copiado da tela do Tirvu (Cargos ou Jornadas) em Configurações → Empresas e
+  jornadas, o sistema PROPÕE o de-para (`CargoTirvu`/`Jornada.tirvu_id`) e o
+  RH confirma linha a linha — nunca grava sozinho. Detecta e sinaliza (nunca
+  funde): cópia parcial (contagem do cabeçalho não bate), cargos homônimos
+  com 2+ IDs ativos no Tirvu, jornadas duplicadas após limpar a sujeira de
+  "vínculos" colada na cópia. Ataca a causa raiz das pendências manuais do
+  export em massa para o Tirvu.
+
+### Técnico
+- `app/services/importar_tirvu_txt.py`: parser puro (sem DB) do formato
+  colado — testável isoladamente.
+- Rotas `POST /rh/tirvu-txt/{preview,confirmar}-{cargos,jornadas}`.
+- Testes novos: `test_editar_secao_rh.py` (os casos que viravam 500 mudo),
+  `test_importar_tirvu_txt.py` (parser, validado contra os dados reais do
+  RH), `test_importacao_massa_nao_regride_export.py` — exigido pela revisão
+  adversária: gera o export do Tirvu antes/depois da importação em massa e
+  garante que **só** a coluna Cargo muda, célula a célula.
+
 ## [1.92.0] — 2026-07-24 — Onda Admissão/Ficha (6 ajustes)
 
 ### Adicionado / Corrigido
