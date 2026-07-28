@@ -700,6 +700,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Link de e-mail IDENTIFICA, nunca AUTENTICA** (v2.03, feedback 2026-07-28 —
+  a regra que rege `/creche` e `/meu`): o gate 2FA morria no webview do app de
+  e-mail. A pessoa abria o link, saía para LER o código (única forma) e voltava
+  com a tela zerada — o backend guardava a sessão por 6h, mas o token vivia só
+  em `useState`, e o front ainda apagava o `?t=` da URL. Agora o
+  `AcessoCreche`/`AcessoPortal` nasce com token REAL no ENVIO do código (antes
+  era um `token_hash` placeholder, inutilizável) e esse token vai no e-mail.
+  Rotas `GET /creche/retomar/{token}` e `/portal/retomar/{token}` devolvem só
+  primeiro nome + 4 últimos dígitos do CPF, e `pode_entrar` é true **apenas**
+  para acesso emitido pelo RH (devolução, v1.82, nasce `confirmado_em` porque o
+  e-mail já foi comprovado). Link de CÓDIGO nunca vira sessão sozinho — sessão
+  expirada volta a pedir código; senão e-mail vazado = acesso. `confirmar`
+  aceita `retomada=<token>` no lugar do CPF (quem voltou pelo link não
+  redigitou). Limpar o `?t=` da URL só DEPOIS de resolvê-lo — apagar antes era
+  o que impedia o "voltar" de recuperar a tentativa. Coberto por
+  `tests/test_retomada_acesso.py` (validado por mutação).
 - **Todo e-mail que MANDA a pessoa voltar ao sistema leva o link junto** (v2.02,
   feedback 2026-07-28): os e-mails de rejeição (`revisao.py::rejeitar` e
   `::rejeitar_lote`) diziam "acesse o mesmo link da sua admissão" e **não

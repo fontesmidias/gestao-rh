@@ -171,8 +171,12 @@ export const candidato = {
 export const creche = {
   iniciar: (cpf) =>
     req('/creche/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
-  confirmar: (cpf, codigo) =>
-    req('/creche/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo }) }),
+  confirmar: (cpf, codigo, retomada) =>
+    req('/creche/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo, retomada }) }),
+  // ?t= do e-mail: diz de quem é a tentativa, sem autenticar (o código continua
+  // sendo exigido). É o que devolve a pessoa ao ponto onde parou quando ela sai
+  // do app de e-mail para ler o código.
+  retomar: (t) => req(`/creche/retomar/${t}`),
   // Verificação de identidade (KBA) para quem não tem e-mail cadastrado
   kbaIniciar: (cpf) =>
     req('/creche/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
@@ -208,8 +212,9 @@ export const creche = {
 export const portal = {
   iniciar: (cpf) =>
     req('/portal/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
-  confirmar: (cpf, codigo) =>
-    req('/portal/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo }) }),
+  confirmar: (cpf, codigo, retomada) =>
+    req('/portal/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo, retomada }) }),
+  retomar: (t) => req(`/portal/retomar/${t}`),
   kbaIniciar: (cpf) =>
     req('/portal/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
   kbaResponder: (desafio, respostas) =>

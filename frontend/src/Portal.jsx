@@ -14,12 +14,38 @@ import logo from './assets/logo.png'
 //
 // Gate idêntico ao do creche: CPF → código por e-mail; sem e-mail, KBA.
 export default function Portal() {
-  const [etapa, setEtapa] = useState('cpf')   // cpf | codigo | kba | dentro
+  // ?t= do e-mail (v2.03, mesma mecânica do creche): identifica quem é para a
+  // pessoa poder sair, ler o código e VOLTAR sem recomeçar. Quem manda é o
+  // `pode_entrar` do backend — link de código não vira sessão sozinho.
+  const tokenUrl = new URLSearchParams(window.location.search).get('t')
+  const [etapa, setEtapa] = useState(tokenUrl ? 'retomando' : 'cpf') // cpf | codigo | kba | dentro | retomando
   const [cpf, setCpf] = useState('')
   const [codigo, setCodigo] = useState('')
   const [token, setToken] = useState(null)
+  const [retomada, setRetomada] = useState(null)
   const [erro, setErro] = useState(null)
   const [carregando, setCarregando] = useState(false)
+
+  useEffect(() => {
+    if (!tokenUrl) return
+    let vivo = true
+    ;(async () => {
+      try {
+        const r = await api.retomar(tokenUrl)
+        if (!vivo) return
+        setRetomada(r)
+        if (r.pode_entrar) { setToken(tokenUrl); setEtapa('dentro') }
+        else setEtapa('codigo')
+      } catch {
+        if (!vivo) return
+        setEtapa('cpf')
+        setErro('Esse link expirou. Informe seu CPF para receber um novo código.')
+      } finally {
+        if (vivo) window.history.replaceState({}, '', window.location.pathname)
+      }
+    })()
+    return () => { vivo = false }
+  }, [])
 
   const iniciar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
@@ -35,7 +61,7 @@ export default function Portal() {
   const confirmar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
     try {
-      const r = await api.confirmar(cpf, codigo)
+      const r = await api.confirmar(cpf, codigo, tokenUrl || undefined)
       setToken(r.token); setEtapa('dentro')
     } catch (err) {
       setErro(err.detail === 'codigo_invalido'
@@ -68,11 +94,25 @@ export default function Portal() {
         </form>
       )}
 
+      {etapa === 'retomando' && (
+        <div className="rh-card creche-card centro">
+          <p className="explica">Um instante — estamos reconhecendo o seu link…</p>
+        </div>
+      )}
+
       {etapa === 'codigo' && (
         <form className="rh-card creche-card" onSubmit={confirmar}>
           <h2>Digite o código</h2>
-          <p className="explica">Enviamos um código de 6 dígitos ao seu e-mail.
-            <strong> Verifique também a caixa de spam</strong> — às vezes a mensagem vai para lá.</p>
+          {retomada ? (
+            <p className="explica">Bem-vindo de volta, <strong>{retomada.primeiro_nome}</strong>!
+              Enviamos um código de 6 dígitos para o e-mail do CPF terminado em
+              {' '}<strong>{retomada.cpf_final}</strong>. <strong>Verifique também a caixa de
+              spam</strong>. Se precisar sair para ler o código, volte por este mesmo link
+              do e-mail — você não perde o que já fez.</p>
+          ) : (
+            <p className="explica">Enviamos um código de 6 dígitos ao seu e-mail.
+              <strong> Verifique também a caixa de spam</strong> — às vezes a mensagem vai para lá.</p>
+          )}
           <label className="campo"><span className="rotulo">Código de confirmação</span>
             <input inputMode="numeric" maxLength={6} placeholder="000000" value={codigo} autoFocus
                    style={{ letterSpacing: '.4em', textAlign: 'center', fontSize: '1.4rem' }}
@@ -80,11 +120,13 @@ export default function Portal() {
           {erro && <div className="alerta">{erro}</div>}
           <button className="btn-principal" disabled={carregando || codigo.length < 6}>
             {carregando ? 'Confirmando…' : 'Entrar'}</button>
+          {/* KBA precisa do CPF digitado; quem veio pelo link não digitou. */}
           <button type="button" className="btn-link"
-                  onClick={() => { setEtapa('kba'); setErro(null) }}>
+                  onClick={() => { setErro(null); setEtapa(cpf ? 'kba' : 'cpf') }}>
             Não recebi o código / não tenho e-mail cadastrado</button>
           <button type="button" className="btn-link"
-                  onClick={() => { setEtapa('cpf'); setCodigo('') }}>← voltar</button>
+                  onClick={() => { setEtapa('cpf'); setCodigo(''); setRetomada(null) }}>
+            ← informar outro CPF</button>
         </form>
       )}
 
