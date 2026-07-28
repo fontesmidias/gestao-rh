@@ -103,7 +103,7 @@ def link_por_email(payload: LinkEmailIn, request: Request,
     não revela se o CPF existe."""
     cpf = "".join(c for c in payload.cpf if c.isdigit())
     ip = ip_do_cliente(request) or "-"
-    if _bloqueado(f"ip:{ip}"):
+    if kba.bloqueado(f"ip:{ip}"):
         raise HTTPException(status_code=429, detail="muitas_tentativas")
     candidato = _candidato_pelo_cpf(db, cpf)
     registrar(db, "entrada_link_email", ator="candidato",
