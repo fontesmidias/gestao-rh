@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmtData, fmtTelefone } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
@@ -327,11 +327,30 @@ function Painel({ aoSair }) {
   // no celular, as tabelas viram cards com rótulos automáticos das colunas
   useEffect(() => observarTabelas(), [])
 
+  // Cargo do convite: mesmo padrão de busca do PostoServico em Detalhe.jsx —
+  // evita "Vigia"/"vigia"/"Vigía" virarem cargos diferentes (feedback 2026-07-27).
+  const [cargos, setCargos] = useState([])
+  const [digitandoCargoConvite, setDigitandoCargoConvite] = useState(false)
+  useEffect(() => { api.cargos().then((r) => setCargos(r.cargos)).catch(() => {}) }, [])
+  const opcoesCargoConvite = useMemo(() => {
+    const cargoAtual = novo?.cargo_funcao || ''
+    const nomes = cargos.map((c) => c.nome)
+    if (cargoAtual && !nomes.includes(cargoAtual)) nomes.unshift(cargoAtual)
+    return [
+      ...nomes.map((n) => {
+        const achado = cargos.find((c) => c.nome === n)
+        return { valor: n, rotulo: n,
+                 extra: achado ? `${achado.pessoas} pessoa(s)` : 'atual' }
+      }),
+      { valor: '__novo', rotulo: '＋ Cargo novo…' },
+    ]
+  }, [cargos, novo?.cargo_funcao])
+
   // Jornadas para o seletor do convite: as do posto escolhido vêm primeiro
   // (ordenação, não filtro). Jornada é obrigatória no convite (feedback 2026-07-21).
   const [jornadasConvite, setJornadasConvite] = useState([])
   useEffect(() => {
-    if (!novo) { setJornadasConvite([]); return }
+    if (!novo) { setJornadasConvite([]); setDigitandoCargoConvite(false); return }
     api.jornadas(novo.posto_id || null).then(setJornadasConvite).catch(() => setJornadasConvite([]))
   }, [novo?.posto_id, novo === null])
 
@@ -419,9 +438,25 @@ function Painel({ aoSair }) {
             </select>
           </div>
           <div className="linha2">
-            <input placeholder="Cargo/função (obrigatório)"
-                   value={novo.cargo_funcao || ''}
-                   onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
+            {digitandoCargoConvite ? (
+              <span className="rh-cargo-novo">
+                <input placeholder="Cargo/função novo (obrigatório)" value={novo.cargo_funcao || ''}
+                       autoFocus
+                       onChange={(e) => setNovo({ ...novo, cargo_funcao: e.target.value })} />
+                <button type="button" className="btn-secundario btn-mini"
+                        title="Voltar para a lista de cargos já cadastrados"
+                        onClick={() => setDigitandoCargoConvite(false)}>↩ lista</button>
+              </span>
+            ) : (
+              <SelectBusca
+                valor={novo.cargo_funcao || ''}
+                vazioRotulo="— cargo/função (obrigatório) —" placeholder="Buscar cargo…"
+                opcoes={opcoesCargoConvite}
+                aoEscolher={(v) => {
+                  if (v === '__novo') { setNovo({ ...novo, cargo_funcao: '' }); setDigitandoCargoConvite(true); return }
+                  setNovo({ ...novo, cargo_funcao: v })
+                }} />
+            )}
             {jornadasConvite.length === 0 && (
               <span className="explica" style={{ margin: 0, alignSelf: 'center' }}>
                 Nenhuma jornada cadastrada ainda — cadastre em <strong>Config → Empresas e jornadas</strong>.</span>)}

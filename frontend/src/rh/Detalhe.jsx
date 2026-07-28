@@ -8,7 +8,9 @@ import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
+import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
+import { OPCOES } from '../candidato/Wizard.jsx'
 
 const MOTIVOS = [
   ['ilegivel', 'Ilegível'],
@@ -421,10 +423,23 @@ function ModelosDoColaborador({ id, setMsg }) {
 // Seções e campos que o RH pode completar/corrigir. A validação é a mesma do
 // candidato (backend); documentos já assinados que exibem o dado alterado são
 // invalidados e voltam para o CANDIDATO assinar — o RH prepara, nunca assina.
+//
+// pessoais/endereco ganharam os campos que faltavam (feedback 2026-07-27): sem
+// eles o RH não conseguia destravar uma ficha parada na declaração final —
+// sexo, identidade de gênero, cor/raça, nacionalidade, estado civil,
+// escolaridade e PCD são obrigatórios lá (ficha.py), e o backend já aceitava,
+// só o formulário do RH não expunha.
 const SECOES_FICHA = {
   pessoais: ['nome_completo', 'nome_social', 'nome_mae', 'nome_pai',
-             'data_nascimento', 'naturalidade_cidade', 'naturalidade_uf'],
-  endereco: ['cep', 'logradouro_numero_complemento', 'bairro', 'cidade', 'uf'],
+             'data_nascimento', 'sexo', 'identidade_genero', 'cor_raca',
+             'nacionalidade', 'naturalidade_cidade', 'naturalidade_uf',
+             'estado_civil', 'escolaridade', 'pcd'],
+  // logradouro_numero_complemento é o campo LEGADO (string única) — quem já
+  // preencheu por ele passa a declaração sem precisar dos três campos novos
+  // (ficha.py::pendencias_da_ficha). Mantido aqui só para corrigir fichas
+  // antigas; a coleta nova usa logradouro/numero/complemento separados.
+  endereco: ['cep', 'logradouro', 'numero', 'complemento',
+             'logradouro_numero_complemento', 'bairro', 'cidade', 'uf'],
   documentos: ['rg_numero', 'rg_orgao_emissor', 'rg_data_expedicao', 'cpf',
                'pis_nis_pasep', 'cnh_numero', 'cnh_categoria', 'cnh_orgao_emissor',
                'cnh_uf', 'cnh_data_emissao', 'cnh_validade', 'cnh_primeira_habilitacao',
@@ -443,17 +458,44 @@ const SECOES_FICHA = {
 }
 // Campos booleanos: o <input> devolve texto; convertê-los para bool no submit
 // (como vt_optante já era). Chave = campo do payload.
-const CAMPOS_BOOL = new Set(['vt_optante', 'usa_medicamento_continuo'])
+const CAMPOS_BOOL = new Set(['vt_optante', 'usa_medicamento_continuo', 'pcd'])
+// Campos de data: <InputData> com máscara BR, valor guardado em ISO — sem
+// isso "15/03/1990" digitado num <input> texto virava ValidationError (500
+// mudo) no backend (feedback 2026-07-27).
+const CAMPOS_DATA = new Set(['data_nascimento', 'rg_data_expedicao', 'cnh_data_emissao',
+                             'cnh_validade', 'cnh_primeira_habilitacao', 'militar_data_emissao'])
+// Campos enum: <select> com as mesmas opções do wizard do candidato — digitar
+// livre um enum ("CPF" em vez do valor exato) também virava 500 mudo.
+const CAMPOS_ENUM = {
+  sexo: OPCOES.sexo, identidade_genero: OPCOES.identidade_genero,
+  cor_raca: OPCOES.cor_raca, nacionalidade: OPCOES.nacionalidade,
+  estado_civil: OPCOES.estado_civil, escolaridade: OPCOES.escolaridade,
+  pix_tipo: OPCOES.pix_tipo,
+}
+// Campos de UF: só 2 letras — <select> evita "Distrito Federal" (DataError
+// de truncamento no commit, também 500 mudo antes da correção do backend).
+const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+             'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC',
+             'SP', 'SE', 'TO']
+const CAMPOS_UF = new Set(['naturalidade_uf', 'uf', 'cnh_uf'])
 const CHAVE_ESTADO = { 'trabalho-banco': 'trabalho_banco' }
 
-function FichaRH({ id, setMsg }) {
+function FichaRH({ id }) {
   const [aberta, setAberta] = useState(false)
   const [ficha, setFicha] = useState(null)
+  const [erroCarga, setErroCarga] = useState(null)
   const [edicao, setEdicao] = useState({}) // {`secao.campo`: valor}
   const [motivo, setMotivo] = useState('')
   const [salvando, setSalvando] = useState(null)
+  // Mensagem LOCAL a esta seção — antes ia para o setMsg do pai, renderizado
+  // ~19 blocos JSX acima do formulário (fora do viewport com o <details>
+  // aberto e rolado até o botão Salvar). O RH nunca via o erro (feedback de
+  // campo 2026-07-27: "não salva e não diz o motivo"). {secao: {tipo, texto}}
+  const [msgSecao, setMsgSecao] = useState({})
 
   const carregar = () => api.fichaCandidato(id).then(setFicha)
+    .then(() => setErroCarga(null))
+    .catch(() => setErroCarga('Não foi possível carregar a ficha. Tente novamente.'))
   useEffect(() => { if (aberta) carregar() }, [aberta, id])
 
   if (!aberta) return (
@@ -461,6 +503,12 @@ function FichaRH({ id, setMsg }) {
       <button className="btn-secundario btn-mini" onClick={() => setAberta(true)}
               title="Completa campos faltantes ou corrige erros. Fichas já assinadas que exibem o dado alterado voltam para o candidato assinar de novo — só as afetadas.">
         ✏️ Corrigir dados da ficha <span className="dica-i">ⓘ</span></button>
+    </div>
+  )
+  if (erroCarga) return (
+    <div className="rh-card">
+      <div className="alerta">{erroCarga}</div>
+      <button className="btn-secundario btn-mini" onClick={carregar}>tentar de novo</button>
     </div>
   )
   if (!ficha) return <div className="rh-card"><p>Carregando ficha…</p></div>
@@ -487,10 +535,10 @@ function FichaRH({ id, setMsg }) {
       if (chave in edicao) dados[campo] = edicao[chave] === '' ? null : edicao[chave]
     }
     if (!Object.keys(dados).length) {
-      setMsg({ tipo: 'erro', texto: 'Nenhum campo desta seção foi alterado.' }); return
+      setMsgSecao((m) => ({ ...m, [secao]: { tipo: 'erro', texto: 'Nenhum campo desta seção foi alterado.' } })); return
     }
     if (!motivo.trim()) {
-      setMsg({ tipo: 'erro', texto: 'Informe o motivo da correção — ele vai para a auditoria.' }); return
+      setMsgSecao((m) => ({ ...m, [secao]: { tipo: 'erro', texto: 'Informe o motivo da correção — ele vai para a auditoria.' } })); return
     }
     if (!window.confirm('Salvar a correção desta seção?\n\nSe algum documento já assinado exibir um dado alterado, ele será reaberto para o colaborador assinar novamente.')) return
     for (const campo of CAMPOS_BOOL) {
@@ -498,26 +546,36 @@ function FichaRH({ id, setMsg }) {
         dados[campo] = String(dados[campo]).toLowerCase() === 'true'
       }
     }
-    setSalvando(secao); setMsg(null)
+    setSalvando(secao); setMsgSecao((m) => ({ ...m, [secao]: null }))
     try {
       const r = await api.editarFicha(id, secao, dados, motivo.trim())
       const invalidadas = r.assinaturas_invalidadas || []
-      setMsg({ tipo: 'ok', texto: invalidadas.length
+      setMsgSecao((m) => ({ ...m, [secao]: { tipo: 'ok', texto: invalidadas.length
         ? `Ficha atualizada. ${invalidadas.length} documento(s) voltaram para assinatura do candidato`
           + (r.email_enviado ? ' — ele foi avisado por e-mail.' : ' — avise-o (e-mail não saiu).')
-        : 'Ficha atualizada (nenhum documento assinado foi afetado).' })
+        : 'Ficha atualizada (nenhum documento assinado foi afetado).' } }))
       setEdicao((e) => {
         const novo = { ...e }
         Object.keys(novo).forEach((k) => { if (k.startsWith(`${secao}.`)) delete novo[k] })
         return novo
       })
-      await carregar()
+      // Fora do try: se o recarregamento falhar depois de um salvamento bem
+      // sucedido, o catch abaixo NÃO deve sobrescrever a mensagem de sucesso
+      // por uma de erro (bug antigo: dizia "não foi possível salvar" quando na
+      // verdade tinha salvo, levando o RH a reeditar à toa).
     } catch (e) {
-      const texto = Array.isArray(e.detail)
-        ? e.detail.map((d) => `${d.loc?.slice(-1)[0]}: ${d.msg}`).join('; ')
-        : (e.detail || e.message)
-      setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${texto}).` })
-    } finally { setSalvando(null) }
+      // e.campos vem do 422 estruturado [{loc, msg}] que o backend agora
+      // devolve (rh_ficha.py); antes disso o api.js descartava a lista e só
+      // sobrava a string genérica 'dados_invalidos' ou 'erro'.
+      const texto = Array.isArray(e.campos)
+        ? e.campos.map((c) => `${(c.loc || []).slice(-1)[0]}: ${c.msg}`).join('; ')
+        : (e.amigavel || e.detail || e.message)
+      setMsgSecao((m) => ({ ...m, [secao]: { tipo: 'erro', texto: `Não foi possível salvar (${texto}).` } }))
+      setSalvando(null)
+      return
+    }
+    setSalvando(null)
+    carregar().catch(() => {})
   }
 
   return (
@@ -526,10 +584,10 @@ function FichaRH({ id, setMsg }) {
         <strong>✏️ Corrigir dados da ficha</strong>
         <button className="btn-link" onClick={() => setAberta(false)}>fechar</button>
       </div>
-      <p className="explica">Datas no formato <code>aaaa-mm-dd</code>. Deixar um campo em
-        branco apaga o valor. Toda alteração exige motivo e fica na auditoria com o antes e
-        o depois. Se o dado aparece em documento já assinado, a assinatura é invalidada e o
-        candidato assina a versão nova — <strong>quem assina é sempre ele</strong>.</p>
+      <p className="explica">Deixar um campo em branco apaga o valor. Toda alteração exige
+        motivo e fica na auditoria com o antes e o depois. Se o dado aparece em documento já
+        assinado, a assinatura é invalidada e o candidato assina a versão nova —
+        <strong> quem assina é sempre ele</strong>.</p>
       <label className="campo"><span className="rotulo">Motivo da correção (obrigatório)</span>
         <input value={motivo} placeholder="ex.: candidato informou RG errado pelo WhatsApp"
                onChange={(e) => setMotivo(e.target.value)} /></label>
@@ -544,6 +602,9 @@ function FichaRH({ id, setMsg }) {
             // "sim" num input gravaria false silenciosamente (dado médico em
             // usa_medicamento_continuo). O submit converte "true"/"false".
             const ehBool = CAMPOS_BOOL.has(campo)
+            const ehData = CAMPOS_DATA.has(campo)
+            const ehUf = CAMPOS_UF.has(campo)
+            const opcoesEnum = CAMPOS_ENUM[campo]
             return (
               <label className="campo" key={campo}>
                 <span className="rotulo">{campo.replaceAll('_', ' ')}
@@ -554,6 +615,21 @@ function FichaRH({ id, setMsg }) {
                     <option value="">— não informado —</option>
                     <option value="true">Sim</option>
                     <option value="false">Não</option>
+                  </select>
+                ) : ehData ? (
+                  <InputData valor={valorEdit || ''}
+                             onChange={(iso) => setEdicao({ ...edicao, [chave]: iso ?? '' })} />
+                ) : opcoesEnum ? (
+                  <select value={valorEdit}
+                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                    <option value="">— não informado —</option>
+                    {opcoesEnum.map(([v, rotulo]) => <option key={v} value={v}>{rotulo}</option>)}
+                  </select>
+                ) : ehUf ? (
+                  <select value={valorEdit}
+                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                    <option value="">— não informado —</option>
+                    {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>
                 ) : (
                   <input value={valorEdit}
@@ -572,6 +648,10 @@ function FichaRH({ id, setMsg }) {
                 ))}
               </ul>
             </div>
+          )}
+          {msgSecao[secao] && (
+            <div className={msgSecao[secao].tipo === 'erro' ? 'alerta' : 'sucesso'}
+                 style={{ width: '100%' }}>{msgSecao[secao].texto}</div>
           )}
           <button className="btn-principal btn-mini" disabled={salvando === secao}
                   onClick={() => salvarSecao(secao)}>
@@ -836,7 +916,7 @@ export default function Detalhe({ id, aoVoltar }) {
       <RoteiroAssinatura id={id} />
       <div className="rh-grid-2">
         <ModelosDoColaborador id={id} setMsg={setMsg} />
-        <FichaRH id={id} setMsg={setMsg} />
+        <FichaRH id={id} />
       </div>
       <DiagnosticoColaborador id={id} />
 
