@@ -283,7 +283,7 @@ def testar_ocr(db: Session = Depends(get_db),
         texto = testar_mistral(chave)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"ok": True, "texto_lido": texto[:120]}
+    return {"ok": True, "texto_lido": (texto or "")[:120]}
 
 
 # ---------- IA de texto: OpenRouter (principal) + Groq (reserva) ----------
@@ -356,7 +356,7 @@ def testar_groq_rota(db: Session = Depends(get_db),
         texto = testar_groq(chave)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"ok": True, "texto_lido": texto[:120]}
+    return {"ok": True, "texto_lido": (texto or "")[:120]}
 
 
 @router.put("/rh/config/openrouter")
@@ -387,7 +387,7 @@ def testar_openrouter_rota(db: Session = Depends(get_db),
         texto = testar_openrouter(chave)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"ok": True, "texto_lido": texto[:120]}
+    return {"ok": True, "texto_lido": (texto or "")[:120]}
 
 
 @router.get("/rh/config/smtp")

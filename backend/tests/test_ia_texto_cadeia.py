@@ -236,6 +236,48 @@ def test_erro_401_acusa_a_chave():
             assert "recusou a chave" in str(exc), str(exc)
 
 
+# ---------- content nulo/vazio (HTTP 200) NUNCA devolve None (era o 500) ----------
+
+def test_content_vazio_nao_devolve_none():
+    # 200 com content=None (reasoning gastou o orçamento de tokens) cai como
+    # resposta inválida e tenta o próximo modelo/provedor — nunca retorna None.
+    def fake_post(url, **kw):
+        return _resposta(200, {"choices": [{"message": {"content": None}}], "usage": {}})
+
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        try:
+            ia_texto.gerar_texto("s", "u")
+            raise AssertionError("deveria ter levantado, não devolver None")
+        except IndisponivelError as exc:
+            assert exc.codigo == "resposta_vazia", exc.codigo
+
+
+def test_content_vazio_no_teste_de_chave_vira_runtime_nao_500():
+    # A rota faz texto[:120] — se gerar_texto devolvesse None, dava 500. Agora o
+    # _testar levanta RuntimeError (→ 422 com mensagem clara), sem estourar.
+    def fake_post(url, **kw):
+        return _resposta(200, {"choices": [{"message": {"content": "   "}}], "usage": {}})
+
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        try:
+            ia_texto.testar_openrouter("chave-x")
+            raise AssertionError("deveria ter levantado RuntimeError")
+        except RuntimeError as exc:
+            assert "vazio" in str(exc), str(exc)
+
+
+def test_content_valido_ainda_retorna():
+    # Não pode ter virado paranoico: content de verdade continua passando.
+    def fake_post(url, **kw):
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        assert ia_texto.gerar_texto("s", "u") == "resposta boa"
+
+
 test_429_vira_cota_excedida_com_retry_after()
 test_401_vira_indisponivel_nao_cota()
 test_fallback_para_groq_quando_openrouter_falha()
@@ -248,5 +290,8 @@ test_401_pula_provedor_sem_varrer_modelos()
 test_override_de_modelos_pelo_painel()
 test_erro_404_nao_acusa_a_chave()
 test_erro_401_acusa_a_chave()
+test_content_vazio_nao_devolve_none()
+test_content_vazio_no_teste_de_chave_vira_runtime_nao_500()
+test_content_valido_ainda_retorna()
 
 print("test_ia_texto_cadeia: OK")
