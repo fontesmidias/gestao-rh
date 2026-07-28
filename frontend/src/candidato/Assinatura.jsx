@@ -21,6 +21,10 @@ export default function Assinatura({ token, email, aoConcluir }) {
   const [vtOptante, setVtOptante] = useState(null) // opção atual pelo Vale-Transporte
   const [trocandoVt, setTrocandoVt] = useState(false)
 
+  // O termo de VT só entra na lista de quem tem VT a assinar; a confirmação
+  // antes do botão depende disso (não faz sentido perguntar a quem não assina).
+  const temTermoVt = fichas.some((f) => f.documento === 'termo_vt' && !f.assinado)
+
   const recarregar = () => api.fichas(token).then((r) => {
     setFichas(r.fichas)
     return r.fichas
@@ -103,20 +107,41 @@ export default function Assinatura({ token, email, aoConcluir }) {
                  target="_blank" rel="noreferrer">
                 {assinado ? 'ver documento assinado' : 'conferir o documento antes de assinar'}
               </a>
+              {/* A troca vive no bloco de confirmação, logo acima do botão de
+                  assinar — aqui fica só o estado, para o card não mentir. */}
               {documento === 'termo_vt' && !assinado && vtOptante !== null && (
                 <div className="vt-opcao">
-                  Sua opção pelo Vale-Transporte:{' '}
-                  <strong>{vtOptante ? 'RECEBER o VT' : 'NÃO receber o VT'}</strong>
-                  <button className="btn-link" disabled={trocandoVt}
-                          onClick={() => trocarVt(!vtOptante)}>
-                    {trocandoVt ? 'trocando…' : `trocar para ${vtOptante ? 'NÃO receber' : 'RECEBER'}`}
-                  </button>
+                  Sua opção: <strong>{vtOptante ? 'RECEBER o VT' : 'NÃO receber o VT'}</strong>
                 </div>
               )}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Confirmação do VT ANTES do botão de assinar (feedback 2026-07-28: gente
+          assinando o termo com a opção errada). Antes essa troca só existia
+          dentro do card do termo, no meio da lista — quem não reparasse assinava
+          e não dava mais para mudar (409). O termo vira desconto de até 6% em
+          folha, então o erro custa dinheiro do salário da pessoa. */}
+      {!todasAssinadas && (fase === 'revisar' || fase === 'enviando')
+        && temTermoVt && vtOptante !== null && (
+        <div className="aviso-codigo">
+          <strong>Confirme sua opção pelo Vale-Transporte:</strong>
+          <div className="email-confirma">
+            <code>{vtOptante ? 'QUERO receber o VT' : 'NÃO quero o VT'}</code>
+            <button className="btn-link" disabled={trocandoVt}
+                    onClick={() => trocarVt(!vtOptante)}>
+              {trocandoVt ? 'trocando…' : `trocar para ${vtOptante ? 'NÃO querer' : 'QUERER'}`}
+            </button>
+          </div>
+          {vtOptante
+            ? 'Optando pelo VT, a empresa desconta até 6% do seu salário básico (nunca '
+              + 'mais do que o transporte custa).'
+            : 'Sem o VT, nada é descontado do seu salário e o transporte fica por sua conta.'}
+          {' '}<strong>Depois de assinar, essa opção não pode mais ser trocada por aqui.</strong>
+        </div>
+      )}
 
       {!todasAssinadas && (fase === 'revisar' || fase === 'enviando') && (
         <>

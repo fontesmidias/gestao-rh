@@ -700,6 +700,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Escolha irreversível se confirma ANTES do botão, não dentro do card**
+  (v2.05, feedback 2026-07-28 — "assinou com a opção errada"): a troca da opção
+  de VT existia só dentro do card do `termo_vt`, no meio da lista de
+  documentos; quem não reparasse assinava errado e aí é 409
+  `termo_vt_ja_assinado`. Como o termo vira desconto de até 6% em folha, o erro
+  custa salário. A confirmação agora fica logo acima de "Assinar os
+  documentos" (mesmo lugar do bloco que confirma o e-mail), diz o efeito em
+  dinheiro e avisa que depois não dá para trocar; o card só exibe o estado. A
+  trava de PREENCHIMENTO já existia e não mudou (`ficha.py:480` +
+  `declarar_veracidade` 422) — o problema nunca foi a obrigatoriedade, foi a
+  pessoa não ver o que tinha respondido.
 - **O candidato reabre o PRÓPRIO envio enquanto o RH não olhou** (v2.03,
   `documentos.py::reabrir_envio`): depois do "CONCLUÍ MEU ENVIO" o checklist
   congela (409 `envio_ja_concluido`) e antes só o RH reabria — quem percebia
