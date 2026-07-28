@@ -39,26 +39,47 @@ _ESPERA_BASE_S = 2.0     # backoff exponencial: 2s, 4s, 8s
 _ESPERA_MAX_S = 30.0     # teto por tentativa (o worker é que espera longo)
 
 # Cadeia de provedores em ordem de preferência. `chave_cfg` é a chave na
-# config dinâmica; `modelo` é o id do modelo em cada serviço.
+# config dinâmica; `modelos_cfg` é a chave (config dinâmica) onde o RH pode
+# sobrescrever a LISTA de modelos daquele provedor pelo painel; `modelos_padrao`
+# é o fallback quando o RH não configurou nada.
+#
+# POR QUE UMA LISTA POR PROVEDOR (decisão do Bruno, 2026-07-28): os modelos
+# `:free` do OpenRouter somem/renomeiam sem aviso — foi o que derrubou o
+# provedor principal (`meta-llama/llama-3.3-70b-instruct:free` deixou de existir
+# e todo teste virava um falso "recusou a chave"). Agora cada provedor tenta seus
+# modelos EM ORDEM: se um falhar (404 de modelo inexistente, cota…), cai no
+# próximo modelo do MESMO provedor antes de trocar de provedor. E a lista é
+# editável no painel — quando um id sumir de novo, o RH corrige em segundos, sem
+# deploy. Os padrões abaixo suportam `response_format: json_object` (exigido pelo
+# Match de vagas via `gerar_json`) — conferido em 2026-07-28.
 PROVEDORES = (
     {
         "nome": "openrouter",
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "chave_cfg": "openrouter_api_key",
-        "modelo": "meta-llama/llama-3.3-70b-instruct:free",
+        "modelos_cfg": "openrouter_modelos",
+        "modelos_padrao": ("google/gemma-4-31b-it:free", "openai/gpt-oss-20b:free"),
     },
     {
         "nome": "groq",
         "url": "https://api.groq.com/openai/v1/chat/completions",
         "chave_cfg": "groq_api_key",
-        "modelo": "llama-3.3-70b-versatile",
+        "modelos_cfg": "groq_modelos",
+        "modelos_padrao": ("llama-3.3-70b-versatile",),
     },
 )
 
 
 class IndisponivelError(Exception):
     """Falha PERMANENTE ou desconhecida: chave ausente/inválida, provedor fora
-    do ar, resposta inválida. Tentar de novo já não resolve sozinho."""
+    do ar, resposta inválida. Tentar de novo já não resolve sozinho. `codigo`
+    guarda o motivo cru (chave_recusada, http_404, resposta_invalida…) para o
+    painel dizer a coisa CERTA — antes tudo virava um genérico 'recusou a
+    chave', mascarando um modelo inexistente como se fosse chave errada."""
+
+    def __init__(self, codigo: str = "provedor_indisponivel"):
+        super().__init__(codigo)
+        self.codigo = codigo
 
 
 class CotaExcedidaError(Exception):
@@ -93,6 +114,23 @@ def provedores_configurados(db=None) -> list[str]:
     return [p["nome"] for p in PROVEDORES if _ler_chave(p["chave_cfg"], db)]
 
 
+def _modelos_do_provedor(provedor: dict, db=None) -> list[str]:
+    """Lista de modelos a tentar, em ordem. O override do painel (config
+    dinâmica, itens separados por vírgula ou quebra de linha) vem primeiro; sem
+    ele, cai nos padrões do código. Nunca devolve vazio — lista vazia deixaria o
+    provedor sem nada para chamar."""
+    bruto = _ler_chave(provedor["modelos_cfg"], db) or ""
+    modelos = [m.strip() for m in bruto.replace("\n", ",").split(",") if m.strip()]
+    return modelos or list(provedor["modelos_padrao"])
+
+
+def modelos_configurados(db=None) -> dict[str, list[str]]:
+    """Para o painel: a lista EFETIVA de modelos por provedor (o que o RH
+    configurou, ou os padrões). Não é segredo — pode voltar ao painel para
+    edição, ao contrário da chave."""
+    return {p["nome"]: _modelos_do_provedor(p, db) for p in PROVEDORES}
+
+
 def _espera_do_header(resposta: httpx.Response, padrao: float) -> float:
     """`Retry-After` (segundos) quando o provedor manda — é a informação mais
     confiável sobre quando vale a pena tentar de novo. Antes era descartada."""
@@ -103,11 +141,11 @@ def _espera_do_header(resposta: httpx.Response, padrao: float) -> float:
         return padrao
 
 
-def _chamar_provedor(provedor: dict, mensagens: list[dict], *, chave: str,
-                     resposta_json: bool, max_tokens: int) -> str:
-    """Uma tentativa contra UM provedor. Levanta CotaExcedidaError (429) ou
-    IndisponivelError (resto)."""
-    corpo = {"model": provedor["modelo"], "messages": mensagens,
+def _chamar_provedor(provedor: dict, modelo: str, mensagens: list[dict], *,
+                     chave: str, resposta_json: bool, max_tokens: int) -> str:
+    """Uma tentativa contra UM modelo de UM provedor. Levanta CotaExcedidaError
+    (429) ou IndisponivelError (resto)."""
+    corpo = {"model": modelo, "messages": mensagens,
              "max_tokens": max_tokens, "temperature": 0.4}
     if resposta_json:
         corpo["response_format"] = {"type": "json_object"}
@@ -120,37 +158,42 @@ def _chamar_provedor(provedor: dict, mensagens: list[dict], *, chave: str,
     try:
         r = httpx.post(provedor["url"], headers=cabecalhos, json=corpo, timeout=_TIMEOUT)
     except Exception as exc:   # rede, DNS, timeout
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=%s", provedor["nome"],
-                        type(exc).__name__)
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=%s",
+                        provedor["nome"], modelo, type(exc).__name__)
         raise IndisponivelError("provedor_indisponivel") from exc
 
     if r.status_code == 429:
         espera = _espera_do_header(r, 60.0)
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=cota espera=%.0fs",
-                        provedor["nome"], espera)
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=cota espera=%.0fs",
+                        provedor["nome"], modelo, espera)
         raise CotaExcedidaError("cota_excedida", espera_s=espera)
     if r.status_code in (401, 403):
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=chave_recusada", provedor["nome"])
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=chave_recusada",
+                        provedor["nome"], modelo)
         raise IndisponivelError("chave_recusada")
     if r.status_code >= 500:
         # Erro do lado deles — transitório, mas sem Retry-After confiável.
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=http_%s", provedor["nome"],
-                        r.status_code)
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=http_%s",
+                        provedor["nome"], modelo, r.status_code)
         raise CotaExcedidaError("provedor_instavel", espera_s=10.0)
     if r.status_code >= 400:
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=http_%s", provedor["nome"],
-                        r.status_code)
+        # 400/404 costuma ser MODELO inexistente/indisponível (o `:free` sumiu,
+        # ou a conta não tem acesso). Não é a chave — por isso a cadeia tenta o
+        # próximo modelo. O `codigo` carrega o status para o painel explicar.
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=http_%s",
+                        provedor["nome"], modelo, r.status_code)
         raise IndisponivelError(f"http_{r.status_code}")
 
     try:
         dados = r.json()
         texto = dados["choices"][0]["message"]["content"]
     except Exception as exc:
-        telemetria.info("ia_texto provedor=%s ok=0 motivo=resposta_invalida", provedor["nome"])
+        telemetria.info("ia_texto provedor=%s modelo=%s ok=0 motivo=resposta_invalida",
+                        provedor["nome"], modelo)
         raise IndisponivelError("resposta_invalida") from exc
 
-    telemetria.info("ia_texto provedor=%s tokens=%s ok=1", provedor["nome"],
-                    dados.get("usage", {}).get("total_tokens", "-"))
+    telemetria.info("ia_texto provedor=%s modelo=%s tokens=%s ok=1", provedor["nome"],
+                    modelo, dados.get("usage", {}).get("total_tokens", "-"))
     return texto
 
 
@@ -167,8 +210,15 @@ def _chamar(mensagens: list[dict], *, chave: str | None, resposta_json: bool,
 
     `chave` + `so_provedor` restringem a UM provedor — usado só pelo botão de
     teste de conexão do painel (testar a chave da Groq não pode mandá-la ao
-    OpenRouter)."""
+    OpenRouter).
+
+    Ordem de fallback: para cada provedor, tenta seus modelos EM ORDEM; para
+    cada modelo, `_TENTATIVAS` com backoff. Um modelo que dá 404 (inexistente/
+    indisponível) ou estoura cota cede ao PRÓXIMO MODELO do mesmo provedor antes
+    de trocar de provedor. Só `chave_recusada` (401/403) pula o provedor inteiro
+    — a chave é do provedor, então nenhum modelo dele passaria."""
     ultima_cota: CotaExcedidaError | None = None
+    ultimo_indisp: IndisponivelError | None = None
     algum_configurado = False
 
     for provedor in PROVEDORES:
@@ -179,27 +229,37 @@ def _chamar(mensagens: list[dict], *, chave: str | None, resposta_json: bool,
             continue
         algum_configurado = True
 
-        for tentativa in range(_TENTATIVAS):
-            try:
-                return _chamar_provedor(provedor, mensagens, chave=chave_provedor,
-                                        resposta_json=resposta_json, max_tokens=max_tokens)
-            except CotaExcedidaError as exc:
-                ultima_cota = exc
-                if not esperar_cota:
-                    break          # troca de provedor: o RH não pode esperar
-                if tentativa == _TENTATIVAS - 1:
-                    break          # esgotou aqui; tenta o próximo provedor
-                espera = min(exc.espera_s or (_ESPERA_BASE_S * (2 ** tentativa)), _ESPERA_MAX_S)
-                log.info("Cota de %s excedida — aguardando %.0fs.", provedor["nome"], espera)
-                time.sleep(espera)
-            except IndisponivelError:
-                break              # chave ruim / erro permanente: próximo provedor
+        pular_provedor = False
+        for modelo in _modelos_do_provedor(provedor):
+            for tentativa in range(_TENTATIVAS):
+                try:
+                    return _chamar_provedor(provedor, modelo, mensagens, chave=chave_provedor,
+                                            resposta_json=resposta_json, max_tokens=max_tokens)
+                except CotaExcedidaError as exc:
+                    ultima_cota = exc
+                    if not esperar_cota:
+                        break          # troca de modelo: o RH não pode esperar
+                    if tentativa == _TENTATIVAS - 1:
+                        break          # esgotou aqui; tenta o próximo modelo
+                    espera = min(exc.espera_s or (_ESPERA_BASE_S * (2 ** tentativa)), _ESPERA_MAX_S)
+                    log.info("Cota de %s (%s) excedida — aguardando %.0fs.",
+                             provedor["nome"], modelo, espera)
+                    time.sleep(espera)
+                except IndisponivelError as exc:
+                    ultimo_indisp = exc
+                    # Chave recusada falha em QUALQUER modelo deste provedor —
+                    # não adianta tentar os outros; vai direto ao próximo provedor.
+                    if exc.codigo == "chave_recusada":
+                        pular_provedor = True
+                    break              # próximo modelo (erro do modelo) ou provedor
+            if pular_provedor:
+                break
 
     if not algum_configurado:
         raise IndisponivelError("chave_nao_configurada")
     if ultima_cota is not None:
         raise ultima_cota          # todos estouraram cota: é transitório
-    raise IndisponivelError("provedor_indisponivel")
+    raise ultimo_indisp or IndisponivelError("provedor_indisponivel")
 
 
 def gerar_texto(prompt_sistema: str, prompt_usuario: str, *,
@@ -232,7 +292,10 @@ def gerar_json(prompt_sistema: str, prompt_usuario: str, *,
 
 def _testar(chave: str, provedor: str, rotulo: str, onde: str) -> str:
     """Testa a chave CONTRA O PROVEDOR CERTO — testar a chave da Groq não pode
-    mandá-la ao OpenRouter (e vice-versa)."""
+    mandá-la ao OpenRouter (e vice-versa). A mensagem de erro é ESPECÍFICA por
+    motivo: 'recusou a chave' só quando o provedor respondeu 401/403; um modelo
+    inexistente (404) diz para conferir os MODELOS, não a chave — senão a causa
+    real (o `:free` que sumiu) fica escondida atrás de um falso 'chave errada'."""
     try:
         return gerar_texto("Responda em português, em uma frase curta.",
                            "Diga apenas: conexão funcionando.",
@@ -241,8 +304,23 @@ def _testar(chave: str, provedor: str, rotulo: str, onde: str) -> str:
         raise RuntimeError(f"A chave do {rotulo} funciona, mas o limite de uso está "
                            f"esgotado agora (tente em ~{int(exc.espera_s)}s).") from exc
     except IndisponivelError as exc:
-        raise RuntimeError(f"A API do {rotulo} não respondeu ou recusou a chave. "
-                           f"Confira a chave em {onde}.") from exc
+        cod = exc.codigo
+        if cod == "chave_recusada":
+            raise RuntimeError(f"O {rotulo} recusou a chave (não autorizada). "
+                               f"Confira a chave em {onde}.") from exc
+        if cod.startswith("http_"):
+            dica = ("Provável modelo indisponível — confira os modelos "
+                    "configurados abaixo. ")
+            if provedor == "openrouter":
+                dica += ("Modelos free do OpenRouter às vezes exigem habilitar a "
+                         "política de dados em openrouter.ai/settings/privacy. ")
+            raise RuntimeError(f"O {rotulo} respondeu {cod.replace('http_', 'HTTP ')}. "
+                               f"{dica}(A chave em si parece válida.)") from exc
+        if cod == "resposta_invalida":
+            raise RuntimeError(f"O {rotulo} respondeu num formato inesperado. "
+                               f"Tente de novo; se persistir, troque o modelo.") from exc
+        raise RuntimeError(f"O {rotulo} não respondeu (rede ou serviço fora do ar). "
+                           f"Tente de novo em instantes.") from exc
 
 
 def testar_groq(chave: str) -> str:

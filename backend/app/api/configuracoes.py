@@ -293,19 +293,36 @@ def testar_ocr(db: Session = Depends(get_db),
 # 2026-07-28.
 
 
+def _normalizar_modelos(bruto: str) -> str:
+    """Normaliza a lista de modelos digitada no painel para uma string estável
+    'a, b, c' (separadores vírgula/quebra de linha viram vírgula; espaços e itens
+    vazios caem fora). String vazia mantém o override limpo → o serviço usa os
+    padrões do código."""
+    itens = [m.strip() for m in (bruto or "").replace("\n", ",").split(",") if m.strip()]
+    return ", ".join(itens)
+
+
 class GroqIn(BaseModel):
     groq_api_key: str | None = None
+    groq_modelos: str | None = None
 
 
 class OpenRouterIn(BaseModel):
     openrouter_api_key: str | None = None
+    openrouter_modelos: str | None = None
 
 
 @router.get("/rh/config/groq")
 def ver_groq(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
-    from app.services.ia_texto import chave_groq, chave_openrouter
+    from app.services.ia_texto import (chave_groq, chave_openrouter,
+                                       modelos_configurados)
+    # Os MODELOS não são segredo (ao contrário da chave) — voltam ao painel para
+    # o RH ver/editar a lista efetiva (a que configurou, ou os padrões).
+    modelos = modelos_configurados(db)
     return {"chave_definida": bool(chave_groq(db)),
-            "openrouter_definida": bool(chave_openrouter(db))}
+            "openrouter_definida": bool(chave_openrouter(db)),
+            "openrouter_modelos": ", ".join(modelos.get("openrouter", [])),
+            "groq_modelos": ", ".join(modelos.get("groq", []))}
 
 
 @router.put("/rh/config/groq")
@@ -317,6 +334,13 @@ def salvar_groq(payload: GroqIn, db: Session = Depends(get_db),
         gravar_config(db, {"groq_api_key": (payload.groq_api_key or "").strip()})
         registrar(db, "groq_alterado", ator="rh", ator_detalhe=rh.email,
                   detalhe={"ativado": bool((payload.groq_api_key or "").strip())})
+    if payload.groq_modelos is not None:
+        # Lista vazia limpa o override (volta aos padrões do código). O valor não
+        # é segredo — pode ir para a auditoria.
+        modelos = _normalizar_modelos(payload.groq_modelos)
+        gravar_config(db, {"groq_modelos": modelos})
+        registrar(db, "groq_modelos_alterado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"modelos": modelos})
     db.commit()
     return ver_groq(db, rh)
 
@@ -343,6 +367,11 @@ def salvar_openrouter(payload: OpenRouterIn, db: Session = Depends(get_db),
         gravar_config(db, {"openrouter_api_key": (payload.openrouter_api_key or "").strip()})
         registrar(db, "openrouter_alterado", ator="rh", ator_detalhe=rh.email,
                   detalhe={"ativado": bool((payload.openrouter_api_key or "").strip())})
+    if payload.openrouter_modelos is not None:
+        modelos = _normalizar_modelos(payload.openrouter_modelos)
+        gravar_config(db, {"openrouter_modelos": modelos})
+        registrar(db, "openrouter_modelos_alterado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"modelos": modelos})
     db.commit()
     return ver_groq(db, rh)
 

@@ -128,6 +128,12 @@ def test_worker_espera_e_retoma():
 
 # ---------- Teste de chave manda para o provedor CERTO ----------
 
+# `_chave_api_so` responde à chave dos provedores mas devolve None para
+# `*_modelos` — assim `_modelos_do_provedor` cai nos PADRÕES sem tocar o banco.
+def _chave_api_so(cfg, db=None):
+    return "chave-x" if cfg.endswith("_api_key") else None
+
+
 def test_testar_chave_vai_ao_provedor_certo():
     urls = []
 
@@ -135,14 +141,99 @@ def test_testar_chave_vai_ao_provedor_certo():
         urls.append(url)
         return _resposta(200, _OK)
 
-    with patch.object(ia_texto.httpx, "post", fake_post):
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
         ia_texto.testar_groq("chave-groq-do-rh")
     assert len(urls) == 1 and "groq" in urls[0], urls
 
     urls.clear()
-    with patch.object(ia_texto.httpx, "post", fake_post):
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
         ia_texto.testar_openrouter("chave-openrouter-do-rh")
     assert len(urls) == 1 and "openrouter" in urls[0], urls
+
+
+# ---------- Fallback ENTRE MODELOS do mesmo provedor (o `:free` que some) ----------
+
+def test_fallback_entre_modelos_do_mesmo_provedor():
+    vistos = []
+
+    def fake_post(url, **kw):
+        modelo = kw["json"]["model"]
+        vistos.append(modelo)
+        # 1º modelo padrão do OpenRouter não existe mais → 404; o 2º responde.
+        if modelo == "google/gemma-4-31b-it:free":
+            return _resposta(404, {"error": "no endpoints found"})
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        assert ia_texto.gerar_texto("s", "u", so_provedor="openrouter") == "resposta boa"
+    assert vistos == ["google/gemma-4-31b-it:free", "openai/gpt-oss-20b:free"], vistos
+
+
+# ---------- 401 NÃO tenta os outros modelos do provedor (chave é do provedor) ----------
+
+def test_401_pula_provedor_sem_varrer_modelos():
+    or_modelos = []
+
+    def fake_post(url, **kw):
+        if "openrouter" in url:
+            or_modelos.append(kw["json"]["model"])
+            return _resposta(401)
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        assert ia_texto.gerar_texto("s", "u") == "resposta boa"  # a Groq assumiu
+    # tentou UM só modelo do OpenRouter antes de pular para a Groq (não os dois)
+    assert len(or_modelos) == 1, or_modelos
+
+
+# ---------- Override de modelos pelo painel tem precedência sobre o padrão ----------
+
+def test_override_de_modelos_pelo_painel():
+    vistos = []
+
+    def fake_chave(cfg, db=None):
+        if cfg == "openrouter_api_key":
+            return "chave-x"
+        if cfg == "openrouter_modelos":
+            return "meu/modelo-a, meu/modelo-b"
+        return None
+
+    def fake_post(url, **kw):
+        vistos.append(kw["json"]["model"])
+        return _resposta(200, _OK)
+
+    with patch.object(ia_texto, "_ler_chave", fake_chave), \
+         patch.object(ia_texto.httpx, "post", fake_post):
+        ia_texto.gerar_texto("s", "u", so_provedor="openrouter")
+    assert vistos[0] == "meu/modelo-a", vistos
+
+
+# ---------- Mensagem de erro distingue MODELO indisponível de CHAVE recusada ----------
+
+def test_erro_404_nao_acusa_a_chave():
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", lambda url, **kw: _resposta(404)):
+        try:
+            ia_texto.testar_openrouter("chave-x")
+            raise AssertionError("deveria ter levantado RuntimeError")
+        except RuntimeError as exc:
+            msg = str(exc)
+            assert "404" in msg, msg
+            assert "recusou a chave" not in msg, msg
+
+
+def test_erro_401_acusa_a_chave():
+    with patch.object(ia_texto, "_ler_chave", _chave_api_so), \
+         patch.object(ia_texto.httpx, "post", lambda url, **kw: _resposta(401)):
+        try:
+            ia_texto.testar_openrouter("chave-x")
+            raise AssertionError("deveria ter levantado RuntimeError")
+        except RuntimeError as exc:
+            assert "recusou a chave" in str(exc), str(exc)
 
 
 test_429_vira_cota_excedida_com_retry_after()
@@ -152,5 +243,10 @@ test_sem_chave_alguma()
 test_so_groq_configurado()
 test_worker_espera_e_retoma()
 test_testar_chave_vai_ao_provedor_certo()
+test_fallback_entre_modelos_do_mesmo_provedor()
+test_401_pula_provedor_sem_varrer_modelos()
+test_override_de_modelos_pelo_painel()
+test_erro_404_nao_acusa_a_chave()
+test_erro_401_acusa_a_chave()
 
 print("test_ia_texto_cadeia: OK")
