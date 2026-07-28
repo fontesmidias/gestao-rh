@@ -17,6 +17,10 @@ export default function MemoriaPessoa({ pessoa }) {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState(null)
   const [abrirTags, setAbrirTags] = useState(false)
+  // Edição inline do texto de uma anotação (v1.97, feedback 2026-07-27:
+  // "lançar OU EDITAR"). {id: textoEmEdicao}
+  const [editando, setEditando] = useState(null)
+  const [textoEdicao, setTextoEdicao] = useState('')
 
   const carregar = () => {
     api.crmMemoria(pessoa).then(setDados).catch((e) => setErro(e.amigavel || e.detail || e.message))
@@ -39,6 +43,16 @@ export default function MemoriaPessoa({ pessoa }) {
     if (!window.confirm('Excluir esta anotação?')) return
     try { await api.crmExcluirAnotacao(id); carregar() }
     catch (e) { setErro(e.amigavel || e.detail || e.message) }
+  }
+
+  const iniciarEdicao = (a) => { setEditando(a.id); setTextoEdicao(a.texto) }
+  const cancelarEdicao = () => { setEditando(null); setTextoEdicao('') }
+  const salvarEdicao = async (id) => {
+    if (!textoEdicao.trim()) { setErro('A anotação não pode ficar vazia.'); return }
+    try {
+      await api.crmEditarAnotacao(id, textoEdicao.trim())
+      cancelarEdicao(); carregar()
+    } catch (e) { setErro(e.amigavel || e.detail || e.message) }
   }
 
   const verAnexo = async (id) => {
@@ -119,10 +133,31 @@ export default function MemoriaPessoa({ pessoa }) {
                   <span className="crm-item-meta">
                     <strong>{a.autor}</strong> · {fmtDataHora(a.quando)}
                     {a.origem === 'talento' && <span className="crm-badge">quando era talento</span>}
+                    {a.editado_quando && (
+                      <span className="crm-badge" title={fmtDataHora(a.editado_quando)}>
+                        editado por {a.editado_por}</span>
+                    )}
                   </span>
-                  <button className="btn-link" onClick={() => excluir(a.id)}>excluir</button>
+                  {editando !== a.id && (
+                    <span>
+                      <button className="btn-link" onClick={() => iniciarEdicao(a)}>editar</button>
+                      {' · '}
+                      <button className="btn-link" onClick={() => excluir(a.id)}>excluir</button>
+                    </span>
+                  )}
                 </div>
-                <p className="crm-item-texto">{a.texto}</p>
+                {editando === a.id ? (
+                  <div className="crm-nova">
+                    <textarea rows={2} value={textoEdicao}
+                              onChange={(e) => setTextoEdicao(e.target.value)} />
+                    <div className="crm-nova-acoes">
+                      <button className="btn-secundario btn-mini" onClick={cancelarEdicao}>cancelar</button>
+                      <button className="btn-principal btn-mini" onClick={() => salvarEdicao(a.id)}>salvar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="crm-item-texto">{a.texto}</p>
+                )}
                 {a.tem_anexo && (
                   <button className="btn-link" onClick={() => verAnexo(a.id)}>
                     📎 {a.anexo_nome || 'anexo'}</button>

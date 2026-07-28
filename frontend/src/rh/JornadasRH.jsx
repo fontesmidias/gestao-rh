@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
-import { comAmpulheta } from '../Carregando.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 
@@ -23,7 +22,6 @@ export default function JornadasRH({ aoVoltar }) {
   const [postos, setPostos] = useState([])
   const [dups, setDups] = useState(null)
   const [msg, setMsg] = useState(null)
-  const inputPlanilha = useRef(null)
 
   const recarregar = () => api.jornadas().then(setJornadas).catch(() => setJornadas([]))
   useEffect(() => {
@@ -37,23 +35,6 @@ export default function JornadasRH({ aoVoltar }) {
   }, [aba, dups])
 
   const postoNome = (id) => postos.find((p) => p.id === id)?.nome || '—'
-
-  const importar = async (arquivo) => {
-    if (!arquivo) return
-    setMsg(null)
-    try {
-      const r = await comAmpulheta('Importando jornadas da planilha…',
-                                   () => api.importarJornadasPlanilha(arquivo))
-      setMsg({ tipo: 'ok', texto: `Importação concluída: ${r.criadas} nova(s), `
-        + `${r.puladas} já existente(s) (de ${r.total_planilha} linhas). `
-        + 'Confira a estruturação proposta na aba "A confirmar".' })
-      recarregar(); setDups(null)
-    } catch (e) {
-      setMsg({ tipo: 'erro', texto: e.detail === 'sem_coluna_jornada'
-        ? 'A planilha precisa da coluna "Jornada de Trabalho".'
-        : `Falha ao importar (${e.detail || e.message}).` })
-    } finally { if (inputPlanilha.current) inputPlanilha.current.value = '' }
-  }
 
   const salvarPosto = async (j, postoId) => {
     try { await api.editarJornada(j.id, { descricao: j.descricao, posto_servico_id: postoId || null, tirvu_id: j.tirvu_id || null }); recarregar() }
@@ -135,16 +116,12 @@ export default function JornadasRH({ aoVoltar }) {
       <header className="rh-topo">
         {aoVoltar && <button className="btn-link" onClick={aoVoltar}>← Voltar</button>}
         <h1>🕒 Jornadas</h1>
-        <div>
-          <input ref={inputPlanilha} type="file" accept=".xlsx" hidden
-                 onChange={(e) => importar(e.target.files?.[0])} />
-          <button className="btn-secundario btn-mini" onClick={() => inputPlanilha.current?.click()}>
-            ⬆ Importar da planilha</button>
-        </div>
+        <div />
       </header>
       <p className="explica">A <strong>descrição</strong> é o texto que vai ao Tirvu (não muda o
         formato). Os demais campos são <strong>estrutura interna</strong> — o parser propõe na
-        importação e você confirma. Vincule cada jornada ao seu posto.</p>
+        importação e você confirma. Vincule cada jornada ao seu posto. Para importar da planilha
+        de colaboradores em massa, veja <strong>Configurações → 📥 Importações</strong>.</p>
 
       <div className="rh-lote" style={{ marginBottom: '.6rem' }}>
         <button className={aba === 'lista' ? 'btn-principal btn-mini' : 'btn-secundario btn-mini'}

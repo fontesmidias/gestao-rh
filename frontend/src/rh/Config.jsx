@@ -4,6 +4,7 @@ import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
 import { comAmpulheta } from '../Carregando.jsx'
+import Importacoes from './Importacoes.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -201,6 +202,7 @@ const SUBMENUS = [
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
   ['identidade', '🎨 Identidade visual'],
   ['organizacao', '🏢 Empresas e jornadas'],
+  ['importacoes', '📥 Importações'],
   ['tags', '🏷️ Tags'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['sistema', '🛠️ Sistema'],
@@ -231,6 +233,7 @@ export default function Config({ aoVoltar }) {
         <PadronizacaoTirvuTxt />
         <BackfillEnderecos />
       </>}
+      {aba === 'importacoes' && <Importacoes />}
       {aba === 'tags' && <TagsConfig />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
@@ -1474,8 +1477,6 @@ function ImportarTirvuTxt({ tipo, titulo }) {
 function JornadasConfig() {
   const [jornadas, setJornadas] = useState(null)
   const [busca, setBusca] = useState('')
-  const [msg, setMsg] = useState(null)
-  const [relato, setRelato] = useState(null)
   const carregar = () => api.jornadas().then(setJornadas)
   useEffect(() => { carregar().catch(() => setJornadas([])) }, [])
   if (!jornadas) return null
@@ -1485,35 +1486,11 @@ function JornadasConfig() {
     <div className="rh-card">
       <h3>🕐 Jornadas de trabalho</h3>
       <p className="explica">Importadas da planilha "Escala de Trabalho - Detalhado" do
-        Tirvu (cada aba é um posto) ou criadas na ficha do colaborador. O arquivo enviado
-        é processado e descartado — nada fica guardado.</p>
-      <label className="btn-secundario" style={{ cursor: 'pointer' }}>
-        📥 Importar planilha de escalas…
-        <input type="file" accept=".xlsx" style={{ display: 'none' }}
-               onChange={async (e) => {
-                 const f = e.target.files[0]; e.target.value = ''
-                 if (!f) return
-                 setMsg(null); setRelato(null)
-                 try {
-                   const r = await api.importarJornadas(f)
-                   setRelato(r); carregar()
-                 } catch (err) {
-                   setMsg({ tipo: 'erro', texto: err.detail === 'arquivo_invalido'
-                     ? 'O arquivo não parece um .xlsx válido.'
-                     : `Não foi possível importar (${err.detail || err.message}).` })
-                 }
-               }} />
-      </label>
-      {relato && (
-        <div className="sucesso">
-          {relato.jornadas_criadas} jornada(s) nova(s) de {relato.abas_processadas} abas —
-          {' '}{relato.abas_casadas_com_posto} abas casaram com postos.
-          {relato.abas_sem_posto.length > 0 && (
-            <> Sem posto correspondente: {relato.abas_sem_posto.join(', ')}.
-              As jornadas dessas abas entraram sem posto (valem para todos).</>
-          )}
-        </div>
-      )}
+        Tirvu (cada aba é um posto) ou criadas na ficha do colaborador.
+        {/* Upload movido para a aba Importações (v1.97, feedback 2026-07-27:
+            "movimentando as que porventura estão em outras páginas"). */}
+        Para importar uma planilha de escalas nova, veja
+        {' '}<strong>Configurações → 📥 Importações</strong>.</p>
       <p className="explica"><strong>{jornadas.length}</strong> jornada(s) cadastrada(s).</p>
       {jornadas.length > 0 && (
         <input placeholder="🔎 Filtrar jornadas…" value={busca}
@@ -1526,7 +1503,6 @@ function JornadasConfig() {
           {visiveis.length === 0 && <li>Nenhuma jornada com esse texto.</li>}
         </ul>
       )}
-      <Msg msg={msg} />
     </div>
   )
 }

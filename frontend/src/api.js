@@ -631,6 +631,8 @@ export const rh = {
     req(`/rh/crm/tags/${id}`, { method: 'DELETE', headers: authRH() }),
   crmCriarAnotacao: (dados) =>
     req('/rh/crm/anotacoes', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  crmEditarAnotacao: (id, texto) =>
+    req(`/rh/crm/anotacoes/${id}`, { method: 'PATCH', headers: authRH(), body: JSON.stringify({ texto }) }),
   crmExcluirAnotacao: (id) =>
     req(`/rh/crm/anotacoes/${id}`, { method: 'DELETE', headers: authRH() }),
   crmAnexarAnotacao: async (id, arquivo) => {

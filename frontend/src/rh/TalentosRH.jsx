@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fmtData, fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
-import { comAmpulheta } from '../Carregando.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
+import Modal from '../Modal.jsx'
 
 const STATUS = {
   novo: ['Novo', '#5bc0de'],
@@ -25,27 +25,13 @@ const simNao = (v) => v == null ? '—' : v ? 'Sim' : 'Não'
 export default function TalentosRH({ aoAbrir }) {
   const [talentos, setTalentos] = useState(null)
   const [msg, setMsg] = useState(null)
-  const [anotando, setAnotando] = useState(null)   // id do talento com painel de anotações aberto
-  const inputPlanilha = useRef(null)
+  // talento com o modal de anotações aberto (v1.97: virou popup — antes era
+  // um painel inline na própria linha, feedback 2026-07-27 "pense em algo
+  // melhor" — a anotação tem anexo+histórico, não cabia espremida na tabela)
+  const [anotando, setAnotando] = useState(null)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
   useEffect(() => { recarregar() }, [])
-
-  const importar = async (arquivo) => {
-    if (!arquivo) return
-    setMsg(null)
-    try {
-      const r = await comAmpulheta('Importando a planilha do Banco de Talentos…',
-                                   () => api.importarTalentosPlanilha(arquivo))
-      setMsg({ tipo: 'ok', texto: `Importação concluída: ${r.criados} novo(s), `
-        + `${r.pulados} já existente(s) pulado(s) (de ${r.total_planilha} na planilha).` })
-      await recarregar()
-    } catch (e) {
-      setMsg({ tipo: 'erro', texto: e.detail === 'sem_coluna_nome'
-        ? 'A planilha precisa ter a coluna "Nome completo". Confira o export do Forms.'
-        : `Falha ao importar (${e.detail || e.message}).` })
-    } finally { if (inputPlanilha.current) inputPlanilha.current.value = '' }
-  }
 
   const converter = async (t) => {
     if (!window.confirm(`Converter ${t.nome} em candidato e iniciar a admissão?`)) return
@@ -148,9 +134,8 @@ export default function TalentosRH({ aoAbrir }) {
   ]
 
   const acoesLinha = (t) => (<>
-    <button className={`btn-${anotando === t.id ? 'principal' : 'secundario'} btn-mini`}
-            onClick={() => setAnotando(anotando === t.id ? null : t.id)}>
-      🗒️ {anotando === t.id ? 'Fechar' : 'Anotações'}</button>
+    <button className="btn-secundario btn-mini" onClick={() => setAnotando(t)}>
+      🗒️ Anotações</button>
     {t.email && t.status !== 'convertido' && (
       <button className="btn-secundario btn-mini" onClick={() => enviarTeste(t)}>📝 Teste</button>)}
     {t.status !== 'convertido' && (<>
@@ -181,25 +166,24 @@ export default function TalentosRH({ aoAbrir }) {
     <main className="rh-painel">
       <header className="rh-topo">
         <h1>🎯 Banco de Talentos</h1>
-        <div>
-          <input ref={inputPlanilha} type="file" accept=".xlsx" hidden
-                 onChange={(e) => importar(e.target.files?.[0])} />
-          <button className="btn-secundario btn-mini" onClick={() => inputPlanilha.current?.click()}>
-            ⬆ Importar planilha (Forms)</button>
-        </div>
+        <div />
       </header>
       <p className="explica">Interessados do formulário público (<code>/banco-de-talentos</code>) ou
-        importados da planilha do Microsoft Forms. Ordene por qualquer coluna, filtre, selecione para
-        agir em massa, envie testes e converta em candidato — os dados migram e o link de admissão é disparado.</p>
+        importados da planilha do Microsoft Forms (veja <strong>Configurações → 📥 Importações</strong>).
+        Ordene por qualquer coluna, filtre, selecione para agir em massa, envie testes e converta em
+        candidato — os dados migram e o link de admissão é disparado.</p>
 
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
       {!talentos ? <p>Carregando…</p> : (
         <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
-                      linhaExpandida={(t) => (anotando === t.id
-                        ? <MemoriaPessoa pessoa={{ talento_id: t.id }} /> : null)}
                       vazio="Nenhum talento cadastrado ainda." />
+      )}
+      {anotando && (
+        <Modal titulo={`🗒️ Anotações — ${anotando.nome}`} aoFechar={() => setAnotando(null)}>
+          <MemoriaPessoa pessoa={{ talento_id: anotando.id }} />
+        </Modal>
       )}
     </main>
   )

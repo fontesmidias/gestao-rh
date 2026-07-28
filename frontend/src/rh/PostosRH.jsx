@@ -21,7 +21,6 @@ export default function PostosRH() {
   const [selecionados, setSelecionados] = useState(() => new Set())
   const [massaKit, setMassaKit] = useState(null) // painel de vínculo em massa
   const [verIncidencia, setVerIncidencia] = useState(false)
-  const inputPlanilha = useRef(null)
 
   const recarregar = () => api.postos(true).then((r) => {
     setPostos(r.postos); setColunas(r.colunas || []); setDocsDisp(r.documentos_disponiveis || {}) })
@@ -30,22 +29,6 @@ export default function PostosRH() {
     <IncidenciaBeneficios aoVoltar={() => setVerIncidencia(false)} aoAplicar={recarregar} />
   )
   if (!postos) return <main className="rh-painel"><p>Carregando…</p></main>
-
-  const importarPlanilha = async (arquivo) => {
-    if (!arquivo) return
-    setMsg(null)
-    try {
-      const r = await comAmpulheta('Importando a planilha de postos do Tirvu…',
-                                   () => api.importarPostosPlanilha(arquivo))
-      setMsg({ tipo: 'ok', texto: `Planilha importada: ${r.criados} novo(s), `
-        + `${r.atualizados} atualizado(s). Total: ${r.total} posto(s).` })
-      await recarregar()
-    } catch (e) {
-      setMsg({ tipo: 'erro', texto: e.detail === 'sem_coluna_nome'
-        ? 'A planilha precisa ter a coluna "Nome / Apelido". Confira o export do Tirvu.'
-        : `Falha ao importar a planilha (${e.detail || e.message}).` })
-    } finally { if (inputPlanilha.current) inputPlanilha.current.value = '' }
-  }
 
   const alternarSel = (id) => setSelecionados((s) => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -115,16 +98,12 @@ export default function PostosRH() {
     <main className="rh-painel">
       <header className="rh-topo"><h1>🏢 Postos de serviço</h1><div /></header>
       <p className="explica">Lotações onde os colaboradores são alocados. Cada posto tem sigla,
-        CNPJ do tomador e contrato. <strong>Importe direto a planilha de Postos do Tirvu (.xlsx)</strong> —
-        o sistema casa por ID do Tirvu (não duplica), enriquece com razão social, CNPJ e endereço, e
-        desambigua apelidos repetidos. Marque documentos específicos por posto, em massa se quiser.</p>
+        CNPJ do tomador e contrato. Marque documentos específicos por posto, em massa se quiser.
+        Para importar a planilha de Postos do Tirvu em massa, veja
+        {' '}<strong>Configurações → 📥 Importações</strong>.</p>
 
       <div className="rh-card rh-lote">
         <button className="btn-principal btn-mini" onClick={() => setEdit({ ...VAZIO })}>+ Novo posto</button>
-        <input ref={inputPlanilha} type="file" accept=".xlsx" hidden
-               onChange={(e) => importarPlanilha(e.target.files?.[0])} />
-        <button className="btn-secundario btn-mini"
-                onClick={() => inputPlanilha.current?.click()}>⬆ Importar planilha do Tirvu</button>
         <button className="btn-secundario btn-mini"
                 onClick={() => setVerIncidencia(true)}>📋 Incidência de Benefícios</button>
         <button className="btn-secundario btn-mini" onClick={() => setImportar('')}>Colar lista</button>

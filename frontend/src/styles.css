@@ -1007,6 +1007,36 @@ body[data-rh-ocupado] { cursor: progress; }
 /* A ampulheta inteira vira 180° e faz uma pausa — como quem inverte o vidro.
    3,2s por ciclo: virada suave (~0,9s) e descanso enquanto a areia escoa. */
 .ampulheta-svg { color: var(--verde-vivo); animation: virar-ampulheta 3.2s ease-in-out infinite; }
+
+/* ---------- Modal (primeiro do projeto, v1.97 — anotações do CRM) ----------
+   Sistema de design: "editar/criar abre PERTO do item" admite duas formas —
+   inline (curto, cabe na linha) OU modal ancorado (anexo + histórico + texto
+   longo). Acima do overlay de ampulheta (z-index 400) porque pode haver uma
+   ação de salvar DENTRO do modal. */
+.modal-fundo {
+  position: fixed; inset: 0; z-index: 500;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--esp-3);
+  background: color-mix(in srgb, #0b1f14 48%, transparent);
+  backdrop-filter: blur(2px);
+  animation: surgir .18s ease-out;
+}
+.modal-caixa {
+  width: 100%; max-width: 560px; max-height: min(86vh, 720px);
+  display: flex; flex-direction: column;
+  background: var(--cartao); border-radius: var(--raio);
+  border: 1px solid var(--borda); box-shadow: var(--sombra-cartao);
+}
+.modal-cabecalho {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--esp-2); padding: var(--esp-3) var(--esp-4);
+  border-bottom: 1px solid var(--borda-suave); flex-shrink: 0;
+}
+.modal-cabecalho strong { font-size: 1.05rem; }
+.modal-corpo { padding: var(--esp-4); overflow-y: auto; }
+@media (max-width: 640px) {
+  .modal-caixa { max-height: 92vh; }
+}
 @keyframes virar-ampulheta {
   0%, 62% { transform: rotate(0deg); }
   78%, 100% { transform: rotate(180deg); }

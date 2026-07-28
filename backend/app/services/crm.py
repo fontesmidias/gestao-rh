@@ -108,6 +108,9 @@ def dump_anotacao(a: Anotacao) -> dict:
         "tem_anexo": bool(a.anexo_key), "anexo_nome": a.anexo_nome,
         # de qual lado foi criada (info; o front pode marcar "quando era talento")
         "origem": "talento" if a.talento_id else "candidato",
+        # Edição (v1.97): o autor acima é sempre o ORIGINAL; editado_por/quando
+        # só aparecem se a anotação já foi editada.
+        "editado_por": a.editor_nome, "editado_quando": a.editado_em,
     }
 
 

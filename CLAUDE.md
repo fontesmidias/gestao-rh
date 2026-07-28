@@ -281,6 +281,33 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   copia questão de prova → banco (original permanece). Só ACRESCENTA ao final da
   prova, nunca remove. Front: aba "🗃️ Banco de itens" (`BancoItens.jsx`, CRUD) +
   `MontarDoBanco` no editor + botão "→ banco" por questão.
+- **Navegação do painel do RH tem URL própria** (v1.97, `RHApp.jsx`): o
+  `react-router` estava instalado desde sempre e `App.jsx` já reservava
+  `/rh/*` com um splat, mas dentro do painel tudo era `useState('inicio')` —
+  por isso botão direito não oferecia "abrir em nova aba" (não havia
+  `<a href>` nenhum), F5 sempre voltava para Admissões, e não dava para abrir
+  duas pessoas em duas abas. Agora `Painel` declara `<Routes>` (`candidato/:id`,
+  `:pagina`, raiz) e `PainelConteudo` lê `useParams()`/`useNavigate()`; o menu
+  lateral usa `<NavLink to={...} end>` (o `end` evita que `/rh` fique "ativo"
+  em toda subrota). `abrirPessoa(id)` substitui o antigo `setSelecionado` nas
+  telas filhas — navega para `/rh/candidato/{id}` em vez de mexer em estado
+  local. Ao criar uma tela nova no menu, sempre usar `<NavLink>`/`<Link>`,
+  nunca `<button onClick={() => setPagina(...)}>`.
+- **Modal** (`frontend/src/Modal.jsx`, v1.97 — primeiro do projeto): usado
+  quando o conteúdo tem anexo + histórico + texto longo e não cabe inline
+  (ver `08-sistema-de-design.md`, item 4, revisado). Reaproveita o padrão de
+  fechar do `SelectBusca` (clique fora + Escape), tem `role="dialog"` e foco
+  preso. Antes de criar outro modal, ver se este serve — é o único e deve
+  continuar sendo, para não fragmentar o padrão.
+- **Central de Importações** (`frontend/src/rh/Importacoes.jsx`,
+  Config → 📥 Importações, v1.97): os uploads de planilha do RH (Colaboradores,
+  Postos, Jornadas ×2, Talentos, Ponto) foram MOVIDOS para cá — as telas de
+  origem não têm mais o `<input type="file">`, só um texto apontando para
+  cá. **Ao adicionar upload de planilha novo, criar o card aqui, não na tela
+  de origem.** Exceções que continuam em tela própria (e por quê): Incidência
+  de Benefícios é fluxo de 2 passos com decisões linha a linha (embutir seria
+  reescrevê-la à toa) e a padronização de cargos/jornadas é texto colado, não
+  upload de arquivo — ambas ganharam só um card-atalho na central.
 - **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
   — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
   em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em

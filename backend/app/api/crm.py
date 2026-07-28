@@ -48,6 +48,10 @@ class AnotacaoIn(BaseModel):
     texto: str
 
 
+class EditarAnotacaoIn(BaseModel):
+    texto: str
+
+
 class MarcarTagIn(BaseModel):
     tag_id: uuid.UUID
     talento_id: uuid.UUID | None = None
@@ -112,6 +116,29 @@ def criar_anotacao(payload: AnotacaoIn, db: Session = Depends(get_db),
     db.commit()
     registrar(db, "crm_anotacao_criada", ator="rh", ator_detalhe=rh.email,
               candidato_id=payload.candidato_id, detalhe={"anotacao": str(a.id)})
+    return crm.dump_anotacao(a)
+
+
+@router.patch("/rh/crm/anotacoes/{anotacao_id}")
+def editar_anotacao(anotacao_id: uuid.UUID, payload: EditarAnotacaoIn,
+                    db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Edita o texto — o AUTOR original nunca é sobrescrito (snapshot
+    imutável); grava só quem editou e quando (feedback 2026-07-27: 'lançar OU
+    EDITAR' as anotações)."""
+    from datetime import datetime, timezone
+
+    a = db.get(Anotacao, anotacao_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="anotacao_nao_encontrada")
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(status_code=422, detail="texto_obrigatorio")
+    a.texto = texto
+    a.editado_em = datetime.now(timezone.utc)
+    a.editor_nome = rh.nome or rh.email
+    db.commit()
+    registrar(db, "crm_anotacao_editada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=a.candidato_id, detalhe={"anotacao": str(a.id)})
     return crm.dump_anotacao(a)
 
 
