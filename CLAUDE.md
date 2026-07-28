@@ -700,6 +700,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **O candidato reabre o PRÓPRIO envio enquanto o RH não olhou** (v2.03,
+  `documentos.py::reabrir_envio`): depois do "CONCLUÍ MEU ENVIO" o checklist
+  congela (409 `envio_ja_concluido`) e antes só o RH reabria — quem percebia
+  na hora que mandou o arquivo errado ficava travado dependendo de socorro.
+  `POST /c/{token}/reabrir-envio` volta o status para `docs_pendentes`, com
+  guarda: **qualquer** slot já revisado (aprovado/rejeitado/dispensado) recusa
+  com 409 `rh_ja_revisou` — trocar arquivo já analisado faria a análise do RH
+  valer para um documento que não existe mais. NÃO confundir com a reabertura
+  cirúrgica pós-aprovação (essa é do RH e continua igual). Coberto por
+  `tests/test_reabrir_envio.py` (validado por mutação).
 - **Link de e-mail IDENTIFICA, nunca AUTENTICA** (v2.03, feedback 2026-07-28 —
   a regra que rege `/creche` e `/meu`): o gate 2FA morria no webview do app de
   e-mail. A pessoa abria o link, saía para LER o código (única forma) e voltava

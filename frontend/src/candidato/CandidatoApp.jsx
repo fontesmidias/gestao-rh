@@ -190,15 +190,37 @@ export default function CandidatoApp() {
         <Checklist token={token} aoConcluir={() => setTela('acompanhamento')} />
       )}
 
-      {tela === 'acompanhamento' && <Acompanhamento token={token} estado={estado} />}
+      {tela === 'acompanhamento' && (
+        <Acompanhamento token={token} estado={estado}
+                        aoReabrir={async () => { await recarregar(); setTela('documentos') }} />
+      )}
     </div>
   )
 }
 
-function Acompanhamento({ token, estado }) {
+function Acompanhamento({ token, estado, aoReabrir }) {
   const [check, setCheck] = useState(null)
+  const [reabrindo, setReabrindo] = useState(false)
+  const [erroReabrir, setErroReabrir] = useState(null)
   useEffect(() => { api.documentos(token).then(setCheck).catch(() => {}) }, [token])
   const aprovado = estado.status === 'aprovado'
+
+  // "Percebi que mandei o documento errado" (feedback 2026-07-28): enquanto o
+  // RH não tiver olhado NADA, a pessoa destrava sozinha em vez de depender de
+  // alguém do RH reabrir o slot por ela.
+  const reabrir = async () => {
+    setErroReabrir(null); setReabrindo(true)
+    try {
+      await api.reabrirEnvio(token)
+      aoReabrir?.()
+    } catch (e) {
+      setErroReabrir(e.detail === 'rh_ja_revisou'
+        ? 'O RH já começou a conferir seus documentos. Se algo estiver errado, aguarde '
+          + 'o e-mail — ele dirá exatamente o que reenviar.'
+        : 'Não foi possível reabrir agora. Tente de novo em instantes.')
+    } finally { setReabrindo(false) }
+  }
+
   return (
     <Cartao>
       <p className="etapa-num">Parte 4 de 4 — Conferência</p>
@@ -215,7 +237,12 @@ function Acompanhamento({ token, estado }) {
              indicado. Quando tudo for aprovado, o e-mail confirmará a conclusão da sua
              documentação.</p>
           {check && <p className="progresso-txt">
-            {check.progresso.ok} de {check.progresso.total} documentos conferidos/recebidos.</p>}</>
+            {check.progresso.ok} de {check.progresso.total} documentos conferidos/recebidos.</p>}
+          <p className="explica">Mandou um documento errado ou trocado? Enquanto o RH ainda
+             não começou a conferir, você mesmo pode reabrir e corrigir.</p>
+          {erroReabrir && <div className="alerta">{erroReabrir}</div>}
+          <button className="btn-secundario" onClick={reabrir} disabled={reabrindo}>
+            {reabrindo ? 'Reabrindo…' : '↩ Preciso corrigir um documento'}</button></>
       )}
     </Cartao>
   )
