@@ -85,6 +85,26 @@ function Editor({ item, aoSalvar }) {
     } finally { setOcupado(false) }
   }
 
+  // O preview mostra como fica na tela; só o envio real mostra como o Gmail e
+  // o Outlook renderizam de fato — que é onde a formatação costuma quebrar.
+  // Vai só para a caixa de quem está editando (o RH não escolhe destinatário).
+  const enviarTeste = async () => {
+    setMsg(null); setOcupado(true)
+    try {
+      const r = await api.enviarTesteEmail(item.chave,
+        { assunto, corpo, botao_texto: botao || null })
+      setMsg({ tipo: 'ok', texto: `Teste enviado para ${r.enviado_para}. `
+        + 'Confira também a caixa de spam — o assunto começa com [TESTE].' })
+    } catch (e) {
+      const d = e.detail || e.message || ''
+      setMsg({ tipo: 'erro', texto: d === 'smtp_nao_configurado'
+        ? 'O envio de e-mail ainda não está configurado (Configurações → E-mail e integrações).'
+        : d === 'sem_email_no_seu_usuario'
+          ? 'Seu usuário do painel está sem e-mail cadastrado — o teste iria para lugar nenhum.'
+          : `Não foi possível enviar o teste: ${d}` })
+    } finally { setOcupado(false) }
+  }
+
   const salvar = async () => {
     setMsg(null); setOcupado(true)
     try {
@@ -156,6 +176,9 @@ function Editor({ item, aoSalvar }) {
       <div className="email-acoes">
         <button className="btn-secundario" onClick={verPrevia} disabled={ocupado}>
           👁 Ver preview</button>
+        <button className="btn-secundario" onClick={enviarTeste} disabled={ocupado}
+                title="Manda este texto para o seu próprio e-mail, com dados de exemplo">
+          📨 Enviar teste para mim</button>
         <button className="btn-principal" onClick={salvar} disabled={ocupado || !mudou}>
           {ocupado ? 'Salvando…' : 'Salvar texto'}</button>
         <button className="btn-link" onClick={verHistorico}>

@@ -487,6 +487,10 @@ export const rh = {
   previewEmail: (chave, dados) =>
     req(`/rh/config/emails/${chave}/preview`,
         { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // manda o texto EM EDIÇÃO para a caixa de quem está editando (v2.16)
+  enviarTesteEmail: (chave, dados) =>
+    req(`/rh/config/emails/${chave}/enviar-teste`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   salvarEmail: (chave, dados) =>
     req(`/rh/config/emails/${chave}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

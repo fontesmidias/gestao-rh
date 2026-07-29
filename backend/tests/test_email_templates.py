@@ -184,4 +184,64 @@ assert assunto == CATALOGO_POR_CHAVE["documento_rejeitado"].assunto, assunto
 assert c.put("/api/rh/config/emails/nao_existe", headers=rh,
              json={"assunto": "a", "corpo": "b"}).status_code == 404
 
+# ------------------------------------------------- enviar teste (v2.16)
+# O preview mostra como fica na tela; só o envio real mostra como o Gmail e o
+# Outlook renderizam. Vai para a caixa de QUEM ESTÁ EDITANDO e mais ninguém —
+# o RH não escolhe destinatário, senão a tela de textos viraria disparador.
+import app.services.email_templates as _mod_tpl  # noqa: E402
+import app.api.configuracoes as _mod_cfg  # noqa: E402
+
+_capturado = {}
+_orig_env = _mod_cfg.enviar_email
+
+
+def _fake(dest, assunto, corpo, html=None, levantar_erro=False, anexos=None, **kw):
+    _capturado.update(dest=dest, assunto=assunto, corpo=corpo, html=html)
+    return True
+
+
+_mod_cfg.enviar_email = _fake
+try:
+    r = c.post("/api/rh/config/emails/documento_rejeitado/enviar-teste", headers=rh,
+               json={"assunto": "Oi {{primeiro_nome}}", "corpo": "Motivo: {{motivo}}",
+                     "botao_texto": "Reenviar"})
+    assert r.status_code == 200, r.text
+    # destinatário é SEMPRE o usuário logado
+    assert r.json()["enviado_para"] == "rh@greenhousedf.com.br", r.json()
+    assert _capturado["dest"] == "rh@greenhousedf.com.br", _capturado["dest"]
+    # marca de teste no assunto: se vazar, fica evidente que é ensaio
+    assert _capturado["assunto"].startswith("[TESTE] "), _capturado["assunto"]
+    # usou o texto DIGITADO (não o salvo) e substituiu com o exemplo
+    assert "Oi Maria" in _capturado["assunto"], _capturado["assunto"]
+    assert "{{" not in _capturado["corpo"], _capturado["corpo"]
+    # o payload NÃO tem campo de destinatário — é garantia estrutural
+    assert "destinatario" not in _mod_cfg.EmailTemplateIn.model_fields
+    assert "para" not in _mod_cfg.EmailTemplateIn.model_fields
+
+    # chave fora do catálogo não envia nada
+    _capturado.clear()
+    assert c.post("/api/rh/config/emails/nao_existe/enviar-teste", headers=rh,
+                  json={"assunto": "a", "corpo": "b"}).status_code == 404
+    assert not _capturado, "enviou e-mail para chave desconhecida"
+
+    # exige login
+    assert c.post("/api/rh/config/emails/documento_rejeitado/enviar-teste",
+                  json={"assunto": "a", "corpo": "b"}).status_code == 401
+finally:
+    _mod_cfg.enviar_email = _orig_env
+
+# falha de SMTP vira 422 com o motivo, nunca 500 silencioso
+def _falha(*a, **kw):
+    raise RuntimeError("smtp fora do ar")
+
+
+_mod_cfg.enviar_email = _falha
+try:
+    r = c.post("/api/rh/config/emails/documento_rejeitado/enviar-teste", headers=rh,
+               json={"assunto": "a", "corpo": "b"})
+    assert r.status_code == 422, f"esperava 422, veio {r.status_code}"
+    assert "smtp fora do ar" in str(r.json()["detail"]), r.json()
+finally:
+    _mod_cfg.enviar_email = _orig_env
+
 print("test_email_templates: OK")

@@ -830,6 +830,55 @@ def preview_email(chave: str, payload: EmailTemplateIn,
             "faltando": faltando_obrigatorias(chave, payload.assunto, payload.corpo)}
 
 
+@router.post("/rh/config/emails/{chave}/enviar-teste")
+def enviar_teste_email(chave: str, payload: EmailTemplateIn,
+                       db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Manda o e-mail EM EDIÇÃO para a própria caixa de quem está editando.
+
+    O preview mostra como fica na tela; só o envio real mostra como o Gmail/
+    Outlook renderiza de fato — que é onde a formatação costuma quebrar. Vai
+    para `rh.email` e para mais ninguém: nunca para o candidato, e o RH não
+    escolhe o destinatário (senão a tela de textos viraria disparador).
+
+    Usa o texto DIGITADO, não o salvo — testar antes de gravar é o ponto.
+    """
+    from app.services.email_templates import CATALOGO_POR_CHAVE, modelo
+    from app.services.fichas import aplicar_variaveis
+
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+    if not rh.email:
+        raise HTTPException(status_code=422, detail="sem_email_no_seu_usuario")
+
+    m = modelo(chave)
+    ctx = dict(m.exemplo)
+    assunto = aplicar_variaveis(payload.assunto, ctx)
+    corpo = aplicar_variaveis(payload.corpo, ctx)
+    paragrafos = [p.strip().replace("\n", "<br>")
+                  for p in corpo.split("\n\n") if p.strip()]
+    url = ctx.get(m.botao_url_var) if m.botao_url_var else None
+    html = html_moderno(m.rotulo, paragrafos,
+                        botao_texto=payload.botao_texto if url else None,
+                        botao_url=url or None)
+    # marca de teste no assunto: se algum dia vazar, fica evidente que é ensaio
+    # (e o RH não confunde com um e-mail de verdade na própria caixa)
+    try:
+        enviado = enviar_email(
+            rh.email, f"[TESTE] {assunto}",
+            f"(Envio de teste do painel — dados de exemplo)\n\n{corpo}",
+            html, levantar_erro=True)
+    except Exception as exc:
+        raise HTTPException(status_code=422,
+                            detail=f"falha_no_envio: {exc}") from exc
+    if not enviado:
+        raise HTTPException(status_code=422, detail="smtp_nao_configurado")
+    registrar(db, "email_template_teste_enviado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"chave": chave})
+    db.commit()
+    return {"enviado_para": rh.email}
+
+
 @router.put("/rh/config/emails/{chave}")
 def salvar_email(chave: str, payload: EmailTemplateIn,
                  db: Session = Depends(get_db),
