@@ -732,6 +732,26 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   "as 3 criadas deveriam estar na fila: 0", que não diz nada sobre a causa.
   Agora usa sufixo `uuid` por execução. Ao escrever teste que grava em tabela
   com campo único, sempre gerar o valor por execução.
+- **Catálogo dos documentos do sistema** (v2.19,
+  `services/documentos_catalogo.py`, `documentos_texto.py`, rotas em
+  `modelos.py`, seção em `Modelos.jsx`): o RH vê os 11 documentos que a
+  admissão gera, com amostra em PDF (candidato FICTÍCIO, nunca vai ao banco),
+  download, e — nos de TEXTO CORRIDO — "criar modelo a partir deste", que
+  copia o conteúdo para um `ModeloDocumento` editável.
+  **NENHUM gerador foi substituído, e não devem ser**: o hash do ato de
+  assinatura é calculado sobre o PDF gerado (`assinaturas.py`), então trocar
+  um gerador por template faria os manifestos já emitidos apontarem para um
+  hash que não se reproduz. Duplicar CRIA CÓPIA; o oficial segue intacto.
+  Classificação em `Formato`: `texto` (3, duplicáveis) · `formulario` (3:
+  campos em tabela e loops da ficha) · `hibrido` (5: branch, tabela desenhada,
+  ou dados que **não existem** em `VARIAVEIS_MODELO` — RG, endereço, titular
+  do comprovante). O catálogo se autovalida contra o enum no import.
+  **Corpo editável NÃO PODE divergir do documento oficial**: a 1ª versão tinha
+  a lista de direitos do informativo INFRAERO escrita à mão e perdeu 6% do VT,
+  8% do FGTS e o 5º dia útil — texto plausível e errado num documento de
+  contrato com órgão público. Virou `fichas.DIREITOS_TRABALHADOR` (fonte
+  única, importada dos dois lados) e o teste ganhou ÂNCORAS (trechos que
+  existem no oficial) — "corpo não vazio + tem `{{`" deixava passar.
 - **Código por e-mail: a mensagem tem que dizer o que RESOLVE** (v2.17/v2.18,
   incidente de campo 2026-07-29 — "foi eu mesmo quem copiou e colou o código,
   impossível ter erro"). O código estava certo. A cota é **5 pedidos por

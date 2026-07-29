@@ -122,6 +122,110 @@ def previa(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> StreamingResp
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf")
 
 
+# ---------------------------------------------------------------------------
+# Catálogo dos DOCUMENTOS DO SISTEMA (v2.16) — nos moldes do catálogo de
+# e-mails: o RH vê todos, pré-visualiza em PDF, baixa, e nos de texto corrido
+# cria um modelo editável a partir do conteúdo real.
+#
+# Nenhum gerador é substituído: o hash do ato de assinatura é calculado sobre
+# o PDF gerado, então trocar o gerador por template faria os manifestos já
+# emitidos apontarem para um hash que não se reproduz mais. Ver o cabeçalho de
+# `services/documentos_catalogo.py`.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rh/documentos-sistema")
+def listar_documentos_sistema(_rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    from app.services.documentos_catalogo import listar as _listar
+    return _listar()
+
+
+def _candidato_de_amostra() -> Candidato:
+    """Candidato FICTÍCIO, só em memória, para a prévia dos documentos.
+
+    Nunca vai ao banco (`db.add` jamais é chamado): os geradores recebem o
+    objeto direto. Assim a prévia mostra o documento com cara de documento —
+    com nome, CPF e cargo plausíveis — em vez de uma folha de `{{variáveis}}`,
+    e sem expor dado de gente real a quem só quer conferir o layout.
+    """
+    from app.models.candidato import Candidato as _C
+    amostra = _C(
+        nome_completo="Maria de Exemplo Souza",
+        email="maria.exemplo@example.com",
+        cargo_funcao="Auxiliar de Serviços Gerais",
+        salario_base="1.800,00",
+        regime="efetivo",
+    )
+    amostra.id = uuid.UUID("00000000-0000-0000-0000-0000000000ff")
+    return amostra
+
+
+@router.get("/rh/documentos-sistema/{chave}/previa")
+def previa_documento_sistema(chave: str, db: Session = Depends(get_db),
+                             _rh: UsuarioRH = Depends(requer_rh)) -> StreamingResponse:
+    """PDF de amostra do documento do sistema — o preview 'decente' pedido.
+
+    Renderiza o PDF de verdade (mesmo gerador que a admissão usa) com um
+    candidato fictício. Os campos que vêm de tabelas da ficha saem vazios,
+    porque a amostra não tem ficha — e é isso mesmo que o RH precisa ver: o
+    layout e o texto fixo.
+    """
+    from app.services.documentos_catalogo import CATALOGO_POR_CHAVE, documento
+    from app.services.export_planilha import slug
+    from app.services.fichas import GERADORES
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="documento_desconhecido")
+    gerador = GERADORES.get(chave)
+    if gerador is None:  # pragma: no cover — o catálogo cobre o enum inteiro
+        raise HTTPException(status_code=404, detail="documento_sem_gerador")
+    try:
+        pdf = gerador(db, _candidato_de_amostra())
+    except Exception as exc:
+        raise HTTPException(status_code=422,
+                            detail=f"falha_ao_gerar_previa: {exc}") from exc
+    nome = slug(documento(chave).rotulo, fallback=chave)
+    return StreamingResponse(
+        io.BytesIO(pdf), media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="amostra-{nome}.pdf"'})
+
+
+class DuplicarDocumentoIn(BaseModel):
+    titulo: str | None = None
+
+
+@router.post("/rh/documentos-sistema/{chave}/duplicar", status_code=201)
+def duplicar_documento_sistema(chave: str, payload: DuplicarDocumentoIn,
+                               db: Session = Depends(get_db),
+                               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Cria um MODELO EDITÁVEL a partir de um documento de texto do sistema.
+
+    O documento original continua intacto e seguindo gerando os PDFs oficiais:
+    isto é uma cópia para o RH adaptar (foi o "duplicar" pedido). Só vale para
+    os de texto corrido — formulário e híbrido não cabem em texto com
+    variáveis, e a tela explica o motivo de cada um.
+    """
+    from app.services.documentos_catalogo import (CATALOGO_POR_CHAVE, documento,
+                                                  duplicavel)
+    from app.services.documentos_texto import corpo_editavel
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="documento_desconhecido")
+    if not duplicavel(chave):
+        raise HTTPException(status_code=422, detail={
+            "erro": "documento_nao_duplicavel",
+            "motivo": documento(chave).porque_nao_duplica})
+    d = documento(chave)
+    m = ModeloDocumento(
+        titulo=(payload.titulo or f"{d.rotulo} (cópia)").strip()[:200],
+        corpo=corpo_editavel(chave),
+        escopo=EscopoModelo.avulso)
+    db.add(m)
+    registrar(db, "modelo_criado_de_documento", ator="rh", ator_detalhe=rh.email,
+              detalhe={"documento": chave, "titulo": m.titulo})
+    db.commit()
+    db.refresh(m)
+    return _dump(m)
+
+
 @router.get("/rh/candidatos/{candidato_id}/modelos-aplicaveis")
 def aplicaveis(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
     """Modelos que valem para este colaborador: avulsos + do seu cargo + do seu
