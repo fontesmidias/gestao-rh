@@ -287,6 +287,77 @@ def editar_jornada(jornada_id: uuid.UUID, dados: JornadaIn,
     return _dump_jornada(j)
 
 
+class ConfirmarLoteIn(BaseModel):
+    # ids explícitos OU, se vazio, todas as de `confianca` (padrão: alta)
+    jornada_ids: list[uuid.UUID] = []
+    confianca: str = "alta"
+
+
+@router.post("/rh/jornadas/confirmar-lote")
+def confirmar_lote(payload: ConfirmarLoteIn, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Aplica a proposta do parser e carimba a confirmação em VÁRIAS jornadas.
+
+    Medido nos dados reais (2026-07-28): das 269 jornadas da planilha de
+    escalas, **86% saem com confiança ALTA** e o restante é 12X36 que o parser
+    lê certo — não é ruído, é volume mesmo. Confirmar uma a uma são 325
+    cliques para nada.
+
+    Por que aqui o lote é seguro (e na tela de duplicidades não seria): isto
+    grava METADADO INTERNO. A `descricao` canônica — a que vai ao Tirvu — não
+    é tocada, e o RH pode reeditar qualquer campo depois. Fundir jornada, não:
+    apaga um registro que alguém está usando.
+
+    Ainda assim, o padrão é confirmar só as de ALTA confiança: as de média
+    ficam para o olho humano, que é onde o parser erra.
+    """
+    consulta = select(Jornada).where(Jornada.estruturado_confirmado_em.is_(None))
+    if payload.jornada_ids:
+        consulta = consulta.where(Jornada.id.in_(payload.jornada_ids))
+    pendentes = db.scalars(consulta).all()
+
+    confirmadas, ignoradas = [], []
+    for j in pendentes:
+        proposta = _propor_jornada(j.descricao)
+        # sem ids explícitos, respeita o filtro de confiança (não confirma no
+        # escuro o que o parser não entendeu)
+        if not payload.jornada_ids and proposta.get("confianca") != payload.confianca:
+            ignoradas.append(str(j.id))
+            continue
+        for campo in _CAMPOS_ESTRUT:
+            valor = proposta.get(campo)
+            if valor is not None:
+                setattr(j, campo, valor)
+        j.estruturado_confirmado_em = datetime.now(timezone.utc)
+        confirmadas.append(str(j.id))
+
+    if confirmadas:
+        registrar(db, "jornadas_confirmadas_lote", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"quantidade": len(confirmadas),
+                           "confianca": payload.confianca if not payload.jornada_ids else "selecionadas"})
+    db.commit()
+    return {"confirmadas": len(confirmadas), "ignoradas": len(ignoradas)}
+
+
+@router.get("/rh/jornadas-a-confirmar")
+def jornadas_a_confirmar(db: Session = Depends(get_db),
+                         _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """As pendentes de confirmação, já com a CONFIANÇA da proposta — é o que
+    permite ao RH confirmar em lote só o que o parser entendeu bem."""
+    pendentes = db.scalars(select(Jornada)
+                           .where(Jornada.estruturado_confirmado_em.is_(None))
+                           .order_by(Jornada.descricao)).all()
+    saida, por_confianca = [], {"alta": 0, "media": 0, "baixa": 0}
+    for j in pendentes:
+        p = _propor_jornada(j.descricao)
+        c = p.get("confianca", "baixa")
+        por_confianca[c] = por_confianca.get(c, 0) + 1
+        saida.append({"id": j.id, "descricao": j.descricao, "confianca": c,
+                      "proposta": p})
+    return {"jornadas": saida, "por_confianca": por_confianca,
+            "total": len(pendentes)}
+
+
 @router.delete("/rh/jornadas/{jornada_id}", status_code=204)
 def excluir_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
                     rh: UsuarioRH = Depends(requer_rh)):

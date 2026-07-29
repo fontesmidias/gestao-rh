@@ -377,6 +377,12 @@ export const rh = {
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirJornada: (id) =>
     req(`/rh/jornadas/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Confirmação em lote da estrutura proposta pelo parser (v2.13): 86% das
+  // jornadas saem com confiança alta, e confirmar uma a uma são 325 cliques.
+  jornadasAConfirmar: () => req('/rh/jornadas-a-confirmar', { headers: authRH() }),
+  confirmarJornadasLote: (dados) =>
+    req('/rh/jornadas/confirmar-lote', { method: 'POST', headers: authRH(),
+        body: JSON.stringify(dados) }),
   propostaJornada: (id) =>
     req(`/rh/jornadas/${id}/proposta`, { headers: authRH() }),
   jornadasDuplicidades: () =>
