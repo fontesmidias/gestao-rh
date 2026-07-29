@@ -173,7 +173,14 @@ a { color: var(--verde-escuro); }
 .portal-rodape { text-align: center; color: var(--tinta-suave); font-size: var(--fs-mini);
                  margin: 0; }
 .portal-talentos { text-align: center; margin: 0; font-size: var(--fs-apoio); }
-.talento-form { max-width: 560px; margin: 4vh auto; }
+/* O formulário público é um `.cartao` DENTRO de `.talento-pagina` — não é o
+   `.cartao` que se centraliza, é o wrapper. Antes `.talento-form` tentava
+   `margin: 4vh auto`, mas `.cartao` (definido depois, mesma especificidade)
+   trazia `margin: 0 1rem` e vencia por ordem de fonte: o formulário grudava na
+   esquerda no desktop. No mobile passava despercebido, porque a viewport ≈
+   560px e as margens de 1rem pareciam propositais (feedback 2026-07-28).
+   O wrapper resolve independentemente da ordem das regras. */
+.talento-pagina { max-width: 560px; margin: 4vh auto; }
 .talento-form h1 { text-align: center; }
 
 /* Banco de Talentos — wizard de 3 passos */
@@ -596,7 +603,11 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-tabela tbody tr:hover { background: var(--hover); }
 /* Chip sutil: fundo translúcido da cor do status, texto na cor — comunicação
    por cor sem gritar. A cor vem por variável (--chip-cor). */
-.chip { border-radius: var(--raio-chip); padding: .25rem .7rem; font-size: var(--fs-mini);
+/* inline-block + margem: vários chips na mesma célula (as tags do talento)
+   ficavam colados/sobrepostos, ilegíveis (feedback 2026-07-28). */
+.chip { display: inline-block; border-radius: var(--raio-chip);
+        padding: .25rem .7rem; margin: .12rem .25rem .12rem 0;
+        font-size: var(--fs-mini);
         font-weight: 700; white-space: nowrap;
         color: var(--chip-cor, var(--tinta-suave));
         background: color-mix(in srgb, var(--chip-cor, #889) 14%, transparent);
@@ -918,11 +929,17 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   background: var(--verde-suave); color: var(--verde-escuro);
   font-weight: 800; font-size: var(--fs-apoio);
 }
+/* text-decoration: none porque na v1.97 estes itens deixaram de ser <button> e
+   viraram <NavLink> (= <a>), herdando o sublinhado do navegador — feio num
+   menu (feedback 2026-07-28). Vale só para link de NAVEGAÇÃO, que já tem
+   afordância própria (fundo no hover, barra no ativo); link em texto corrido
+   continua sublinhado, por acessibilidade. */
 .rh-sidebar-item {
   display: flex; align-items: center; gap: .65rem;
   width: 100%; padding: .55rem .65rem; border: 0; border-radius: 10px;
   background: transparent; color: var(--tinta); font-size: .93rem;
   cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden;
+  text-decoration: none;
 }
 .rh-sidebar-item:hover { background: var(--verde-suave); }
 .rh-sidebar-item.ativo { background: var(--verde-suave); font-weight: 700;
@@ -1529,3 +1546,14 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
 .email-versao { display: flex; gap: var(--esp-3); align-items: center;
   justify-content: space-between; padding: var(--esp-2) 0;
   border-bottom: 1px solid var(--borda-suave); }
+
+/* Ficha completa do talento, no painel que abre na própria linha (v2.10).
+   Mostra tudo que a pessoa preencheu — inclusive `resumo` e `origem`, que não
+   tinham lugar nenhum na tela antes. */
+.ficha-talento { padding: var(--esp-3) 0; }
+.ficha-grade { display: grid; gap: var(--esp-3);
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+.ficha-campo.largo { grid-column: 1 / -1; }
+.ficha-rotulo { display: block; font-size: var(--fs-mini); text-transform: uppercase;
+  letter-spacing: .04em; color: var(--cinza-txt); margin-bottom: var(--esp-1); }
+.ficha-texto { margin: 0; white-space: pre-wrap; line-height: 1.5; }
