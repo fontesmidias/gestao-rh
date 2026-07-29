@@ -318,19 +318,51 @@ def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
 
 class StatusIn(BaseModel):
     status: StatusTalento
+    # Por que arquivou/desarquivou. Vira ANOTAÇÃO no mini-CRM (feedback
+    # 2026-07-28) — com autor e data, junto do resto da memória da pessoa.
+    motivo: str | None = None
 
 
 @router.put("/rh/talentos/{talento_id}/status", dependencies=[Depends(requer_rh)])
 def mudar_status(talento_id: uuid.UUID, payload: StatusIn, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Muda o status do talento; o motivo (quando vier) vira anotação no CRM.
+
+    O RH pediu "colocar alguma observação por ocasião do arquivamento, bem como
+    quem foi o responsável e quando, e poder desfazer". Tudo isso já existe no
+    mini-CRM (`Anotacao`: texto, anexo, autor SNAPSHOT e data) — então o
+    arquivamento passa a ESCREVER lá em vez de ganhar campos próprios. Assim o
+    histórico da pessoa fica num lugar só, e anexar documento ao arquivamento
+    já funciona pela tela de anotações.
+
+    Desfazer é mudar o status de volta: o registro do que houve fica, porque a
+    anotação é append-only.
+    """
+    from app.models.crm import Anotacao
+    from app.models.talento import StatusTalento as _S
+
     t = db.get(Talento, talento_id)
     if t is None:
         raise HTTPException(status_code=404, detail="talento_nao_encontrado")
     if t.status == StatusTalento.convertido:
         raise HTTPException(status_code=409, detail="talento_ja_convertido")
+    anterior = t.status
     t.status = payload.status
+
+    motivo = (payload.motivo or "").strip()
+    if motivo:
+        acao = {_S.arquivado: "Arquivado",
+                _S.novo: "Reaberto",
+                _S.em_analise: "Voltou para análise"}.get(payload.status, "Status alterado")
+        db.add(Anotacao(
+            talento_id=t.id,
+            texto=f"{acao} — {motivo}",
+            autor_id=rh.id, autor_nome=rh.nome or rh.email))
+
     registrar(db, "talento_status_alterado", ator="rh", ator_detalhe=rh.email,
-              detalhe={"talento": t.nome, "status": t.status.value})
+              detalhe={"talento": t.nome, "status": t.status.value,
+                       "anterior": anterior.value if anterior else None,
+                       "motivo": motivo or None})
     db.commit()
     return _dump(t)
 

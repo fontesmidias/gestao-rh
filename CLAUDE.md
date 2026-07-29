@@ -700,6 +700,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Arquivar talento ESCREVE no mini-CRM, não ganha campo próprio** (v2.14,
+  `talentos.py::mudar_status`): o RH pediu "observação e arquivo ao arquivar,
+  com responsável e quando, e poder desfazer" — e a `Anotacao` do CRM já tinha
+  texto, anexo, autor SNAPSHOT e data. Então `StatusIn.motivo` (opcional) vira
+  uma anotação (`"Arquivado — <motivo>"`, `"Reaberto — …"`), o histórico da
+  pessoa fica num lugar só e anexar documento já funciona pela tela de
+  anotações. Desfazer é mudar o status de volta; o registro permanece porque a
+  anotação é append-only. Motivo vazio/só espaços NÃO cria anotação. O lote de
+  arquivamento pede UM motivo para todos e **presta contas de quem não foi**
+  (antes tinha `.catch(() => {})` e dizia que arquivou tudo).
+- **Teste que só passa em banco limpo é armadilha** (v2.14): o
+  `test_jornadas_confirmar_lote` criava jornadas com descrição fixa e a
+  `descricao` é `unique=True` — rodar duas vezes no mesmo banco falhava com
+  "as 3 criadas deveriam estar na fila: 0", que não diz nada sobre a causa.
+  Agora usa sufixo `uuid` por execução. Ao escrever teste que grava em tabela
+  com campo único, sempre gerar o valor por execução.
 - **Fila de decisão precisa ser MEDIDA antes de ganhar ação em massa** (v2.12,
   `jornada_duplicidade.py`): o RH pediu ação em massa nas 325 duplicidades de
   jornada ("um clique cada"). Medindo contra os dados reais (269 jornadas da

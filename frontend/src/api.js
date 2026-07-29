@@ -661,8 +661,10 @@ export const rh = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/talentos${q ? `?${q}` : ''}`, { headers: authRH() })
   },
-  statusTalento: (id, status) =>
-    req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(), body: JSON.stringify({ status }) }),
+  // `motivo` vira anotação no mini-CRM (com autor e data) — v2.14
+  statusTalento: (id, status, motivo) =>
+    req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ status, motivo }) }),
   converterTalento: (id) =>
     req(`/rh/talentos/${id}/converter`, { method: 'POST', headers: authRH() }),
   baixarCurriculoTalento: (id) =>

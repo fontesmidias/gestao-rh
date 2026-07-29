@@ -28,6 +28,8 @@ os.environ.setdefault("RH_ADMIN_PASSWORD", "senha-teste-123")
 os.environ.setdefault("SECRET_KEY", "segredo-de-teste")
 os.environ.setdefault("BASE_URL", "http://localhost:8090")
 
+import uuid  # noqa: E402
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
@@ -42,11 +44,15 @@ assert c.post("/api/rh/jornadas/confirmar-lote", json={}).status_code == 401
 # ------------------------------------------- descrições REAIS da planilha
 # Duas de alta confiança (escala + 4 horários) e uma 12X36, que o parser lê
 # só em parte — é justamente a que NÃO pode ser confirmada no escuro.
+# Sufixo único por execução: a descrição é `unique=True`, então repetir o
+# teste no MESMO banco recriaria as jornadas e o segundo run falharia — teste
+# que só passa em banco limpo falha no CI de alguém sem explicar por quê.
+_ID = uuid.uuid4().hex[:6].upper()
 ALTA = [
-    "LOTE TESTE A - 2ª A 6ª - 08H - 12H - 13H - 17H",
-    "LOTE TESTE B - 2ª A 6ª - 07H - 11H - 12H - 16H",
+    f"LOTE {_ID} A - 2ª A 6ª - 08H - 12H - 13H - 17H",
+    f"LOTE {_ID} B - 2ª A 6ª - 07H - 11H - 12H - 16H",
 ]
-PARCIAL = "LOTE TESTE C - 12X36 - 19H - 07H - ADICIONAL NOTURNO"
+PARCIAL = f"LOTE {_ID} C - 12X36 - 19H - 07H - ADICIONAL NOTURNO"
 
 ids = {}
 for d in ALTA + [PARCIAL]:
@@ -66,6 +72,8 @@ assert minhas[ids[PARCIAL]]["confianca"] != "alta", (
 antes_alta = fila["por_confianca"]["alta"]
 r = c.post("/api/rh/jornadas/confirmar-lote", headers=rh, json={"confianca": "alta"})
 assert r.status_code == 200, r.text
+# >= porque a fila pode ter jornadas de outras execuções; o que importa é que
+# NENHUMA de alta confiança ficou para trás (conferido logo abaixo).
 assert r.json()["confirmadas"] == antes_alta, r.json()
 
 depois = c.get("/api/rh/jornadas-a-confirmar", headers=rh).json()
