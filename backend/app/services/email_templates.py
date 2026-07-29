@@ -218,10 +218,13 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        quando="O RH aprova e ativa o Reembolso-Creche.",
        assunto="Green House — Reembolso-Creche ativado: orientações da entrega mensal",
        corpo="Olá, {{nome}}!\n\n"
-             "Seu Reembolso-Creche foi ativado. Todo mês, entregue o recibo da "
-             "creche até o dia {{dia}} para que o reembolso entre na folha.\n\n"
-             "O recibo precisa estar no nome da criança e conter o valor pago, "
-             "a data e o CNPJ da instituição.",
+             "Seu benefício de Reembolso-Creche foi ativado. 🎉\n\n"
+             "Todo mês, até o dia {{dia}}, envie a comprovação da despesa do mês "
+             "anterior, de uma destas formas:\n"
+             "- DECLARAÇÃO assinada por quem cuida da criança (cuidador(a)/babá) "
+             "— use o modelo que enviamos; ou\n"
+             "- NOTA FISCAL da creche/pré-escola, quando for um estabelecimento.\n\n"
+             "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.",
        variaveis={"nome": "primeiro nome do colaborador",
                   "dia": "dia limite da entrega mensal"},
        exemplo={"nome": "Maria", "dia": "10"}),
@@ -230,11 +233,10 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        rotulo="Pedido indeferido",
        quando="O RH indefere o pedido de Reembolso-Creche.",
        assunto="Green House — Reembolso-Creche: resultado da análise",
-       corpo="Olá, {{nome}},\n\n"
-             "Analisamos o seu pedido de Reembolso-Creche e ele não pôde ser "
-             "deferido pelo seguinte motivo:\n\n"
-             "{{motivo}}\n\n"
-             "Se tiver dúvidas ou novas informações, fale com o RH.",
+       corpo="Olá, {{nome}}!\n\n"
+             "Após a análise, seu pedido de Reembolso-Creche foi indeferido.\n\n"
+             "Motivo: {{motivo}}\n\n"
+             "Em caso de dúvida, procure o RH.",
        variaveis={"nome": "primeiro nome", "motivo": "motivo do indeferimento"},
        obrigatorias=("motivo",),
        exemplo={"nome": "Maria", "motivo": "A criança já completou 5 anos."}),
@@ -243,10 +245,11 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        rotulo="Benefício suspenso ou encerrado",
        quando="O RH suspende ou encerra o benefício.",
        assunto="Green House — Reembolso-Creche {{verbo}}",
-       corpo="Olá, {{nome}},\n\n"
+       corpo="Olá, {{nome}}!\n\n"
              "Seu Reembolso-Creche foi {{verbo}}.\n\n"
              "Motivo: {{motivo}}\n\n"
-             "Em caso de dúvida, procure o RH.",
+             "Você não precisa mais enviar a comprovação mensal. Em caso de "
+             "dúvida, procure o RH.",
        variaveis={"nome": "primeiro nome", "verbo": "'suspenso' ou 'encerrado'",
                   "motivo": "motivo informado pelo RH"},
        exemplo={"nome": "Maria", "verbo": "suspenso",
@@ -258,10 +261,11 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        quando="O RH libera o ciclo de avaliação de desempenho.",
        assunto="Green House — sua avaliação está disponível",
        corpo="Olá, {{primeiro_nome}}!\n\n"
-             "Sua avaliação de desempenho está disponível no portal. "
-             "Responda até {{prazo}}.\n\n"
-             "É a sua oportunidade de registrar como foi o período e o que "
-             "você espera para o próximo.",
+             "Sua avaliação de desempenho foi registrada após a conversa de "
+             "feedback.\n\n"
+             "Você pode ler e escrever a sua manifestação até {{prazo}} — "
+             "concordando ou não.\n\n"
+             "Registrar sua opinião é um direito seu.",
        variaveis={"primeiro_nome": "primeiro nome", "prazo": "data limite",
                   "link": "endereço do portal do colaborador"},
        botao_texto="Ver minha avaliação", botao_url_var="link",
@@ -273,10 +277,11 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        quando="O worker diário avisa 90 dias antes do vencimento.",
        assunto="Green House — {{titulo}} {{quando}}",
        corpo="Olá, {{primeiro_nome}}!\n\n"
-             "Sua certificação {{titulo}} {{quando}} (validade: "
-             "{{validade}}).\n\n"
-             "Envie o comprovante da renovação pelo portal para manter seu "
-             "cadastro em dia.",
+             "{{titulo}} {{quando}} — validade até {{validade}}.\n\n"
+             "Para renovar, envie no portal: documento com foto (RG ou CNH), "
+             "certificado de formação e atestado de saúde ocupacional.\n\n"
+             "Assim que estiver tudo certo, o RH providencia a matrícula na "
+             "reciclagem.",
        variaveis={"primeiro_nome": "primeiro nome", "titulo": "nome do certificado",
                   "quando": "'vence em N dias' ou 'venceu há N dias'",
                   "validade": "data de validade",
@@ -287,20 +292,35 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                 "link": "https://exemplo/meu"}),
 
     _m(chave="desenvolvimento_devolvido", grupo="Colaborador",
-       rotulo="Curso/certificado devolvido ou recusado",
-       quando="O RH devolve ou recusa um documento enviado pelo colaborador.",
+       rotulo="Curso/certificado devolvido para ajuste",
+       quando="O RH devolve um documento do colaborador para correção.",
        assunto="Green House — precisamos de um ajuste no seu envio",
        corpo="Olá, {{primeiro_nome}}!\n\n"
-             "Sobre o seu envio de {{titulo}}: {{motivo}}\n\n"
-             "Você pode reenviar pelo portal.",
+             "Sobre {{titulo}}, precisamos de um ajuste:\n\n"
+             "{{motivo}}\n\n"
+             "Acesse o portal para corrigir e reenviar.",
        variaveis={"primeiro_nome": "primeiro nome",
                   "titulo": "título do curso/certificado",
                   "motivo": "motivo informado pelo RH",
                   "link": "endereço do portal"},
-       botao_texto="Reenviar pelo portal", botao_url_var="link",
+       botao_texto="Corrigir e reenviar", botao_url_var="link",
        exemplo={"primeiro_nome": "Maria", "titulo": "NR-35",
                 "motivo": "o certificado está sem a data de conclusão",
                 "link": "https://exemplo/meu"}),
+
+    _m(chave="desenvolvimento_recusado", grupo="Colaborador",
+       rotulo="Curso/certificado recusado",
+       quando="O RH recusa um documento enviado pelo colaborador (terminal).",
+       assunto="Green House — sobre o seu envio",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "{{titulo}} não pôde ser aceito.\n\n"
+             "{{motivo}}\n\n"
+             "Em caso de dúvida, fale com o RH.",
+       variaveis={"primeiro_nome": "primeiro nome",
+                  "titulo": "título do curso/certificado",
+                  "motivo": "motivo informado pelo RH"},
+       exemplo={"primeiro_nome": "Maria", "titulo": "NR-35",
+                "motivo": "o documento enviado não é um certificado."}),
 
     # ---------------------------------------------------------------- talento
     _m(chave="talento_agradecimento", grupo="Banco de Talentos",

@@ -80,7 +80,7 @@ def avisar(hoje: date | None = None) -> int:
                 log.info("Sem e-mail para avisar sobre %s (%s)",
                          registro.titulo, col.nome_completo)
                 continue
-            _enviar(destinos, col, registro, dias)
+            _enviar(db, destinos, col, registro, dias)
             from app.services.auditoria import registrar
             registrar(db, ACAO, ator="sistema", candidato_id=col.id,
                       detalhe={"registro": str(registro.id), "dias": dias,
@@ -103,33 +103,19 @@ def _destinatarios(db, col: Candidato) -> list[str]:
     return destinos
 
 
-def _enviar(destinos: list[str], col: Candidato, registro, dias: int) -> None:
+def _enviar(db, destinos: list[str], col: Candidato, registro, dias: int) -> None:
     from app.core.config import get_settings
-    from app.services.email import enviar_email, html_moderno
-    primeiro = (col.nome_completo or "").split()[0].title()
-    titulo = registro.titulo or "sua certificação"
-    quando = (f"vence em {dias} dias" if dias >= 0 else f"venceu há {-dias} dias")
-    url = f"{get_settings().base_url.rstrip('/')}/meu"
-    assunto = (f"Green House — {titulo} {quando}"
-               if dias >= 0 else f"Green House — {titulo} VENCIDA")
-    texto = (
-        f"Olá, {primeiro}!\n\n"
-        f"{titulo} {quando} (validade: {registro.validade_ate.strftime('%d/%m/%Y')}).\n\n"
-        f"Para renovar, acesse {url}, entre com seu CPF e envie:\n"
-        "- documento com foto (RG ou CNH)\n"
-        "- certificado de formação\n"
-        "- atestado de saúde ocupacional\n\n"
-        "Assim que estiver tudo certo, o RH providencia a matrícula na "
-        "reciclagem.\n\nAtenciosamente,\nRH — Green House\n")
-    html = html_moderno(
-        "Sua certificação precisa ser renovada",
-        [f"Olá, <strong>{primeiro}</strong>!",
-         f"<strong>{titulo}</strong> {quando} — validade até "
-         f"<strong>{registro.validade_ate.strftime('%d/%m/%Y')}</strong>.",
-         "Para renovar, envie no portal: documento com foto, certificado de "
-         "formação e atestado de saúde ocupacional.",
-         "Assim que estiver tudo certo, o RH providencia a matrícula na reciclagem."],
-        botao_texto="Enviar meus documentos", botao_url=url)
+    from app.services.email import enviar_email
+    from app.services.email_templates import renderizar
+    # Renderiza UMA vez e reusa: o mesmo aviso vai ao colaborador e aos
+    # destinatários internos da matriz.
+    assunto, texto, html = renderizar(db, "certificacao_vencendo", {
+        "primeiro_nome": (col.nome_completo or "").split()[0].title(),
+        "titulo": registro.titulo or "sua certificação",
+        "quando": f"vence em {dias} dias" if dias >= 0 else f"venceu há {-dias} dias",
+        "validade": registro.validade_ate.strftime("%d/%m/%Y"),
+        "link": f"{get_settings().base_url.rstrip('/')}/meu",
+    })
     for destino in destinos:
         try:
             enviar_email(destino, assunto, texto, html)

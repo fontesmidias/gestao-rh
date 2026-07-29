@@ -18,7 +18,7 @@ from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services.auditoria import registrar
 from app.services.dossie import DossieIncompleto, gerar_dossie
-from app.services.email import enviar_email, html_moderno
+from app.services.email import enviar_email
 from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 
