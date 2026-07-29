@@ -15,6 +15,7 @@ import app.models.crm  # noqa: F401
 import app.models.desempenho  # noqa: F401
 import app.models.desenvolvimento  # noqa: F401
 import app.models.documento  # noqa: F401
+import app.models.email_template  # noqa: F401
 import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
 import app.models.lixeira  # noqa: F401

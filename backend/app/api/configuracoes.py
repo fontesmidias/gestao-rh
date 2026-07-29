@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -781,6 +781,151 @@ def testar_teams(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_r
     registrar(db, "teams_teste_ok", ator="rh", ator_detalhe=rh.email)
     db.commit()
     return {"ok": True}
+
+
+# ---------- Textos dos e-mails (v2.06) ----------
+# O RH vê TODOS os e-mails que o sistema manda, com as variáveis de cada um,
+# edita o texto, confere no preview e tem histórico com restauração. O catálogo
+# (quais e-mails existem, quais variáveis, quais são obrigatórias) vive em
+# `services/email_templates.py` — aqui só entram as rotas.
+
+
+class EmailTemplateIn(BaseModel):
+    assunto: str
+    corpo: str
+    botao_texto: str | None = None
+
+
+@router.get("/rh/config/emails")
+def listar_emails(db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    from app.services.email_templates import listar
+    return listar(db)
+
+
+@router.get("/rh/config/emails/{chave}/versoes")
+def versoes_email(chave: str, db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    from app.models.email_template import EmailTemplateVersao
+    from app.services.email_templates import CATALOGO_POR_CHAVE
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+    versoes = db.scalars(
+        select(EmailTemplateVersao)
+        .where(EmailTemplateVersao.chave == chave)
+        .order_by(EmailTemplateVersao.versao.desc())).all()
+    return [{"versao": v.versao, "assunto": v.assunto, "corpo": v.corpo,
+             "botao_texto": v.botao_texto, "autor": v.autor,
+             "criado_em": v.criado_em} for v in versoes]
+
+
+@router.post("/rh/config/emails/{chave}/preview")
+def preview_email(chave: str, payload: EmailTemplateIn,
+                  db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Renderiza o texto EM EDIÇÃO com dados de exemplo — sem salvar nada.
+
+    Preview sobre o texto digitado (e não sobre o salvo) é o ponto: o RH vê o
+    que vai sair ANTES de gravar.
+    """
+    from app.services.email_templates import (CATALOGO_POR_CHAVE,
+                                              faltando_obrigatorias, modelo)
+    from app.services.fichas import aplicar_variaveis
+    from app.services.email import html_moderno
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+    m = modelo(chave)
+    ctx = dict(m.exemplo)
+    assunto = aplicar_variaveis(payload.assunto, ctx)
+    corpo = aplicar_variaveis(payload.corpo, ctx)
+    paragrafos = [p.strip().replace("\n", "<br>")
+                  for p in corpo.split("\n\n") if p.strip()]
+    url = ctx.get(m.botao_url_var) if m.botao_url_var else None
+    html = html_moderno(m.rotulo, paragrafos,
+                        botao_texto=payload.botao_texto if url else None,
+                        botao_url=url or None)
+    return {"assunto": assunto, "corpo": corpo, "html": html,
+            "faltando": faltando_obrigatorias(chave, payload.assunto, payload.corpo)}
+
+
+@router.put("/rh/config/emails/{chave}")
+def salvar_email(chave: str, payload: EmailTemplateIn,
+                 db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Salva o texto e arquiva a versão ANTERIOR no histórico.
+
+    Recusa (422) se faltar uma variável obrigatória: sem `{{codigo}}` num
+    e-mail de acesso, a mensagem sai bonita e vazia — e ninguém mais entra no
+    sistema. É o único jeito de o RH não se trancar para fora sem perceber.
+    """
+    from app.models.email_template import EmailTemplate, EmailTemplateVersao
+    from app.services.email_templates import (CATALOGO_POR_CHAVE,
+                                              faltando_obrigatorias,
+                                              texto_vigente)
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+    assunto = (payload.assunto or "").strip()
+    corpo = (payload.corpo or "").strip()
+    if not assunto or not corpo:
+        raise HTTPException(status_code=422, detail="assunto_e_corpo_obrigatorios")
+    faltando = faltando_obrigatorias(chave, assunto, corpo)
+    if faltando:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "variaveis_obrigatorias", "faltando": faltando})
+
+    # arquiva o que estava valendo antes de sobrescrever
+    anterior_assunto, anterior_corpo, anterior_botao = texto_vigente(db, chave)
+    ultima = db.scalar(
+        select(func.max(EmailTemplateVersao.versao))
+        .where(EmailTemplateVersao.chave == chave)) or 0
+    db.add(EmailTemplateVersao(
+        chave=chave, versao=ultima + 1, assunto=anterior_assunto,
+        corpo=anterior_corpo, botao_texto=anterior_botao, autor=rh.email))
+
+    t = db.get(EmailTemplate, chave)
+    if t is None:
+        t = EmailTemplate(chave=chave, assunto=assunto, corpo=corpo,
+                          botao_texto=payload.botao_texto, atualizado_por=rh.email)
+        db.add(t)
+    else:
+        t.assunto, t.corpo = assunto, corpo
+        t.botao_texto = payload.botao_texto
+        t.atualizado_por = rh.email
+    registrar(db, "email_template_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"chave": chave, "versao_arquivada": ultima + 1})
+    db.commit()
+    return {"ok": True, "chave": chave}
+
+
+@router.post("/rh/config/emails/{chave}/restaurar")
+def restaurar_email(chave: str, versao: int | None = None,
+                    db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Volta a uma versão do histórico; sem `versao`, volta ao texto de fábrica."""
+    from app.models.email_template import EmailTemplate, EmailTemplateVersao
+    from app.services.email_templates import CATALOGO_POR_CHAVE, modelo
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+
+    if versao is None:
+        # de fábrica: some com a personalização e o padrão do catálogo volta a
+        # valer sozinho (texto_vigente cai nele quando não há registro)
+        t = db.get(EmailTemplate, chave)
+        if t is not None:
+            db.delete(t)
+        registrar(db, "email_template_restaurado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"chave": chave, "para": "padrao"})
+        db.commit()
+        m = modelo(chave)
+        return {"ok": True, "assunto": m.assunto, "corpo": m.corpo,
+                "botao_texto": m.botao_texto}
+
+    v = db.scalar(select(EmailTemplateVersao).where(
+        EmailTemplateVersao.chave == chave, EmailTemplateVersao.versao == versao))
+    if v is None:
+        raise HTTPException(status_code=404, detail="versao_nao_encontrada")
+    return salvar_email(chave, EmailTemplateIn(
+        assunto=v.assunto, corpo=v.corpo, botao_texto=v.botao_texto), db, rh)
 
 
 # ---------- Auditoria ----------

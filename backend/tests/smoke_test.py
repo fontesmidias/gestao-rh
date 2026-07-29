@@ -3,6 +3,7 @@ upload de documentos (imagem→PDF no MinIO) → concluir envio."""
 
 import io
 import os
+import re
 
 os.environ.update(
     DATABASE_URL="postgresql+psycopg://admissao:admissao@localhost:55432/admissao",
@@ -152,8 +153,13 @@ import app.api.assinaturas as mod_ass
 capturado = {}
 _orig = mod_ass.enviar_email
 def _fake_email(dest, assunto, corpo, html=None, anexos=None, **kw):
-    if "código de assinatura" in corpo:
-        capturado["codigo"] = corpo.split("eletrônica é: ")[1][:6]
+    # O código é achado por PADRÃO (6 dígitos isolados), não pela frase que o
+    # acompanha: os textos de e-mail viraram editáveis pelo RH na v2.06, e
+    # depender da redação faria uma edição no painel derrubar o smoke — num
+    # commit sem relação nenhuma com o que quebrou.
+    achado = re.search(r"(?<!\d)(\d{6})(?!\d)", corpo)
+    if achado:
+        capturado["codigo"] = achado.group(1)
     if anexos:
         capturado["anexos"] = anexos
     return True

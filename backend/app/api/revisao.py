@@ -19,6 +19,7 @@ from app.services import storage
 from app.services.auditoria import registrar
 from app.services.dossie import DossieIncompleto, gerar_dossie
 from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 
 router = APIRouter(tags=["revisao-rh"], dependencies=[Depends(requer_rh)])
@@ -329,38 +330,18 @@ def rejeitar_lote(payload: LoteRejeitarIn, request: Request,
         if candidato.status == StatusCandidato.envio_concluido:
             candidato.status = StatusCandidato.docs_pendentes
         total += len(slots)
-        lista = "\n".join(f"  - {s.tipo.value.replace('_', ' ')}" for s in slots)
+        # A LISTA é montada aqui e chega pronta ao template: o RH edita o texto
+        # ao redor, mas a regra de o que entra na lista é do código (v2.06).
+        lista = "\n".join(f"- {s.tipo.value.replace('_', ' ')}" for s in slots)
         # Um link NOVO por candidato (ver comentário em ``rejeitar``): o e-mail
         # mandava acessar "o mesmo link da sua admissão" sem link nenhum.
         link = emitir_link(db, candidato, base_url_publica(request)) if candidato.email else None
-        enviar_email(
-            candidato.email,
-            "Green House — documentos precisam ser reenviados",
-            f"Prezado(a) {candidato.nome_completo},\n\n"
-            f"Os documentos abaixo precisam ser enviados novamente "
-            f"({_MOTIVO_LEGIVEL[payload.motivo]}"
-            + (f" — {payload.observacao}" if payload.observacao else "") + "):\n"
-            f"{lista}\n\n"
-            + (f"Acesse e reenvie-os HOJE:\n{link}\n\n" if link
-               else "Acesse o link da sua admissão e reenvie-os HOJE.\n\n")
-            + "Sua contratação fica parada até esse reenvio.\n\n"
-            "Atenciosamente,\nRH — Green House\n",
-            html_moderno(
-                "Documentos precisam ser reenviados",
-                [
-                    f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                    f"Os documentos abaixo precisam ser enviados novamente "
-                    f"(<strong>{_MOTIVO_LEGIVEL[payload.motivo]}</strong>"
-                    + (f" — {payload.observacao}" if payload.observacao else "") + "):"
-                    + "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
-                    + "".join(f"<li>{s.tipo.value.replace('_', ' ')}</li>" for s in slots)
-                    + "</ul>",
-                    "Sua contratação fica parada até esse reenvio.",
-                ],
-                botao_texto="Reenviar os documentos",
-                botao_url=link,
-            ),
-        )
+        motivo = _MOTIVO_LEGIVEL[payload.motivo] + (
+            f" — {payload.observacao}" if payload.observacao else "")
+        enviar_modelo(db, "documentos_rejeitados_lote", candidato.email, {
+            "nome": candidato.nome_completo, "motivo": motivo,
+            "lista": lista, "link": link,
+        })
     db.commit()
     return {"rejeitados": total}
 
@@ -430,30 +411,14 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, request: Request,
     link = emitir_link(db, candidato, base_url_publica(request)) if candidato.email else None
     db.commit()
 
-    enviar_email(
-        candidato.email,
-        "🌱 Green House — um documento precisa ser reenviado",
-        f"Olá, {candidato.nome_completo.split()[0].title()}!\n\n"
-        f"Um dos seus documentos precisa ser enviado novamente: "
-        f"{_MOTIVO_LEGIVEL[payload.motivo]}"
-        + (f" ({payload.observacao})" if payload.observacao else "")
-        + ".\n\n"
-        + (f"Acesse e reenvie esse documento HOJE:\n{link}\n\n" if link
-           else "Acesse o link da sua admissão e reenvie esse documento HOJE.\n\n")
-        + "Sua contratação fica parada até esse reenvio — não deixe para depois.\n",
-        html_moderno(
-            "Um documento precisa ser reenviado",
-            [
-                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                f"Um dos seus documentos precisa ser enviado novamente: "
-                f"<strong>{_MOTIVO_LEGIVEL[payload.motivo]}</strong>"
-                + (f" ({payload.observacao})" if payload.observacao else "") + ".",
-                "Sua contratação fica parada até esse reenvio — não deixe para depois.",
-            ],
-            botao_texto="Reenviar esse documento",
-            botao_url=link,
-        ),
-    )
+    motivo = _MOTIVO_LEGIVEL[payload.motivo] + (
+        f" ({payload.observacao})" if payload.observacao else "")
+    enviar_modelo(db, "documento_rejeitado", candidato.email, {
+        "nome": candidato.nome_completo,
+        "primeiro_nome": (candidato.nome_completo or "").split()[0].title(),
+        "motivo": motivo,
+        "link": link,
+    })
     return {"status": slot.status}
 
 

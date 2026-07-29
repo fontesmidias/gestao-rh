@@ -137,7 +137,7 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
     tid = str(talento.id)
     registrar(db, "talento_cadastrado", ator="publico",
               detalhe={"cargos": cargos, "cidade": talento.cidade})
-    nome_cad, cargos_cad = talento.nome, cargos
+    nome_cad, cargos_cad, email_cad = talento.nome, cargos, talento.email
     db.commit()
     # aviso interno configurável (v1.82) — desligado por padrão seria pior:
     # cadastro de talento que ninguém vê é currículo perdido
@@ -149,6 +149,16 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
         f"Cargos de interesse: {', '.join(cargos_cad) or '(não informado)'}\n"
         "Acesse o painel do RH para ver o cadastro.\n",
     )
+    # Agradecimento para a PESSOA (feedback 2026-07-28): a tela de obrigado só
+    # existe enquanto a aba está aberta; sem e-mail, quem se cadastrou fica sem
+    # nenhum comprovante de que o cadastro entrou. Texto editável pelo RH.
+    if email_cad:
+        from app.services.email_templates import enviar_modelo
+        enviar_modelo(db, "talento_agradecimento", email_cad, {
+            "primeiro_nome": (nome_cad or "").split()[0].title() if nome_cad else "",
+            "nome": nome_cad or "",
+            "cargos": ", ".join(cargos_cad) if cargos_cad else "",
+        })
     upload_token = _upload_serializer().dumps({"tid": tid})
     return {"ok": True, "id": tid, "upload_token": upload_token}
 

@@ -700,6 +700,35 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Textos de e-mail editáveis pelo RH** (v2.06, `services/email_templates.py`,
+  `models/email_template.py`, Config → ✉️ Textos dos e-mails): o CATÁLOGO em
+  `email_templates.py` é a fonte da verdade — quais e-mails existem, quais
+  variáveis cada um oferece e quais são **obrigatórias**; a tabela guarda só o
+  texto que o RH escreveu por cima. Quatro regras:
+  (1) **O template é APRESENTAÇÃO, nunca decisão** — os e-mails que enumeram
+  documentos/pendências recebem a lista PRONTA como `{{lista}}`, montada em
+  Python; o RH edita o texto ao redor, a regra de o que entra continua no
+  código. (2) **Variável obrigatória valida no salvamento** (422
+  `variaveis_obrigatorias`): sem `{{codigo}}` num e-mail de acesso a mensagem
+  sai bonita e vazia e ninguém mais entra no sistema — a variável do BOTÃO é
+  exceção (chega pela URL do botão, não precisa estar no corpo). (3)
+  **Fallback sempre**: sem registro, texto vazio ou erro de leitura vale o
+  padrão do catálogo — e-mail nenhum deixa de sair por edição ruim. (4) **Nada
+  de engine de template**: usa `fichas.aplicar_variaveis` (regex `{{chave}}`,
+  `\w+`, sem dot-access) — o Jinja2 que a revisão pediu introduziria a
+  superfície de injection que ele deveria proteger. Histórico append-only em
+  `email_template_versao` (autor é SNAPSHOT string, não FK) com restaurar
+  versão ou voltar ao padrão. Ao criar um e-mail novo: entrada no `CATALOGO` +
+  `enviar_modelo(db, chave, destino, contexto)` no ponto de envio.
+- **Teste de e-mail não pode depender da REDAÇÃO** (v2.06, armadilha achada no
+  levantamento): o `smoke_test` extraía o OTP com
+  `corpo.split("eletrônica é: ")` e o `test_email_reenvio_link` procurava
+  `botao_url` no código-fonte. Com o texto editável pelo RH, uma edição no
+  painel derrubaria o CI num commit sem relação nenhuma — e ninguém ligaria
+  uma coisa à outra. Agora o smoke acha o código por PADRÃO
+  (`re.search(r"(?<!\d)(\d{6})(?!\d)")`) e o teste renderiza o e-mail de
+  verdade para conferir que o link chega. Regra: teste de e-mail afirma a
+  GARANTIA (o link chegou, o código chegou), nunca a frase nem a implementação.
 - **Escolha irreversível se confirma ANTES do botão, não dentro do card**
   (v2.05, feedback 2026-07-28 — "assinou com a opção errada"): a troca da opção
   de VT existia só dentro do card do `termo_vt`, no meio da lista de
