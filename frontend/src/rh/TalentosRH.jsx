@@ -60,12 +60,28 @@ export default function TalentosRH({ aoAbrir }) {
     catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
   }
 
+  // PDF e imagem abrem em aba nova; Word (e qualquer outro tipo que o navegador
+  // não renderiza) BAIXA. Antes tudo ia para window.open e o Word abria uma aba
+  // em branco — o arquivo estava certo, o navegador é que não exibe (feedback
+  // 2026-07-28: "deu bom para baixar, mas não abriu").
   const verCurriculo = async (t) => {
     setMsg(null)
     try {
       const blob = await api.baixarCurriculoTalento(t.id)
       const url = URL.createObjectURL(blob)
-      window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 30000)
+      const exibivel = blob.type === 'application/pdf' || blob.type.startsWith('image/')
+      if (exibivel) {
+        window.open(url, '_blank')
+      } else {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = t.curriculo_nome || 'curriculo'
+        document.body.appendChild(a); a.click(); a.remove()
+        setMsg({ tipo: 'ok', texto: `O currículo de ${t.nome} está em `
+          + `${t.curriculo_nome || 'arquivo'} — o navegador não exibe esse formato, `
+          + 'então baixamos para você abrir no Word.' })
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível abrir o currículo (${e.detail || e.message}).` }) }
   }
 
