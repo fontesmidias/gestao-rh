@@ -54,10 +54,24 @@ export default function TalentosRH({ aoAbrir }) {
     }
   }
 
+  // Arquivar/desarquivar PEDE O MOTIVO, que vira anotação no mini-CRM com
+  // autor e data (feedback 2026-07-28). Não há campo novo no talento: o
+  // histórico da pessoa mora num lugar só, e anexar documento ao arquivamento
+  // já funciona pela tela de anotações.
   const mudarStatus = async (t, status) => {
-    if (status === 'arquivado' && !window.confirm(`Arquivar ${t.nome}? Ele sai da triagem ativa.`)) return
-    try { await api.statusTalento(t.id, status); await recarregar() }
-    catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
+    const arquivando = status === 'arquivado'
+    const motivo = window.prompt(arquivando
+      ? `Arquivar ${t.nome} — por quê?\n\nFica registrado nas anotações com o seu nome e a data.`
+      : `Reabrir ${t.nome} — por quê?\n\nFica registrado nas anotações com o seu nome e a data.`,
+      '')
+    if (motivo === null) return   // cancelou
+    try {
+      await api.statusTalento(t.id, status, motivo.trim() || null)
+      setMsg({ tipo: 'ok', texto: arquivando
+        ? `${t.nome} arquivado. Para desfazer, filtre por "Arquivado" e clique em Reabrir.`
+        : `${t.nome} voltou para a triagem.` })
+      await recarregar()
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
   }
 
   // PDF e imagem abrem em aba nova; Word (e qualquer outro tipo que o navegador
@@ -162,16 +176,46 @@ export default function TalentosRH({ aoAbrir }) {
       🗒️ Anotações</button>
     {t.email && t.status !== 'convertido' && (
       <button className="btn-secundario btn-mini" onClick={() => enviarTeste(t)}>📝 Teste</button>)}
-    {t.status !== 'convertido' && (<>
-      <button className="btn-secundario btn-mini" onClick={() => mudarStatus(t, 'arquivado')}>Arquivar</button>
-      <button className="btn-principal btn-mini" onClick={() => converter(t)}>→ Converter</button>
-    </>)}
+    {t.status === 'arquivado' && (
+      <button className="btn-secundario btn-mini" onClick={() => mudarStatus(t, 'novo')}>
+        ↩ Reabrir</button>)}
+    {t.status !== 'convertido' && t.status !== 'arquivado' && (
+      <button className="btn-secundario btn-mini" onClick={() => mudarStatus(t, 'arquivado')}>Arquivar</button>)}
+    {t.status !== 'convertido' && (
+      <button className="btn-principal btn-mini" onClick={() => converter(t)}>→ Converter</button>)}
   </>)
+
+  // Arquivar em lote: UM motivo para todos (vira uma anotação em cada pessoa,
+  // com autor e data). Antes engolia os erros com `.catch(() => {})` e dizia
+  // que arquivou tudo mesmo quando falhava — agora presta contas de quem não
+  // foi e por quê (mesma regra do lote de documento crítico).
+  const arquivarMassa = async (linhas, limpar) => {
+    const alvos = linhas.filter((t) => t.status !== 'convertido' && t.status !== 'arquivado')
+    if (!alvos.length) {
+      setMsg({ tipo: 'erro', texto: 'Nenhum dos selecionados pode ser arquivado '
+        + '(já arquivados ou convertidos).' })
+      return
+    }
+    const motivo = window.prompt(`Arquivar ${alvos.length} talento(s) — por quê?\n\n`
+      + 'O motivo fica nas anotações de cada um, com o seu nome e a data.', '')
+    if (motivo === null) return
+    let ok = 0
+    const falhas = []
+    for (const t of alvos) {
+      try { await api.statusTalento(t.id, 'arquivado', motivo.trim() || null); ok++ }
+      catch (e) { falhas.push(`${t.nome} (${e.detail || e.message})`) }
+    }
+    const ignorados = linhas.length - alvos.length
+    setMsg({ tipo: falhas.length ? 'erro' : 'ok',
+      texto: `${ok} arquivado(s).`
+        + (ignorados ? ` ${ignorados} ignorado(s) por já estarem arquivados ou convertidos.` : '')
+        + (falhas.length ? ` Não deu para arquivar: ${falhas.join('; ')}.` : '') })
+    limpar(); recarregar()
+  }
 
   const acoesMassa = (linhas, limpar) => (<>
     <button className="btn-secundario btn-mini" onClick={() => enviarTesteMassa(linhas, limpar)}>📝 Enviar teste</button>
-    <button className="btn-secundario btn-mini"
-            onClick={async () => { for (const t of linhas) await api.statusTalento(t.id, 'arquivado').catch(() => {}); limpar(); recarregar() }}>
+    <button className="btn-secundario btn-mini" onClick={() => arquivarMassa(linhas, limpar)}>
       Arquivar</button>
   </>)
 
