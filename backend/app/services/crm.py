@@ -101,6 +101,53 @@ def tags_por_talento(db: Session, talentos: list[Talento]) -> dict:
     return resultado
 
 
+def resumo_anotacoes_por_talento(db: Session, talentos: list[Talento]) -> dict:
+    """Mapa {talento_id: {"total": n, "ultima": {...}}} em UMA consulta.
+
+    Serve à linha do dash (feedback 2026-07-28): o RH quer ver que a pessoa TEM
+    anotação e quantas, com a última no hover, sem precisar abrir o modal para
+    descobrir que não havia nada. Mesma mecânica do `tags_por_talento` — une os
+    dois lados da pessoa (talento + candidato vinculado) e evita N+1.
+    """
+    if not talentos:
+        return {}
+    tids = [t.id for t in talentos]
+    cids = [t.candidato_id for t in talentos if t.candidato_id]
+    cand_de = {t.id: t.candidato_id for t in talentos}
+
+    todas = list(db.scalars(
+        select(Anotacao).where(
+            or_(Anotacao.talento_id.in_(tids),
+                Anotacao.candidato_id.in_(cids) if cids else Anotacao.id == None)  # noqa: E711
+        ).order_by(Anotacao.criado_em.desc())))
+
+    por_talento: dict = {}
+    por_candidato: dict = {}
+    for a in todas:
+        if a.talento_id:
+            por_talento.setdefault(a.talento_id, []).append(a)
+        if a.candidato_id:
+            por_candidato.setdefault(a.candidato_id, []).append(a)
+
+    resultado = {}
+    for tid in tids:
+        minhas = list(por_talento.get(tid, []))
+        cid = cand_de.get(tid)
+        if cid:
+            minhas += por_candidato.get(cid, [])
+        if not minhas:
+            continue
+        minhas.sort(key=lambda x: x.criado_em, reverse=True)
+        ultima = minhas[0]
+        resultado[tid] = {
+            "total": len(minhas),
+            "ultima_texto": ultima.texto,
+            "ultima_autor": ultima.autor_nome,
+            "ultima_quando": ultima.criado_em,
+        }
+    return resultado
+
+
 def dump_anotacao(a: Anotacao) -> dict:
     return {
         "id": a.id, "texto": a.texto, "autor": a.autor_nome,

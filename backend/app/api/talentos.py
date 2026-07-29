@@ -218,7 +218,8 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
 # ---------- RH (protegido) ----------
 
 
-def _dump(t: Talento, teste: dict | None = None, tags: list | None = None) -> dict:
+def _dump(t: Talento, teste: dict | None = None, tags: list | None = None,
+          notas: dict | None = None) -> dict:
     return {
         "id": t.id, "nome": t.nome, "email": t.email, "telefone": t.telefone,
         "cargo_interesse": t.cargo_interesse,
@@ -232,6 +233,11 @@ def _dump(t: Talento, teste: dict | None = None, tags: list | None = None) -> di
         "tem_curriculo": bool(t.curriculo_key), "curriculo_nome": t.curriculo_nome,
         "teste_status": (teste or {}).get("status"),  # None | enviado | em_andamento | concluido
         "tags": tags or [],   # tags do CRM (do talento E do candidato vinculado)
+        # resumo das anotações para a linha do dash: quantas e a última
+        "anotacoes": (notas or {}).get("total", 0),
+        "ultima_anotacao": (notas or {}).get("ultima_texto"),
+        "ultima_anotacao_autor": (notas or {}).get("ultima_autor"),
+        "ultima_anotacao_quando": (notas or {}).get("ultima_quando"),
         "status": t.status.value, "candidato_id": t.candidato_id, "criado_em": t.criado_em,
     }
 
@@ -253,11 +259,16 @@ def listar(status: str | None = None, busca: str | None = None,
             Talento.nome.ilike(termo), Talento.email.ilike(termo),
             Talento.cidade.ilike(termo), Talento.resumo.ilike(termo)))
     talentos = db.scalars(consulta).all()
-    # resumo de teste por talento (1 consulta, sem N+1)
-    testes = {t.id: _resumo_teste_talento(db, t.id) for t in talentos}
+    # resumo de teste por talento, EM LOTE (o comentário aqui dizia "1 consulta,
+    # sem N+1" mas o código chamava uma por pessoa — v2.15)
+    testes = _resumo_teste_por_talento(db, list(talentos))
     # tags do CRM em lote (talento + candidato vinculado), sem N+1
     tags = crm.tags_por_talento(db, list(talentos))
-    return [_dump(t, testes.get(t.id), tags.get(t.id)) for t in talentos]
+    # resumo das anotações na própria linha (v2.15): o RH via "🗒️ Anotações" em
+    # todo mundo e só descobria que não havia nada depois de abrir o modal.
+    notas = crm.resumo_anotacoes_por_talento(db, list(talentos))
+    return [_dump(t, testes.get(t.id), tags.get(t.id), notas.get(t.id))
+            for t in talentos]
 
 
 def marcar_em_analise(db: Session, talento: Talento) -> bool:
@@ -400,6 +411,60 @@ def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get
 
 
 # ---------- Enviar teste avulso ao talento (link /t/) ----------
+
+
+def _resumo_teste_por_talento(db: Session, talentos: list[Talento]) -> dict:
+    """Mapa {talento_id: resumo} em 3 consultas — não uma por talento.
+
+    Era um dict comprehension chamando `_resumo_teste_talento` por pessoa (até
+    3 consultas cada), com o comentário "1 consulta, sem N+1" logo acima. O
+    teste de N+1 do resumo de anotações (v2.15) foi quem expôs: 43 consultas
+    para 39 talentos.
+    """
+    from app.models.teste import StatusTeste
+    from app.models.testagem import (LinkTestagem, ParticipanteTestagem,
+                                     TesteTestagem)
+    if not talentos:
+        return {}
+    tids = [t.id for t in talentos]
+
+    # do mais novo para o mais antigo: o primeiro que cair no dict é o vigente
+    links = list(db.scalars(select(LinkTestagem)
+                            .where(LinkTestagem.talento_id.in_(tids))
+                            .order_by(LinkTestagem.criado_em.desc())))
+    link_do_talento: dict = {}
+    for lk in links:
+        link_do_talento.setdefault(lk.talento_id, lk)
+    if not link_do_talento:
+        return {}
+
+    parts = list(db.scalars(select(ParticipanteTestagem)
+                            .where(ParticipanteTestagem.link_id.in_(
+                                [lk.id for lk in link_do_talento.values()]))
+                            .order_by(ParticipanteTestagem.criado_em.desc())))
+    part_do_link: dict = {}
+    for p in parts:
+        part_do_link.setdefault(p.link_id, p)
+
+    testes_do_part: dict = {}
+    if parts:
+        for x in db.scalars(select(TesteTestagem).where(
+                TesteTestagem.participante_id.in_([p.id for p in parts]))):
+            testes_do_part.setdefault(x.participante_id, []).append(x)
+
+    saida = {}
+    for tid, lk in link_do_talento.items():
+        part = part_do_link.get(lk.id)
+        if part is None:
+            saida[tid] = {"status": "enviado", "token": lk.token}
+            continue
+        testes = testes_do_part.get(part.id, [])
+        concluidos = sum(1 for x in testes if x.status == StatusTeste.concluido)
+        total = len(testes)
+        saida[tid] = {
+            "status": "concluido" if total and concluidos == total else "em_andamento",
+            "token": lk.token, "concluidos": concluidos, "total": total}
+    return saida
 
 
 def _resumo_teste_talento(db: Session, talento_id: uuid.UUID) -> dict | None:

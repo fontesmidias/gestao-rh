@@ -1557,3 +1557,9 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
 .ficha-rotulo { display: block; font-size: var(--fs-mini); text-transform: uppercase;
   letter-spacing: .04em; color: var(--cinza-txt); margin-bottom: var(--esp-1); }
 .ficha-texto { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+
+/* Atalhos na linha do dash de Talentos (v2.15): currículo e anotações logo
+   abaixo do nome — o RH abria o modal só para descobrir que não havia nada. */
+.linha-atalhos { display: flex; flex-wrap: wrap; gap: var(--esp-2);
+  margin-top: var(--esp-1); }
+.linha-atalhos .btn-link { font-size: var(--fs-mini); padding: 0; }
