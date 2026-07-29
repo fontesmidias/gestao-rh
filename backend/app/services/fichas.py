@@ -789,25 +789,8 @@ def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
                   "direitos garantidos pela Constituição Federal, pela Consolidação das "
                   "Leis Trabalhistas (CLT) e pelas Convenções/Acordos Coletivos de "
                   "Trabalho. Assim, listamos abaixo alguns desses direitos:")
-    direitos = [
-        "a) Carteira de trabalho assinada desde o primeiro dia de serviço;",
-        "b) Repouso semanal remunerado (1 folga por semana);",
-        "c) Salário pago até o 5º (quinto) dia útil do mês subsequente à prestação "
-        "do serviço;",
-        "d) 13º salário;",
-        "e) Férias de 30 (trinta) dias com acréscimo de 1/3 do salário;",
-        "f) Vale Transporte com desconto máximo de 6% do salário;",
-        "g) FGTS: depósito de 8% (oito por cento) do salário em conta bancária a favor "
-        "do empregado. Dirija-se a uma Agência da Caixa Econômica Federal e solicite o "
-        "extrato de contas vinculadas ao FGTS;",
-        "h) Horas Extras compensadas em banco de horas;",
-        "i) Indenizações pertinentes (verbas rescisórias), em caso de demissão;",
-        "j) Recolhimento da Contribuição Previdenciária (INSS): dirija-se a uma Agência "
-        "da Previdência Social e solicite o extrato de contribuições relativas ao seu "
-        "NIT/PIS/PASEP.",
-    ]
     pdf.set_font("helvetica", "", 10.5)
-    for item in direitos:
+    for item in DIREITOS_TRABALHADOR:
         pdf.set_x(18)
         pdf.multi_cell(182, 5.6, item)
         pdf.ln(1)
@@ -891,6 +874,30 @@ def gerar_termo_lgpd_infraero(db: Session, candidato: Candidato,
 
 EMPRESA_ENDERECO = ("SCIA, Quadra 15, Conjunto 13, Lote 8, Zona Industrial (Guará), "
                     "Brasília/DF, CEP 71.250-015")
+
+# Direitos listados no "Informações ao Trabalhador" (INFRAERO). Virou constante
+# em 2026-07-29 para ser FONTE ÚNICA: o modelo editável derivado deste
+# documento (documentos_texto.py) importa daqui em vez de copiar. Escrever a
+# lista à mão lá fez o fiscal barrar a entrega — o texto copiado omitia os
+# percentuais que dão valor jurídico ao documento (6% do VT, 8% do FGTS, 5º dia
+# útil) e inventava itens que o documento oficial não tem.
+DIREITOS_TRABALHADOR = (
+    "a) Carteira de trabalho assinada desde o primeiro dia de serviço;",
+    "b) Repouso semanal remunerado (1 folga por semana);",
+    "c) Salário pago até o 5º (quinto) dia útil do mês subsequente à prestação "
+    "do serviço;",
+    "d) 13º salário;",
+    "e) Férias de 30 (trinta) dias com acréscimo de 1/3 do salário;",
+    "f) Vale Transporte com desconto máximo de 6% do salário;",
+    "g) FGTS: depósito de 8% (oito por cento) do salário em conta bancária a favor "
+    "do empregado. Dirija-se a uma Agência da Caixa Econômica Federal e solicite o "
+    "extrato de contas vinculadas ao FGTS;",
+    "h) Horas Extras compensadas em banco de horas;",
+    "i) Indenizações pertinentes (verbas rescisórias), em caso de demissão;",
+    "j) Recolhimento da Contribuição Previdenciária (INSS): dirija-se a uma Agência "
+    "da Previdência Social e solicite o extrato de contribuições relativas ao seu "
+    "NIT/PIS/PASEP.",
+)
 
 # Cláusulas do Acordo de Confidencialidade — texto do modelo oficial, com a
 # gramática revisada (concordância de "os DADOS" no plural, "resultará",

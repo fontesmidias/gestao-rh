@@ -654,6 +654,14 @@ export const rh = {
     req(`/rh/modelos-documento/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirModelo: (id) =>
     req(`/rh/modelos-documento/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Catálogo dos DOCUMENTOS do sistema (v2.16): ver todos, pré-visualizar em
+  // PDF, baixar e — nos de texto corrido — criar um modelo editável a partir.
+  documentosSistema: () => req('/rh/documentos-sistema', { headers: authRH() }),
+  previaDocumentoSistema: (chave) =>
+    req(`/rh/documentos-sistema/${chave}/previa`, { headers: authRH() }),
+  duplicarDocumentoSistema: (chave, titulo) =>
+    req(`/rh/documentos-sistema/${chave}/duplicar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ titulo }) }),
   previaModelo: (id) =>
     req(`/rh/modelos-documento/${id}/previa`, { headers: authRH() }),
   modelosAplicaveis: (candidatoId) =>

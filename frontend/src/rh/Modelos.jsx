@@ -276,6 +276,7 @@ export default function Modelos() {
       )}
       <Msg msg={msg} />
       </div>
+      <DocumentosDoSistema aoDuplicar={recarregar} />
     </main>
   )
 }
@@ -599,6 +600,116 @@ function CamposModelo({ edit, setEdit, postos, papeis, pessoas, salvar, salvando
         <button className="btn-principal" disabled={salvando} onClick={salvar}>
           {salvando ? 'Salvando…' : 'Salvar modelo'}</button>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Documentos do SISTEMA (v2.16) — nos moldes do catálogo de e-mails: o RH vê
+// todos os que a admissão gera, pré-visualiza o PDF real, baixa, e nos de
+// texto corrido cria um modelo editável a partir do conteúdo.
+//
+// Nenhum gerador é substituído: o hash do ato de assinatura é calculado sobre
+// o PDF gerado, então trocar o gerador por template faria os manifestos já
+// emitidos apontarem para um hash que não se reproduz. Duplicar CRIA UMA
+// CÓPIA; o documento oficial segue intacto.
+// ---------------------------------------------------------------------------
+
+const FORMATO_ROTULO = {
+  texto: ['Texto', 'Documento de texto corrido — dá para criar um modelo a partir dele'],
+  formulario: ['Formulário', 'Formulário com campos e tabelas da ficha'],
+  hibrido: ['Misto', 'Texto com um trecho estruturado (tabela ou condição)'],
+}
+
+export function DocumentosDoSistema({ aoDuplicar }) {
+  const [docs, setDocs] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(null)
+
+  useEffect(() => {
+    api.documentosSistema().then(setDocs).catch(() => setDocs([]))
+  }, [])
+
+  const baixar = async (d) => {
+    setMsg(null); setOcupado(d.chave)
+    try {
+      const blob = await api.previaDocumentoSistema(d.chave)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `amostra-${d.chave}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível baixar (${e.detail || e.message}).` })
+    } finally { setOcupado(null) }
+  }
+
+  const duplicar = async (d) => {
+    const titulo = window.prompt('Nome do novo modelo (você poderá editá-lo depois):',
+      `${d.rotulo} (cópia)`)
+    if (titulo === null) return
+    setMsg(null); setOcupado(d.chave)
+    try {
+      const m = await api.duplicarDocumentoSistema(d.chave, titulo.trim() || null)
+      setMsg({ tipo: 'ok', texto: `"${m.titulo}" criado na sua lista de modelos, `
+        + 'já com o texto deste documento. O documento original continua como estava.' })
+      aoDuplicar?.()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail?.motivo
+        || `Não foi possível duplicar (${e.detail || e.message}).` })
+    } finally { setOcupado(null) }
+  }
+
+  if (!docs) return <div className="rh-card"><p className="explica">Carregando…</p></div>
+
+  const grupos = docs.reduce((acc, d) => {
+    (acc[d.grupo] = acc[d.grupo] || []).push(d)
+    return acc
+  }, {})
+
+  return (
+    <div className="rh-card">
+      <h3>📄 Documentos do sistema</h3>
+      <p className="explica">São os documentos que a admissão gera sozinha. Você pode ver e
+        baixar uma <strong>amostra em PDF</strong> de cada um (com dados de exemplo) e, nos
+        que são de texto corrido, <strong>criar um modelo editável</strong> a partir do
+        conteúdo — o documento original continua intacto, gerando os PDFs oficiais.</p>
+      <Msg msg={msg} />
+
+      {Object.entries(grupos).map(([grupo, lista]) => (
+        <div key={grupo}>
+          <h4 className="rh-grupo-titulo">{grupo}</h4>
+          {lista.map((d) => (
+            <div key={d.chave} className="email-item">
+              <div className="email-cabeca" style={{ cursor: 'default' }}>
+                <span>
+                  <strong>{d.rotulo}</strong>
+                  <span className="chip-mini" title={FORMATO_ROTULO[d.formato]?.[1]}>
+                    {FORMATO_ROTULO[d.formato]?.[0] || d.formato}</span>
+                  {d.base && <span className="chip-mini" title="Exigido de todo candidato">
+                    todo candidato</span>}
+                  <br />
+                  <small className="explica">{d.quando}</small>
+                  {!d.duplicavel && d.porque_nao_duplica && (
+                    <><br /><small className="explica">
+                      <strong>Não dá para criar modelo:</strong> {d.porque_nao_duplica}</small></>
+                  )}
+                </span>
+                <span className="email-acoes" style={{ marginTop: 0 }}>
+                  <button className="btn-secundario btn-mini" disabled={ocupado === d.chave}
+                          onClick={() => abrirBlob(api.previaDocumentoSistema(d.chave), setMsg)}>
+                    👁 Ver</button>
+                  <button className="btn-secundario btn-mini" disabled={ocupado === d.chave}
+                          onClick={() => baixar(d)}>⬇ Baixar</button>
+                  {d.duplicavel && (
+                    <button className="btn-principal btn-mini" disabled={ocupado === d.chave}
+                            onClick={() => duplicar(d)}>⧉ Criar modelo</button>)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
