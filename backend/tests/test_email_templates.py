@@ -306,4 +306,64 @@ try:
 finally:
     _mod_email.enviar_email = _orig_av
 
+# ------------------------------- destinatários na tela do e-mail (v2.21)
+# Vários e-mails separados por vírgula, editados onde o RH edita o texto —
+# gravando na MESMA matriz de Configurações → Avisos internos (uma fonte só).
+_lista = c.get("/api/rh/config/emails", headers=rh).json()
+_aviso = next(x for x in _lista if x["chave"] == "aviso_uniforme")
+assert _aviso["evento"] == "uniforme_pendente", _aviso
+# `destinatarios` é lista (pode vir preenchida de uma execução anterior — o
+# teste não pode exigir banco virgem, senão falha no CI de alguém sem explicar)
+assert isinstance(_aviso["destinatarios"], list), _aviso
+# e-mail que NÃO é aviso interno não tem lista de destinatários
+_externo = next(x for x in _lista if x["chave"] == "documento_rejeitado")
+assert _externo["evento"] is None and _externo["destinatarios"] is None, _externo
+
+r = c.put("/api/rh/config/emails/aviso_uniforme/destinatarios", headers=rh,
+          json={"destinatarios": "gabriel@example.com, vitor@example.com", "ativo": True})
+assert r.status_code == 200, r.text
+assert r.json()["destinatarios"] == ["gabriel@example.com", "vitor@example.com"], r.json()
+
+# a MESMA matriz enxerga (não é um segundo lugar de verdade)
+from app.core.db import SessionLocal as _SL2  # noqa: E402
+
+from app.services.notificacoes import destinatarios as _dests  # noqa: E402
+
+with _SL2() as _db2:
+    assert set(_dests(_db2, "uniforme_pendente")) == {
+        "gabriel@example.com", "vitor@example.com"}
+
+# e a listagem devolve o que foi salvo
+_aviso = next(x for x in c.get("/api/rh/config/emails", headers=rh).json()
+              if x["chave"] == "aviso_uniforme")
+assert _aviso["destinatarios"] == ["gabriel@example.com", "vitor@example.com"], _aviso
+
+# e-mail inválido é recusado com a lista do que está errado
+r = c.put("/api/rh/config/emails/aviso_uniforme/destinatarios", headers=rh,
+          json={"destinatarios": "gabriel@example.com, nao-e-email"})
+assert r.status_code == 422 and r.json()["detail"]["invalidos"] == ["nao-e-email"], r.json()
+
+# e-mail que vai para a pessoa do processo não aceita lista fixa
+r = c.put("/api/rh/config/emails/documento_rejeitado/destinatarios", headers=rh,
+          json={"destinatarios": "x@y.com"})
+assert r.status_code == 422, r.text
+assert r.json()["detail"]["erro"] == "email_sem_destinatario_configuravel", r.json()
+
+# desligar o aviso: ninguém recebe
+r = c.put("/api/rh/config/emails/aviso_uniforme/destinatarios", headers=rh,
+          json={"destinatarios": "gabriel@example.com", "ativo": False})
+assert r.status_code == 200, r.text
+with _SL2() as _db2:
+    assert _dests(_db2, "uniforme_pendente") == [], "aviso desligado não pode enviar"
+
+assert c.put("/api/rh/config/emails/aviso_uniforme/destinatarios",
+             json={"destinatarios": ""}).status_code == 401
+assert c.put("/api/rh/config/emails/nao_existe/destinatarios", headers=rh,
+             json={"destinatarios": ""}).status_code == 404
+
+# limpa o que este teste configurou: deixar o aviso desligado atrapalharia
+# quem rodasse depois (e o próprio sistema, se fosse o banco de verdade)
+assert c.put("/api/rh/config/emails/aviso_uniforme/destinatarios", headers=rh,
+             json={"destinatarios": "", "ativo": True}).status_code == 200
+
 print("test_email_templates: OK")

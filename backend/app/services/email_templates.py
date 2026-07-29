@@ -53,6 +53,10 @@ class ModeloEmail:
     botao_texto: str | None = None
     # Variável que carrega a URL do botão (a URL vem do sistema, não do RH).
     botao_url_var: str | None = None
+    # Aviso interno: qual EVENTO da matriz de `notificacoes.py` governa quem
+    # recebe. Preenchido só no grupo "Avisos internos" — os demais vão para uma
+    # pessoa específica (candidato, colaborador, assinante), não para uma lista.
+    evento: str | None = None
     grupo: str = "Geral"
     critico: bool = False   # carrega código/link de acesso
     editavel: bool = True   # False = texto fixo, aparece na tela só p/ consulta
@@ -576,6 +580,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
     # recebe nem sempre é quem conhece o sistema: o Gabriel e o Vitor recebem
     # o de uniforme, o líder de brigada recebe o de certificação.
     _m(chave="aviso_envio_concluido", grupo="Avisos internos",
+       evento="envio_concluido",
        rotulo="Candidato concluiu o envio",
        quando="O candidato clica em 'CONCLUÍ MEU ENVIO'.",
        assunto="📥 Documentação completa: {{nome}}",
@@ -586,6 +591,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
 
     _m(chave="aviso_documento_reenviado", grupo="Avisos internos",
+       evento="envio_concluido",
        rotulo="Documento reenviado por quem já foi aprovado",
        quando="Um candidato já aprovado reenvia um documento que fora rejeitado.",
        assunto="🔁 Documento reenviado (já aprovado): {{nome}}",
@@ -597,6 +603,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
 
     _m(chave="aviso_uniforme", grupo="Avisos internos",
+       evento="uniforme_pendente",
        rotulo="Uniforme: tamanhos de um novo admitido",
        quando="O candidato conclui a admissão tendo informado os tamanhos.",
        assunto="👕 Uniforme: {{nome}} informou os tamanhos",
@@ -609,6 +616,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh/uniformes"}),
 
     _m(chave="aviso_dossie_pronto", grupo="Avisos internos",
+       evento="dossie_pronto",
        rotulo="Dossiê de admissão pronto",
        quando="O dossiê completo de um candidato termina de ser gerado.",
        assunto="📄 Dossiê de admissão pronto: {{nome}}",
@@ -619,6 +627,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
 
     _m(chave="aviso_creche_levantamento", grupo="Avisos internos",
+       evento="creche_levantamento_enviado",
        rotulo="Reembolso-Creche: levantamento enviado",
        quando="Um colaborador envia (ou reenvia) o levantamento para análise.",
        assunto="👶 Reembolso-Creche: levantamento de {{nome}}",
@@ -630,6 +639,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "criancas": "2"}),
 
     _m(chave="aviso_talento_cadastrado", grupo="Avisos internos",
+       evento="talento_cadastrado",
        rotulo="Banco de Talentos: novo cadastro",
        quando="Alguém se cadastra pelo formulário público do Banco de Talentos.",
        assunto="⭐ Banco de Talentos: {{nome}}",
@@ -642,6 +652,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                 "cargos": "Recepcionista, Auxiliar de Serviços Gerais"}),
 
     _m(chave="aviso_desenvolvimento_enviado", grupo="Avisos internos",
+       evento="desenvolvimento_enviado",
        rotulo="Colaborador enviou curso ou certificado",
        quando="Alguém envia algo novo pelo portal e a fila de validação cresce.",
        assunto="🎓 {{nome}} enviou um documento",
@@ -654,6 +665,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        exemplo={"nome": "Maria Souza", "acao": "enviou", "titulo": "NR-35"}),
 
     _m(chave="aviso_match_concluido", grupo="Avisos internos",
+       evento="match_vagas_concluido",
        rotulo="Match de Vagas: ranqueamento concluído",
        quando="Termina o ranqueamento de uma vaga contra o Banco de Talentos.",
        assunto="Match de Vagas concluído — {{vaga}}",
@@ -770,6 +782,15 @@ def enviar_modelo(db: Session, chave: str, destinatario: str | None,
 def listar(db: Session) -> list[dict]:
     """Catálogo + estado atual, para a tela do RH."""
     personalizados = {t.chave: t for t in db.scalars(select(EmailTemplate)).all()}
+    # Quem recebe cada AVISO INTERNO — a mesma matriz de Configurações → Avisos
+    # internos, exibida aqui para o RH ter o e-mail inteiro num lugar só
+    # (pedido de 2026-07-29). É a MESMA fonte: editar aqui ou lá dá no mesmo.
+    try:
+        from app.services.notificacoes import ler_matriz
+        matriz = ler_matriz(db)
+    except Exception:  # pragma: no cover — matriz ilegível não derruba a tela
+        log.warning("matriz de notificações ilegível na listagem de e-mails")
+        matriz = {}
     saida = []
     for m in CATALOGO:
         t = personalizados.get(m.chave)
@@ -787,5 +808,14 @@ def listar(db: Session) -> list[dict]:
             "variaveis": [{"nome": k, "descricao": v,
                            "obrigatoria": k in m.obrigatorias}
                           for k, v in m.variaveis.items()],
+            # Aviso interno: quem recebe (vários, separados por vírgula na tela).
+            # Nos demais o destinatário é a pessoa do processo, não uma lista.
+            "evento": m.evento,
+            "destinatarios": (matriz.get(m.evento, {}).get("emails") or []
+                              if m.evento else None),
+            "destinatarios_herdado": (matriz.get(m.evento, {}).get("herdado")
+                                      if m.evento else None),
+            "aviso_ativo": (matriz.get(m.evento, {}).get("ativo", True)
+                            if m.evento else None),
         })
     return saida

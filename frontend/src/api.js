@@ -336,6 +336,18 @@ export const rh = {
     return req(`/rh/candidatos-exportar${q ? `?${q}` : ''}`, { headers: authRH() })
   },
   metricas: () => req('/rh/metricas', { headers: authRH() }),
+  // Testes já respondidos, aproveitados para um candidato (v2.21) — só o RH vê
+  testesVinculaveis: (busca) =>
+    req(`/rh/testes-vinculaveis${busca ? `?busca=${encodeURIComponent(busca)}` : ''}`,
+        { headers: authRH() }),
+  testesVinculados: (cid) =>
+    req(`/rh/candidatos/${cid}/testes-vinculados`, { headers: authRH() }),
+  vincularTeste: (cid, dados) =>
+    req(`/rh/candidatos/${cid}/testes-vinculados`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  desvincularTeste: (cid, vid) =>
+    req(`/rh/candidatos/${cid}/testes-vinculados/${vid}`,
+        { method: 'DELETE', headers: authRH() }),
   uniformes: (pendentes) =>
     req(`/rh/uniformes${pendentes ? '?pendentes=true' : ''}`, { headers: authRH() }),
   colaboradores: (filtros = {}) => {
@@ -487,6 +499,11 @@ export const rh = {
   previewEmail: (chave, dados) =>
     req(`/rh/config/emails/${chave}/preview`,
         { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // quem recebe um AVISO INTERNO, editável na própria tela do e-mail (v2.21);
+  // grava na MESMA matriz de Configurações → Avisos internos
+  salvarDestinatariosEmail: (chave, dados) =>
+    req(`/rh/config/emails/${chave}/destinatarios`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   // manda o texto EM EDIÇÃO para a caixa de quem está editando (v2.16)
   enviarTesteEmail: (chave, dados) =>
     req(`/rh/config/emails/${chave}/enviar-teste`,

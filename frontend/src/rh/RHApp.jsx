@@ -167,6 +167,14 @@ const COLUNAS_ADMISSAO = () => [
   { chave: 'docs', rotulo: 'Docs', ordenavel: true,
     valor: (c) => (c.progresso_docs?.total ? c.progresso_docs.ok / c.progresso_docs.total : -1),
     render: (c) => (c.progresso_docs?.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—') },
+  // Testes já respondidos aproveitados para esta pessoa (v2.21) — só o RH vê.
+  // Oculta por padrão: nem toda admissão tem, e o dash já tem coluna demais.
+  { chave: 'testes_vinculados', rotulo: 'Testes', ordenavel: true, oculta: true,
+    valor: (c) => c.testes_vinculados || 0,
+    render: (c) => (c.testes_vinculados
+      ? <span className="chip" title="Testes respondidos antes da admissão, aproveitados pelo RH"
+              style={{ '--chip-cor': '#5b7' }}>🧪 {c.testes_vinculados}</span>
+      : '—') },
   { chave: 'criado_em', rotulo: 'Criado', ordenavel: true, valor: (c) => c.criado_em,
     render: (c) => fmtData(c.criado_em) },
 ]

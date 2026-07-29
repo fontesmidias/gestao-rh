@@ -158,6 +158,12 @@ function Editor({ item, aoSalvar }) {
         )}
       </div>
 
+      {/* Quem recebe — só nos AVISOS INTERNOS. Nos demais o destinatário é a
+          pessoa do processo (candidato, colaborador, assinante). É a MESMA
+          matriz de Configurações → Avisos internos, exposta aqui para o RH ter
+          o e-mail inteiro num lugar só (pedido de 2026-07-29). */}
+      {item.evento && <Destinatarios item={item} aoSalvar={aoSalvar} />}
+
       <label className="campo"><span className="rotulo">Assunto</span>
         <input value={assunto} onChange={(e) => setAssunto(e.target.value)} /></label>
       <label className="campo"><span className="rotulo">Texto do e-mail</span>
@@ -212,6 +218,58 @@ function Editor({ item, aoSalvar }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Quem recebe um AVISO INTERNO (v2.21). Vários e-mails separados por vírgula —
+// é como o RH pensa a lista. Grava na MESMA matriz de Configurações → Avisos
+// internos: não é um segundo lugar de verdade, é a mesma fonte exposta onde ele
+// está editando o texto.
+function Destinatarios({ item, aoSalvar }) {
+  const [texto, setTexto] = useState((item.destinatarios || []).join(', '))
+  const [ativo, setAtivo] = useState(item.aviso_ativo !== false)
+  const [msg, setMsg] = useState(null)
+  const [ocupado, setOcupado] = useState(false)
+
+  const mudou = texto !== (item.destinatarios || []).join(', ')
+    || ativo !== (item.aviso_ativo !== false)
+
+  const salvar = async () => {
+    setMsg(null); setOcupado(true)
+    try {
+      const r = await api.salvarDestinatariosEmail(item.chave,
+        { destinatarios: texto, ativo })
+      setMsg({ tipo: 'ok', texto: r.destinatarios.length
+        ? `Vai para: ${r.destinatarios.join(', ')}.`
+        : 'Sem destinatário específico — usa o e-mail padrão de avisos.' })
+      await aoSalvar()
+    } catch (e) {
+      const inv = e.detail?.invalidos
+      setMsg({ tipo: 'erro', texto: inv
+        ? `E-mail inválido: ${inv.join(', ')}.`
+        : `Não foi possível salvar (${e.detail?.motivo || e.detail || e.message}).` })
+    } finally { setOcupado(false) }
+  }
+
+  return (
+    <div className="email-vars">
+      <strong>Quem recebe este aviso</strong>
+      <label className="campo" style={{ marginTop: '.4rem' }}>
+        <input value={texto} placeholder="fulano@empresa.com, ciclano@empresa.com"
+               onChange={(e) => setTexto(e.target.value)} /></label>
+      <small className="explica">Separe vários e-mails por vírgula. Em branco, o
+        aviso vai para o e-mail padrão configurado em Avisos internos
+        {item.destinatarios_herdado ? ` (hoje: ${item.destinatarios_herdado})` : ''}.</small>
+      <label className="explica" style={{ display: 'flex', alignItems: 'center',
+                                          gap: '.4rem', marginTop: '.3rem' }}>
+        <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
+        <span>Enviar este aviso {ativo ? '' : '(desligado — ninguém recebe)'}</span>
+      </label>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'aviso-inline'}>{msg.texto}</div>}
+      <button className="btn-secundario btn-mini" onClick={salvar}
+              disabled={ocupado || !mudou} style={{ marginTop: '.4rem' }}>
+        {ocupado ? 'Salvando…' : 'Salvar destinatários'}</button>
     </div>
   )
 }

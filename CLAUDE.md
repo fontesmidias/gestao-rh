@@ -732,6 +732,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   "as 3 criadas deveriam estar na fila: 0", que não diz nada sobre a causa.
   Agora usa sufixo `uuid` por execução. Ao escrever teste que grava em tabela
   com campo único, sempre gerar o valor por execução.
+- **REGRA: e-mail novo e documento novo NASCEM na sua página** (v2.21, cravada
+  pelo Bruno em 2026-07-29). Nunca mais escrever e-mail em f-string no call
+  site nem documento só no gerador:
+  - **E-mail novo** → entrada no `CATALOGO` de `services/email_templates.py`
+    (rótulo, `quando`, variáveis, obrigatórias, exemplo p/ o preview) +
+    `enviar_modelo(...)`. Se for AVISO INTERNO, também: entrada em
+    `notificacoes.EVENTOS`, o campo `evento=` no modelo (é o que liga o
+    template à matriz) e `avisar_modelo(...)`. Os destinatários são vários,
+    separados por vírgula, editáveis em Configurações → Textos dos e-mails E em
+    Avisos internos — **é a MESMA matriz**, exposta nos dois lugares, não duas
+    fontes de verdade.
+  - **Documento novo** → entrada no `CATALOGO` de
+    `services/documentos_catalogo.py` com o `Formato` correto; se for texto
+    corrido, corpo em `documentos_texto.py` (importando de `fichas.py` quando
+    o conteúdo já existe em constante — nunca copiar). O vínculo com
+    posto/cargo/pessoa continua em `ModeloDocumento.escopo`.
+  - Os dois catálogos se autovalidam: `test_email_templates` exige que todo
+    aviso interno tenha evento correspondente, e `documentos_catalogo` compara
+    com o enum `DocumentoAssinavel` no import.
 - **Avisos internos também saem do catálogo** (v2.20): os 8 avisos que vão à
   EQUIPE (RH, operacional, líder de brigada) passaram a usar
   `notificacoes.avisar_modelo(db, evento, chave_template, contexto)` — mesma
@@ -747,6 +766,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `dossie_pronto`. Ao criar aviso interno novo: entrada em `EVENTOS`, entrada
   no `CATALOGO` (grupo "Avisos internos") e `avisar_modelo` no ponto de envio —
   o teste cobra que todo aviso do catálogo tenha evento correspondente.
+- **Teste já respondido aproveitado para o candidato** (v2.21,
+  `models/teste_vinculado.py`, `services/testes_vinculaveis.py`,
+  `TestesVinculados.jsx`): a pessoa respondeu DISC/situacional ou uma prova
+  ANTES de virar candidata; o RH aproveita o resultado em vez de mandá-la
+  refazer. **Aponta, não copia** — o vínculo referencia o
+  `ParticipanteTestagem`/`AplicacaoProva` e o resultado é lido na origem.
+  **A identidade é registrada como o que é**: `automatico=True` quando veio do
+  Banco de Talentos (o link tinha `talento_id`, então o sistema sabe de quem
+  é, e a conversão talento→candidato vincula sozinha); `automatico=False`
+  quando o RH escolheu da lista, com autor snapshot. Isso existe porque o link
+  avulso de testagem é ANÔNIMO (`ParticipanteTestagem` guarda só o nome) e
+  homônimo decide contratação — por isso a lista de escolha mostra nome, data,
+  qual teste e por qual link. **Só o RH vê**: não entra no wizard nem no
+  dossiê, que circula.
 - **Catálogo dos documentos do sistema** (v2.19,
   `services/documentos_catalogo.py`, `documentos_texto.py`, rotas em
   `modelos.py`, seção em `Modelos.jsx`): o RH vê os 11 documentos que a
