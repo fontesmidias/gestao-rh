@@ -237,8 +237,15 @@ function Duplicidades({ dups, onMudou, setMsg }) {
   if (dups === null) return <p>Carregando…</p>
   if (!dups.length) return <p className="explica centro">Nenhuma duplicidade suspeita. 👍</p>
   return (<>
-    <p className="explica">Pares parecidos — <strong>o sistema não funde sozinho</strong>. Confira e
-      decida: são a mesma jornada (grafia diferente) ou realmente diferentes?</p>
+    {/* A lista encolheu de 199 para 3 na v2.12: horário diferente e cliente
+        diferente deixaram de entrar aqui (eram 99% do que aparecia). O texto
+        explica o critério para o RH não achar que "sumiu" duplicidade. */}
+    <p className="explica">Pares que parecem ser <strong>a mesma jornada escrita de dois
+      jeitos</strong> — só muda pontuação, espaço ou acento. <strong>O sistema não funde
+      sozinho</strong>: confira e decida.</p>
+    <p className="explica">Jornadas com <strong>horário diferente</strong> (uma sai 16h, outra
+      17h) ou de <strong>clientes diferentes</strong> no mesmo horário não aparecem aqui —
+      são jornadas distintas de verdade, não duplicidade.</p>
     <table className="rh-tabela">
       <thead><tr><th>Jornada A</th><th>Jornada B</th><th>Semelhança</th><th></th></tr></thead>
       <tbody>

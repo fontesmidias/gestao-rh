@@ -700,6 +700,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Fila de decisão precisa ser MEDIDA antes de ganhar ação em massa** (v2.12,
+  `jornada_duplicidade.py`): o RH pediu ação em massa nas 325 duplicidades de
+  jornada ("um clique cada"). Medindo contra os dados reais (269 jornadas da
+  planilha de escalas), a fila tinha **199 pares e só 3 eram duplicata** —
+  80 eram o mesmo texto com HORÁRIO diferente (`13H -16H` x `13H -17H`) e 40
+  eram o mesmo horário com CLIENTE diferente (INEP x MME, CARLTON CENTER x
+  CARLTON TOWER). Resolver 199 "em massa" seria o merge cego que o módulo
+  existe para impedir, e o estrago é invisível (jornada errada não dá erro; a
+  pessoa descobre no contracheque). O `suspeitas()` deixou de depender só do
+  limiar de similaridade e ganhou duas regras ESTRUTURAIS: **números
+  diferentes ⇒ jornadas diferentes** (horário é o que distingue turno) e
+  **mesmos números + letras diferentes ⇒ clientes diferentes**. Fila: 199 → 3.
+  Lição que vale para qualquer fila do painel: quando o RH pede velocidade,
+  conferir antes se a fila não está cheia de ruído — velocidade em fila errada
+  multiplica erro. Coberto por `tests/test_jornada_duplicidade.py` (casos
+  reais da planilha, validado por mutação).
 - **Uniformes é TELA, o e-mail é só empurrão** (v2.07, `revisao.py::uniformes`,
   `UniformesRH.jsx`, menu Admissão → 👕 Uniformes): o Bruno pediu "um e-mail
   para o Gabriel, o Vitor e o operacional com todas as informações de
