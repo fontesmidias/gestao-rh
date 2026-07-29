@@ -502,20 +502,12 @@ def promover_etapa_do_candidato(db: Session, assinatura: Assinatura,
 def _notificar_liberadas(db: Session, sol: SolicitacaoAssinatura,
                          etapas: list[EtapaAssinatura], base_url: str | None) -> None:
     from app.api.solicitacoes_externo import emitir_link_etapa
-    from app.services.email import enviar_email, html_moderno
     for e in etapas:
         if e.tipo_signatario == TipoSignatario.externo and e.externo_email:
             link = emitir_link_etapa(db, e, base_url)
             db.commit()
-            enviar_email(
-                e.externo_email,
-                f"Green House — documento aguarda sua assinatura ({e.papel})",
-                f"Olá, {e.externo_nome}!\n\nUm documento aguarda a sua assinatura "
-                f"eletrônica na qualidade de {e.papel}.\n\nAcesse: {link}\n",
-                html_moderno("Documento aguarda sua assinatura", [
-                    f"Olá, <strong>{e.externo_nome}</strong>!",
-                    f"Um documento aguarda a sua assinatura eletrônica, na qualidade "
-                    f"de <strong>{e.papel}</strong>.",
-                    f"<a href='{link}'>Toque aqui para conferir e assinar</a>."]))
+            enviar_modelo(db, "assinatura_externa_convite", e.externo_email, {
+                "nome": e.externo_nome, "papel": e.papel, "link": link,
+            })
         # usuário RH: aparece na fila /rh/minhas-assinaturas (sem e-mail obrigatório)
         # candidato: assina pelo link mágico dele, já existente

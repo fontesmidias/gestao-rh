@@ -88,23 +88,11 @@ def criar(payload: NovaAutorizacaoIn, db: Session = Depends(get_db),
     registrar(db, "autorizacao_equipe_criada", ator="rh", ator_detalhe=rh.email,
               detalhe={"nome": a.nome, "modelo": str(payload.modelo_id)})
     db.commit()
-    from app.services.email import enviar_email, html_moderno
-    enviar_email(
-        a.email,
-        "Green House — confirme sua autorização de assinatura",
-        f"Olá, {a.nome}!\n\nO RH da Green House registrou uma autorização para que a "
-        f"sua assinatura, na qualidade de {a.papel}, conste nos documentos gerados a "
-        f"partir de um modelo.\n\nPara CONFIRMAR esta autorização (ato de vontade), use "
-        f"o código: {codigo}\n\nEle vale por {get_settings().otp_ttl_minutes} minutos. "
-        "Se você não reconhece este pedido, ignore este e-mail.\n",
-        html_moderno("Confirme sua autorização de assinatura", [
-            f"Olá, <strong>{a.nome}</strong>!",
-            f"O RH registrou uma autorização para que a sua assinatura, na qualidade de "
-            f"<strong>{a.papel}</strong>, conste nos documentos gerados a partir de um "
-            "modelo. Confirme com o código abaixo:",
-            f"<div style='font-size:2rem;font-weight:800;letter-spacing:.3em;"
-            f"text-align:center;margin:1rem 0;color:#0a8f46'>{codigo}</div>",
-            "Se você não reconhece este pedido, ignore este e-mail."]))
+    from app.services.email_templates import enviar_modelo
+    enviar_modelo(db, "autorizacao_equipe_codigo", a.email, {
+        "nome": a.nome, "papel": a.papel, "codigo": codigo,
+        "ttl": get_settings().otp_ttl_minutes,
+    })
     return _dump(a)
 
 

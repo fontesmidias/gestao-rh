@@ -16,6 +16,7 @@ from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
 from app.services.config_dinamica import CHAVES_SMTP, gravar_config, smtp_config
 from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 
 router = APIRouter(tags=["configuracoes"])
 
@@ -116,29 +117,10 @@ def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depend
     email_enviado = True
     base = base_url_publica(request)
     try:
-        enviar_email(
-            email,
-            "🌱 Green House — seu acesso ao Portal de Admissão",
-            f"Olá, {nome.split()[0].title()}!\n\n"
-            f"{rh.nome} criou um acesso para você no painel do RH do Portal de Admissão.\n"
-            f"Acesse {base}/rh com o e-mail {email} e a senha "
-            "que ela(e) vai lhe informar.\n\n"
-            "IMPORTANTE: troque a senha no primeiro acesso, em Configurações → Senha.\n",
-            html_moderno(
-                "Seu acesso ao painel do RH",
-                [
-                    f"Olá, <strong>{nome.split()[0].title()}</strong>!",
-                    f"<strong>{rh.nome}</strong> criou um acesso para você no painel do RH "
-                    "do Portal de Admissão da Green House.",
-                    f"Entre em <a href='{base}/rh'>"
-                    f"{base}/rh</a> com o e-mail <strong>{email}</strong> "
-                    "e a senha que quem criou o acesso vai lhe informar.",
-                    "<strong>Troque a senha no primeiro acesso</strong>, em "
-                    "Configurações → Senha.",
-                ],
-            ),
-            levantar_erro=True,
-        )
+        enviar_modelo(db, "rh_usuario_criado", email, {
+            "primeiro_nome": (nome or "").split()[0].title() if nome else "",
+            "email": email, "quem_criou": rh.nome, "link": base,
+        })
     except Exception:
         email_enviado = False
     return {**_usuario_dict(novo, rh), "email_enviado": email_enviado}

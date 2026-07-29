@@ -35,7 +35,7 @@ from app.services.disc import (PERFIS_DISC, TEMPO_DISC_SEGUNDOS,
                                TEMPO_SITUACIONAL_SEGUNDOS, pontuar_disc,
                                pontuar_situacional, questoes_disc_publicas,
                                questoes_situacional_publicas)
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.limite import exigir
 from app.services.magic_link import resolver_token
 
@@ -139,25 +139,10 @@ def identificar(token: str, payload: IdentificarIn, db: Session = Depends(get_db
         cand.cpf = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
     registrar(db, "teste_identificacao", ator="candidato", candidato_id=cand.id)
     db.commit()
-    enviar_email(
-        email,
-        "Green House — código de confirmação para o seu teste",
-        f"Olá, {payload.nome_completo.split()[0].title()}!\n\n"
-        f"Seu código de confirmação é: {codigo}\n\n"
-        "Ele vale por 15 minutos.\n\n"
-        "IMPORTANTE: verifique também a caixa de SPAM/lixo eletrônico.\n",
-        html_moderno(
-            "Código de confirmação",
-            [
-                f"Olá, <strong>{payload.nome_completo.split()[0].title()}</strong>!",
-                "Use o código abaixo para confirmar sua identidade e iniciar o teste:",
-                f"<div style='font-size:2rem;font-weight:800;letter-spacing:.3em;"
-                f"text-align:center;margin:1rem 0;color:#0a8f46'>{codigo}</div>",
-                "O código vale por 15 minutos. <strong>Verifique também a caixa de "
-                "spam</strong> — a mensagem pode ter ido para lá.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "teste_codigo", email, {
+        "primeiro_nome": payload.nome_completo.split()[0].title(),
+        "codigo": codigo, "ttl": CODIGO_TTL_MIN,
+    })
     return {"enviado": True}
 
 

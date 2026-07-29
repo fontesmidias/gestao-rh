@@ -90,17 +90,10 @@ def solicitar_codigo_externo(token: str, request: Request,
         minutes=get_settings().otp_ttl_minutes)
     e.otp_tentativas = 0
     db.commit()
-    from app.services.email import enviar_email, html_moderno
-    enviar_email(
-        e.externo_email,
-        "Green House — código para assinar o documento",
-        f"Seu código de assinatura é: {codigo}\n\n"
-        f"Ele vale por {get_settings().otp_ttl_minutes} minutos.\n",
-        html_moderno("Seu código de assinatura", [
-            f"Olá, <strong>{e.externo_nome}</strong>!",
-            "Use o código abaixo para confirmar e assinar o documento:",
-            f"<div style='font-size:2rem;font-weight:800;letter-spacing:.3em;"
-            f"text-align:center;margin:1rem 0;color:#0a8f46'>{codigo}</div>"]))
+    enviar_modelo(db, "assinatura_externa_codigo", e.externo_email, {
+        "nome": e.externo_nome, "codigo": codigo,
+        "ttl": get_settings().otp_ttl_minutes,
+    })
 
 
 class ConfirmarIn(BaseModel):

@@ -20,7 +20,7 @@ from app.models.talento import StatusTalento, Talento
 from app.models.usuario_rh import UsuarioRH
 from app.services import crm, storage
 from app.services.auditoria import registrar
-from app.services.email import email_convite, enviar_email
+from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 
 router = APIRouter(tags=["talentos"])
@@ -342,8 +342,10 @@ def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get
 
     enviado = False
     if candidato.email:
-        assunto, texto, html = email_convite(candidato.nome_completo, link)
-        enviado = enviar_email(candidato.email, assunto, texto, html)
+        enviado = enviar_modelo(db, "convite_admissao", candidato.email, {
+            "primeiro_nome": (candidato.nome_completo or "").split()[0].title(),
+            "nome": candidato.nome_completo, "link": link,
+        })
     return {"candidato_id": candidato.id, "link_magico": link, "email_enviado": enviado}
 
 

@@ -21,7 +21,7 @@ from app.models.candidato import Candidato
 from app.models.ficha import DocumentosIdentificacao
 from app.services import kba
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 from app.services.validacao import cpf_valido
 
@@ -114,21 +114,7 @@ def link_por_email(payload: LinkEmailIn, request: Request,
         return
     link = emitir_link(db, candidato, base_url_publica(request))
     db.commit()
-    enviar_email(
-        candidato.email,
-        "🌱 Green House — seu link de acesso à admissão",
-        f"Olá, {candidato.nome_completo.split()[0].title()}!\n\n"
-        f"Você pediu um novo acesso à sua admissão. Use o link abaixo:\n{link}\n\n"
-        "Se não foi você, ignore esta mensagem.\n",
-        html_moderno(
-            "Seu link de acesso",
-            [
-                f"Olá, <strong>{candidato.nome_completo.split()[0].title()}</strong>!",
-                "Você pediu um novo acesso à sua admissão pelo portal. "
-                "Toque no botão para continuar de onde parou.",
-                "Se não foi você quem pediu, ignore esta mensagem.",
-            ],
-            botao_texto="Continuar minha admissão",
-            botao_url=link,
-        ),
-    )
+    enviar_modelo(db, "link_acesso_reenvio", candidato.email, {
+        "primeiro_nome": candidato.nome_completo.split()[0].title(),
+        "link": link,
+    })

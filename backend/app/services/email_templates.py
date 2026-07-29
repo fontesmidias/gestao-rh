@@ -76,10 +76,15 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        quando="O RH cadastra o candidato (e no reenvio do convite).",
        assunto="🌱 Green House — comece sua admissão",
        corpo="Olá, {{primeiro_nome}}!\n\n"
-             "Você foi selecionado(a) para a nossa equipe. Para começar sua "
-             "admissão, é só tocar no botão abaixo — leva poucos minutos e "
-             "pode ser feito pelo celular.\n\n"
-             "O link é pessoal: não compartilhe com ninguém.",
+             "Seja bem-vindo(a) à Green House! Para concluir a sua admissão, "
+             "toque no botão abaixo — pelo celular ou pelo computador. Não "
+             "precisa de senha.\n\n"
+             "COMECE AGORA: sua contratação só é efetivada depois que você "
+             "preencher os dados, assinar os documentos e enviar toda a "
+             "documentação. Se precisar interromper, tudo fica salvo — mas "
+             "conclua o quanto antes.\n\n"
+             "O link é pessoal: não compartilhe com ninguém. Qualquer dúvida, "
+             "fale com o RH.",
        variaveis={"primeiro_nome": "primeiro nome do candidato",
                   "nome": "nome completo do candidato",
                   "link": "link mágico de acesso à admissão"},
@@ -321,6 +326,247 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                   "motivo": "motivo informado pelo RH"},
        exemplo={"primeiro_nome": "Maria", "titulo": "NR-35",
                 "motivo": "o documento enviado não é um certificado."}),
+
+    # ------------------------------------------------ códigos de acesso (OTP)
+    # CRÍTICOS: sem {{codigo}} o e-mail sai vazio e ninguém entra. A validação
+    # de obrigatórias é o que impede o RH de se trancar para fora sem perceber.
+    _m(chave="assinatura_codigo_lote", grupo="Códigos de acesso", critico=True,
+       rotulo="Código para assinar as fichas da admissão",
+       quando="O candidato pede o código para assinar os documentos da admissão.",
+       assunto="Green House — Código de assinatura dos documentos admissionais",
+       corpo="Prezado(a) {{nome}},\n\n"
+             "Sua assinatura eletrônica é: {{codigo}}\n\n"
+             "Este código vale por {{ttl}} minutos e assina os documentos "
+             "abaixo:\n\n"
+             "{{documentos}}\n\n"
+             "Se não foi você que pediu, ignore esta mensagem.",
+       variaveis={"nome": "nome completo", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade",
+                  "documentos": "lista dos documentos (montada pelo sistema)"},
+       obrigatorias=("codigo", "documentos"),
+       exemplo={"nome": "Maria Souza", "codigo": "123456", "ttl": "10",
+                "documentos": "- Ficha de cadastro\n- Termo de VT"}),
+
+    _m(chave="assinatura_codigo_documento", grupo="Códigos de acesso", critico=True,
+       rotulo="Código para assinar um documento",
+       quando="O candidato pede o código para assinar um documento avulso.",
+       assunto="🌱 Green House — seu código para assinar: {{documento}}",
+       corpo="Seu código para assinar \"{{documento}}\" é: {{codigo}}\n\n"
+             "Ele vale por {{ttl}} minutos.",
+       variaveis={"documento": "título do documento", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade"},
+       obrigatorias=("codigo",),
+       exemplo={"documento": "Termo de Confidencialidade", "codigo": "123456",
+                "ttl": "10"}),
+
+    _m(chave="assinatura_externa_codigo", grupo="Códigos de acesso", critico=True,
+       rotulo="Código para assinante externo",
+       quando="Um assinante de fora da empresa pede o código para assinar.",
+       assunto="Green House — código para assinar o documento",
+       corpo="Olá, {{nome}}!\n\n"
+             "Use o código abaixo para confirmar e assinar o documento:\n\n"
+             "{{codigo}}\n\n"
+             "Ele vale por {{ttl}} minutos.",
+       variaveis={"nome": "nome do assinante externo", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade"},
+       obrigatorias=("codigo",),
+       exemplo={"nome": "João Prestador", "codigo": "123456", "ttl": "10"}),
+
+    _m(chave="autorizacao_equipe_codigo", grupo="Códigos de acesso", critico=True,
+       rotulo="Código de autorização da equipe",
+       quando="Um representante confirma a autorização permanente de assinatura.",
+       assunto="Green House — confirme sua autorização de assinatura",
+       corpo="Olá, {{nome}}!\n\n"
+             "Você foi indicado(a) como {{papel}} para assinar documentos em "
+             "nome da equipe. Confirme com o código abaixo:\n\n"
+             "{{codigo}}\n\n"
+             "Ele vale por {{ttl}} minutos. Confirmar é um ato de vontade seu: "
+             "a partir daí os documentos do seu papel saem sob a sua "
+             "autorização permanente.",
+       variaveis={"nome": "nome do representante", "papel": "papel na assinatura",
+                  "codigo": "código de 6 dígitos", "ttl": "minutos de validade"},
+       obrigatorias=("codigo",),
+       exemplo={"nome": "Ana Diretora", "papel": "Contratante",
+                "codigo": "123456", "ttl": "10"}),
+
+    _m(chave="teste_codigo", grupo="Códigos de acesso", critico=True,
+       rotulo="Código de confirmação do teste",
+       quando="O participante confirma a identidade para começar um teste.",
+       assunto="Green House — código de confirmação para o seu teste",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Seu código de confirmação é: {{codigo}}\n\n"
+             "Ele vale por {{ttl}} minutos.",
+       variaveis={"primeiro_nome": "primeiro nome", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade"},
+       obrigatorias=("codigo",),
+       exemplo={"primeiro_nome": "Maria", "codigo": "123456", "ttl": "15"}),
+
+    _m(chave="creche_codigo", grupo="Códigos de acesso", critico=True,
+       rotulo="Código do Reembolso-Creche",
+       quando="O colaborador informa o CPF no link público do creche.",
+       assunto="Green House — código para o levantamento do Reembolso-Creche",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Use o código abaixo para confirmar sua identidade no levantamento "
+             "do Reembolso-Creche (IN SEGES/MGI nº 147/2026):\n\n"
+             "{{codigo}}\n\n"
+             "Anote o código e toque no botão para voltar e digitá-lo. Ele vale "
+             "por {{ttl}} minutos.\n\n"
+             "Verifique também a sua caixa de spam — a mensagem pode ter ido "
+             "para lá.",
+       variaveis={"primeiro_nome": "primeiro nome", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade",
+                  "link": "link para voltar e digitar o código"},
+       obrigatorias=("codigo",),
+       botao_texto="Voltar e digitar o código", botao_url_var="link",
+       exemplo={"primeiro_nome": "Maria", "codigo": "123456", "ttl": "15",
+                "link": "https://exemplo/creche?t=abc"}),
+
+    _m(chave="portal_codigo", grupo="Códigos de acesso", critico=True,
+       rotulo="Código de acesso ao portal do colaborador",
+       quando="O colaborador informa o CPF em /meu.",
+       assunto="Green House — seu código de acesso",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Use o código abaixo para entrar no seu portal:\n\n"
+             "{{codigo}}\n\n"
+             "Anote o código e toque no botão para voltar e digitá-lo. Ele vale "
+             "por {{ttl}} minutos.\n\n"
+             "Se não foi você que pediu, ignore este e-mail.",
+       variaveis={"primeiro_nome": "primeiro nome", "codigo": "código de 6 dígitos",
+                  "ttl": "minutos de validade",
+                  "link": "link para voltar e digitar o código"},
+       obrigatorias=("codigo",),
+       botao_texto="Voltar e digitar o código", botao_url_var="link",
+       exemplo={"primeiro_nome": "Maria", "codigo": "123456", "ttl": "15",
+                "link": "https://exemplo/meu?t=abc"}),
+
+    _m(chave="rh_redefinir_senha", grupo="Códigos de acesso", critico=True,
+       rotulo="Redefinição de senha do painel",
+       quando="Alguém do RH pede para redefinir a senha do painel.",
+       assunto="🔐 Green House — redefinição de senha do painel",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Recebemos um pedido para redefinir a sua senha do painel do RH. "
+             "Toque no botão abaixo para escolher uma nova.\n\n"
+             "O link vale por {{ttl}} minutos e só pode ser usado uma vez.\n\n"
+             "Se não foi você que pediu, ignore este e-mail — sua senha atual "
+             "continua valendo.",
+       variaveis={"primeiro_nome": "primeiro nome", "link": "link de redefinição",
+                  "ttl": "minutos de validade"},
+       obrigatorias=("link",),
+       botao_texto="Escolher nova senha", botao_url_var="link",
+       exemplo={"primeiro_nome": "Bruno", "link": "https://exemplo/rh?redefinir=abc",
+                "ttl": "30"}),
+
+    _m(chave="rh_usuario_criado", grupo="Códigos de acesso", critico=True,
+       rotulo="Acesso ao painel criado",
+       quando="O RH cadastra uma pessoa nova no painel.",
+       assunto="🌱 Green House — seu acesso ao Portal de Admissão",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "{{quem_criou}} criou o seu acesso ao painel do RH.\n\n"
+             "Seu usuário é: {{email}}\n\n"
+             "Use a opção \"Esqueci minha senha\" na tela de login para "
+             "definir a sua senha.",
+       variaveis={"primeiro_nome": "primeiro nome", "email": "e-mail de login",
+                  "quem_criou": "quem cadastrou", "link": "endereço do painel"},
+       obrigatorias=("email",),
+       botao_texto="Acessar o painel", botao_url_var="link",
+       exemplo={"primeiro_nome": "Ana", "email": "ana@greenhousedf.com.br",
+                "quem_criou": "Bruno", "link": "https://exemplo/rh"}),
+
+    # ---------------------------------------------------- assinatura (envios)
+    _m(chave="assinatura_vias_assinadas", grupo="Assinatura",
+       rotulo="Vias assinadas (com os PDFs em anexo)",
+       quando="Logo após o candidato assinar — leva as vias dele em anexo.",
+       assunto="Green House — Seus documentos assinados (vias do colaborador)",
+       corpo="Prezado(a) {{nome}},\n\n"
+             "Confirmamos a assinatura eletrônica dos seus documentos "
+             "admissionais. As vias assinadas seguem ANEXAS a esta mensagem "
+             "para a sua guarda:\n\n"
+             "{{documentos}}\n\n"
+             "Próximo passo obrigatório: envie a sua documentação pelo mesmo "
+             "link da admissão. Sua contratação somente será efetivada após o "
+             "envio completo.",
+       variaveis={"nome": "nome completo",
+                  "documentos": "lista dos documentos (montada pelo sistema)"},
+       obrigatorias=("documentos",),
+       exemplo={"nome": "Maria Souza",
+                "documentos": "- Ficha de cadastro\n- Termo de VT"}),
+
+    _m(chave="modelo_para_assinar", grupo="Assinatura",
+       rotulo="Documento de modelo aguarda assinatura",
+       quando="O RH envia um documento de modelo para a pessoa assinar.",
+       assunto="Green House — documento aguarda sua assinatura: {{documento}}",
+       corpo="Prezado(a) {{nome}},\n\n"
+             "O documento \"{{documento}}\" aguarda a sua assinatura "
+             "eletrônica.\n\n"
+             "É rápido e pode ser feito pelo celular.",
+       variaveis={"nome": "nome completo", "documento": "título do documento",
+                  "link": "link para assinar"},
+       botao_texto="Assinar o documento", botao_url_var="link",
+       exemplo={"nome": "Maria Souza", "documento": "Acordo de Teletrabalho",
+                "link": "https://exemplo/c/abc"}),
+
+    _m(chave="modelo_anexo", grupo="Assinatura",
+       rotulo="Documento de modelo em anexo (sem assinatura)",
+       quando="O RH envia um documento de modelo apenas para conhecimento.",
+       assunto="Green House — {{documento}}",
+       corpo="Prezado(a) {{nome}},\n\n"
+             "Segue em anexo o documento \"{{documento}}\".",
+       variaveis={"nome": "nome completo", "documento": "título do documento"},
+       exemplo={"nome": "Maria Souza", "documento": "Comunicado Interno"}),
+
+    _m(chave="assinatura_externa_convite", grupo="Assinatura", critico=True,
+       rotulo="Convite para assinante externo",
+       quando="Um documento em roteiro chega à vez de um assinante de fora.",
+       assunto="Green House — documento aguarda sua assinatura ({{papel}})",
+       corpo="Olá, {{nome}}!\n\n"
+             "Um documento da Green House aguarda a sua assinatura como "
+             "{{papel}}.\n\n"
+             "O link é pessoal e vale só para você.",
+       variaveis={"nome": "nome do assinante externo", "papel": "papel na assinatura",
+                  "link": "link de assinatura"},
+       obrigatorias=("link",),
+       botao_texto="Ver e assinar o documento", botao_url_var="link",
+       exemplo={"nome": "João Prestador", "papel": "Testemunha",
+                "link": "https://exemplo/assinar/abc"}),
+
+    # ---------------------------------------------------------- creche (resto)
+    _m(chave="creche_aguardando_contrato", grupo="Reembolso-Creche",
+       rotulo="Aprovado, aguardando o contrato",
+       quando="O RH aprova mas o pagamento depende de repactuação do contrato.",
+       assunto="Green House — Reembolso-Creche: aprovado, aguardando o contrato",
+       corpo="Olá, {{nome}}!\n\n"
+             "Seu pedido de Reembolso-Creche foi APROVADO.\n\n"
+             "O pagamento depende de um ajuste no contrato com o órgão, que já "
+             "está em andamento. Assim que concluído, o benefício passa a ser "
+             "pago — e avisamos você.\n\n"
+             "Não é preciso fazer nada agora.",
+       variaveis={"nome": "primeiro nome"},
+       exemplo={"nome": "Maria"}),
+
+    _m(chave="creche_incluir_crianca", grupo="Reembolso-Creche",
+       rotulo="Reaberto para incluir criança",
+       quando="O RH reabre o benefício para o colaborador incluir outra criança.",
+       assunto="Green House — Reembolso-Creche: inclua a nova criança",
+       corpo="Olá, {{nome}}!\n\n"
+             "Seu Reembolso-Creche foi reaberto para você incluir a nova "
+             "criança.\n\n"
+             "Atenção: enquanto o pedido estiver em análise, o benefício sai "
+             "da folha — reenvie o quanto antes para voltar a receber.",
+       variaveis={"nome": "primeiro nome", "link": "endereço do link do creche"},
+       botao_texto="Incluir a criança", botao_url_var="link",
+       exemplo={"nome": "Maria", "link": "https://exemplo/creche"}),
+
+    _m(chave="creche_sem_direito", grupo="Reembolso-Creche",
+       rotulo="Registro de 'não faço jus'",
+       quando="Fica registrado que o colaborador declarou não ter direito.",
+       assunto="Green House — Reembolso-Creche: registro de 'sem direito'",
+       corpo="Olá, {{nome}}!\n\n"
+             "Registramos que você declarou não fazer jus ao Reembolso-Creche "
+             "no momento.\n\n"
+             "Se a situação mudar (nova criança, mudança de posto), procure o "
+             "RH: dá para reabrir o pedido a qualquer tempo.",
+       variaveis={"nome": "primeiro nome"},
+       exemplo={"nome": "Maria"}),
 
     # ---------------------------------------------------------------- talento
     _m(chave="talento_agradecimento", grupo="Banco de Talentos",

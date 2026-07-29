@@ -121,33 +121,3 @@ def html_moderno(titulo: str, paragrafos: list[str], destaque: str | None = None
       </div>
     </div>"""
 
-
-def email_convite(nome: str, link: str) -> tuple[str, str, str]:
-    """(assunto, texto, html) do convite de admissão com o link mágico."""
-    primeiro_nome = nome.split()[0].title() if nome.strip() else "candidato(a)"
-    assunto = "🌱 Green House — comece sua admissão"
-    texto = (
-        f"Olá, {primeiro_nome}!\n\n"
-        "Seja bem-vindo(a) à Green House! Para concluir sua admissão, acesse o link abaixo "
-        "pelo celular ou computador. Não precisa de senha — é só tocar e começar:\n\n"
-        f"{link}\n\n"
-        "IMPORTANTE: comece AGORA. Sua contratação só é efetivada depois que você preencher "
-        "os dados, assinar os documentos e enviar toda a documentação. Se precisar "
-        "interromper, tudo fica salvo — mas conclua o quanto antes: sem a documentação "
-        "completa, o RH não pode efetivar seu registro.\n\n"
-        "Qualquer dúvida, fale com o RH.\n"
-    )
-    html = html_moderno(
-        f"Bem-vindo(a), {primeiro_nome}!",
-        [
-            "Para concluir a sua admissão, toque no botão abaixo. "
-            "<strong>Não precisa de senha.</strong>",
-            "<strong>Comece agora:</strong> sua contratação só é efetivada depois do envio "
-            "completo dos dados, assinaturas e documentos. Tudo fica salvo se precisar "
-            "interromper — mas <strong>conclua o quanto antes</strong>.",
-            f'Se o botão não funcionar, copie este endereço: <a href="{link}">{link}</a>',
-        ],
-        botao_texto="Começar minha admissão",
-        botao_url=link,
-    )
-    return assunto, texto, html
