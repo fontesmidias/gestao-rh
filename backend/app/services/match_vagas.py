@@ -278,17 +278,18 @@ def _avisar_conclusao(processamento_id, resumo: dict) -> None:
     que é a caixa pessoal de login (regra da casa)."""
     try:
         from app.core.db import SessionLocal
-        from app.services.notificacoes import avisar
+        from app.services.notificacoes import avisar_modelo
         with SessionLocal() as db:
-            corpo = (
-                f"O ranqueamento da vaga \"{resumo.get('vaga')}\" terminou.\n\n"
-                f"  - Analisados agora pela IA: {resumo.get('analisados')}\n"
-                f"  - Reaproveitados de análise anterior: {resumo.get('reaproveitados')}\n"
-                f"  - Sem currículo enviado: {resumo.get('sem_curriculo')}\n"
-                f"  - Currículo ilegível: {resumo.get('ilegiveis')}\n"
-                f"  - Currículos com trecho suspeito: {resumo.get('suspeitos')}\n\n"
-                "Veja o resultado completo em Match de Vagas → Resultados.\n")
-            avisar(db, "match_vagas_concluido",
-                   f"Match de Vagas concluído — {resumo.get('vaga')}", corpo)
+            # Os números chegam PRONTOS ao template como {{resumo}} — o RH edita
+            # o texto ao redor, a regra do que entra na lista fica aqui (v2.20).
+            numeros = "\n".join([
+                f"- Analisados agora pela IA: {resumo.get('analisados')}",
+                f"- Reaproveitados de análise anterior: {resumo.get('reaproveitados')}",
+                f"- Sem currículo enviado: {resumo.get('sem_curriculo')}",
+                f"- Currículo ilegível: {resumo.get('ilegiveis')}",
+                f"- Currículos com trecho suspeito: {resumo.get('suspeitos')}",
+            ])
+            avisar_modelo(db, "match_vagas_concluido", "aviso_match_concluido",
+                          {"vaga": resumo.get("vaga"), "resumo": numeros})
     except Exception as exc:   # aviso nunca derruba o processamento
         log.warning("Falha ao avisar conclusão do match (%s).", type(exc).__name__)

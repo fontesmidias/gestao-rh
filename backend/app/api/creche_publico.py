@@ -602,14 +602,10 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
               candidato_id=col.id, detalhe={"criancas": len(ben.criancas)})
     db.commit()
     # avisa o RH que entrou pedido na fila (v1.82) — destinatários configuráveis
-    from app.services.notificacoes import avisar
-    avisar(
-        db, "creche_levantamento_enviado",
-        f"👶 Reembolso-Creche: levantamento de {col.nome_completo}",
-        f"{col.nome_completo} enviou o levantamento do Reembolso-Creche "
-        f"({len(ben.criancas)} criança(s)) para análise.\n"
-        "Acesse o painel do RH para revisar.\n",
-    )
+    from app.services.notificacoes import avisar_modelo
+    avisar_modelo(
+        db, "creche_levantamento_enviado", "aviso_creche_levantamento",
+        {"nome": col.nome_completo, "criancas": len(ben.criancas)})
     return {"status": ben.status}
 
 

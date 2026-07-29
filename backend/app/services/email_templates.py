@@ -569,6 +569,105 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        variaveis={"nome": "primeiro nome"},
        exemplo={"nome": "Maria"}),
 
+    # ------------------------------------------------------- avisos internos
+    # Vão para a EQUIPE (RH, operacional, líder de brigada) pela matriz de
+    # `services/notificacoes.py` — quem recebe cada um se configura em
+    # Configurações → Avisos internos. O texto fica editável porque quem
+    # recebe nem sempre é quem conhece o sistema: o Gabriel e o Vitor recebem
+    # o de uniforme, o líder de brigada recebe o de certificação.
+    _m(chave="aviso_envio_concluido", grupo="Avisos internos",
+       rotulo="Candidato concluiu o envio",
+       quando="O candidato clica em 'CONCLUÍ MEU ENVIO'.",
+       assunto="📥 Documentação completa: {{nome}}",
+       corpo="O candidato {{nome}} concluiu o envio da documentação.\n\n"
+             "Acesse o painel do RH para revisar.",
+       variaveis={"nome": "nome do candidato", "link": "endereço do painel"},
+       botao_texto="Revisar no painel", botao_url_var="link",
+       exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
+
+    _m(chave="aviso_documento_reenviado", grupo="Avisos internos",
+       rotulo="Documento reenviado por quem já foi aprovado",
+       quando="Um candidato já aprovado reenvia um documento que fora rejeitado.",
+       assunto="🔁 Documento reenviado (já aprovado): {{nome}}",
+       corpo="O colaborador {{nome}}, já aprovado, reenviou um documento que "
+             "havia sido rejeitado.\n\n"
+             "Reavalie no painel do RH.",
+       variaveis={"nome": "nome do colaborador", "link": "endereço do painel"},
+       botao_texto="Reavaliar no painel", botao_url_var="link",
+       exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
+
+    _m(chave="aviso_uniforme", grupo="Avisos internos",
+       rotulo="Uniforme: tamanhos de um novo admitido",
+       quando="O candidato conclui a admissão tendo informado os tamanhos.",
+       assunto="👕 Uniforme: {{nome}} informou os tamanhos",
+       corpo="{{nome}} concluiu a admissão e informou os tamanhos de uniforme.\n\n"
+             "A lista completa, com posto e medidas, fica na tela Uniformes — "
+             "não vai por e-mail.",
+       variaveis={"nome": "nome do colaborador",
+                  "link": "endereço da tela de Uniformes"},
+       botao_texto="Ver a lista de uniformes", botao_url_var="link",
+       exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh/uniformes"}),
+
+    _m(chave="aviso_dossie_pronto", grupo="Avisos internos",
+       rotulo="Dossiê de admissão pronto",
+       quando="O dossiê completo de um candidato termina de ser gerado.",
+       assunto="📄 Dossiê de admissão pronto: {{nome}}",
+       corpo="O dossiê completo de {{nome}} foi gerado e está pronto para "
+             "download no painel.",
+       variaveis={"nome": "nome do candidato", "link": "endereço do painel"},
+       botao_texto="Baixar no painel", botao_url_var="link",
+       exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh"}),
+
+    _m(chave="aviso_creche_levantamento", grupo="Avisos internos",
+       rotulo="Reembolso-Creche: levantamento enviado",
+       quando="Um colaborador envia (ou reenvia) o levantamento para análise.",
+       assunto="👶 Reembolso-Creche: levantamento de {{nome}}",
+       corpo="{{nome}} enviou o levantamento do Reembolso-Creche com "
+             "{{criancas}} criança(s).\n\n"
+             "Analise na tela de Reembolso-Creche.",
+       variaveis={"nome": "nome do colaborador",
+                  "criancas": "quantas crianças foram cadastradas"},
+       exemplo={"nome": "Maria Souza", "criancas": "2"}),
+
+    _m(chave="aviso_talento_cadastrado", grupo="Avisos internos",
+       rotulo="Banco de Talentos: novo cadastro",
+       quando="Alguém se cadastra pelo formulário público do Banco de Talentos.",
+       assunto="⭐ Banco de Talentos: {{nome}}",
+       corpo="{{nome}} se cadastrou no Banco de Talentos.\n\n"
+             "Cargos de interesse: {{cargos}}\n\n"
+             "Acesse o painel do RH para ver o cadastro.",
+       variaveis={"nome": "nome de quem se cadastrou",
+                  "cargos": "cargos de interesse informados"},
+       exemplo={"nome": "Maria Souza",
+                "cargos": "Recepcionista, Auxiliar de Serviços Gerais"}),
+
+    _m(chave="aviso_desenvolvimento_enviado", grupo="Avisos internos",
+       rotulo="Colaborador enviou curso ou certificado",
+       quando="Alguém envia algo novo pelo portal e a fila de validação cresce.",
+       assunto="🎓 {{nome}} enviou um documento",
+       corpo="{{nome}} {{acao}} um documento para o Cadastro de "
+             "Desenvolvimento: {{titulo}}.\n\n"
+             "A fila de validação está na tela de Desenvolvimento.",
+       variaveis={"nome": "nome do colaborador",
+                  "acao": "'enviou' ou 'reenviou'",
+                  "titulo": "título do curso/certificado"},
+       exemplo={"nome": "Maria Souza", "acao": "enviou", "titulo": "NR-35"}),
+
+    _m(chave="aviso_match_concluido", grupo="Avisos internos",
+       rotulo="Match de Vagas: ranqueamento concluído",
+       quando="Termina o ranqueamento de uma vaga contra o Banco de Talentos.",
+       assunto="Match de Vagas concluído — {{vaga}}",
+       corpo="O ranqueamento da vaga \"{{vaga}}\" terminou.\n\n"
+             "{{resumo}}\n\n"
+             "Veja o resultado completo em Match de Vagas → Resultados.",
+       variaveis={"vaga": "título da vaga",
+                  "resumo": "os números do ranqueamento (montados pelo sistema)"},
+       obrigatorias=("resumo",),
+       exemplo={"vaga": "Recepcionista — INEP",
+                "resumo": "- Analisados agora pela IA: 18\n"
+                          "- Reaproveitados de análise anterior: 4\n"
+                          "- Sem currículo enviado: 9"}),
+
     # ---------------------------------------------------------------- talento
     _m(chave="talento_agradecimento", grupo="Banco de Talentos",
        rotulo="Agradecimento pelo cadastro",

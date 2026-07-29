@@ -244,4 +244,66 @@ try:
 finally:
     _mod_cfg.enviar_email = _orig_env
 
+# --------------------------------------------- avisos internos (v2.20)
+# Os avisos que vão para a EQUIPE (RH, operacional, líder de brigada) também
+# passam a sair do catálogo: quem recebe nem sempre é quem conhece o sistema.
+from app.services.notificacoes import EVENTOS, avisar_modelo  # noqa: E402
+
+_INTERNOS = [m for m in CATALOGO if m.grupo == "Avisos internos"]
+assert len(_INTERNOS) == 8, f"esperava 8 avisos internos, achei {len(_INTERNOS)}"
+
+# todo aviso interno tem que casar com um EVENTO da matriz de notificações —
+# senão o RH não teria onde cadastrar quem recebe
+_eventos = {e["chave"] for e in EVENTOS}
+_usados = {
+    "aviso_envio_concluido": "envio_concluido",
+    "aviso_documento_reenviado": "envio_concluido",
+    "aviso_uniforme": "uniforme_pendente",
+    "aviso_dossie_pronto": "dossie_pronto",
+    "aviso_creche_levantamento": "creche_levantamento_enviado",
+    "aviso_talento_cadastrado": "talento_cadastrado",
+    "aviso_desenvolvimento_enviado": "desenvolvimento_enviado",
+    "aviso_match_concluido": "match_vagas_concluido",
+}
+assert set(_usados) == {m.chave for m in _INTERNOS}, (
+    "há aviso interno no catálogo sem evento mapeado (ou vice-versa)")
+for chave, evento in _usados.items():
+    assert evento in _eventos, (
+        f"'{chave}' aponta para o evento '{evento}', que não existe em "
+        f"notificacoes.EVENTOS — o RH não teria onde cadastrar quem recebe")
+
+# `avisar_modelo` renderiza pelo catálogo e respeita a matriz
+_env = []
+# `notificacoes.avisar_modelo` importa `enviar_email` de dentro da função, então
+# o patch vai no MÓDULO DE ORIGEM — é o funil por onde ele passa.
+import app.services.email as _mod_email  # noqa: E402
+
+_orig_av = _mod_email.enviar_email
+
+
+def _fake_av(dest, assunto, corpo, html=None, **kw):
+    _env.append({"dest": dest, "assunto": assunto, "corpo": corpo})
+    return True
+
+
+_mod_email.enviar_email = _fake_av
+try:
+    from app.core.db import SessionLocal as _SL  # noqa: E402
+
+    with _SL() as _db:
+        n = avisar_modelo(_db, "envio_concluido", "aviso_envio_concluido",
+                          {"nome": "Maria Souza", "link": "https://exemplo/rh"})
+    assert n >= 1, "o aviso não saiu para ninguém (a matriz tem padrão global)"
+    assert _env, "nenhum e-mail montado"
+    assert "Maria Souza" in _env[0]["assunto"], _env[0]["assunto"]
+    assert "{{" not in _env[0]["corpo"], _env[0]["corpo"]
+
+    # template inexistente NÃO derruba o aviso — degrada para 0 e loga
+    _env.clear()
+    with _SL() as _db:
+        assert avisar_modelo(_db, "envio_concluido", "nao_existe", {}) == 0
+    assert not _env, "montou e-mail para template inexistente"
+finally:
+    _mod_email.enviar_email = _orig_av
+
 print("test_email_templates: OK")

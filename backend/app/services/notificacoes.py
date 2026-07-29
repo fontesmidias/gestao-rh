@@ -67,6 +67,12 @@ EVENTOS: list[dict] = [
                      "Desenvolvimento e a fila de validação cresce.",
     },
     {
+        "chave": "dossie_pronto",
+        "rotulo": "Dossiê de admissão pronto",
+        "descricao": "Quando o dossiê completo de um candidato é gerado e "
+                     "fica pronto para download no painel.",
+    },
+    {
         "chave": "uniforme_pendente",
         "rotulo": "Uniforme: tamanhos de um novo admitido",
         "descricao": "Quando um candidato informa os tamanhos de uniforme. "
@@ -161,6 +167,36 @@ def destinatarios(db: Session, evento: str) -> list[str]:
         return []
     emails = [e for e in (cfg.get("emails") or []) if email_valido(e)]
     return emails or [destino_padrao(db)]
+
+
+def avisar_modelo(db: Session, evento: str, chave_template: str,
+                  contexto: dict) -> int:
+    """Aviso interno com o texto vindo do CATÁLOGO de e-mails (v2.20).
+
+    Mesma entrega de `avisar` (matriz de destinatários, nunca levanta), mas o
+    assunto e o corpo saem de `services/email_templates.py` — logo, editáveis
+    pelo RH em Configurações → Textos dos e-mails, com preview e histórico.
+
+    Existe separado de `avisar` porque o dispatcher continua útil para aviso
+    com texto montado na hora; quem tem template usa este.
+    """
+    from app.services.email import enviar_email
+    from app.services.email_templates import renderizar
+
+    try:
+        assunto, corpo, html = renderizar(db, chave_template, contexto)
+    except Exception:  # catálogo/template ilegível não pode calar o aviso
+        log.warning("template '%s' ilegível; aviso não saiu", chave_template,
+                    exc_info=True)
+        return 0
+    enviados = 0
+    for endereco in destinatarios(db, evento):
+        try:
+            enviar_email(endereco, assunto, corpo, html)
+            enviados += 1
+        except Exception:
+            log.warning("falha ao avisar %s sobre %s", endereco, evento, exc_info=True)
+    return enviados
 
 
 def avisar(db: Session, evento: str, assunto: str, corpo: str,

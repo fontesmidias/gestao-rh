@@ -590,12 +590,12 @@ def editar_registro(token: str, registro_id: uuid.UUID, payload: RegistroIn,
     db.commit()
     db.refresh(r)
     # avisa o RH que entrou (ou voltou) algo na fila — destinatários na matriz
-    from app.services.notificacoes import avisar
-    avisar(db, "desenvolvimento_enviado",
-           f"🎓 {col.nome_completo} enviou um documento",
-           f"{col.nome_completo} {'reenviou' if reenviado else 'enviou'} "
-           f"\"{r.titulo or (r.tipo.nome if r.tipo else 'um documento')}\" "
-           "para validação.\nAcesse o painel do RH › Desenvolvimento.\n")
+    from app.services.notificacoes import avisar_modelo
+    avisar_modelo(db, "desenvolvimento_enviado", "aviso_desenvolvimento_enviado", {
+        "nome": col.nome_completo,
+        "acao": "reenviou" if reenviado else "enviou",
+        "titulo": r.titulo or (r.tipo.nome if r.tipo else "um documento"),
+    })
     return _dump_registro(db, r)
 
 

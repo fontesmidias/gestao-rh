@@ -732,6 +732,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   "as 3 criadas deveriam estar na fila: 0", que não diz nada sobre a causa.
   Agora usa sufixo `uuid` por execução. Ao escrever teste que grava em tabela
   com campo único, sempre gerar o valor por execução.
+- **Avisos internos também saem do catálogo** (v2.20): os 8 avisos que vão à
+  EQUIPE (RH, operacional, líder de brigada) passaram a usar
+  `notificacoes.avisar_modelo(db, evento, chave_template, contexto)` — mesma
+  entrega de `avisar` (matriz de destinatários, nunca levanta), mas assunto e
+  corpo vêm do catálogo, editáveis com preview e histórico. O motivo não é
+  cosmético: **quem recebe nem sempre conhece o sistema** — o Gabriel e o Vitor
+  recebem o de uniforme, o líder de brigada recebe o de certificação.
+  `avisar()` continua para aviso com texto montado na hora. Template ausente
+  degrada para 0 envios + log, nunca derruba a ação que o disparou.
+  **Bug corrigido junto**: o aviso de dossiê pronto (`revisao.py`) lia
+  `email_avisos_internos` DIRETO, fora da matriz — desligar o evento no painel
+  não o desligava e cadastrar destinatário não funcionava. Virou o evento
+  `dossie_pronto`. Ao criar aviso interno novo: entrada em `EVENTOS`, entrada
+  no `CATALOGO` (grupo "Avisos internos") e `avisar_modelo` no ponto de envio —
+  o teste cobra que todo aviso do catálogo tenha evento correspondente.
 - **Catálogo dos documentos do sistema** (v2.19,
   `services/documentos_catalogo.py`, `documentos_texto.py`, rotas em
   `modelos.py`, seção em `Modelos.jsx`): o RH vê os 11 documentos que a

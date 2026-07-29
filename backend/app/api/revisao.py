@@ -516,18 +516,15 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
                   detalhe={"parcial": forcar})
         db.commit()
 
-        # Aviso interno "Dossiê pronto": vai para o e-mail configurado no painel
-        # (Configurações → E-mail de avisos internos), com fallback ao remetente.
-        from app.services.config_dinamica import ler_config
-        destino = (ler_config(db, ("email_avisos_internos",)).get("email_avisos_internos")
-                   or get_settings().smtp_from)
-        if destino:
-            enviar_email(
-                destino,
-                f"📄 Dossiê de admissão pronto: {cand.nome_completo}",
-                f"O dossiê completo de {cand.nome_completo} foi gerado.\n"
-                f"Baixe no painel: {base_url_publica(request)}/rh\n",
-            )
+        # Aviso interno pela MATRIZ (v2.20). Antes lia `email_avisos_internos`
+        # direto: desligar o evento no painel não desligava este aviso, e
+        # cadastrar destinatário específico não funcionava — o RH configurava a
+        # matriz achando que ela governava todos os avisos, e este escapava.
+        from app.services.notificacoes import avisar_modelo
+        avisar_modelo(
+            db, "dossie_pronto", "aviso_dossie_pronto",
+            {"nome": cand.nome_completo,
+             "link": f"{base_url_publica(request)}/rh"})
         return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
 
 

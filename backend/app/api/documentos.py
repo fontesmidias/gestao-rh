@@ -332,14 +332,11 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
         registrar(db, "documento_reenviado_pos_aprovacao", ator="candidato",
                   candidato_id=candidato.id)
         db.commit()
-        from app.services.notificacoes import avisar
-        avisar(
-            db, "envio_concluido",
-            f"🔁 Documento reenviado (já aprovado): {candidato.nome_completo}",
-            f"O colaborador {candidato.nome_completo}, já aprovado, reenviou um "
-            f"documento que havia sido rejeitado. Reavalie no painel do RH: "
-            f"{base_url_publica(request)}/rh\n",
-        )
+        from app.services.notificacoes import avisar_modelo
+        avisar_modelo(
+            db, "envio_concluido", "aviso_documento_reenviado",
+            {"nome": candidato.nome_completo,
+             "link": f"{base_url_publica(request)}/rh"})
         return {"status": candidato.status}
 
     candidato.status = StatusCandidato.envio_concluido
@@ -349,13 +346,11 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
     # Quem recebe é configurável no painel (v1.82). Antes ia para `smtp_from`,
     # a caixa de LOGIN do e-mail — o RH recebia no e-mail pessoal sem poder
     # mudar. Sem configuração, cai no padrão de sempre.
-    from app.services.notificacoes import avisar
-    avisar(
-        db, "envio_concluido",
-        f"📥 Documentação completa: {candidato.nome_completo}",
-        f"O candidato {candidato.nome_completo} concluiu o envio da documentação.\n"
-        f"Acesse o painel do RH para revisar: {base_url_publica(request)}/rh\n",
-    )
+    from app.services.notificacoes import avisar_modelo
+    avisar_modelo(
+        db, "envio_concluido", "aviso_envio_concluido",
+        {"nome": candidato.nome_completo,
+         "link": f"{base_url_publica(request)}/rh"})
     # Empurrão para quem compra uniforme (feedback 2026-07-28). Sai daqui, e não
     # do autosave da ficha, porque o wizard salva a cada 900ms — avisar a cada
     # tecla digitada faria o operacional parar de ler. O aviso NÃO leva os
@@ -364,13 +359,10 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
     from app.models.ficha import DadosProfissionaisBancarios
     _u = db.get(DadosProfissionaisBancarios, candidato.id)
     if _u and (_u.tamanho_calca or _u.tamanho_camisa or _u.tamanho_calcado):
-        avisar(
-            db, "uniforme_pendente",
-            f"👕 Uniforme: {candidato.nome_completo} informou os tamanhos",
-            f"{candidato.nome_completo} concluiu a admissão e informou os "
-            f"tamanhos de uniforme.\n"
-            f"Veja a lista completa em {base_url_publica(request)}/rh/uniformes\n",
-        )
+        avisar_modelo(
+            db, "uniforme_pendente", "aviso_uniforme",
+            {"nome": candidato.nome_completo,
+             "link": f"{base_url_publica(request)}/rh/uniformes"})
     return {"status": candidato.status}
 
 

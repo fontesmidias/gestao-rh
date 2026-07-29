@@ -141,14 +141,11 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
     db.commit()
     # aviso interno configurável (v1.82) — desligado por padrão seria pior:
     # cadastro de talento que ninguém vê é currículo perdido
-    from app.services.notificacoes import avisar
-    avisar(
-        db, "talento_cadastrado",
-        f"⭐ Banco de Talentos: {nome_cad}",
-        f"{nome_cad} se cadastrou no Banco de Talentos.\n"
-        f"Cargos de interesse: {', '.join(cargos_cad) or '(não informado)'}\n"
-        "Acesse o painel do RH para ver o cadastro.\n",
-    )
+    from app.services.notificacoes import avisar_modelo
+    avisar_modelo(
+        db, "talento_cadastrado", "aviso_talento_cadastrado",
+        {"nome": nome_cad,
+         "cargos": ", ".join(cargos_cad) or "(não informado)"})
     # Agradecimento para a PESSOA (feedback 2026-07-28): a tela de obrigado só
     # existe enquanto a aba está aberta; sem e-mail, quem se cadastrou fica sem
     # nenhum comprovante de que o cadastro entrou. Texto editável pelo RH.
