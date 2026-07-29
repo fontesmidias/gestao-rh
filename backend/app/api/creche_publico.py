@@ -130,6 +130,15 @@ def _gerar_e_enviar_codigo(db: Session, colaborador: Candidato,
         codigo_hash=_hash(codigo),
         codigo_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
         expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H),
+        # O LINK DO E-MAIL ENTRA DIRETO (decisão do Bruno, 2026-07-29): quem
+        # recebeu o link na própria caixa já provou posse do e-mail, que é
+        # exatamente o que o código de 6 dígitos prova. Pedir os dois é o mesmo
+        # fator duas vezes — e foi o que travou o RH em campo. O código segue
+        # no mesmo e-mail, para quem preferir digitar ou se o link quebrar no
+        # app de e-mail. Contenção: o link vale o mesmo que o código (15 min,
+        # `link_expira_em`), enquanto a SESSÃO que ele abre dura as 6h de
+        # sempre.
+        link_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
     )
     db.add(ac)
     registrar(db, "creche_codigo_enviado", ator="colaborador",
@@ -204,13 +213,31 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
     o link identifica, o código autentica. Sessão já expirada volta ao código,
     e não ao acesso: por isso a checagem de ``expira_em`` vale para os dois.
     """
+    agora = datetime.now(timezone.utc)
     ac = db.scalar(select(AcessoCreche).where(AcessoCreche.token_hash == _hash(token)))
-    if ac is None or ac.expira_em < datetime.now(timezone.utc):
+    if ac is None or ac.expira_em < agora:
         raise HTTPException(status_code=404, detail="link_expirado")
     ben = db.get(BeneficioCreche, ac.beneficio_id)
     col = db.get(Candidato, ben.candidato_id) if ben else None
     if col is None:
         raise HTTPException(status_code=404, detail="link_expirado")
+
+    # O link entra DIRETO em dois casos (v2.17): o acesso emitido pelo RH na
+    # devolução (nasce `confirmado_em`) e o link do e-mail do código, enquanto
+    # `link_expira_em` não vence. Nos dois, quem tem o link recebeu-o na
+    # própria caixa — mesmo fator que o código prova.
+    entra_pelo_link = (ac.confirmado_em is None
+                       and ac.link_expira_em is not None
+                       and ac.link_expira_em >= agora)
+    if entra_pelo_link:
+        ac.confirmado_em = agora
+        ac.expira_em = agora + timedelta(hours=SESSAO_TTL_H)
+        # uso único: o link não serve para uma segunda entrada
+        ac.link_expira_em = agora
+        registrar(db, "creche_entrou_pelo_link", ator="colaborador",
+                  candidato_id=col.id)
+        db.commit()
+
     nome = (col.nome_completo or "").split()
     return {
         "primeiro_nome": nome[0].title() if nome else "",
@@ -407,15 +434,21 @@ def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
     if colaborador is None:
         raise HTTPException(status_code=422, detail="codigo_invalido")
     ben = _beneficio(db, colaborador)
-    # pega o acesso mais recente com código ainda válido
+    # O acesso mais recente que ainda tem código válido — CONFIRMADO OU NÃO.
+    # Antes exigia `confirmado_em IS NULL`, e quem entrava pelo link (v2.17) e
+    # digitava o código em seguida levava "código inválido" com o código certo
+    # na mão: o link já tinha confirmado aquele acesso. O código continua
+    # sendo conferido; o que mudou é não descartar o registro por já ter sido
+    # aberto pelo link do MESMO e-mail.
+    agora = datetime.now(timezone.utc)
     ac = db.scalars(
         select(AcessoCreche)
         .where(AcessoCreche.beneficio_id == ben.id,
-               AcessoCreche.confirmado_em.is_(None))
+               AcessoCreche.codigo_hash.isnot(None),
+               AcessoCreche.codigo_expira_em >= agora)
         .order_by(AcessoCreche.criado_em.desc())
     ).first()
-    if (ac is None or ac.codigo_hash != _hash(payload.codigo.strip())
-            or ac.codigo_expira_em < datetime.now(timezone.utc)):
+    if ac is None or ac.codigo_hash != _hash(payload.codigo.strip()):
         raise HTTPException(status_code=422, detail="codigo_invalido")
 
     # emite token de sessão real

@@ -184,6 +184,9 @@ class AcessoPortal(Base):
     codigo_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Ver `AcessoCreche.link_expira_em` (v2.17): até quando o link do e-mail
+    # entra sozinho, sem digitar o código.
+    link_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                 server_default=func.now())
 

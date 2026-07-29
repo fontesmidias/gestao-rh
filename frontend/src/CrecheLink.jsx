@@ -58,8 +58,17 @@ export default function CrecheLink() {
       await api.iniciar(cpf)
       setEtapa('codigo')
     } catch (err) {
-      setErro(err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
-        : 'Não foi possível iniciar. Tente novamente em instantes.')
+      // NÃO avança para a tela do código quando o envio falhou (feedback
+      // 2026-07-29): antes, o 429 do limite de tentativas caía no genérico e a
+      // tela mudava de etapa assim mesmo — a pessoa colava o código do e-mail
+      // ANTERIOR e recebia "código incorreto", sem nunca saber que o e-mail
+      // novo não tinha saído. É a mesma armadilha do "sucesso mentiroso".
+      setErro(err.status === 429
+        ? 'Você pediu o código várias vezes seguidas. Por segurança, aguarde '
+          + '15 minutos e tente de novo — ou use o último código que chegou, '
+          + 'se ainda estiver dentro dos 15 minutos.'
+        : err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
+          : 'Não conseguimos enviar o código agora. Tente novamente em instantes.')
     } finally { setCarregando(false) }
   }
 
@@ -71,9 +80,34 @@ export default function CrecheLink() {
       const r = await api.confirmar(cpf, codigo, tokenUrl || undefined)
       setToken(r.token); setEtapa('sessao')
     } catch (err) {
-      setErro(err.detail === 'codigo_invalido'
-        ? 'Código incorreto ou expirado. Confira no seu e-mail (inclusive o spam).'
-        : 'Não foi possível confirmar. Tente novamente.')
+      // O código vale 15 minutos e só o ÚLTIMO enviado funciona. Dizer isso é
+      // o que faltava: "código incorreto" fazia a pessoa conferir e reconferir
+      // um código que estava certo, mas era de um e-mail antigo.
+      setErro(err.status === 429
+        ? 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.'
+        : err.detail === 'codigo_invalido'
+          ? 'Esse código não vale mais. Use o código do e-mail MAIS RECENTE — '
+            + 'ele vale por 15 minutos. Se já passou disso, toque em "Reenviar '
+            + 'o código" abaixo.'
+          : 'Não foi possível confirmar. Tente novamente.')
+    } finally { setCarregando(false) }
+  }
+
+  // Reenviar sem voltar para a tela do CPF (a pessoa já digitou; fazer de novo
+  // é atrito). O backend recusa com 429 se for pedido demais, e a mensagem
+  // diz isso em vez de fingir que enviou.
+  const reenviar = async () => {
+    setErro(null); setCarregando(true)
+    try {
+      await api.iniciar(cpf)
+      setCodigo('')
+      setErro('Enviamos um código novo. Use o do e-mail mais recente '
+            + '(confira também o spam).')
+    } catch (err) {
+      setErro(err.status === 429
+        ? 'Você já pediu o código várias vezes. Aguarde 15 minutos — ou use o '
+          + 'último código que chegou, se ainda estiver válido.'
+        : 'Não conseguimos reenviar agora. Tente em instantes.')
     } finally { setCarregando(false) }
   }
 
@@ -126,6 +160,9 @@ export default function CrecheLink() {
           {erro && <div className="alerta">{erro}</div>}
           <button className="btn-principal" disabled={carregando || codigo.length < 6}>
             {carregando ? 'Confirmando…' : 'Confirmar'}</button>
+          {cpf && (
+            <button type="button" className="btn-link" disabled={carregando}
+                    onClick={reenviar}>🔄 Reenviar o código</button>)}
           {/* A KBA precisa do CPF digitado; quem entrou pelo link não digitou
               (só temos os 4 últimos dígitos), então o caminho é informar o CPF. */}
           <button type="button" className="btn-link"
