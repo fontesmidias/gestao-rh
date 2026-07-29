@@ -29,6 +29,11 @@ export default function TalentosRH({ aoAbrir }) {
   // um painel inline na própria linha, feedback 2026-07-27 "pense em algo
   // melhor" — a anotação tem anexo+histórico, não cabia espremida na tabela)
   const [anotando, setAnotando] = useState(null)
+  // ficha completa aberta na própria linha (feedback 2026-07-28: "para nós é
+  // interessante que apareça todos os campos que as pessoas preencheram").
+  // Vai no painel e não em coluna nova: o dash já tem coluna demais, e resumo
+  // e origem são texto livre que não cabe em célula.
+  const [aberto, setAberto] = useState(null)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
   useEffect(() => { recarregar() }, [])
@@ -134,6 +139,9 @@ export default function TalentosRH({ aoAbrir }) {
   ]
 
   const acoesLinha = (t) => (<>
+    <button className="btn-secundario btn-mini"
+            onClick={() => setAberto(aberto === t.id ? null : t.id)}>
+      {aberto === t.id ? '▲ Fechar' : '👁 Ver ficha'}</button>
     <button className="btn-secundario btn-mini" onClick={() => setAnotando(t)}>
       🗒️ Anotações</button>
     {t.email && t.status !== 'convertido' && (
@@ -178,6 +186,8 @@ export default function TalentosRH({ aoAbrir }) {
       {!talentos ? <p>Carregando…</p> : (
         <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
+                      linhaExpandida={(t) => (aberto === t.id
+                        ? <FichaTalento t={t} verCurriculo={verCurriculo} /> : null)}
                       vazio="Nenhum talento cadastrado ainda." />
       )}
       {anotando && (
@@ -186,5 +196,53 @@ export default function TalentosRH({ aoAbrir }) {
         </Modal>
       )}
     </main>
+  )
+}
+
+// Ficha completa do talento, aberta NA PRÓPRIA LINHA (feedback 2026-07-28:
+// "para nós é interessante que apareça todos os campos que as pessoas
+// preencheram, no painel, pois já ajuda na análise humana").
+//
+// Mostra inclusive o que não tinha lugar nenhum na tela até aqui: o `resumo`
+// (o campo mais rico do formulário — "conte sobre sua experiência") e a
+// `origem` ("como conheceu a Green House?"). Ambos iam para o banco e nunca
+// eram vistos por ninguém.
+function Campo({ rotulo, children, largo }) {
+  return (
+    <div className={largo ? 'ficha-campo largo' : 'ficha-campo'}>
+      <span className="ficha-rotulo">{rotulo}</span>
+      <div>{children || '—'}</div>
+    </div>
+  )
+}
+
+function FichaTalento({ t, verCurriculo }) {
+  const lista = (v) => (Array.isArray(v) && v.length ? v.join(' · ') : null)
+  return (
+    <div className="ficha-talento">
+      <div className="ficha-grade">
+        <Campo rotulo="Nome">{t.nome}</Campo>
+        <Campo rotulo="E-mail">{t.email}</Campo>
+        <Campo rotulo="Telefone">{t.telefone}</Campo>
+        <Campo rotulo="Cidade">{t.cidade}</Campo>
+        <Campo rotulo="Escolaridade">{t.escolaridade}</Campo>
+        <Campo rotulo="Contratação">{TIPO_ROT[t.tipo_contratacao]}</Campo>
+        <Campo rotulo="Já atuou na função">{simNao(t.ja_trabalhou_funcao)}</Campo>
+        <Campo rotulo="Recebe seguro-desemprego">{simNao(t.recebe_seguro_desemprego)}</Campo>
+        <Campo rotulo="Cargos de interesse" largo>{lista(t.cargos_interesse)}</Campo>
+        <Campo rotulo="Regiões" largo>{lista(t.regioes)}</Campo>
+        <Campo rotulo="Experiência (o que a pessoa escreveu)" largo>
+          {t.resumo ? <p className="ficha-texto">{t.resumo}</p> : null}</Campo>
+        <Campo rotulo="Como conheceu a Green House" largo>{t.origem}</Campo>
+        <Campo rotulo="Currículo">
+          {t.tem_curriculo
+            ? <button className="btn-link" onClick={() => verCurriculo(t)}>
+                📎 {t.curriculo_nome || 'abrir currículo'}</button>
+            : 'não enviou'}</Campo>
+        <Campo rotulo="Consentimento LGPD">
+          {t.consentimento_lgpd_em ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}` : null}</Campo>
+        <Campo rotulo="Cadastro">{fmtDataHora(t.criado_em)}</Campo>
+      </div>
+    </div>
   )
 }

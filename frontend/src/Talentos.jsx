@@ -86,6 +86,10 @@ export default function BancoDeTalentos() {
   )
 
   return (
+    // O wrapper é quem centraliza (ver .talento-pagina no styles.css): o
+    // `.cartao` traz `margin: 0 1rem` e, como é definido depois, vencia a
+    // tentativa de centralizar no próprio card.
+    <div className="talento-pagina">
     <main className="cartao talento-form">
       <Link to="/" className="verificar-marca"><img src={logo} alt="Green House" className="logo-img" /></Link>
       <h1>Banco de Talentos</h1>
@@ -219,6 +223,7 @@ export default function BancoDeTalentos() {
       <p className="explica centro" style={{ marginTop: '.8rem' }}>
         <Link to="/">← Voltar ao início</Link></p>
     </main>
+    </div>
   )
 }
 
