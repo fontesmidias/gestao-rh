@@ -152,6 +152,31 @@ export default function JornadasRH({ aoVoltar }) {
 function Confirmar({ jornadas, postos, onConfirmou, setMsg }) {
   const [edit, setEdit] = useState(null)   // {id, campos...}
   const [prop, setProp] = useState(null)
+  // Confiança da proposta por jornada (v2.13). Medido nos dados reais: 86%
+  // saem com confiança ALTA — confirmar uma a uma são 325 cliques para nada.
+  const [resumo, setResumo] = useState(null)
+  const [confirmando, setConfirmando] = useState(false)
+
+  useEffect(() => {
+    api.jornadasAConfirmar().then(setResumo).catch(() => setResumo(null))
+  }, [jornadas.length])
+
+  const confirmarAlta = async () => {
+    const n = resumo?.por_confianca?.alta || 0
+    if (!window.confirm(`Confirmar a estrutura de ${n} jornada(s) de alta confiança?\n\n`
+      + 'Isso preenche só os campos internos (escala, horários). A descrição — a que '
+      + 'vai ao Tirvu — não muda, e você pode reeditar qualquer uma depois.')) return
+    setConfirmando(true); setMsg(null)
+    try {
+      const r = await api.confirmarJornadasLote({ confianca: 'alta' })
+      setMsg({ tipo: 'ok', texto: `${r.confirmadas} confirmada(s). `
+        + `${r.ignoradas} ficaram para revisão individual — são as que o parser não `
+        + 'entendeu por completo.' })
+      onConfirmou()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Falha ao confirmar em lote (${e.detail || e.message}).` })
+    } finally { setConfirmando(false) }
+  }
 
   const abrir = async (j) => {
     const r = await api.propostaJornada(j.id)
@@ -174,7 +199,20 @@ function Confirmar({ jornadas, postos, onConfirmou, setMsg }) {
   }
 
   if (!jornadas.length) return <p className="explica centro">Tudo confirmado. 🎉</p>
+  const alta = resumo?.por_confianca?.alta || 0
   return (
+    <>
+    {alta > 0 && (
+      <div className="aviso-inline">
+        <strong>{alta}</strong> de {resumo.total} têm a estrutura reconhecida por completo
+        (escala e os quatro horários). As outras {resumo.total - alta} o parser leu só em
+        parte e pedem o seu olho.
+        <div style={{ marginTop: '.5rem' }}>
+          <button className="btn-principal btn-mini" onClick={confirmarAlta} disabled={confirmando}>
+            {confirmando ? 'Confirmando…' : `✓ Confirmar as ${alta} de alta confiança`}</button>
+        </div>
+      </div>
+    )}
     <table className="rh-tabela">
       <thead><tr><th>Jornada</th><th>Proposta do parser</th><th></th></tr></thead>
       <tbody>
@@ -215,6 +253,7 @@ function Confirmar({ jornadas, postos, onConfirmou, setMsg }) {
         ))}
       </tbody>
     </table>
+    </>
   )
 }
 
