@@ -286,16 +286,34 @@ def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
     if t is None or not t.curriculo_key:
         raise HTTPException(status_code=404, detail="curriculo_nao_encontrado")
     key, nome, ct = t.curriculo_key, t.curriculo_nome or "curriculo", t.curriculo_tipo
-    registrar(db, "talento_curriculo_visto", ator="rh", ator_detalhe=rh.email,
-              detalhe={"talento": t.nome})
     marcar_em_analise(db, t)   # abrir o currículo é ato de atenção
     db.commit()
     try:
         conteudo = storage.ler(key)
-    except Exception:
+    except Exception as exc:
+        # O log dizia só o nome do talento, então "não abriu" e "não existe no
+        # storage" eram indistinguíveis na auditoria (feedback 2026-07-28).
+        registrar(db, "talento_curriculo_falhou", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"talento": t.nome, "arquivo": nome, "tipo": ct,
+                           "erro": type(exc).__name__})
+        db.commit()
         raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
+
+    # Só é `inline` o que o navegador SABE exibir. Word/octet-stream com
+    # `inline` abria uma aba em branco — o arquivo vinha certo, o navegador é
+    # que não renderiza (feedback 2026-07-28: "anexou um arquivo em word, deu
+    # bom para baixar, mas não abriu"). Para esses, `attachment` baixa.
+    exibivel = (ct or "").startswith("image/") or ct == "application/pdf"
+    registrar(db, "talento_curriculo_visto", ator="rh", ator_detalhe=rh.email,
+              detalhe={"talento": t.nome, "arquivo": nome, "tipo": ct,
+                       "bytes": len(conteudo),
+                       "modo": "inline" if exibivel else "download"})
+    db.commit()
+    disp = "inline" if exibivel else "attachment"
     return Response(content=conteudo, media_type=ct or "application/octet-stream",
-                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
+                    headers={"Content-Disposition": f'{disp}; filename="{nome}"',
+                             # o front lê para avisar que baixou em vez de abrir
+                             "X-Curriculo-Modo": "inline" if exibivel else "download"})
 
 
 class StatusIn(BaseModel):
