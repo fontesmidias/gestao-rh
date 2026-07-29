@@ -98,4 +98,61 @@ r = c.put(f"/api/rh/talentos/{tid4}/status", headers=rh,
 assert r.status_code == 409 and r.json()["detail"] == "talento_ja_convertido", r.text
 assert _anotacoes(tid4) == [], "recusou o status mas gravou anotação assim mesmo"
 
+# ------------------------------------------- resumo das anotações na LINHA
+# (v2.15) O RH via "🗒️ Anotações" em todo mundo e só descobria que não havia
+# nada depois de abrir o modal. A listagem agora diz quantas e qual a última.
+def _da_lista(tid: str) -> dict:
+    return next(x for x in c.get("/api/rh/talentos", headers=rh).json() if x["id"] == tid)
+
+
+tid5 = _novo_talento("Bruna Resumo Linha")
+linha = _da_lista(tid5)
+assert linha["anotacoes"] == 0 and linha["ultima_anotacao"] is None, linha
+
+for txt in ("Primeira conversa por telefone", "Aceita o turno da noite"):
+    assert c.post("/api/rh/crm/anotacoes", headers=rh,
+                  json={"talento_id": tid5, "texto": txt}).status_code in (200, 201)
+
+linha = _da_lista(tid5)
+assert linha["anotacoes"] == 2, linha
+assert "turno da noite" in linha["ultima_anotacao"], (
+    f"a última tem que ser a MAIS RECENTE: {linha['ultima_anotacao']!r}")
+assert linha["ultima_anotacao_autor"], "resumo sem autor"
+assert linha["ultima_anotacao_quando"], "resumo sem data"
+
+# o arquivamento também aparece no resumo (é anotação como qualquer outra)
+c.put(f"/api/rh/talentos/{tid5}/status", headers=rh,
+      json={"status": "arquivado", "motivo": "Posto encerrado"})
+linha = _da_lista(tid5)
+assert linha["anotacoes"] == 3 and "Posto encerrado" in linha["ultima_anotacao"], linha
+
+# sem N+1: o resumo é carregado em LOTE, como as tags.
+# O teste compara duas listagens de tamanhos diferentes: se o número de
+# queries acompanhar o de talentos, é N+1. Um limite absoluto não serviria —
+# mediria o tamanho do banco, que cresce a cada execução, e não o padrão de
+# acesso.
+from sqlalchemy import event  # noqa: E402
+
+from app.core.db import engine  # noqa: E402
+
+
+def _queries_do_listar(**filtros) -> tuple[int, int]:
+    n = {"q": 0}
+    ouvinte = lambda *a, **k: n.__setitem__("q", n["q"] + 1)  # noqa: E731
+    event.listen(engine, "before_cursor_execute", ouvinte)
+    try:
+        linhas = c.get("/api/rh/talentos", headers=rh, params=filtros).json()
+    finally:
+        event.remove(engine, "before_cursor_execute", ouvinte)
+    return len(linhas), n["q"]
+
+
+_n_todos, _q_todos = _queries_do_listar()
+_n_um, _q_um = _queries_do_listar(busca="Bruna Resumo Linha")
+assert _n_todos > _n_um, f"a busca deveria filtrar ({_n_todos} x {_n_um})"
+# a diferença de queries não pode acompanhar a diferença de talentos
+assert _q_todos - _q_um <= 3, (
+    f"{_q_todos} queries para {_n_todos} talentos x {_q_um} para {_n_um} — "
+    f"o custo cresce com o volume: o resumo de anotações voltou a ser N+1")
+
 print("test_talento_arquivar: OK")

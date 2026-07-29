@@ -700,6 +700,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Resumo do CRM na LINHA do dash + o N+1 que ele revelou** (v2.15): o dash
+  de Talentos mostrava "🗒️ Anotações" em todo mundo e o RH só descobria que
+  não havia nada depois de abrir o modal; o 📎 do currículo era enfeite.
+  Agora `_dump` traz `anotacoes` (quantas), `ultima_anotacao`/`_autor`/
+  `_quando`, carregados em LOTE por `crm.resumo_anotacoes_por_talento`
+  (mesma mecânica de `tags_por_talento`, unindo talento+candidato). Na linha,
+  currículo e anotações viram atalhos clicáveis logo abaixo do nome, com a
+  última anotação no `title`. **O teste de N+1 que escrevi para isso expôs um
+  N+1 ANTIGO**: `testes = {t.id: _resumo_teste_talento(db, t.id) ...}` fazia
+  até 3 consultas por talento — com o comentário "1 consulta, sem N+1" logo
+  acima. Virou `_resumo_teste_por_talento` (3 consultas no total): a listagem
+  caiu de **43 consultas para 39 talentos → 5 consultas**, constante.
+  Armadilha do teste: medir N+1 com LIMITE ABSOLUTO não funciona (mede o
+  tamanho do banco, que cresce a cada execução) — compare DUAS listagens de
+  tamanhos diferentes e exija que a diferença de consultas não acompanhe a de
+  registros.
 - **Arquivar talento ESCREVE no mini-CRM, não ganha campo próprio** (v2.14,
   `talentos.py::mudar_status`): o RH pediu "observação e arquivo ao arquivar,
   com responsável e quando, e poder desfazer" — e a `Anotacao` do CRM já tinha

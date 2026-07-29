@@ -126,9 +126,23 @@ export default function TalentosRH({ aoAbrir }) {
   const chip = (rot, cor) => <span className="chip" style={{ '--chip-cor': cor }}>{rot}</span>
 
   const colunas = [
+    // Currículo e anotações ficam LOGO ABAIXO DO NOME (feedback 2026-07-28):
+    // o RH precisava abrir o modal para descobrir que não havia anotação, e o
+    // 📎 era só um enfeite — agora abre o currículo direto daqui.
     { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
-      render: (t) => (<><strong>{t.nome}</strong><br /><small>{t.email || '—'}</small>
-        {t.tem_curriculo && <span title="Enviou currículo"> 📎</span>}</>) },
+      render: (t) => (<>
+        <strong>{t.nome}</strong><br /><small>{t.email || '—'}</small>
+        <div className="linha-atalhos">
+          {t.tem_curriculo && (
+            <button className="btn-link" onClick={() => verCurriculo(t)}
+                    title={t.curriculo_nome || 'abrir currículo'}>📎 currículo</button>)}
+          {t.anotacoes > 0 && (
+            <button className="btn-link" onClick={() => setAnotando(t)}
+                    title={`${t.ultima_anotacao_autor || ''} — ${t.ultima_anotacao || ''}`
+                      + (t.anotacoes > 1 ? `\n(+${t.anotacoes - 1} anterior(es))` : '')}>
+              🗒️ {t.anotacoes} anotaç{t.anotacoes > 1 ? 'ões' : 'ão'}</button>)}
+        </div>
+      </>) },
     // Telefone em coluna própria — sem ele o RH não tem como contatar o talento
     // (antes só aparecia como fallback do e-mail no Nome, então sumia p/ quem
     // tinha e-mail). O dump já traz `telefone`.
