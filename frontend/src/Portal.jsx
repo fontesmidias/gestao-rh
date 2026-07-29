@@ -53,8 +53,15 @@ export default function Portal() {
       await api.iniciar(cpf)
       setEtapa('codigo')
     } catch (err) {
-      setErro(err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
-        : 'Não foi possível iniciar. Tente novamente em instantes.')
+      // NÃO avança para a tela do código quando o envio falhou (feedback
+      // 2026-07-29): o 429 caía no genérico e a tela mudava de etapa assim
+      // mesmo, então a pessoa colava o código do e-mail ANTERIOR.
+      setErro(err.status === 429
+        ? 'Você pediu o código várias vezes seguidas. Por segurança, aguarde '
+          + '15 minutos e tente de novo — ou use o último código que chegou, '
+          + 'se ainda estiver dentro dos 15 minutos.'
+        : err.detail === 'cpf_invalido' ? 'CPF inválido. Confira os números.'
+          : 'Não conseguimos enviar o código agora. Tente novamente em instantes.')
     } finally { setCarregando(false) }
   }
 
@@ -64,9 +71,29 @@ export default function Portal() {
       const r = await api.confirmar(cpf, codigo, tokenUrl || undefined)
       setToken(r.token); setEtapa('dentro')
     } catch (err) {
-      setErro(err.detail === 'codigo_invalido'
-        ? 'Código incorreto ou expirado. Confira no seu e-mail (inclusive o spam).'
-        : 'Não foi possível confirmar. Tente novamente.')
+      setErro(err.status === 429
+        ? 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.'
+        : err.detail === 'codigo_invalido'
+          ? 'Esse código não vale mais. Use o código do e-mail MAIS RECENTE — '
+            + 'ele vale por 15 minutos. Se já passou disso, toque em "Reenviar '
+            + 'o código" abaixo.'
+          : 'Não foi possível confirmar. Tente novamente.')
+    } finally { setCarregando(false) }
+  }
+
+  // Reenviar sem voltar à tela do CPF (a pessoa já digitou).
+  const reenviar = async () => {
+    setErro(null); setCarregando(true)
+    try {
+      await api.iniciar(cpf)
+      setCodigo('')
+      setErro('Enviamos um código novo. Use o do e-mail mais recente '
+            + '(confira também o spam).')
+    } catch (err) {
+      setErro(err.status === 429
+        ? 'Você já pediu o código várias vezes. Aguarde 15 minutos — ou use o '
+          + 'último código que chegou, se ainda estiver válido.'
+        : 'Não conseguimos reenviar agora. Tente em instantes.')
     } finally { setCarregando(false) }
   }
 
@@ -121,6 +148,9 @@ export default function Portal() {
           <button className="btn-principal" disabled={carregando || codigo.length < 6}>
             {carregando ? 'Confirmando…' : 'Entrar'}</button>
           {/* KBA precisa do CPF digitado; quem veio pelo link não digitou. */}
+          {cpf && (
+            <button type="button" className="btn-link" disabled={carregando}
+                    onClick={reenviar}>🔄 Reenviar o código</button>)}
           <button type="button" className="btn-link"
                   onClick={() => { setErro(null); setEtapa(cpf ? 'kba' : 'cpf') }}>
             Não recebi o código / não tenho e-mail cadastrado</button>

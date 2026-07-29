@@ -95,12 +95,26 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
     """De quem é a tentativa por trás do `?t=` — sem autenticar (ver a gêmea em
     ``creche_publico.retomar``, mesma regra: o link identifica, o código
     autentica). Devolve só primeiro nome e 4 últimos dígitos do CPF."""
+    agora = datetime.now(timezone.utc)
     ac = db.scalar(select(AcessoPortal).where(AcessoPortal.token_hash == _hash(token)))
-    if ac is None or ac.expira_em < datetime.now(timezone.utc):
+    if ac is None or ac.expira_em < agora:
         raise HTTPException(status_code=404, detail="link_expirado")
     col = db.get(Candidato, ac.candidato_id)
     if col is None:
         raise HTTPException(status_code=404, detail="link_expirado")
+
+    # O link do e-mail entra DIRETO enquanto `link_expira_em` valer (v2.17):
+    # quem o recebeu na própria caixa já provou posse do e-mail, que é o mesmo
+    # que o código de 6 dígitos prova. Uso único.
+    if (ac.confirmado_em is None and ac.link_expira_em is not None
+            and ac.link_expira_em >= agora):
+        ac.confirmado_em = agora
+        ac.expira_em = agora + timedelta(hours=SESSAO_TTL_H)
+        ac.link_expira_em = agora
+        registrar(db, "portal_entrou_pelo_link", ator="colaborador",
+                  candidato_id=col.id)
+        db.commit()
+
     nome = (col.nome_completo or "").split()
     return {
         "primeiro_nome": nome[0].title() if nome else "",
@@ -131,7 +145,10 @@ def _gerar_e_enviar_codigo(db: Session, col: Candidato, email: str,
         token_hash=_hash(token),
         codigo_hash=_hash(codigo),
         codigo_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN),
-        expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H)))
+        expira_em=datetime.now(timezone.utc) + timedelta(hours=SESSAO_TTL_H),
+        # o LINK do e-mail entra direto enquanto valer (v2.17) — ver
+        # `creche_publico._gerar_e_enviar_codigo` para o porquê
+        link_expira_em=datetime.now(timezone.utc) + timedelta(minutes=CODIGO_TTL_MIN)))
     registrar(db, "portal_codigo_enviado", ator="colaborador", candidato_id=col.id)
     db.commit()
     url = f"{base_url or get_settings().base_url}/meu?t={token}"
@@ -195,13 +212,17 @@ def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
         col = _colaborador_por_cpf(db, cpf)
     if col is None:
         raise HTTPException(status_code=422, detail="codigo_invalido")
+    # Aceita também o acesso já aberto pelo LINK do mesmo e-mail (v2.17):
+    # antes exigia confirmado_em IS NULL e quem clicava no link e depois
+    # digitava o código levava "código inválido" com o código certo na mão.
+    _agora = datetime.now(timezone.utc)
     ac = db.scalars(
         select(AcessoPortal)
         .where(AcessoPortal.candidato_id == col.id,
-               AcessoPortal.confirmado_em.is_(None))
+               AcessoPortal.codigo_hash.isnot(None),
+               AcessoPortal.codigo_expira_em >= _agora)
         .order_by(AcessoPortal.criado_em.desc())).first()
-    if (ac is None or ac.codigo_hash != _hash(payload.codigo.strip())
-            or ac.codigo_expira_em < datetime.now(timezone.utc)):
+    if ac is None or ac.codigo_hash != _hash(payload.codigo.strip()):
         raise HTTPException(status_code=422, detail="codigo_invalido")
 
     token = secrets.token_urlsafe(32)

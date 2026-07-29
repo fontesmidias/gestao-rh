@@ -124,4 +124,8 @@ class AcessoCreche(Base):
     codigo_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Até quando o LINK do e-mail entra sozinho, sem digitar o código (v2.17).
+    # Vale o mesmo que o código (15 min); a SESSÃO que ele abre dura as 6h de
+    # `expira_em`. Nulo = link que não entra direto (comportamento antigo).
+    link_expira_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

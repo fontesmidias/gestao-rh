@@ -409,15 +409,16 @@ CATALOGO: tuple[ModeloEmail, ...] = (
              "Use o código abaixo para confirmar sua identidade no levantamento "
              "do Reembolso-Creche (IN SEGES/MGI nº 147/2026):\n\n"
              "{{codigo}}\n\n"
-             "Anote o código e toque no botão para voltar e digitá-lo. Ele vale "
-             "por {{ttl}} minutos.\n\n"
+             "Ou toque no botão abaixo: ele já abre o seu levantamento, sem "
+             "precisar digitar nada. O código e o botão valem por {{ttl}} "
+             "minutos.\n\n"
              "Verifique também a sua caixa de spam — a mensagem pode ter ido "
              "para lá.",
        variaveis={"primeiro_nome": "primeiro nome", "codigo": "código de 6 dígitos",
                   "ttl": "minutos de validade",
-                  "link": "link para voltar e digitar o código"},
+                  "link": "link que abre o levantamento direto"},
        obrigatorias=("codigo",),
-       botao_texto="Voltar e digitar o código", botao_url_var="link",
+       botao_texto="Entrar no meu levantamento", botao_url_var="link",
        exemplo={"primeiro_nome": "Maria", "codigo": "123456", "ttl": "15",
                 "link": "https://exemplo/creche?t=abc"}),
 
@@ -428,14 +429,14 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        corpo="Olá, {{primeiro_nome}}!\n\n"
              "Use o código abaixo para entrar no seu portal:\n\n"
              "{{codigo}}\n\n"
-             "Anote o código e toque no botão para voltar e digitá-lo. Ele vale "
-             "por {{ttl}} minutos.\n\n"
+             "Ou toque no botão abaixo: ele já abre o seu portal, sem precisar "
+             "digitar nada. O código e o botão valem por {{ttl}} minutos.\n\n"
              "Se não foi você que pediu, ignore este e-mail.",
        variaveis={"primeiro_nome": "primeiro nome", "codigo": "código de 6 dígitos",
                   "ttl": "minutos de validade",
-                  "link": "link para voltar e digitar o código"},
+                  "link": "link que abre o portal direto"},
        obrigatorias=("codigo",),
-       botao_texto="Voltar e digitar o código", botao_url_var="link",
+       botao_texto="Entrar no meu portal", botao_url_var="link",
        exemplo={"primeiro_nome": "Maria", "codigo": "123456", "ttl": "15",
                 "link": "https://exemplo/meu?t=abc"}),
 
