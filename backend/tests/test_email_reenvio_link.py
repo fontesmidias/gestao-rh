@@ -84,19 +84,40 @@ for _rota in ("rejeitar", "rejeitar_lote"):
         f"{_rota}() não emite link mágico. A pessoa recebe um e-mail mandando "
         f"reenviar um documento e não tem como voltar ao sistema."
     )
-    assert "botao_url" in _src, (
-        f"{_rota}() não passa botao_url ao html_moderno — sem botão, o link "
-        f"não aparece de forma clicável no e-mail."
-    )
-    # A frase antiga é o sintoma: mandava acessar um link que não vinha junto.
-    assert "mesmo link da sua admissão e" not in _src, (
-        f"{_rota}() ainda manda 'acesse o mesmo link da sua admissão' como "
-        f"instrução principal — o link agora vai no próprio e-mail."
-    )
     # request é necessário para base_url_publica (o link precisa do host certo).
     assert "request" in inspect.signature(getattr(revisao, _rota)).parameters, (
         f"{_rota}() precisa receber `request` para montar a URL pública."
     )
+
+# --------------------------------------------- o e-mail RENDERIZADO tem o link
+# Estes asserts eram sobre a IMPLEMENTAÇÃO (procuravam "botao_url" e "if link"
+# no código-fonte) e quebraram na v2.06, quando os textos viraram template
+# editável — uma mudança legítima. Agora testam a GARANTIA: renderiza o e-mail
+# de verdade e confere que o link chega ao destinatário.
+from app.services.email_templates import renderizar  # noqa: E402
+
+
+class _DBVazio:
+    """Sem template salvo: cai no padrão do catálogo (o fallback)."""
+
+    def get(self, *_a, **_kw):
+        return None
+
+
+for _chave, _ctx in (
+    ("documento_rejeitado",
+     {"nome": "Maria Souza", "primeiro_nome": "Maria", "motivo": "ilegível",
+      "link": "https://exemplo/c/tok123"}),
+    ("documentos_rejeitados_lote",
+     {"nome": "Maria Souza", "motivo": "vencido", "lista": "- rg",
+      "link": "https://exemplo/c/tok123"}),
+):
+    _a, _txt, _html = renderizar(_DBVazio(), _chave, _ctx)
+    assert "https://exemplo/c/tok123" in _html, (
+        f"{_chave}: o link não chegou ao HTML — a pessoa recebe um e-mail "
+        f"mandando reenviar e não tem como voltar ao sistema."
+    )
+    assert "<a href" in _html, f"{_chave}: o botão clicável sumiu do e-mail."
 
 # ------------------------------------------------- candidato sem e-mail (None)
 # enviar_email() retorna cedo sem destinatário, mas o corpo é montado ANTES —
@@ -109,12 +130,19 @@ assert "<a href" not in _html_sem_link, (
     "html_moderno gerou um <a> sem destino válido."
 )
 
-# O texto puro das duas rotas tem ramo alternativo para link ausente.
-for _rota in ("rejeitar", "rejeitar_lote"):
-    _src = _fonte(revisao, _rota)
-    assert "if link" in _src, (
-        f"{_rota}() monta o corpo em texto puro sem tratar link=None — "
-        f"candidato sem e-mail geraria 'Acesse ...: None'."
+# link ausente (candidato sem e-mail) não pode virar a string "None" no corpo
+for _chave, _ctx in (
+    ("documento_rejeitado", {"nome": "Maria", "primeiro_nome": "Maria",
+                             "motivo": "ilegível", "link": None}),
+    ("documentos_rejeitados_lote", {"nome": "Maria", "motivo": "vencido",
+                                    "lista": "- rg", "link": None}),
+):
+    _a, _txt, _html = renderizar(_DBVazio(), _chave, _ctx)
+    assert "None" not in _txt and "None" not in _html, (
+        f"{_chave}: link ausente virou a string 'None' no corpo do e-mail."
+    )
+    assert "<a href" not in _html, (
+        f"{_chave}: gerou botão sem destino quando não há link."
     )
 
 print("test_email_reenvio_link: OK")

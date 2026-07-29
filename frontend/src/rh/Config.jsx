@@ -5,6 +5,7 @@ import InputSenha from '../InputSenha.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
 import { comAmpulheta } from '../Carregando.jsx'
 import Importacoes from './Importacoes.jsx'
+import EmailsConfig from './EmailsConfig.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -320,6 +321,7 @@ const SUBMENUS = [
   ['importacoes', '📥 Importações'],
   ['tags', '🏷️ Tags'],
   ['integracoes', '🔌 E-mail e integrações'],
+  ['emails', '✉️ Textos dos e-mails'],
   ['sistema', '🛠️ Sistema'],
 ]
 
@@ -357,6 +359,7 @@ export default function Config({ aoVoltar }) {
         <div className="rh-grid-2"><AvisosInternos /></div>
         <Teams />
       </>}
+      {aba === 'emails' && <EmailsConfig />}
       {aba === 'sistema' && <><Lixeira /><ErrosRecentes /><Auditoria /></>}
     </main>
   )

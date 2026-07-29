@@ -1496,3 +1496,36 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   .areia-cima, .areia-baixo { transform: scaleY(.5); }
 }
 @keyframes pulsar-suave { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Textos dos e-mails (v2.06): lista de todos os e-mails do sistema, com edição
+   inline na própria linha — nunca formulário no topo (sistema de design). */
+.rh-grupo-titulo { font-size: var(--fs-apoio); text-transform: uppercase;
+  letter-spacing: .05em; color: var(--cinza-txt); margin: var(--esp-6) 0 var(--esp-2); }
+.email-item { border: 1px solid var(--borda-suave); border-radius: var(--raio-input);
+  margin-bottom: var(--esp-2); overflow: hidden; }
+.email-cabeca { display: flex; width: 100%; gap: var(--esp-3); align-items: center;
+  justify-content: space-between; text-align: left; padding: var(--esp-3);
+  background: transparent; border: 0; cursor: pointer; color: inherit; }
+.email-cabeca:hover { background: var(--verde-suave); }
+.email-cabeca small { display: block; margin: 0; }
+.chip-mini { display: inline-block; margin-left: var(--esp-2); padding: 0 var(--esp-2);
+  border-radius: 999px; background: var(--verde-suave); color: var(--verde-escuro);
+  font-size: .72rem; font-weight: 700; vertical-align: middle; }
+.chip-mini.alerta-mini { background: #fff2d8; color: #9a6a12; }
+.email-editor { padding: 0 var(--esp-3) var(--esp-3); border-top: 1px solid var(--borda-suave); }
+.email-vars { background: var(--verde-suave); border-radius: var(--raio-input);
+  padding: var(--esp-3); margin: var(--esp-3) 0; font-size: var(--fs-apoio); }
+.chip-var { display: inline-block; margin: var(--esp-1) var(--esp-1) 0 0;
+  padding: var(--esp-1) var(--esp-2); border-radius: var(--raio-input);
+  background: #fff; border: 1px solid var(--borda-suave);
+  font-family: Consolas, monospace; font-size: .8rem; }
+.chip-var.obrigatoria { border-color: var(--verde-vivo); font-weight: 700; }
+.email-acoes { display: flex; flex-wrap: wrap; gap: var(--esp-2);
+  align-items: center; margin-top: var(--esp-3); }
+.email-previa { margin-top: var(--esp-4); }
+.email-iframe { width: 100%; height: 420px; border: 1px solid var(--borda-suave);
+  border-radius: var(--raio-input); background: #fff; }
+.email-historico { margin-top: var(--esp-4); border-top: 1px solid var(--borda-suave); }
+.email-versao { display: flex; gap: var(--esp-3); align-items: center;
+  justify-content: space-between; padding: var(--esp-2) 0;
+  border-bottom: 1px solid var(--borda-suave); }

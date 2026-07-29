@@ -473,6 +473,18 @@ export const rh = {
   salvarTeams: (dados) =>
     req('/rh/config/teams', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarTeams: () => req('/rh/config/teams/testar', { method: 'POST', headers: authRH() }),
+  // Textos dos e-mails do sistema (v2.06)
+  listarEmails: () => req('/rh/config/emails', { headers: authRH() }),
+  versoesEmail: (chave) => req(`/rh/config/emails/${chave}/versoes`, { headers: authRH() }),
+  previewEmail: (chave, dados) =>
+    req(`/rh/config/emails/${chave}/preview`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  salvarEmail: (chave, dados) =>
+    req(`/rh/config/emails/${chave}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  restaurarEmail: (chave, versao) =>
+    req(`/rh/config/emails/${chave}/restaurar${versao ? `?versao=${versao}` : ''}`,
+        { method: 'POST', headers: authRH() }),
   editarFicha: (id, secao, dados, motivo) =>
     req(`/rh/candidatos/${id}/ficha/${secao}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),
