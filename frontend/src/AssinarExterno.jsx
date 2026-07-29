@@ -53,9 +53,14 @@ export default function AssinarExterno() {
       e.preventDefault(); setErro(null); setOcupado(true)
       try { await api.confirmar(token, codigo); await recarregar() }
       catch (er) {
-        setErro(er.detail === 'codigo_incorreto' ? 'Código incorreto.'
-          : er.detail === 'codigo_expirado' ? 'Código expirado — peça um novo.'
-          : 'Não foi possível confirmar.')
+        setErro(er.status === 429 || er.detail === 'tentativas_excedidas'
+          ? 'Muitas tentativas seguidas. Aguarde alguns minutos e peça um código novo.'
+          : er.detail === 'codigo_incorreto'
+            ? 'Código incorreto. Use o do e-mail MAIS RECENTE — se pediu mais de uma '
+              + 'vez, só o último vale.'
+            : er.detail === 'codigo_expirado'
+              ? 'Código expirado. Toque em "Enviar código ao meu e-mail" para receber outro.'
+              : 'Não foi possível confirmar. Tente novamente.')
       } finally { setOcupado(false) }
     }}>
       <div className="teste-cabecalho">Assinatura de documento — {info?.papel}</div>
@@ -64,7 +69,23 @@ export default function AssinarExterno() {
           assinatura. Para conferir e assinar, confirme sua identidade com o código enviado
           ao seu e-mail.</p>
         <button type="button" className="btn-secundario btn-mini" disabled={ocupado}
-                onClick={async () => { setErro(null); try { await api.solicitarCodigo(token) } catch {} }}>
+                onClick={async () => {
+                  // Era `catch {}` mudo: a falha não aparecia em lugar nenhum e
+                  // a pessoa ficava esperando um e-mail que nunca saiu
+                  // (feedback 2026-07-29).
+                  setErro(null)
+                  try {
+                    await api.solicitarCodigo(token)
+                    setErro('Código enviado. Confira o e-mail (inclusive o spam).')
+                  } catch (er) {
+                    setErro(er.status === 429
+                      ? 'Você pediu o código várias vezes seguidas. Aguarde 15 minutos '
+                        + '— ou use o último código que chegou, se ainda estiver válido.'
+                      : er.detail === 'ja_assinou' ? 'Este documento já foi assinado por você.'
+                        : er.detail === 'fora_da_vez' ? 'Ainda não é a sua vez de assinar.'
+                          : 'Não foi possível enviar o código agora. Tente em instantes.')
+                  }
+                }}>
           📧 Enviar código ao meu e-mail</button>
         <label className="campo" style={{ marginTop: '.6rem' }}><span className="rotulo">Código</span>
           <input inputMode="numeric" maxLength={6} placeholder="000000" value={codigo}

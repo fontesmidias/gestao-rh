@@ -732,6 +732,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   "as 3 criadas deveriam estar na fila: 0", que não diz nada sobre a causa.
   Agora usa sufixo `uuid` por execução. Ao escrever teste que grava em tabela
   com campo único, sempre gerar o valor por execução.
+- **Código por e-mail: a mensagem tem que dizer o que RESOLVE** (v2.17/v2.18,
+  incidente de campo 2026-07-29 — "foi eu mesmo quem copiou e colou o código,
+  impossível ter erro"). O código estava certo. A cota é **5 pedidos por
+  CPF/token a cada 15 min**; estourada, o e-mail não sai — e o front dizia
+  outra coisa. Três defeitos de mensagem, todos corrigidos:
+  (1) `CrecheLink`/`Portal` AVANÇAVAM de etapa mesmo com o envio falhando (o
+  429 caía no `catch` genérico), então a pessoa colava o código do e-mail
+  anterior; (2) `Assinatura.jsx` tinha `catch` cego dizendo **"verifique sua
+  conexão"** para erro de cota — pior que inútil, porque convida a tentar de
+  novo na hora e reabastecer a cota; (3) `AssinarExterno` tinha `catch {}`
+  MUDO no pedido de código. Regras que ficam: **nunca avançar de etapa quando
+  o envio falha**; 429 tem frase própria ("aguarde 15 min OU use o último
+  código que chegou"); e "código incorreto" deve dizer *use o do e-mail MAIS
+  RECENTE* — reconferir um código certo é o que a pessoa faz quando a
+  mensagem não explica. Diferença entre os fluxos, medida em
+  `tests/test_codigo_cota.py`: na ASSINATURA e no TESTE o código é
+  sobrescrito no mesmo registro, então **o último enviado continua valendo
+  depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
+  registro era outro, e por isso o defeito lá era grave.
+- **Link de e-mail ENTRA DIRETO no creche e no portal** (v2.17, decisão do
+  Bruno que reverte a regra da v2.03): código e link chegam na MESMA caixa,
+  logo provam o MESMO fator — exigir os dois era atrito duplicado, não
+  segurança em camadas. `link_expira_em` (migration a8b9c0d1e2f3) vale o mesmo
+  que o código (15 min) e é de USO ÚNICO; a sessão que ele abre mantém as 6h
+  de `expira_em`. Nulo = acesso antigo, que segue exigindo código. O
+  `confirmar` deixou de exigir `confirmado_em IS NULL` — quem entrava pelo
+  link e ainda assim digitava o código levava "código inválido" com o código
+  certo na mão.
 - **Fila de decisão precisa ser MEDIDA antes de ganhar ação em massa** (v2.12,
   `jornada_duplicidade.py`): o RH pediu ação em massa nas 325 duplicidades de
   jornada ("um clique cada"). Medindo contra os dados reais (269 jornadas da
