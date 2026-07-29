@@ -11,6 +11,7 @@ import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
 import JornadasRH from './JornadasRH.jsx'
+import UniformesRH from './UniformesRH.jsx'
 import DesenvolvimentoRH from './DesenvolvimentoRH.jsx'
 import DesempenhoRH from './DesempenhoRH.jsx'
 import AvaliacoesRH from './AvaliacoesRH.jsx'
@@ -238,6 +239,7 @@ const GRUPOS = [
     ['colaboradores', '👥', 'Colaboradores'],
     ['postos', '🏢', 'Postos'],
     ['jornadas', '🕒', 'Jornadas'],
+    ['uniformes', '👕', 'Uniformes'],
   ]],
   ['Documentos', [
     ['modelos', '📝', 'Modelos'],
@@ -399,6 +401,8 @@ function PainelConteudo({ aoSair }) {
         )}
         {pagina === 'postos' && <PostosRH />}
         {pagina === 'jornadas' && <JornadasRH aoVoltar={() => navegar('inicio')} />}
+        {pagina === 'uniformes' && <UniformesRH aoVoltar={() => navegar('inicio')}
+                                                abrirPessoa={abrirPessoa} />}
         {pagina === 'creche' && <Creche aoVoltar={() => navegar('inicio')} />}
         {pagina === 'desenvolvimento' && <DesenvolvimentoRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'desempenho' && <DesempenhoRH aoVoltar={() => navegar('inicio')} />}

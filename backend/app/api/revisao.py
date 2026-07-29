@@ -144,6 +144,52 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
                  f'attachment; filename="importacao-tirvu-{nome}.xlsx"'})
 
 
+@router.get("/rh/uniformes")
+def uniformes(pendentes: bool = False, db: Session = Depends(get_db)) -> dict:
+    """Tamanhos de uniforme de quem está em admissão — a lista que o operacional
+    usa para comprar (feedback 2026-07-28).
+
+    O Bruno pediu "um e-mail para o Gabriel, o Vitor e o operacional com todas
+    as informações de uniforme" e, ao ser perguntado, preferiu TELA + e-mail só
+    de aviso: nome, posto e tamanhos numa tabela por e-mail é ficha de pessoal
+    circulando em caixa que ninguém controla, e a cada 20 admissões seriam 20
+    e-mails que o time para de ler. O aviso vira empurrão ("há N pendentes"),
+    o dado fica aqui.
+
+    `pendentes=true` traz só quem ainda não informou algum tamanho — é a fila
+    de cobrança do RH.
+    """
+    from app.models.candidato import PostoServico
+    from app.models.ficha import DadosProfissionaisBancarios
+
+    candidatos = db.scalars(
+        select(Candidato).where(Candidato.situacao.is_(None))
+        .order_by(Candidato.nome_completo)).all()
+    dados = {d.candidato_id: d for d in db.scalars(
+        select(DadosProfissionaisBancarios)).all()}
+    postos = {p.id: p for p in db.scalars(select(PostoServico)).all()}
+
+    linhas, faltando = [], 0
+    for c in candidatos:
+        d = dados.get(c.id)
+        tam = {"calca": (d.tamanho_calca if d else None) or None,
+               "camisa": (d.tamanho_camisa if d else None) or None,
+               "calcado": (d.tamanho_calcado if d else None) or None}
+        completo = all(tam.values())
+        if not completo:
+            faltando += 1
+        if pendentes and completo:
+            continue
+        posto = postos.get(c.posto_servico_id)
+        linhas.append({
+            "candidato_id": c.id, "nome": c.nome_completo,
+            "cargo": c.cargo_funcao, "posto": posto.nome if posto else None,
+            "status": c.status.value, "data_admissao": c.data_admissao,
+            **tam, "completo": completo,
+        })
+    return {"linhas": linhas, "total": len(candidatos), "faltando": faltando}
+
+
 @router.get("/rh/metricas")
 def metricas(db: Session = Depends(get_db)) -> dict:
     """Números do painel de ADMISSÕES: só quem está em admissão (`situacao IS

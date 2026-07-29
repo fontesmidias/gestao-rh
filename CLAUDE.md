@@ -700,6 +700,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   aceita N arquivos** → 1 PDF (`inserir_arquivo_rh` reusa `combinar_pdfs` +
   `_gravar_partes_no_slot`). **Import Tirvu não zera matrícula vazia**
   (`colaboradores.py`: guarda `if k in ("nome_completo","matricula") and not val`).
+- **Uniformes é TELA, o e-mail é só empurrão** (v2.07, `revisao.py::uniformes`,
+  `UniformesRH.jsx`, menu Admissão → 👕 Uniformes): o Bruno pediu "um e-mail
+  para o Gabriel, o Vitor e o operacional com todas as informações de
+  uniforme" e, perguntado, escolheu o contrário do pedido literal — nome,
+  posto e medidas numa tabela por e-mail é ficha de pessoal circulando em
+  caixa que ninguém controla, e a cada 20 admissões seriam 20 e-mails que o
+  time para de ler. A lista (com export CSV do DashPlanilha) fica na tela; o
+  aviso `uniforme_pendente` da matriz diz só "fulano informou os tamanhos,
+  veja em /rh/uniformes". O aviso dispara no `concluir_envio`, **nunca no
+  autosave da ficha** — o wizard salva a cada 900ms.
 - **Textos de e-mail editáveis pelo RH** (v2.06, `services/email_templates.py`,
   `models/email_template.py`, Config → ✉️ Textos dos e-mails): o CATÁLOGO em
   `email_templates.py` é a fonte da verdade — quais e-mails existem, quais

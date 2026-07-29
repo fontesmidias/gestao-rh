@@ -357,6 +357,21 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
         f"O candidato {candidato.nome_completo} concluiu o envio da documentação.\n"
         f"Acesse o painel do RH para revisar: {base_url_publica(request)}/rh\n",
     )
+    # Empurrão para quem compra uniforme (feedback 2026-07-28). Sai daqui, e não
+    # do autosave da ficha, porque o wizard salva a cada 900ms — avisar a cada
+    # tecla digitada faria o operacional parar de ler. O aviso NÃO leva os
+    # tamanhos: a lista com nome, posto e medidas fica na tela Uniformes, para
+    # não circular ficha de pessoal por e-mail (decisão do Bruno).
+    from app.models.ficha import DadosProfissionaisBancarios
+    _u = db.get(DadosProfissionaisBancarios, candidato.id)
+    if _u and (_u.tamanho_calca or _u.tamanho_camisa or _u.tamanho_calcado):
+        avisar(
+            db, "uniforme_pendente",
+            f"👕 Uniforme: {candidato.nome_completo} informou os tamanhos",
+            f"{candidato.nome_completo} concluiu a admissão e informou os "
+            f"tamanhos de uniforme.\n"
+            f"Veja a lista completa em {base_url_publica(request)}/rh/uniformes\n",
+        )
     return {"status": candidato.status}
 
 

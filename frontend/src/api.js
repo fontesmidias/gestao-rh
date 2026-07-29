@@ -336,6 +336,8 @@ export const rh = {
     return req(`/rh/candidatos-exportar${q ? `?${q}` : ''}`, { headers: authRH() })
   },
   metricas: () => req('/rh/metricas', { headers: authRH() }),
+  uniformes: (pendentes) =>
+    req(`/rh/uniformes${pendentes ? '?pendentes=true' : ''}`, { headers: authRH() }),
   colaboradores: (filtros = {}) => {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/colaboradores${q ? `?${q}` : ''}`, { headers: authRH() })
