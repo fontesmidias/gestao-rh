@@ -13,7 +13,6 @@ from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import SlotDocumento, StatusSlot, TipoDocumento
 from app.services import storage
 from app.services.auditoria import registrar
-from app.services.email import enviar_email
 from app.services.magic_link import resolver_token
 from app.services.normalizacao import (ArquivoInvalido, combinar_pdfs,
                                        normalizar_para_pdf,

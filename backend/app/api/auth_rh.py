@@ -11,7 +11,7 @@ from app.core.db import get_db
 from app.core.security import (criar_token_reset, criar_token_sessao, hash_senha,
                                validar_token_reset, validar_token_sessao, verificar_senha)
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.limite import exigir
 from app.models.usuario_rh import UsuarioRH
 
@@ -66,29 +66,10 @@ def esqueci_senha(payload: EsqueciSenhaIn, request: Request,
     token = criar_token_reset(str(usuario.id), usuario.senha_hash)
     link = f"{base_url_publica(request)}/rh?redefinir={token}"
     try:
-        enviar_email(
-            usuario.email,
-            "🔐 Green House — redefinição de senha do painel",
-            f"Olá, {usuario.nome.split()[0].title()}!\n\n"
-            "Recebemos um pedido para redefinir a sua senha do painel do RH.\n"
-            f"Acesse o link abaixo em ATÉ 30 MINUTOS para criar uma nova senha:\n{link}\n\n"
-            "Se não foi você, ignore esta mensagem — sua senha continua a mesma.\n",
-            html_moderno(
-                "Redefinição de senha",
-                [
-                    f"Olá, <strong>{usuario.nome.split()[0].title()}</strong>!",
-                    "Recebemos um pedido para redefinir a sua senha do painel do RH "
-                    "do Portal de Admissão.",
-                    f"<a href='{link}' style='display:inline-block;padding:12px 22px;"
-                    "background:#2f7d3a;color:#fff;border-radius:10px;text-decoration:none;"
-                    "font-weight:600'>Criar nova senha</a>",
-                    "O link vale por <strong>30 minutos</strong> e só pode ser usado "
-                    "uma vez. Se não foi você quem pediu, ignore esta mensagem — "
-                    "sua senha continua a mesma.",
-                ],
-            ),
-            levantar_erro=True,
-        )
+        enviar_modelo(db, "rh_redefinir_senha", usuario.email, {
+        "primeiro_nome": (usuario.nome or "").split()[0].title(),
+        "link": link, "ttl": 30,
+    })
     except Exception:
         # Não propaga o erro para não revelar se o e-mail existe; fica na auditoria.
         registrar(db, "reset_senha_email_falhou", ator="sistema", ator_detalhe=usuario.email)

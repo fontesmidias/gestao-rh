@@ -135,30 +135,16 @@ def _gerar_e_enviar_codigo(db: Session, col: Candidato, email: str,
     registrar(db, "portal_codigo_enviado", ator="colaborador", candidato_id=col.id)
     db.commit()
     url = f"{base_url or get_settings().base_url}/meu?t={token}"
-    _enviar_codigo(email, col.nome_completo, codigo, url)
+    _enviar_codigo(db, email, col.nome_completo, codigo, url)
 
 
-def _enviar_codigo(email: str, nome: str, codigo: str, url: str | None = None) -> None:
-    from app.services.email import enviar_email, html_moderno
-    primeiro = (nome or "").split()[0].title() if nome else ""
-    volte = ("Terminou de ler? Toque no link abaixo para voltar e digitar o "
-             f"código:\n{url}\n\n" if url else "")
-    enviar_email(
-        email, "Green House — seu código de acesso",
-        f"Olá, {primeiro}!\n\nSeu código de acesso é {codigo}.\n\n"
-        + volte
-        + f"Ele vale por {CODIGO_TTL_MIN} minutos.\n\n"
-        "Se não foi você que pediu, ignore este e-mail.\n",
-        html_moderno("Seu código de acesso",
-                     [f"Olá, <strong>{primeiro}</strong>!",
-                      "Use o código abaixo para entrar no seu portal.",
-                      "Anote o código e toque no botão para voltar e digitá-lo."
-                      if url else
-                      f"O código vale por {CODIGO_TTL_MIN} minutos.",
-                      f"O código vale por {CODIGO_TTL_MIN} minutos."],
-                     destaque=codigo,
-                     botao_texto="Voltar e digitar o código" if url else None,
-                     botao_url=url))
+def _enviar_codigo(db: Session, email: str, nome: str, codigo: str,
+                   url: str | None = None) -> None:
+    from app.services.email_templates import enviar_modelo
+    enviar_modelo(db, "portal_codigo", email, {
+        "primeiro_nome": (nome or "").split()[0].title() if nome else "",
+        "codigo": codigo, "ttl": CODIGO_TTL_MIN, "link": url,
+    })
 
 
 @router.post("/portal/iniciar")

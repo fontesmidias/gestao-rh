@@ -148,10 +148,14 @@ assert r.status_code == 200, r.text
 assert r.json()["status"] == "aguardando_assinatura"
 
 # 7b) assinatura: 1 código único -> preview -> assina os 3 -> vias assinadas anexadas
-import app.api.assinaturas as mod_ass
+# A interceptação é no `email_templates` (v2.07): TODO e-mail de template passa
+# por lá, então não importa mais qual módulo dispara nem como o texto está
+# escrito — antes o patch era em `assinaturas.enviar_email` e parou de pegar
+# quando aquele ponto passou a chamar `enviar_modelo`.
+import app.services.email_templates as mod_tpl
 
 capturado = {}
-_orig = mod_ass.enviar_email
+_orig = mod_tpl.enviar_email
 def _fake_email(dest, assunto, corpo, html=None, anexos=None, **kw):
     # O código é achado por PADRÃO (6 dígitos isolados), não pela frase que o
     # acompanha: os textos de e-mail viraram editáveis pelo RH na v2.06, e
@@ -163,7 +167,7 @@ def _fake_email(dest, assunto, corpo, html=None, anexos=None, **kw):
     if anexos:
         capturado["anexos"] = anexos
     return True
-mod_ass.enviar_email = _fake_email
+mod_tpl.enviar_email = _fake_email
 
 FICHAS = ("ficha_cadastro", "ficha_emergencia", "termo_vt", "acordo_confidencialidade")
 for doc in FICHAS:
@@ -179,7 +183,7 @@ assert len(capturado["anexos"]) == len(FICHAS)  # vias assinadas enviadas ao can
 assert all(a[1][:4] == b"%PDF" for a in capturado["anexos"])
 assert c.post(f"/api/c/{token}/fichas/solicitar-codigo").status_code == 409  # tudo assinado
 
-mod_ass.enviar_email = _orig
+mod_tpl.enviar_email = _orig
 fichas = c.get(f"/api/c/{token}/fichas").json()["fichas"]
 assert all(f["assinado"] for f in fichas)
 # preview agora devolve a via assinada (bloco de assinatura embutido)

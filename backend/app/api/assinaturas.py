@@ -16,7 +16,7 @@ from app.models.assinatura import FICHAS_BASE, Assinatura, DocumentoAssinavel
 from app.models.candidato import Candidato, StatusCandidato
 from app.services import storage
 from app.services.auditoria import registrar
-from app.services.email import enviar_email
+from app.services.email_templates import enviar_modelo
 from app.services.fichas import GERADORES
 from app.services.magic_link import resolver_token
 
@@ -299,33 +299,14 @@ def solicitar_codigo_unico(token: str, db: Session = Depends(get_db)) -> None:
         assinatura.otp_tentativas = 0
     db.commit()
 
-    from app.services.email import html_moderno
-
-    docs = "\n".join(f"  - {titulo_doc(a)}" for a in pendentes)
-    docs_html = "".join(f"<li>{titulo_doc(a)}</li>" for a in pendentes)
-    ttl = get_settings().otp_ttl_minutes
-    enviar_email(
-        candidato.email,
-        "Green House — Código de assinatura dos documentos admissionais",
-        f"Prezado(a) {candidato.nome_completo},\n\n"
-        f"Seu código de assinatura eletrônica é: {codigo}\n\n"
-        f"Ele é válido por {ttl} minutos e assina, de uma só vez, os seguintes documentos:\n"
-        f"{docs}\n\nDigite o código na tela de assinatura para concluir. Caso não localize "
-        "esta mensagem, verifique a caixa de spam ou lixo eletrônico.\n\n"
-        "Se você não solicitou este código, desconsidere esta mensagem.\n\n"
-        "Atenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Seu código de assinatura",
-            [
-                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                f"Use o código abaixo na tela de assinatura. Ele é válido por "
-                f"<strong>{ttl} minutos</strong> e assina, de uma só vez, os documentos:"
-                f"<ul style='margin:8px 0 0 18px;color:#3a4152'>{docs_html}</ul>",
-                "Se você não solicitou este código, desconsidere esta mensagem.",
-            ],
-            destaque=codigo,
-        ),
-    )
+    # A lista de documentos chega PRONTA ao template (v2.06): o RH edita o
+    # texto ao redor, a regra de o que entra na lista fica aqui.
+    enviar_modelo(db, "assinatura_codigo_lote", candidato.email, {
+        "nome": candidato.nome_completo,
+        "codigo": codigo,
+        "ttl": get_settings().otp_ttl_minutes,
+        "documentos": "\n".join(f"- {titulo_doc(a)}" for a in pendentes),
+    })
 
 
 class AssinarTodosIn(BaseModel):
@@ -400,33 +381,10 @@ def assinar_todos(
         if a.solicitacao_etapa_id:
             promover_etapa_do_candidato(db, a, base_url_publica(request))
 
-    from app.services.email import html_moderno
-
-    docs_html = "".join(f"<li>{titulo_doc(a)}</li>" for a in pendentes)
-    enviar_email(
-        candidato.email,
-        "Green House — Seus documentos assinados (vias do colaborador)",
-        f"Prezado(a) {candidato.nome_completo},\n\n"
-        "Confirmamos a assinatura eletrônica dos seus documentos admissionais, que seguem "
-        "anexos a esta mensagem para sua guarda:\n"
-        + "\n".join(f"  - {titulo_doc(a)}" for a in pendentes)
-        + "\n\nPróximo passo obrigatório: envie a sua documentação pelo mesmo link da "
-        "admissão. Sua contratação somente será efetivada após o envio completo.\n\n"
-        "Atenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Documentos assinados ✓",
-            [
-                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                "Confirmamos a assinatura eletrônica dos seus documentos admissionais. "
-                "As vias assinadas seguem <strong>anexas a esta mensagem</strong> para sua guarda:"
-                f"<ul style='margin:8px 0 0 18px;color:#3a4152'>{docs_html}</ul>",
-                "<strong>Próximo passo obrigatório:</strong> envie a sua documentação pelo "
-                "mesmo link da admissão. Sua contratação somente será efetivada após o "
-                "envio completo.",
-            ],
-        ),
-        anexos=anexos,
-    )
+    enviar_modelo(db, "assinatura_vias_assinadas", candidato.email, {
+        "nome": candidato.nome_completo,
+        "documentos": "\n".join(f"- {titulo_doc(a)}" for a in pendentes),
+    }, anexos=anexos)
     return {"assinados": assinados}
 
 
@@ -456,14 +414,11 @@ def solicitar_codigo(
     assinatura.otp_tentativas = 0
     db.commit()
 
-    nome_doc = titulo_doc(assinatura)
-    enviar_email(
-        candidato.email,
-        f"🌱 Green House — seu código para assinar: {nome_doc}",
-        f"Seu código de assinatura é: {codigo}\n\n"
-        f"Ele vale por {get_settings().otp_ttl_minutes} minutos e serve apenas para o "
-        f"documento '{nome_doc}'. Se você não pediu este código, ignore este e-mail.\n",
-    )
+    enviar_modelo(db, "assinatura_codigo_documento", candidato.email, {
+        "documento": titulo_doc(assinatura),
+        "codigo": codigo,
+        "ttl": get_settings().otp_ttl_minutes,
+    })
 
 
 class AssinarIn(BaseModel):

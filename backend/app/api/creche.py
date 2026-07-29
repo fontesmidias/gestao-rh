@@ -22,7 +22,6 @@ from app.models.candidato import Candidato, PostoServico
 from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
 from app.services.email_templates import enviar_modelo
 
 router = APIRouter(tags=["creche-rh"], dependencies=[Depends(requer_rh)])
@@ -408,7 +407,7 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
         if ben.status == StatusBeneficio.ativo:
             _email_orientacoes_mensais(db, ben, col)
         else:
-            _email_aguardando_repactuacao(ben, col)
+            _email_aguardando_repactuacao(db, ben, col)
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -554,7 +553,7 @@ def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_d
               candidato_id=colaborador_id, detalhe={"por": "rh"})
     db.commit()
     try:
-        _email_sem_direito(ben, col)  # confirmação escrita ao colaborador
+        _email_sem_direito(db, ben, col)  # confirmação escrita ao colaborador
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -600,7 +599,7 @@ def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
     db.commit()
     if era_ativo:
         try:
-            _email_reabertura_para_incluir(ben, col)
+            _email_reabertura_para_incluir(db, ben, col)
         except Exception:
             pass
     return _dump_beneficio(db, ben)
@@ -703,32 +702,16 @@ def _email_devolucao(db: Session, ben: BeneficioCreche, col: Candidato,
     })
 
 
-def _email_aguardando_repactuacao(ben: BeneficioCreche, col: Candidato) -> None:
+def _email_aguardando_repactuacao(db: Session, ben: BeneficioCreche,
+                                  col: Candidato) -> None:
     """Avisa o colaborador de que foi APROVADO, mas o pagamento depende do ajuste
     (repactuação) do contrato do posto — senão ele acha que ainda está 'em
     análise' e cobra o RH sem necessidade (auditoria 2026-07-22)."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche: aprovado, aguardando o contrato",
-        f"Olá, {nome}!\n\n"
-        "Seu Reembolso-Creche foi APROVADO pelo RH. O pagamento começa após o "
-        "ajuste (repactuação) do contrato do seu posto. Avisaremos quando estiver "
-        "ativo — não é preciso fazer nada agora.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Aprovado — aguardando o contrato",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                "Seu <strong>Reembolso-Creche</strong> foi <strong>aprovado</strong> pelo RH. 🎉",
-                "O pagamento começa após o ajuste (repactuação) do contrato do seu "
-                "posto. <strong>Avisaremos quando estiver ativo</strong> — não é "
-                "preciso fazer nada agora.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_aguardando_contrato", email, {
+        "nome": col.nome_completo.split()[0].title()})
 
 
 def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
@@ -753,64 +736,27 @@ def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
         pass
 
 
-def _email_reabertura_para_incluir(ben: BeneficioCreche, col: Candidato) -> None:
-    """Avisa o colaborador de que o RH reabriu o levantamento para ele INCLUIR
-    outra criança (mais filhos). O benefício fica fora do pagamento até a nova
+def _email_reabertura_para_incluir(db: Session, ben: BeneficioCreche,
+                                   col: Candidato) -> None:
+    """Reabertura de um benefício ATIVO para o colaborador acrescentar outra
+    criança (mais filhos). O benefício fica fora do pagamento até a nova
     aprovação — por isso o pedido de urgência (2026-07-22)."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    url = _url_creche()
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche: inclua a nova criança",
-        f"Olá, {nome}!\n\n"
-        "Reabrimos seu Reembolso-Creche para você INCLUIR a nova criança.\n\n"
-        f"Acesse {url}, entre com seu CPF, cadastre a criança com a certidão de "
-        "nascimento e reenvie. O benefício volta a ser pago após a aprovação do "
-        "RH — quanto antes enviar, melhor.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Inclua a nova criança",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                "Reabrimos seu <strong>Reembolso-Creche</strong> para você "
-                "<strong>incluir a nova criança</strong>.",
-                f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, cadastre a "
-                "criança com a <strong>certidão de nascimento</strong> e reenvie.",
-                "O benefício volta a ser pago após a aprovação do RH — quanto "
-                "antes enviar, melhor.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_incluir_crianca", email, {
+        "nome": col.nome_completo.split()[0].title(), "link": _url_creche()})
 
 
-def _email_sem_direito(ben: BeneficioCreche, col: Candidato) -> None:
+def _email_sem_direito(db: Session, ben: BeneficioCreche, col: Candidato) -> None:
     """Quando o RH registra 'sem direito' por um colaborador (respondeu por fora),
     manda uma confirmação escrita — ele pode contestar antes de virar relatório
     oficial, e a trilha de auditoria fica mais forte (auditoria 2026-07-22)."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche: registro de 'sem direito'",
-        f"Olá, {nome}!\n\n"
-        "Registramos que você informou NÃO ter dependentes que dão direito ao "
-        "Reembolso-Creche.\n\nSe isso estiver incorreto ou mudar (novo filho, "
-        "guarda, adoção), procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Registro de 'sem direito'",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                "Registramos que você informou <strong>não ter dependentes</strong> "
-                "que dão direito ao Reembolso-Creche.",
-                "Se isso estiver <strong>incorreto ou mudar</strong> (novo filho, "
-                "guarda, adoção), procure o RH.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_sem_direito", email, {
+        "nome": col.nome_completo.split()[0].title()})
 
 
 def _email_suspensao(db: Session, ben: BeneficioCreche, col: Candidato,

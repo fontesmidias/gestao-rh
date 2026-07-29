@@ -10,7 +10,7 @@ from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
-from app.services.email import email_convite, enviar_email
+from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link, resolver_token
 
 router = APIRouter(tags=["candidatos"])
@@ -118,8 +118,10 @@ def criar_candidato(
     db.commit()
     enviado = False
     if candidato.email:
-        assunto, texto, html = email_convite(candidato.nome_completo, link)
-        enviado = enviar_email(candidato.email, assunto, texto, html)
+        enviado = enviar_modelo(db, "convite_admissao", candidato.email, {
+            "primeiro_nome": (candidato.nome_completo or "").split()[0].title(),
+            "nome": candidato.nome_completo, "link": link,
+        })
     return ConviteOut(
         candidato=CandidatoOut.model_validate(candidato), link_magico=link, email_enviado=enviado
     )
@@ -145,8 +147,10 @@ def reenviar_link(
     db.commit()
     enviado = False
     if enviar_email_convite and candidato.email:
-        assunto, texto, html = email_convite(candidato.nome_completo, link)
-        enviado = enviar_email(candidato.email, assunto, texto, html)
+        enviado = enviar_modelo(db, "convite_admissao", candidato.email, {
+            "primeiro_nome": (candidato.nome_completo or "").split()[0].title(),
+            "nome": candidato.nome_completo, "link": link,
+        })
     return ConviteOut(
         candidato=CandidatoOut.model_validate(candidato), link_magico=link, email_enviado=enviado
     )

@@ -28,7 +28,7 @@ from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import SlotDocumento, StatusSlot
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.idempotencia import travar_por
 from app.services.magic_link import emitir_link
 from app.services.normalizacao import ArquivoInvalido, normalizar_para_pdf
@@ -259,30 +259,12 @@ def editar_secao(
         link = emitir_link(db, candidato, base_url_publica(request))
         db.commit()
         nomes = _nomes_docs(invalidados)
-        email_enviado = enviar_email(
-            candidato.email,
-            "Green House — documentos atualizados aguardam sua assinatura",
-            f"Prezado(a) {candidato.nome_completo},\n\n"
-            f"O RH atualizou informações da sua ficha ({payload.motivo.strip()}). "
-            "Com isso, os documentos abaixo foram regenerados e precisam ser "
-            "assinados novamente:\n"
-            + "\n".join(f"  - {n}" for n in nomes)
-            + f"\n\nAcesse: {link}\n\nA assinatura leva menos de um minuto — faça "
-            "HOJE para não atrasar a sua contratação.\n\nAtenciosamente,\nRH — Green House\n",
-            html_moderno(
-                "Documentos aguardam nova assinatura",
-                [
-                    f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                    f"O RH atualizou informações da sua ficha "
-                    f"(<strong>{payload.motivo.strip()}</strong>). Os documentos abaixo "
-                    "foram regenerados e precisam ser assinados novamente:"
-                    + "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
-                    + "".join(f"<li>{n}</li>" for n in nomes) + "</ul>",
-                    f"<a href='{link}'>Toque aqui para assinar</a> — leva menos de um "
-                    "minuto. Faça <strong>hoje</strong> para não atrasar a sua contratação.",
-                ],
-            ),
-        )
+        email_enviado = enviar_modelo(db, "ficha_alterada_reassinar", candidato.email, {
+            "nome": candidato.nome_completo,
+            "motivo": payload.motivo.strip(),
+            "lista": '\n'.join(f"- {n}" for n in nomes),
+            "link": link,
+        })
 
     return {"secao": secao, "campos_alterados": campos,
             "assinaturas_invalidadas": invalidados, "email_enviado": email_enviado}
@@ -442,27 +424,10 @@ def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
 
     lista_txt = "\n".join(f"  {i + 1}. {t}" for i, t in enumerate(itens))
     lista_html = "".join(f"<li>{t}</li>" for t in itens)
-    enviado = enviar_email(
-        candidato.email,
-        "Green House — sua admissão tem pendências que dependem de você",
-        f"Prezado(a) {candidato.nome_completo},\n\n"
-        "Sua admissão está parada aguardando as providências abaixo:\n\n"
-        f"{lista_txt}\n\n"
-        f"Acesse: {link}\n\n"
-        "Resolva HOJE — sua contratação somente será efetivada após a "
-        "conclusão de todas as etapas.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Sua admissão tem pendências",
-            [
-                f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                "Sua admissão está parada aguardando as providências abaixo:"
-                f"<ol style='margin:8px 0 0 18px;color:#3a4152'>{lista_html}</ol>",
-                f"<a href='{link}'>Toque aqui para continuar de onde parou</a>. "
-                "Resolva <strong>hoje</strong> — sua contratação somente será "
-                "efetivada após a conclusão de todas as etapas.",
-            ],
-        ),
-    )
+    enviado = enviar_modelo(db, "admissao_pendencias", candidato.email, {
+        "nome": candidato.nome_completo,
+        "lista": lista_txt, "link": link,
+    })
     return {"email_enviado": enviado, "itens": itens, "link_magico": link}
 
 

@@ -17,6 +17,7 @@ from app.models.modelo_documento import EscopoModelo, ModeloDocumento
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
 from app.services.email import enviar_email
+from app.services.email_templates import enviar_modelo
 from app.services.fichas import (VARIAVEIS_MODELO, gerar_documento_modelo)
 
 router = APIRouter(tags=["modelos-documento"], dependencies=[Depends(requer_rh)])
@@ -181,7 +182,6 @@ def enviar_para_pessoa(candidato_id: uuid.UUID, modelo_id: uuid.UUID,
     """
     from app.core.config import base_url_publica
     from app.models.assinatura import Assinatura
-    from app.services.email import html_moderno
     from app.services.magic_link import emitir_link
 
     candidato = db.get(Candidato, candidato_id)
@@ -219,41 +219,17 @@ def enviar_para_pessoa(candidato_id: uuid.UUID, modelo_id: uuid.UUID,
     email_enviado = False
     if enviar_email_ and candidato.email:
         if para_assinatura:
-            email_enviado = enviar_email(
-                candidato.email,
-                f"Green House — documento aguarda sua assinatura: {m.titulo}",
-                f"Prezado(a) {candidato.nome_completo},\n\n"
-                f"O documento \"{m.titulo}\" foi disponibilizado e aguarda a sua "
-                f"assinatura eletrônica.\n\nAcesse: {link}\n\n"
-                "A assinatura leva menos de um minuto.\n\nAtenciosamente,\nRH — Green House\n",
-                html_moderno(
-                    "Documento aguarda sua assinatura",
-                    [
-                        f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                        f"O documento <strong>{m.titulo}</strong> foi disponibilizado "
-                        "e aguarda a sua assinatura eletrônica.",
-                        f"<a href='{link}'>Toque aqui para conferir e assinar</a> — "
-                        "leva menos de um minuto.",
-                    ],
-                ),
-            )
+            email_enviado = enviar_modelo(db, "modelo_para_assinar", candidato.email, {
+                "nome": candidato.nome_completo, "documento": m.titulo,
+                "link": link,
+            })
         else:
             pdf = gerar_documento_modelo(db, m.titulo, m.corpo, candidato)
             nome_arq = "".join(c for c in m.titulo if c.isalnum() or c in " -_").strip()[:60] \
                 or "documento"
-            email_enviado = enviar_email(
-                candidato.email,
-                f"Green House — {m.titulo}",
-                f"Prezado(a) {candidato.nome_completo},\n\n"
-                f"Segue anexo o documento \"{m.titulo}\".\n\n"
-                "Atenciosamente,\nRH — Green House\n",
-                html_moderno(
-                    m.titulo,
-                    [f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                     f"Segue anexo o documento <strong>{m.titulo}</strong>."],
-                ),
-                anexos=[(f"{nome_arq}.pdf", pdf)],
-            )
+            email_enviado = enviar_modelo(db, "modelo_anexo", candidato.email, {
+                "nome": candidato.nome_completo, "documento": m.titulo,
+            }, anexos=[(f"{nome_arq}.pdf", pdf)])
 
     return {"assinatura_criada": para_assinatura,
             "assinatura_id": str(assinatura.id) if assinatura else None,

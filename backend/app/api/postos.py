@@ -18,7 +18,7 @@ from app.models.assinatura import FICHAS_BASE, Assinatura, DocumentoAssinavel
 from app.models.candidato import Candidato, PostoServico
 from app.models.usuario_rh import UsuarioRH
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 
 router = APIRouter(tags=["postos-rh"], dependencies=[Depends(requer_rh)])
@@ -647,30 +647,11 @@ def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: R
         from app.api.assinaturas import NOMES_DOC
         link = emitir_link(db, candidato, base_url_publica(request))
         db.commit()
-        docs_html = "".join(f"<li>{NOMES_DOC[d]}</li>" for d in docs_novos)
-        email_enviado = enviar_email(
-            candidato.email,
-            "Green House — novos documentos aguardam a sua assinatura",
-            f"Prezado(a) {candidato.nome_completo},\n\n"
-            "O seu posto de serviço exige a assinatura dos documentos abaixo:\n"
-            + "\n".join(f"  - {NOMES_DOC[d]}" for d in docs_novos)
-            + f"\n\nAcesse: {link}\n\n"
-            "Assine HOJE: sem essas assinaturas, sua alocação no posto não pode ser "
-            "concluída.\n\nAtenciosamente,\nRH — Green House\n",
-            html_moderno(
-                "Novos documentos para assinar",
-                [
-                    f"Prezado(a) <strong>{candidato.nome_completo}</strong>,",
-                    "O seu posto de serviço exige a assinatura dos documentos abaixo:"
-                    f"<ul style='margin:8px 0 0 18px;color:#3a4152'>{docs_html}</ul>",
-                    "<strong>Assine HOJE</strong> — sem essas assinaturas, sua alocação "
-                    "no posto não pode ser concluída. O processo é o mesmo: um código "
-                    "chega no seu e-mail e assina tudo de uma vez.",
-                ],
-                botao_texto="Assinar os documentos",
-                botao_url=link,
-            ),
-        )
+        # A lista chega PRONTA ao template (v2.06): o RH edita o texto ao redor.
+        lista = "\n".join(f"- {NOMES_DOC[d]}" for d in docs_novos)
+        email_enviado = enviar_modelo(db, "posto_novos_documentos", candidato.email, {
+            "nome": candidato.nome_completo, "lista": lista, "link": link,
+        })
     return {
         "posto_servico_id": candidato.posto_servico_id,
         "cargo_funcao": candidato.cargo_funcao,

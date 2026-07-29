@@ -34,7 +34,7 @@ from app.models.candidato import Candidato, PostoServico
 from app.models.ficha import DadosPessoais, Endereco
 from app.services import kba, storage
 from app.services.auditoria import registrar
-from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 from app.services.validacao import cpf_valido
 
 router = APIRouter(tags=["creche-publico"])
@@ -136,7 +136,7 @@ def _gerar_e_enviar_codigo(db: Session, colaborador: Candidato,
               candidato_id=colaborador.id, detalhe={"cpf_final": _digitos(colaborador.cpf or "")[-4:]})
     db.commit()
     url = f"{base_url or get_settings().base_url}/creche?t={token}"
-    _enviar_codigo(email_destino, colaborador.nome_completo, codigo, url)
+    _enviar_codigo(db, email_destino, colaborador.nome_completo, codigo, url)
 
 
 def emitir_acesso_devolucao(db: Session, ben: BeneficioCreche) -> str:
@@ -362,7 +362,8 @@ def kba_definir_email(payload: KbaDefinirEmailIn, request: Request,
     return {"ok": True}
 
 
-def _enviar_codigo(email: str, nome: str, codigo: str, url: str | None = None) -> None:
+def _enviar_codigo(db: Session, email: str, nome: str, codigo: str,
+                   url: str | None = None) -> None:
     """Código 2FA + link de RETOMADA no mesmo e-mail.
 
     O link é o que permite sair do e-mail para ler o código e VOLTAR sem perder
@@ -370,40 +371,10 @@ def _enviar_codigo(email: str, nome: str, codigo: str, url: str | None = None) -
     trocar de tela). Ele não substitui o código — só devolve a pessoa ao ponto
     onde estava, com o CPF já reconhecido.
     """
-    volte = ("Terminou de ler? Toque no link abaixo para voltar e digitar o "
-             f"código:\n{url}\n\n" if url else "")
-    enviar_email(
-        email,
-        "Green House — código para o levantamento do Reembolso-Creche",
-        f"Olá, {nome.split()[0].title()}!\n\n"
-        f"Seu código de confirmação é: {codigo}\n\n"
-        + volte
-        + "Ele vale por 15 minutos. Se você não solicitou, ignore esta mensagem.\n\n"
-        "IMPORTANTE: verifique também a sua caixa de SPAM/lixo eletrônico — às "
-        "vezes a mensagem chega lá.\n",
-        html_moderno(
-            "Seu código de confirmação",
-            [
-                f"Olá, <strong>{nome.split()[0].title()}</strong>!",
-                "Use o código abaixo para confirmar sua identidade no levantamento "
-                "do Reembolso-Creche (IN SEGES/MGI nº 147/2026):",
-                f"<div style='font-size:2rem;font-weight:800;letter-spacing:.3em;"
-                f"text-align:center;margin:1rem 0;color:#0a8f46'>{codigo}</div>",
-                "Anote o código e toque no botão para voltar e digitá-lo."
-                if url else
-                "O código vale por 15 minutos.",
-                "O código vale por 15 minutos. <strong>Verifique também a sua caixa "
-                "de spam</strong> — a mensagem pode ter ido para lá.",
-            ],
-            botao_texto="Voltar e digitar o código" if url else None,
-            botao_url=url,
-        ),
-    )
-
-
-# --------------------------------------------------------------------------
-# 2) confirmar: código -> token de sessão
-# --------------------------------------------------------------------------
+    enviar_modelo(db, "creche_codigo", email, {
+        "primeiro_nome": (nome or "").split()[0].title() if nome else "",
+        "codigo": codigo, "ttl": CODIGO_TTL_MIN, "link": url,
+    })
 
 
 class ConfirmarIn(BaseModel):
