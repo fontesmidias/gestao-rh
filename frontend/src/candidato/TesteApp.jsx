@@ -122,7 +122,15 @@ function Codigo({ token, aoConfirmar, aoVoltar }) {
   const confirmar = async (e) => {
     e.preventDefault(); setErro(null)
     try { await api.testesConfirmar(token, codigo); await aoConfirmar() }
-    catch { setErro('Código incorreto ou expirado. Confira no seu e-mail (inclusive no spam).') }
+    catch (err) {
+      // `catch` cego dizendo "confira no seu e-mail" fazia a pessoa reconferir
+      // um código certo, quando o problema era ser de um e-mail antigo ou a
+      // cota ter estourado (feedback 2026-07-29).
+      setErro(err.status === 429
+        ? 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.'
+        : 'Esse código não vale mais. Use o do e-mail MAIS RECENTE — se você pediu '
+          + 'mais de uma vez, só o último funciona (validade de 15 minutos).')
+    }
   }
 
   return (

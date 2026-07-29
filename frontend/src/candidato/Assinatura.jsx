@@ -61,9 +61,20 @@ export default function Assinatura({ token, email, aoConcluir }) {
       setCodigo('')
       setFase('codigo')
       setMsg({ tipo: 'ok', texto: `O código foi enviado para ${emailAtual}. Verifique a sua caixa de entrada e, se necessário, a caixa de spam/lixo eletrônico. O código é válido por 10 minutos.` })
-    } catch {
+    } catch (e) {
       setFase('revisar')
-      setMsg({ tipo: 'erro', texto: 'Não foi possível enviar o código. Verifique sua conexão e tente novamente.' })
+      // O `catch` era CEGO e culpava a conexão em qualquer erro (feedback
+      // 2026-07-29). No 429 — cota de 5 pedidos por 15 min — isso é pior que
+      // inútil: convida a tentar de novo na hora, que reabastece a cota e
+      // prolonga o bloqueio. O último código enviado CONTINUA valendo, e é
+      // isso que a pessoa precisa ouvir.
+      setMsg({ tipo: 'erro', texto: e.status === 429
+        ? 'Você pediu o código várias vezes seguidas. Aguarde 15 minutos — ou '
+          + 'use o ÚLTIMO código que chegou no seu e-mail, se ainda estiver '
+          + 'dentro dos 10 minutos de validade.'
+        : e.offline
+          ? 'Sem conexão. Confira a internet e tente novamente.'
+          : 'Não foi possível enviar o código agora. Tente novamente em instantes.' })
     }
   }
 
@@ -78,11 +89,19 @@ export default function Assinatura({ token, email, aoConcluir }) {
     } catch (e) {
       setFase('codigo')
       const textos = {
-        codigo_incorreto: 'Código incorreto. Confira o e-mail e digite novamente.',
-        codigo_expirado: 'O código expirou (validade de 10 minutos). Solicite um novo código.',
-        tentativas_excedidas: 'Número de tentativas excedido. Solicite um novo código.',
+        // "confira o e-mail" fazia a pessoa reconferir um código que estava
+        // certo, quando o problema era ser de um e-mail antigo (2026-07-29).
+        codigo_incorreto: 'Código incorreto. Use o do e-mail MAIS RECENTE — se você '
+          + 'pediu o código mais de uma vez, só o último vale.',
+        codigo_expirado: 'O código expirou (validade de 10 minutos). Toque em '
+          + '"Assinar os documentos" para receber um novo.',
+        tentativas_excedidas: 'Número de tentativas excedido. Toque em "Assinar os '
+          + 'documentos" para receber um código novo.',
       }
-      setMsg({ tipo: 'erro', texto: textos[e.detail] || 'Não foi possível concluir a assinatura. Tente novamente.' })
+      setMsg({ tipo: 'erro', texto: textos[e.detail]
+        || (e.status === 429
+          ? 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.'
+          : 'Não foi possível concluir a assinatura. Tente novamente.') })
     }
   }
 
