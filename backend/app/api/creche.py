@@ -23,6 +23,7 @@ from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services.auditoria import registrar
 from app.services.email import enviar_email, html_moderno
+from app.services.email_templates import enviar_modelo
 
 router = APIRouter(tags=["creche-rh"], dependencies=[Depends(requer_rh)])
 
@@ -405,7 +406,7 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
     # e-mails após o commit (SMTP fora não desfaz a decisão)
     try:
         if ben.status == StatusBeneficio.ativo:
-            _email_orientacoes_mensais(ben, col)
+            _email_orientacoes_mensais(db, ben, col)
         else:
             _email_aguardando_repactuacao(ben, col)
     except Exception:
@@ -433,7 +434,7 @@ def indeferir_beneficio(beneficio_id: uuid.UUID, payload: IndeferirIn,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_indeferimento})
     db.commit()
     try:
-        _email_indeferimento(ben, col)  # avisa o colaborador (não trava)
+        _email_indeferimento(db, ben, col)  # avisa o colaborador (não trava)
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -481,7 +482,7 @@ def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
               candidato_id=ben.candidato_id, detalhe={"motivo": ben.motivo_devolucao})
     db.commit()
     try:
-        _email_devolucao(ben, col, token)  # avisa e já leva o link de correção
+        _email_devolucao(db, ben, col, token)  # avisa e já leva o link de correção
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -635,7 +636,7 @@ def suspender_beneficio(beneficio_id: uuid.UUID, payload: EncerrarIn,
               detalhe={"motivo": payload.motivo.strip()})
     db.commit()
     try:
-        _email_suspensao(ben, col, payload.motivo.strip(), payload.encerrar)
+        _email_suspensao(db, ben, col, payload.motivo.strip(), payload.encerrar)
     except Exception:
         pass
     return _dump_beneficio(db, ben)
@@ -662,40 +663,16 @@ def editar_prazos(payload: PrazoMassaIn, db: Session = Depends(get_db),
     return {"atualizados": len(bens), "dia_entrega_mensal": dia}
 
 
-def _email_orientacoes_mensais(ben: BeneficioCreche, col: Candidato) -> None:
+def _email_orientacoes_mensais(db: Session, ben: BeneficioCreche,
+                               col: Candidato) -> None:
     """Enviado ao ATIVAR: orienta a entrega mensal da documentação de despesa."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    dia = ben.dia_entrega_mensal
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche ativado: orientações da entrega mensal",
-        f"Olá, {col.nome_completo.split()[0].title()}!\n\n"
-        "Seu benefício de Reembolso-Creche foi ATIVADO.\n\n"
-        f"Todo mês, até o dia {dia}, você deve nos enviar a comprovação da "
-        "despesa do mês anterior, de UMA destas formas:\n"
-        "  - DECLARAÇÃO assinada pela pessoa que cuida da criança (modelo que "
-        "enviamos), quando for cuidador(a)/babá; ou\n"
-        "  - NOTA FISCAL da creche/pré-escola, quando for estabelecimento.\n\n"
-        "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.\n\n"
-        "Atenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Reembolso-Creche ativado",
-            [
-                f"Olá, <strong>{col.nome_completo.split()[0].title()}</strong>!",
-                "Seu benefício de <strong>Reembolso-Creche</strong> foi ativado. 🎉",
-                f"Todo mês, <strong>até o dia {dia}</strong>, envie a comprovação "
-                "da despesa do mês anterior, de uma destas formas:",
-                "<ul style='margin:8px 0 0 18px;color:#3a4152'>"
-                "<li><strong>Declaração</strong> assinada por quem cuida da criança "
-                "(cuidador(a)/babá) — use o modelo que enviamos; ou</li>"
-                "<li><strong>Nota fiscal</strong> da creche/pré-escola, quando for "
-                "um estabelecimento.</li></ul>",
-                "Sem a comprovação no prazo, o reembolso do mês pode não ser efetuado.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_ativado", email, {
+        "nome": col.nome_completo.split()[0].title(),
+        "dia": ben.dia_entrega_mensal,
+    })
 
 
 def _url_creche() -> str:
@@ -703,7 +680,7 @@ def _url_creche() -> str:
     return f"{get_settings().base_url.rstrip('/')}/creche"
 
 
-def _email_devolucao(ben: BeneficioCreche, col: Candidato,
+def _email_devolucao(db: Session, ben: BeneficioCreche, col: Candidato,
                      token: str | None = None) -> None:
     """Avisa o colaborador que o RH devolveu o levantamento para correção — sem
     isso ele só descobriria se reabrisse o link por acaso (feedback 2026-07-22).
@@ -716,44 +693,14 @@ def _email_devolucao(ben: BeneficioCreche, col: Candidato,
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    motivo = ben.motivo_devolucao or "verifique os dados e reenvie."
+    # O link vai no BOTÃO (v2.06): antes o texto tinha dois ramos inteiros só
+    # para dizer "com token" ou "sem token" — agora a diferença é só a URL.
     url = _url_creche()
-    link = f"{url}?t={token}" if token else url
-    if token:
-        txt_acao = (f"Acesse {link} para corrigir e reenviar — o link entra "
-                    "direto, sem código, e vale 7 dias.")
-        html_acao = (f"<a href='{link}'>Corrigir meu pedido</a> — o link entra "
-                     "direto, sem código, e vale <strong>7 dias</strong>.")
-        rodape_txt = (f"\n\nSe o link expirar, acesse {url} e entre com seu CPF.")
-        rodape_html = (f"Se o link expirar, acesse <a href='{url}'>{url}</a> e "
-                       "entre com seu CPF.")
-    else:
-        txt_acao = f"Acesse {url}, entre com seu CPF, corrija o que for necessário e reenvie."
-        html_acao = f"Acesse <a href='{url}'>{url}</a>, entre com seu CPF, corrija e reenvie."
-        rodape_txt, rodape_html = "", None
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche: seu pedido foi devolvido para correção",
-        f"Olá, {nome}!\n\n"
-        "Seu levantamento do Reembolso-Creche foi DEVOLVIDO para correção.\n\n"
-        f"Motivo: {motivo}\n\n"
-        f"{txt_acao}{rodape_txt}\n\n"
-        "Este link é pessoal — não encaminhe.\n\n"
-        "Atenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Pedido devolvido para correção",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                "Seu levantamento do <strong>Reembolso-Creche</strong> foi "
-                "<strong>devolvido para correção</strong>.",
-                f"<strong>Motivo do RH:</strong> {motivo}",
-                html_acao,
-                *( [rodape_html] if rodape_html else [] ),
-                "Este link é pessoal — não encaminhe.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_devolvido", email, {
+        "nome": col.nome_completo.split()[0].title(),
+        "motivo": ben.motivo_devolucao or "verifique os dados e reenvie.",
+        "link": f"{url}?t={token}" if token else url,
+    })
 
 
 def _email_aguardando_repactuacao(ben: BeneficioCreche, col: Candidato) -> None:
@@ -801,7 +748,7 @@ def encerrar_creche_no_desligamento(db: Session, candidato_id) -> None:
     registrar(db, "creche_beneficio_encerrado", ator="sistema",
               candidato_id=candidato_id, detalhe={"motivo": "desligamento"})
     try:
-        _email_suspensao(ben, col, "Colaborador desligado", encerrado=True)
+        _email_suspensao(db, ben, col, "Colaborador desligado", encerrado=True)
     except Exception:
         pass
 
@@ -866,58 +813,29 @@ def _email_sem_direito(ben: BeneficioCreche, col: Candidato) -> None:
     )
 
 
-def _email_suspensao(ben: BeneficioCreche, col: Candidato, motivo: str, encerrado: bool) -> None:
+def _email_suspensao(db: Session, ben: BeneficioCreche, col: Candidato,
+                     motivo: str, encerrado: bool) -> None:
     """Avisa o colaborador de que o benefício foi suspenso/encerrado e que ele
     NÃO precisa mais enviar a comprovação mensal (auditoria 2026-07-22)."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    verbo = "encerrado" if encerrado else "suspenso"
-    enviar_email(
-        email,
-        f"Green House — Reembolso-Creche {verbo}",
-        f"Olá, {nome}!\n\n"
-        f"Seu Reembolso-Creche foi {verbo}.\n\nMotivo: {motivo}\n\n"
-        "Você não precisa mais enviar a comprovação mensal. Em caso de dúvida, "
-        "procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            f"Reembolso-Creche {verbo}",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                f"Seu <strong>Reembolso-Creche</strong> foi <strong>{verbo}</strong>.",
-                f"<strong>Motivo:</strong> {motivo}",
-                "Você <strong>não precisa mais</strong> enviar a comprovação mensal.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_suspenso", email, {
+        "nome": col.nome_completo.split()[0].title(),
+        "verbo": "encerrado" if encerrado else "suspenso",
+        "motivo": motivo,
+    })
 
 
-def _email_indeferimento(ben: BeneficioCreche, col: Candidato) -> None:
+def _email_indeferimento(db: Session, ben: BeneficioCreche, col: Candidato) -> None:
     """Avisa o colaborador do indeferimento com o motivo (antes: silencioso)."""
     email = ben.email_confirmado or col.email
     if not email:
         return
-    nome = col.nome_completo.split()[0].title()
-    motivo = ben.motivo_indeferimento or "não atende aos requisitos do benefício."
-    enviar_email(
-        email,
-        "Green House — Reembolso-Creche: resultado da análise",
-        f"Olá, {nome}!\n\n"
-        "Após a análise, seu pedido de Reembolso-Creche foi INDEFERIDO.\n\n"
-        f"Motivo: {motivo}\n\n"
-        "Em caso de dúvida, procure o RH.\n\nAtenciosamente,\nRH — Green House\n",
-        html_moderno(
-            "Resultado da análise — indeferido",
-            [
-                f"Olá, <strong>{nome}</strong>!",
-                "Após a análise, seu pedido de <strong>Reembolso-Creche</strong> "
-                "foi <strong>indeferido</strong>.",
-                f"<strong>Motivo:</strong> {motivo}",
-                "Em caso de dúvida, procure o RH.",
-            ],
-        ),
-    )
+    enviar_modelo(db, "creche_indeferido", email, {
+        "nome": col.nome_completo.split()[0].title(),
+        "motivo": ben.motivo_indeferimento or "não atende aos requisitos do benefício.",
+    })
 
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/dossie")

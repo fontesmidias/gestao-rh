@@ -752,7 +752,6 @@ def _avisar_manifestacao(db: Session, a: Avaliacao) -> None:
     """Avisa o colaborador de que a avaliação está disponível e ele pode
     registrar a manifestação (seção 9)."""
     from app.core.config import get_settings
-    from app.services.email import enviar_email, html_moderno
     col = db.get(Candidato, a.candidato_id)
     if col is None or not col.email:
         return
@@ -761,21 +760,9 @@ def _avisar_manifestacao(db: Session, a: Avaliacao) -> None:
     prazo = (a.feedback_em + timedelta(days=PRAZO_MANIFESTACAO_D)
              ).strftime("%d/%m/%Y") if a.feedback_em else ""
     try:
-        enviar_email(
-            col.email, "Green House — sua avaliação está disponível",
-            f"Olá, {primeiro}!\n\nSua avaliação de desempenho foi registrada após a "
-            f"conversa de feedback. Você pode ler e, se quiser, escrever a sua "
-            f"manifestação até {prazo}.\n\nAcesse {url}.\n\n"
-            "Registrar sua opinião é um direito seu — concordando ou não.\n",
-            html_moderno(
-                "Sua avaliação está disponível",
-                [f"Olá, <strong>{primeiro}</strong>!",
-                 "Sua avaliação de desempenho foi registrada após a conversa de "
-                 "feedback.",
-                 f"Você pode ler e escrever a sua <strong>manifestação</strong> "
-                 f"até <strong>{prazo}</strong> — concordando ou não.",
-                 "Registrar sua opinião é um direito seu."],
-                botao_texto="Ver minha avaliação", botao_url=url))
+        from app.services.email_templates import enviar_modelo
+        enviar_modelo(db, "desempenho_avaliacao", col.email, {
+            "primeiro_nome": primeiro, "prazo": prazo, "link": url})
     except Exception:
         pass
 

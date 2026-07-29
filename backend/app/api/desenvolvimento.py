@@ -650,7 +650,6 @@ def baixar_dossie(registro_id: uuid.UUID, db: Session = Depends(get_db)) -> Resp
 def _avisar_colaborador(db: Session, r: RegistroDesenvolvimento, acao: str) -> None:
     """Avisa quem enviou que houve decisão. Sem isso a pessoa só descobriria se
     entrasse no portal por acaso — e o loop não fecharia."""
-    from app.services.email import enviar_email, html_moderno
     col = db.get(Candidato, r.candidato_id)
     if col is None or not col.email:
         return
@@ -658,23 +657,16 @@ def _avisar_colaborador(db: Session, r: RegistroDesenvolvimento, acao: str) -> N
     titulo = r.titulo or (r.tipo.nome if r.tipo else "seu envio")
     from app.core.config import get_settings
     url = f"{get_settings().base_url.rstrip('/')}/meu"
-    if acao == "devolvido":
-        assunto = "Green House — precisamos de um ajuste no seu envio"
-        linhas = [f"Olá, <strong>{primeiro}</strong>!",
-                  f"Sobre <strong>{titulo}</strong>, precisamos de um ajuste:",
-                  f"<em>{r.motivo_recusa}</em>",
-                  f"Acesse <a href='{url}'>{url}</a> para corrigir e reenviar."]
-        texto = (f"Olá, {primeiro}!\n\nSobre {titulo}, precisamos de um ajuste:\n"
-                 f"{r.motivo_recusa}\n\nAcesse {url} para corrigir e reenviar.\n")
-    else:
-        assunto = "Green House — sobre o seu envio"
-        linhas = [f"Olá, <strong>{primeiro}</strong>!",
-                  f"<strong>{titulo}</strong> não pôde ser aceito.",
-                  f"<em>{r.motivo_recusa}</em>",
-                  "Em caso de dúvida, fale com o RH."]
-        texto = (f"Olá, {primeiro}!\n\n{titulo} não pôde ser aceito.\n"
-                 f"{r.motivo_recusa}\n\nEm caso de dúvida, fale com o RH.\n")
+    # Devolver (dá para corrigir) e recusar (terminal) são e-mails DIFERENTES —
+    # por isso dois templates, cada um editável em separado (v2.06).
     try:
-        enviar_email(col.email, assunto, texto, html_moderno(assunto, linhas))
+        from app.services.email_templates import enviar_modelo
+        enviar_modelo(
+            db,
+            "desenvolvimento_devolvido" if acao == "devolvido"
+            else "desenvolvimento_recusado",
+            col.email,
+            {"primeiro_nome": primeiro, "titulo": titulo,
+             "motivo": r.motivo_recusa, "link": url})
     except Exception:
         pass  # aviso que falha não pode derrubar a decisão do RH

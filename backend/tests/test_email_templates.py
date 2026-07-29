@@ -73,6 +73,19 @@ for m in CATALOGO:
                 f"{m.chave}: variável '{v}' aparece no texto mas não tem exemplo "
                 f"para o preview")
 
+# ------------------------------- todo template renderiza com o seu exemplo
+# Pega placeholder errado no catálogo (ex.: {{nome}} onde o contexto manda
+# {{primeiro_nome}}), que sairia como "{{nome}}" cru no e-mail da pessoa.
+for m in CATALOGO:
+    _assunto, _texto, _html = renderizar(_DBVazio(), m.chave, dict(m.exemplo))
+    assert "{{" not in _assunto and "{{" not in _texto, (
+        f"{m.chave}: sobrou placeholder não substituído — "
+        f"assunto={_assunto!r} corpo={_texto!r}")
+    assert _texto.strip(), f"{m.chave}: corpo vazio"
+    if m.botao_url_var and m.exemplo.get(m.botao_url_var):
+        assert m.exemplo[m.botao_url_var] in _html, (
+            f"{m.chave}: a URL do botão não chegou ao HTML")
+
 # ------------------------------------------------------------ renderização
 m = CATALOGO_POR_CHAVE["documento_rejeitado"]
 assunto, texto, html = renderizar(_DBVazio(), "documento_rejeitado", {
