@@ -67,6 +67,14 @@ EVENTOS: list[dict] = [
                      "Desenvolvimento e a fila de validação cresce.",
     },
     {
+        "chave": "uniforme_pendente",
+        "rotulo": "Uniforme: tamanhos de um novo admitido",
+        "descricao": "Quando um candidato informa os tamanhos de uniforme. "
+                     "Cadastre aqui quem compra o uniforme (operacional). O "
+                     "aviso é só um empurrão: a lista com nome, posto e "
+                     "tamanhos fica na tela Uniformes, não vai por e-mail.",
+    },
+    {
         "chave": "match_vagas_concluido",
         "rotulo": "Match de Vagas: ranqueamento concluído",
         "descricao": "Quando termina o ranqueamento de uma vaga contra o "
