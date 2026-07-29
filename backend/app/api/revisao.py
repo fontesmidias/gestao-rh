@@ -75,6 +75,12 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
     por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
     for s in slots:
         por_candidato.setdefault(s.candidato_id, []).append(s)
+    # Quantos testes já respondidos foram aproveitados por candidato (v2.21) —
+    # EM LOTE, para a lista não virar N+1 quando a base crescer.
+    from app.models.teste_vinculado import TesteVinculado
+    vinculados: dict[uuid.UUID, int] = {}
+    for (cid,) in db.execute(select(TesteVinculado.candidato_id)).all():
+        vinculados[cid] = vinculados.get(cid, 0) + 1
     saida = []
     for cand in candidatos:
         meus = [s for s in por_candidato.get(cand.id, []) if s.obrigatorio]
@@ -87,6 +93,7 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
             "progresso_docs": {"ok": len(ok), "total": len(meus)},
             "criado_em": cand.criado_em,
             "dossie_gerado_em": cand.dossie_gerado_em,
+            "testes_vinculados": vinculados.get(cand.id, 0),
         })
     return saida
 

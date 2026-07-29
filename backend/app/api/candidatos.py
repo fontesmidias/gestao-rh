@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -154,6 +155,89 @@ def reenviar_link(
     return ConviteOut(
         candidato=CandidatoOut.model_validate(candidato), link_magico=link, email_enviado=enviado
     )
+
+
+# ---------------------------------------------------------------------------
+# Testes JÁ RESPONDIDOS aproveitados para o candidato (v2.21)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rh/testes-vinculaveis")
+def testes_vinculaveis(busca: str | None = None, db: Session = Depends(get_db),
+                       _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Testes/provas concluídos e ainda não aproveitados por ninguém.
+
+    Cada item vem com nome, data, qual teste e por qual link — contexto para o
+    RH RECONHECER a pessoa. O link avulso de testagem é anônimo, então escolher
+    só pelo nome seria adivinhação, e teste decide contratação.
+    """
+    from app.services.testes_vinculaveis import disponiveis
+    return disponiveis(db, busca)
+
+
+class VincularTesteIn(BaseModel):
+    origem: str                 # testagem | prova
+    referencia_id: uuid.UUID    # participante_id ou aplicacao_id
+
+
+@router.post("/rh/candidatos/{candidato_id}/testes-vinculados", status_code=201)
+def vincular_teste(candidato_id: uuid.UUID, payload: VincularTesteIn,
+                   db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Aproveita para este candidato um teste que a pessoa já respondeu."""
+    from app.services.testes_vinculaveis import resultado_do_vinculo, vincular
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if payload.origem not in ("testagem", "prova"):
+        raise HTTPException(status_code=422, detail="origem_invalida")
+    try:
+        v = vincular(db, candidato.id, payload.origem, payload.referencia_id,
+                     autor=rh.email, automatico=False)
+    except Exception as exc:
+        raise HTTPException(status_code=422,
+                            detail=f"nao_foi_possivel_vincular: {exc}") from exc
+    registrar(db, "teste_vinculado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato.id,
+              detalhe={"origem": payload.origem,
+                       "referencia": str(payload.referencia_id)})
+    db.commit()
+    db.refresh(v)
+    return resultado_do_vinculo(db, v)
+
+
+@router.get("/rh/candidatos/{candidato_id}/testes-vinculados")
+def listar_testes_vinculados(candidato_id: uuid.UUID,
+                             db: Session = Depends(get_db),
+                             _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Resultados aproveitados deste candidato — restrito ao RH.
+
+    NÃO aparece para o candidato (não entra no wizard) nem no dossiê, que
+    circula: resultado de teste é dado sensível de seleção.
+    """
+    from app.models.teste_vinculado import TesteVinculado
+    from app.services.testes_vinculaveis import resultado_do_vinculo
+    vinculos = db.scalars(
+        select(TesteVinculado)
+        .where(TesteVinculado.candidato_id == candidato_id)
+        .order_by(TesteVinculado.vinculado_em.desc())).all()
+    return [resultado_do_vinculo(db, v) for v in vinculos]
+
+
+@router.delete("/rh/candidatos/{candidato_id}/testes-vinculados/{vinculo_id}",
+               status_code=204)
+def desvincular_teste(candidato_id: uuid.UUID, vinculo_id: uuid.UUID,
+                      db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> None:
+    """Desfaz o vínculo — o RH pode ter reconhecido a pessoa errada."""
+    from app.models.teste_vinculado import TesteVinculado
+    v = db.get(TesteVinculado, vinculo_id)
+    if v is None or v.candidato_id != candidato_id:
+        raise HTTPException(status_code=404, detail="vinculo_nao_encontrado")
+    registrar(db, "teste_desvinculado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato_id, detalhe={"origem": v.origem.value})
+    db.delete(v)
+    db.commit()
 
 
 class ContatoIn(BaseModel):

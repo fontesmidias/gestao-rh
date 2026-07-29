@@ -375,6 +375,48 @@ def mudar_status(talento_id: uuid.UUID, payload: StatusIn, db: Session = Depends
     return _dump(t)
 
 
+def _aproveitar_testes_do_talento(db: Session, t: Talento,
+                                  candidato_id: uuid.UUID,
+                                  autor: str | None) -> int:
+    """Vincula ao candidato os testes/provas que ESTE talento já respondeu.
+
+    Marcados `automatico=True`: o link foi disparado para ele, então a
+    identidade não é palpite (diferente do link avulso anônimo, onde o RH
+    escolhe da lista pelo nome). Nunca levanta — a conversão não pode falhar
+    por causa do aproveitamento.
+    """
+    from app.models.prova import AplicacaoProva, LinkProva
+    from app.models.teste import StatusTeste
+    from app.models.testagem import (LinkTestagem, ParticipanteTestagem,
+                                     TesteTestagem)
+    from app.services.testes_vinculaveis import vincular
+
+    aproveitados = 0
+    try:
+        for lk in db.scalars(select(LinkTestagem)
+                             .where(LinkTestagem.talento_id == t.id)):
+            for p in db.scalars(select(ParticipanteTestagem)
+                                .where(ParticipanteTestagem.link_id == lk.id)):
+                concluiu = db.scalar(select(TesteTestagem).where(
+                    TesteTestagem.participante_id == p.id,
+                    TesteTestagem.status == StatusTeste.concluido))
+                if concluiu is not None:
+                    vincular(db, candidato_id, "testagem", p.id, autor,
+                             automatico=True)
+                    aproveitados += 1
+
+        for lk in db.scalars(select(LinkProva)
+                             .where(LinkProva.talento_id == t.id)):
+            for a in db.scalars(select(AplicacaoProva).where(
+                    AplicacaoProva.link_id == lk.id,
+                    AplicacaoProva.concluido_em.isnot(None))):
+                vincular(db, candidato_id, "prova", a.id, autor, automatico=True)
+                aproveitados += 1
+    except Exception:
+        log.warning("falha ao aproveitar testes do talento %s", t.id, exc_info=True)
+    return aproveitados
+
+
 @router.post("/rh/talentos/{talento_id}/converter", dependencies=[Depends(requer_rh)])
 def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
               rh: UsuarioRH = Depends(requer_rh)) -> dict:
@@ -394,8 +436,14 @@ def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get
     link = emitir_link(db, candidato, base_url_publica(request))
     t.status = StatusTalento.convertido
     t.candidato_id = candidato.id
+    # Aproveita AUTOMATICAMENTE os testes que este talento já respondeu (v2.21):
+    # aqui a identidade é certa (o link foi disparado para ele), então não há
+    # julgamento a fazer — e refazer o mesmo teste na admissão seria desperdício
+    # para a pessoa e ruído para o RH.
+    _aproveitados = _aproveitar_testes_do_talento(db, t, candidato.id, rh.email)
     registrar(db, "talento_convertido", ator="rh", ator_detalhe=rh.email,
-              candidato_id=candidato.id, detalhe={"talento": t.nome})
+              candidato_id=candidato.id,
+              detalhe={"talento": t.nome, "testes_aproveitados": _aproveitados})
     db.commit()
 
     enviado = False

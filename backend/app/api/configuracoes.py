@@ -830,6 +830,53 @@ def preview_email(chave: str, payload: EmailTemplateIn,
             "faltando": faltando_obrigatorias(chave, payload.assunto, payload.corpo)}
 
 
+class DestinatariosIn(BaseModel):
+    # aceita "a@x.com, b@y.com" ou lista — o RH digita separado por vírgula
+    destinatarios: str | list[str] = ""
+    ativo: bool = True
+
+
+@router.put("/rh/config/emails/{chave}/destinatarios")
+def salvar_destinatarios_email(chave: str, payload: DestinatariosIn,
+                               db: Session = Depends(get_db),
+                               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Quem recebe um AVISO INTERNO, editado na própria tela do e-mail (v2.21).
+
+    Grava na MESMA matriz de Configurações → Avisos internos — não é um segundo
+    lugar de verdade, é a mesma fonte exposta onde o RH está editando o texto.
+    Só vale para os avisos internos: os demais e-mails vão para a pessoa do
+    processo (candidato, colaborador, assinante), não para uma lista.
+    """
+    from app.services.email_templates import CATALOGO_POR_CHAVE, modelo
+    from app.services.notificacoes import email_valido, gravar_matriz, ler_matriz
+
+    if chave not in CATALOGO_POR_CHAVE:
+        raise HTTPException(status_code=404, detail="email_desconhecido")
+    evento = modelo(chave).evento
+    if not evento:
+        raise HTTPException(status_code=422, detail={
+            "erro": "email_sem_destinatario_configuravel",
+            "motivo": "Este e-mail vai para a pessoa do processo (candidato, "
+                      "colaborador ou assinante), não para uma lista fixa."})
+
+    bruto = payload.destinatarios
+    lista = bruto if isinstance(bruto, list) else bruto.replace(";", ",").split(",")
+    emails = [e.strip() for e in lista if e and e.strip()]
+    invalidos = [e for e in emails if not email_valido(e)]
+    if invalidos:
+        raise HTTPException(status_code=422, detail={
+            "erro": "email_invalido", "invalidos": invalidos})
+
+    matriz = ler_matriz(db)
+    matriz[evento] = {"emails": emails, "ativo": payload.ativo}
+    gravar_matriz(db, matriz)
+    registrar(db, "aviso_destinatarios_alterados", ator="rh", ator_detalhe=rh.email,
+              detalhe={"evento": evento, "quantidade": len(emails),
+                       "ativo": payload.ativo})
+    db.commit()
+    return {"evento": evento, "destinatarios": emails, "ativo": payload.ativo}
+
+
 @router.post("/rh/config/emails/{chave}/enviar-teste")
 def enviar_teste_email(chave: str, payload: EmailTemplateIn,
                        db: Session = Depends(get_db),

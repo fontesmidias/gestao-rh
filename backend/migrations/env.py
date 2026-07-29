@@ -25,6 +25,7 @@ import app.models.modelo_documento  # noqa: F401
 import app.models.prova  # noqa: F401
 import app.models.talento  # noqa: F401
 import app.models.teste  # noqa: F401
+import app.models.teste_vinculado  # noqa: F401
 import app.models.usuario_rh  # noqa: F401
 
 config = context.config
