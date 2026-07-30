@@ -20,6 +20,13 @@ import AlertasTelemetria from './AlertasTelemetria.jsx'
 //
 // Não é a Auditoria (Sistema → Auditoria): aquela é prova de ato, append-only.
 // Esta é dado de produto, descartável, com retenção configurável.
+//
+// LAYOUT: usa as primitivas de `08-sistema-de-design.md` — `.rh-card` para cada
+// bloco, `.rh-metricas` para os números, `.rh-grid-2` para pares de campo. A 1ª
+// versão inventou onze classes (`rh-secao`, `rh-bloco`, `rh-acoes`…) que não
+// existiam no styles.css: sem CSS por trás, a tela saiu crua, sem card nem
+// respiro (feedback do Bruno, 2026-07-30). Ao mexer aqui, confira se a classe
+// EXISTE em styles.css antes de usá-la.
 
 const TIPOS = [
   ['', 'Todos os tipos'],
@@ -63,7 +70,6 @@ export default function TelemetriaRH() {
   const [resumo, setResumo] = useState(null)
   const [eventos, setEventos] = useState(null)
   const [filtros, setFiltros] = useState({ tipo: '', origem: '' })
-  const [msg, setMsg] = useState(null)
 
   const carregar = () => {
     api.telemetriaResumo(dias).then(setResumo).catch(() => setResumo(null))
@@ -75,35 +81,27 @@ export default function TelemetriaRH() {
   const vazio = resumo && resumo.total === 0
 
   return (
-    <section className="rh-secao">
-      <header className="rh-secao-topo">
-        <h2>📈 Telemetria de uso</h2>
-        <label className="campo campo-inline">
-          <span className="rotulo">Período</span>
-          <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
-            <option value={1}>Últimas 24 horas</option>
-            <option value={7}>Últimos 7 dias</option>
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
-          </select>
-        </label>
-      </header>
-
-      <p className="explica">
-        O que acontece no <strong>aparelho das pessoas</strong> — erros de tela,
-        onde elas travam e o que está lento de verdade no celular delas. É
-        diferente da Auditoria <Ajuda texto="A Auditoria (aba Sistema) registra QUEM FEZ O QUÊ e é prova de ato: nunca se apaga. A Telemetria registra COMO FOI USAR o sistema, é dado de produto e tem retenção configurável." />.
-      </p>
-
-      {vazio && (
-        <div className="aviso-codigo">
-          Nenhum evento neste período. Se o sistema acabou de ser atualizado, é
-          normal — os dados aparecem conforme as pessoas usam.
+    <>
+      <div className="rh-card">
+        <div className="rh-topo">
+          <h3>📈 Telemetria de uso</h3>
+          <label className="campo campo-sem-margem">
+            <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+              <option value={1}>Últimas 24 horas</option>
+              <option value={7}>Últimos 7 dias</option>
+              <option value={30}>Últimos 30 dias</option>
+              <option value={90}>Últimos 90 dias</option>
+            </select>
+          </label>
         </div>
-      )}
 
-      {resumo && !vazio && (
-        <>
+        <p className="explica">
+          O que acontece no <strong>aparelho das pessoas</strong> — erros de tela,
+          onde elas travam e o que está lento de verdade no celular delas. É
+          diferente da Auditoria <Ajuda texto="A Auditoria (aba Sistema) registra QUEM FEZ O QUÊ e é prova de ato: nunca se apaga. A Telemetria registra COMO FOI USAR o sistema, é dado de produto e tem retenção configurável." />.
+        </p>
+
+        {resumo && (
           <div className="rh-metricas">
             <div className="rh-metrica">
               <strong>{resumo.por_tipo?.erro || 0}</strong><span>🔴 Erros</span>
@@ -118,97 +116,104 @@ export default function TelemetriaRH() {
               <strong>{resumo.total}</strong><span>Total de eventos</span>
             </div>
           </div>
+        )}
 
-          {/* 1. Está quebrando? Agrupado por mensagem: 300 ocorrências do mesmo
-              erro são UM problema — a lista crua esconderia isso no volume. */}
-          {resumo.erros?.length > 0 && (
-            <details className="rh-bloco" open>
-              <summary><strong>🔴 Erros de tela</strong> — o que está quebrando
-                para as pessoas ({resumo.erros.length})</summary>
-              <table className="rh-tabela">
-                <thead><tr>
-                  <th>Mensagem</th><th>Página</th><th>Vezes</th>
-                  <th>Sessões</th><th>Última</th>
-                </tr></thead>
-                <tbody>
-                  {resumo.erros.map((e, i) => (
-                    <tr key={i}>
-                      <td className="dash-quebra"><code>{e.mensagem || e.evento}</code></td>
-                      <td>{e.pagina || '—'}</td>
-                      <td><strong>{e.ocorrencias}</strong></td>
-                      <td>{e.pessoas}</td>
-                      <td>{fmtDataHora(e.ultima)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="explica">
-                <strong>Sessões</strong> é quanta gente diferente bateu no mesmo erro.
-                Um número alto aqui significa que não é caso isolado.
-              </p>
-            </details>
-          )}
+        {vazio && (
+          <p className="explica" style={{ marginBottom: 0 }}>
+            Nenhum evento neste período. Se o sistema acabou de ser atualizado, é
+            normal — os dados aparecem conforme as pessoas usam.
+          </p>
+        )}
+      </div>
 
-          {/* 2. Onde as pessoas travam. */}
-          {resumo.friccao?.length > 0 && (
-            <details className="rh-bloco" open>
-              <summary><strong>🟠 Onde as pessoas travam</strong> ({resumo.friccao.length})</summary>
-              <table className="rh-tabela">
-                <thead><tr><th>O que aconteceu</th><th>Página</th><th>Vezes</th></tr></thead>
-                <tbody>
-                  {resumo.friccao.map((f, i) => (
-                    <tr key={i}>
-                      <td>{f.evento}</td><td>{f.pagina || '—'}</td>
-                      <td><strong>{f.ocorrencias}</strong></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          )}
-
-          {/* 3. O que está lento — por MEDIANA, não média: uma chamada de 40s
-              distorceria a média e faria parecer que tudo está lento. */}
-          {resumo.lentas?.length > 0 && (
-            <details className="rh-bloco">
-              <summary><strong>🟣 O que está lento</strong> no aparelho das
-                pessoas ({resumo.lentas.length})</summary>
-              <table className="rh-tabela">
-                <thead><tr>
-                  <th>Página</th><th>Tempo típico</th><th>Pior caso</th><th>Amostras</th>
-                </tr></thead>
-                <tbody>
-                  {resumo.lentas.map((l, i) => (
-                    <tr key={i}>
-                      <td className="dash-quebra">{l.pagina || '—'}</td>
-                      <td><strong>{(l.mediana_ms / 1000).toFixed(1)}s</strong></td>
-                      <td>{(l.pior_ms / 1000).toFixed(1)}s</td>
-                      <td>{l.amostras}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="explica">
-                <strong>Tempo típico</strong> é a mediana — o que a maioria das
-                pessoas realmente espera. A média seria distorcida por um único
-                caso muito lento.
-              </p>
-            </details>
-          )}
-        </>
+      {/* 1. Está quebrando? Agrupado por mensagem: 300 ocorrências do mesmo
+          erro são UM problema — a lista crua esconderia isso no volume. */}
+      {resumo?.erros?.length > 0 && (
+        <div className="rh-card">
+          <h3>🔴 Erros de tela — o que está quebrando ({resumo.erros.length})</h3>
+          <table className="rh-tabela">
+            <thead><tr>
+              <th>Mensagem</th><th>Página</th><th>Vezes</th>
+              <th>Sessões</th><th>Última</th>
+            </tr></thead>
+            <tbody>
+              {resumo.erros.map((e, i) => (
+                <tr key={i}>
+                  <td className="dash-quebra"><code>{e.mensagem || e.evento}</code></td>
+                  <td>{e.pagina || '—'}</td>
+                  <td><strong>{e.ocorrencias}</strong></td>
+                  <td>{e.pessoas}</td>
+                  <td>{fmtDataHora(e.ultima)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="explica">
+            <strong>Sessões</strong> é quanta gente diferente bateu no mesmo erro.
+            Um número alto significa que não é caso isolado.
+          </p>
+        </div>
       )}
 
-      <details className="rh-bloco">
+      {/* 2. Onde as pessoas travam. */}
+      {resumo?.friccao?.length > 0 && (
+        <div className="rh-card">
+          <h3>🟠 Onde as pessoas travam ({resumo.friccao.length})</h3>
+          <table className="rh-tabela">
+            <thead><tr><th>O que aconteceu</th><th>Página</th><th>Vezes</th></tr></thead>
+            <tbody>
+              {resumo.friccao.map((f, i) => (
+                <tr key={i}>
+                  <td>{f.evento}</td><td>{f.pagina || '—'}</td>
+                  <td><strong>{f.ocorrencias}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 3. O que está lento — por MEDIANA, não média: uma chamada de 40s
+          distorceria a média e faria parecer que tudo está lento. */}
+      {resumo?.lentas?.length > 0 && (
+        <div className="rh-card">
+          <h3>🟣 O que está lento no aparelho das pessoas ({resumo.lentas.length})</h3>
+          <table className="rh-tabela">
+            <thead><tr>
+              <th>Página</th><th>Tempo típico</th><th>Pior caso</th><th>Amostras</th>
+            </tr></thead>
+            <tbody>
+              {resumo.lentas.map((l, i) => (
+                <tr key={i}>
+                  <td className="dash-quebra">{l.pagina || '—'}</td>
+                  <td><strong>{(l.mediana_ms / 1000).toFixed(1)}s</strong></td>
+                  <td>{(l.pior_ms / 1000).toFixed(1)}s</td>
+                  <td>{l.amostras}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="explica">
+            <strong>Tempo típico</strong> é a mediana — o que a maioria das pessoas
+            realmente espera. A média seria distorcida por um único caso lento.
+          </p>
+        </div>
+      )}
+
+      {/* Alertas ANTES da lista crua e da retenção: é o que o RH mais usa. */}
+      <AlertasTelemetria />
+
+      <details className="rh-card">
         <summary><strong>🔎 Todos os eventos</strong> — filtrar e exportar</summary>
-        <div className="rh-filtros">
-          <label className="campo campo-inline">
+        <div className="rh-grid-2">
+          <label className="campo">
             <span className="rotulo">Tipo</span>
             <select value={filtros.tipo}
                     onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}>
               {TIPOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
             </select>
           </label>
-          <label className="campo campo-inline">
+          <label className="campo">
             <span className="rotulo">Origem</span>
             <select value={filtros.origem}
                     onChange={(e) => setFiltros({ ...filtros, origem: e.target.value })}>
@@ -216,32 +221,31 @@ export default function TelemetriaRH() {
             </select>
           </label>
         </div>
-        {eventos === null ? <p>Carregando…</p> : (
+        {eventos === null ? <p className="explica">Carregando…</p> : (
           <DashPlanilha id="telemetria" colunas={COLUNAS} dados={eventos}
                         chaveLinha={(e) => e.id}
-                        linhaExpandida={(e) => <DetalheEvento evento={e} />} />
+                        linhaExpandida={(e) => <DetalheEvento evento={e} />}
+                        vazio="Nenhum evento no período." />
         )}
       </details>
 
-      <AlertasTelemetria />
-
-      <Retencao aoMudar={carregar} msg={msg} setMsg={setMsg} />
-    </section>
+      <Retencao aoMudar={carregar} />
+    </>
   )
 }
 
 function DetalheEvento({ evento }) {
   return (
-    <div className="rh-detalhe-linha">
+    <div>
       <p><strong>Evento:</strong> {evento.evento} · <strong>Sessão:</strong>{' '}
         <code>{evento.sessao || '—'}</code></p>
       {evento.usuario_rh && <p><strong>Usuário:</strong> {evento.usuario_rh}</p>}
       <p><strong>Navegador:</strong> {evento.user_agent || '—'}</p>
       {/* Só o prefixo do IP é guardado — ver LGPD em models/telemetria.py */}
-      <p><strong>Rede:</strong> {evento.ip_prefixo || '—'} <span className="explica">
-        (só o prefixo, por LGPD)</span></p>
+      <p><strong>Rede:</strong> {evento.ip_prefixo || '—'}{' '}
+        <span className="explica">(só o prefixo, por LGPD)</span></p>
       {evento.detalhe && (
-        <pre className="rh-json">{JSON.stringify(evento.detalhe, null, 2)}</pre>
+        <pre className="bloco-codigo">{JSON.stringify(evento.detalhe, null, 2)}</pre>
       )}
     </div>
   )
@@ -250,10 +254,11 @@ function DetalheEvento({ evento }) {
 // Retenção e expurgo — os dois pedidos do Bruno: mudar o prazo padrão e poder
 // apagar um intervalo específico (ex.: os testes de ontem que poluíram os
 // números).
-function Retencao({ aoMudar, msg, setMsg }) {
+function Retencao({ aoMudar }) {
   const [dias, setDias] = useState('')
   const [intervalo, setIntervalo] = useState({ desde: '', ate: '' })
   const [ocupado, setOcupado] = useState(false)
+  const [msg, setMsg] = useState(null)
 
   useEffect(() => {
     api.telemetriaRetencao().then((r) => setDias(String(r.dias))).catch(() => {})
@@ -274,8 +279,8 @@ function Retencao({ aoMudar, msg, setMsg }) {
       setMsg({ tipo: 'erro', texto: 'Informe pelo menos uma das datas do intervalo.' })
       return
     }
-    if (!confirm(`Apagar a telemetria de ${intervalo.desde || 'o início'} até `
-                 + `${intervalo.ate || 'agora'}? Isto não tem volta.`)) return
+    if (!window.confirm(`Apagar a telemetria de ${intervalo.desde || 'o início'} até `
+                        + `${intervalo.ate || 'agora'}? Isto não tem volta.`)) return
     setOcupado(true); setMsg(null)
     try {
       const r = await api.telemetriaExpurgar({
@@ -285,32 +290,32 @@ function Retencao({ aoMudar, msg, setMsg }) {
       aoMudar()
     } catch (e) {
       setMsg({ tipo: 'erro', texto: e.detail === 'informe_o_intervalo'
-        ? 'Informe o intervalo de datas.'
-        : 'Não foi possível apagar agora.' })
+        ? 'Informe o intervalo de datas.' : 'Não foi possível apagar agora.' })
     } finally { setOcupado(false) }
   }
 
   return (
-    <details className="rh-bloco">
+    <details className="rh-card">
       <summary><strong>🗑️ Retenção e limpeza</strong></summary>
       <p className="explica">
-        A telemetria é apagada automaticamente depois do prazo abaixo — o
-        expurgo roda uma vez por dia, junto com o de arquivos.
+        A telemetria é apagada automaticamente depois do prazo abaixo — o expurgo
+        roda uma vez por dia, junto com o de arquivos.
       </p>
+
       <div className="rh-grid-2">
         <label className="campo">
           <span className="rotulo">Guardar por (dias)</span>
           <input type="number" min="1" max="3650" value={dias}
                  onChange={(e) => setDias(e.target.value)} />
-          <small className="explica">Padrão: 365 (um ano), o que permite
-            comparar períodos do ano anterior.</small>
+          <small className="explica">Padrão: 365 (um ano), o que permite comparar
+            períodos do ano anterior.</small>
         </label>
-        <div className="campo">
+        <label className="campo">
           <span className="rotulo">&nbsp;</span>
           <button className="btn-secundario" onClick={salvar} disabled={ocupado || !dias}>
             Salvar retenção
           </button>
-        </div>
+        </label>
       </div>
 
       <h4>Apagar um intervalo específico</h4>
@@ -328,7 +333,7 @@ function Retencao({ aoMudar, msg, setMsg }) {
                  onChange={(e) => setIntervalo({ ...intervalo, ate: e.target.value })} />
         </label>
       </div>
-      <button className="btn-perigo" onClick={expurgar} disabled={ocupado}>
+      <button className="btn-secundario" onClick={expurgar} disabled={ocupado}>
         Apagar telemetria deste intervalo
       </button>
       {msg && <div className={msg.tipo === 'ok' ? 'sucesso' : 'alerta'}>{msg.texto}</div>}

@@ -46,11 +46,11 @@ export default function TelemetriaPessoa({ candidatoId, talentoId }) {
   const friccoes = (eventos || []).filter((e) => e.tipo === 'friccao')
 
   return (
-    <details className="rh-bloco" onToggle={(e) => setAberto(e.target.open)}>
+    <details className="rh-card" onToggle={(e) => setAberto(e.target.open)}>
       <summary>
         <strong>📈 O que aconteceu na tela desta pessoa</strong>
         {eventos && (erros.length > 0 || friccoes.length > 0) && (
-          <span className="chip" style={{ '--chip-cor': erros.length ? '#c33' : '#c80' }}>
+          <span className="chip" style={{ '--chip-cor': erros.length ? 'var(--perigo)' : 'var(--atencao)' }}>
             {erros.length ? `${erros.length} erro(s)` : `${friccoes.length} travamento(s)`}
           </span>
         )}

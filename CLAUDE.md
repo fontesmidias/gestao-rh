@@ -119,6 +119,23 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   - Expurgo mora em `workers/expurgo.py` (o compose já o agenda; um cron a mais
     seria mais uma peça para esquecer de subir) e NÃO passa pela lixeira —
     milhões de linhas de uso afogariam o que ela existe para proteger.
+- **Classe de CSS que não existe não estiliza NADA — confira antes de usar**
+  (v2.25, feedback do Bruno: "achei tão feia essa página, por que não seguiu o
+  padrão?"). A 1ª tela de Telemetria inventou ONZE classes (`rh-secao`,
+  `rh-bloco`, `rh-acoes`, `rh-form-inline`, `campo-check`…) que não estavam no
+  `styles.css`. O JSX ficava plausível e o build passava — CSS não reclama de
+  seletor inexistente —, mas a tela saía CRUA: sem card, sem borda, sem
+  espaçamento, tudo empilhado. **O erro não foi de gosto, foi de não ter lido
+  `docs/planejamento/08-sistema-de-design.md` antes de escrever.** O vocabulário
+  real é curto: `.rh-card` (bloco), `.rh-grid-2` (duas colunas), `.rh-topo`
+  (cabeçalho), `.rh-metricas`/`.rh-metrica` (números), `.rh-tabela`, `.campo` +
+  `.rotulo`, `.explica`, `.chip`, `.aviso-codigo`, `.sucesso`/`.alerta`,
+  `.btn-principal`/`.btn-secundario`/`.btn-link`/`.btn-remover`/`.btn-mini`.
+  Antes de commitar tela nova: `grep -c '\.minha-classe' styles.css` em cada
+  classe usada — zero significa que ela não faz nada. Idem para
+  `var(--token)`: token inexistente cai no fallback e quebra o dark mode.
+  Precisa de uma classe nova de verdade? Acrescente ao `styles.css` com tokens
+  (foi o caso de `.bloco-codigo` e `.campo-sem-margem`), nunca invente no JSX.
 - **Alertas de telemetria** (`models/alerta.py`, `services/alertas.py`,
   `workers/alertas_telemetria.py`, `rh/AlertasTelemetria.jsx`, v2.25): a
   telemetria da v2.24 é PASSIVA (alguém tem que abrir a aba); os alertas a

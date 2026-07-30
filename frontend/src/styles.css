@@ -683,6 +683,19 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rejeicao { display: flex; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
 .rejeicao select, .rejeicao input { width: auto; flex: 1; }
 
+/* Campo dentro de um `.rh-topo` (seletor de período ao lado do título): sem a
+   margem inferior do `.campo`, que desalinharia o controle do cabeçalho. */
+.campo-sem-margem { margin-bottom: 0; }
+
+/* Bloco de código/JSON legível (detalhe técnico de um evento de telemetria).
+   Rola na horizontal em vez de esticar o card — nada estoura a tela. */
+.bloco-codigo {
+  background: var(--fundo); border: 1px solid var(--borda-suave);
+  border-radius: var(--raio-input); padding: var(--esp-3);
+  font-size: var(--fs-mini); overflow-x: auto; margin: var(--esp-2) 0 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+
 /* ---------- Métricas do painel RH ---------- */
 .rh-metricas {
   display: grid;
