@@ -11,6 +11,59 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.25.0] — 2026-07-30 — Alertas: o sistema avisa em vez de esperar a pergunta
+
+A telemetria da v2.24 grava tudo certo, mas é **passiva** — alguém precisa abrir
+a aba. No incidente de 29/07 isso não bastaria: o erro estaria gravado às 11h01
+e a descoberta continuaria dependendo de o candidato ligar.
+
+### Adicionado
+- **Quatro tipos de alerta**, todos com regras **editáveis na tela** (nada de
+  limiar chumbado no código — quem convive com os números é quem deve ajustá-los):
+  - **Erro novo** — uma mensagem que nunca tinha aparecido. O caso de 29/07:
+    teria avisado às 11h05.
+  - **Volume de erros** — um erro conhecido que disparou; assinatura clássica de
+    deploy ruim.
+  - **Pico de travamentos** — muita gente travando no mesmo ponto. Indica que
+    algo quebrou, não que as pessoas estão desatentas.
+  - **Lentidão** — página acima do tempo aceitável **para a maioria** (mediana).
+- **Entrega pela matriz de avisos internos** (evento `telemetria_alerta`), com
+  texto editável no catálogo de e-mails — a mesma mecânica dos outros 40 avisos,
+  nenhum caminho paralelo.
+- **Worker `alertas` a cada 15 minutos**, serviço próprio no compose e no stack
+  do Portainer. Não foi embutido no `expurgo` (24h): ali o alerta chegaria um
+  dia depois e não serviria para nada.
+- **"O que dispararia agora?"** — simulação que **não envia e não gasta o
+  silêncio**. Testar não pode impedir o alerta real de chegar depois.
+- **Histórico de alertas enviados**, com destaque em vermelho quando o alerta
+  saiu para **ninguém** (destinatário não cadastrado): sem isso, caixa silenciosa
+  seria ambígua — "não houve problema" e "quebrou" pareceriam iguais.
+- Quatro regras já ativas na migration: o recurso nasce vigiando, em vez de
+  esperar alguém configurar o que ainda não doeu.
+
+### Corrigido
+- **`/c/assinatura` era mascarado como se fosse token** (`/c/assina***`), e o
+  mesmo erro aparecia **duas vezes** no alerta — uma por grafia, como se fossem
+  problemas diferentes. Agrupar errado infla a contagem e esconde o padrão.
+  `_parece_token` agora exige tamanho **e** caixa mista: nome de etapa nunca tem
+  as duas coisas.
+- **O teste do catálogo de e-mails travava o NÚMERO de avisos** (`== 8`). Cada
+  aviso legítimo quebraria o teste sem apontar defeito, e a tentação seria só
+  incrementar a constante — um teste que não protege nada. Agora o vínculo
+  aviso↔evento é derivado do próprio catálogo.
+
+### Verificação
+`tests/test_alertas.py` (7 blocos) cobre dedup, silêncio por problema,
+agrupamento, limiar, mediana, filtro por origem, isolamento entre regras e
+histórico. Validado por **mutação** — e a mutação expôs um teste fraco:
+desativar a checagem de "já visto" passava. Faltava o caso de que **"novo" é
+para sempre**, não pela janela de silêncio; sem ele, um erro conhecido voltaria a
+ser anunciado como novidade de hora em hora. Caso adicionado, mutante agora
+falha. Ciclo real conferido na stack: 4 erros simulados → alerta disparado →
+e-mail entregue → 2ª verificação silenciosa.
+
+---
+
 ## [2.24.0] — 2026-07-30 — Telemetria de uso: o que acontece no aparelho das pessoas
 
 Resposta direta ao incidente das v2.22/v2.23. Dois candidatos travaram e o erro

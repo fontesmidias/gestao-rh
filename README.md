@@ -81,6 +81,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Onde as pessoas travam**: documento reenviado, arquivo recusado antes de sair do aparelho, formulário que não deixou avançar, link vencido. Quem desiste não reclama — simplesmente não volta, e sem isto era invisível
 - **Individualizada na ficha da pessoa** (candidato, colaborador, talento): responde *"não consigo enviar meus documentos"* com fato, não com suposição
 - **Aba própria** (Configurações → 📈 Telemetria) com os erros **agrupados** por mensagem — 300 ocorrências do mesmo erro são um problema, não trezentos — e as páginas lentas por **mediana**, que é o que a maioria realmente espera
+- **O sistema avisa você** — não espera alguém abrir a tela: a cada 15 minutos ele verifica e manda e-mail quando um erro **novo** aparece, quando um erro conhecido dispara de volume, quando muita gente trava no mesmo ponto ou quando uma página fica lenta. As regras e os limites são editáveis no painel, e quem recebe sai da mesma matriz de Avisos internos
 - **Retenção configurável** (padrão 1 ano), expurgo diário automático e limpeza por intervalo de datas
 - **Minimizada por desenho**: nada do que a pessoa digita, IP truncado (`191.180.x.x`) e token do link mágico mascarado — ele é credencial de acesso
 

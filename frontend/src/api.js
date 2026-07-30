@@ -1109,6 +1109,20 @@ export const rh = {
   telemetriaExpurgar: (dados) =>
     req('/rh/telemetria/expurgar',
         { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // Alertas: regras editáveis que fazem o sistema AVISAR (v2.25)
+  alertaRegras: () => req('/rh/telemetria/alertas/regras', { headers: authRH() }),
+  criarAlertaRegra: (dados) =>
+    req('/rh/telemetria/alertas/regras',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarAlertaRegra: (id, dados) =>
+    req(`/rh/telemetria/alertas/regras/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirAlertaRegra: (id) =>
+    req(`/rh/telemetria/alertas/regras/${id}`, { method: 'DELETE', headers: authRH() }),
+  testarAlertas: () =>
+    req('/rh/telemetria/alertas/testar', { method: 'POST', headers: authRH() }),
+  alertaHistorico: () =>
+    req('/rh/telemetria/alertas/historico', { headers: authRH() }),
   telemetriaRetencao: () => req('/rh/telemetria/retencao', { headers: authRH() }),
   salvarTelemetriaRetencao: (dias) =>
     req('/rh/telemetria/retencao',

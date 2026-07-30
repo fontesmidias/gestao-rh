@@ -62,9 +62,26 @@ def mascarar_pagina(pagina: str | None) -> str | None:
     for marca in ("c", "t", "p"):        # links de candidato, testagem e prova
         if marca in partes:
             i = partes.index(marca) + 1
-            if i < len(partes) and len(partes[i]) > 8:
+            if i < len(partes) and _parece_token(partes[i]):
                 partes[i] = partes[i][:6] + "***"
     return "/".join(partes)
+
+
+def _parece_token(trecho: str) -> bool:
+    """Distingue um token de link mágico de um nome de etapa.
+
+    Sem isto, `/c/assinatura` (nome de etapa, 10 caracteres) virava
+    `/c/assina***` — e o MESMO erro aparecia duas vezes no alerta, uma por
+    grafia, como se fossem problemas diferentes (pego ao testar o cenário real).
+    Agrupar errado é pior que não agrupar: infla a contagem e esconde o padrão.
+
+    Token do `itsdangerous` é longo e mistura maiúsculas, minúsculas, dígitos e
+    `-`/`_`; nome de etapa é palavra minúscula. Exigimos tamanho E mistura de
+    caixa — um nome de etapa nunca tem as duas coisas.
+    """
+    if len(trecho) < 20:
+        return False
+    return any(c.islower() for c in trecho) and any(c.isupper() for c in trecho)
 
 
 def ip_prefixo(ip: str | None) -> str | None:
