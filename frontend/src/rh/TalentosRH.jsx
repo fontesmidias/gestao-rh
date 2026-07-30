@@ -3,6 +3,7 @@ import { fmtData, fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
+import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
 
 const STATUS = {
@@ -317,6 +318,9 @@ function FichaTalento({ t, verCurriculo }) {
           {t.consentimento_lgpd_em ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}` : null}</Campo>
         <Campo rotulo="Cadastro">{fmtDataHora(t.criado_em)}</Campo>
       </div>
+      {/* Diagnóstico: o que aconteceu na TELA desta pessoa (v2.24). Recolhido —
+          só importa quando ela relata que não conseguiu se cadastrar. */}
+      <TelemetriaPessoa talentoId={t.id} />
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { ErrosRecentes } from './Diagnostico.jsx'
 import { comAmpulheta } from '../Carregando.jsx'
 import Importacoes from './Importacoes.jsx'
 import EmailsConfig from './EmailsConfig.jsx'
+import TelemetriaRH from './TelemetriaRH.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -322,6 +323,7 @@ const SUBMENUS = [
   ['tags', '🏷️ Tags'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['emails', '✉️ Textos dos e-mails'],
+  ['telemetria', '📈 Telemetria'],
   ['sistema', '🛠️ Sistema'],
 ]
 
@@ -360,6 +362,7 @@ export default function Config({ aoVoltar }) {
         <Teams />
       </>}
       {aba === 'emails' && <EmailsConfig />}
+      {aba === 'telemetria' && <TelemetriaRH />}
       {aba === 'sistema' && <><Lixeira /><ErrosRecentes /><Auditoria /></>}
     </main>
   )

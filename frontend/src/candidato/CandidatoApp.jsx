@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { candidato as api } from '../api.js'
+import { anotar, anotarFriccao, definirContexto } from '../telemetria.js'
 import Wizard from './Wizard.jsx'
 import Assinatura from './Assinatura.jsx'
 import Checklist from './Checklist.jsx'
@@ -22,6 +23,22 @@ export default function CandidatoApp() {
   }
 
   const [reassinatura, setReassinatura] = useState(false)
+
+  // Telemetria (v2.24): identifica os eventos desta sessão como do candidato
+  // deste link. É o que permite abrir a ficha de alguém no painel e ver o que
+  // aconteceu com ELA — em vez de descobrir só quando ela liga reclamando.
+  useEffect(() => { definirContexto({ origem: 'candidato', token }) }, [token])
+
+  // Quanto tempo em cada etapa: mostra ONDE o candidato trava. Registrado na
+  // SAÍDA da etapa (o cleanup), porque é aí que se sabe quanto durou.
+  useEffect(() => {
+    if (!tela) return
+    const entrou = performance.now()
+    anotar('etapa_aberta', { pagina: `/c/${tela}` })
+    return () => anotar('etapa_concluida', {
+      pagina: `/c/${tela}`, duracao_ms: performance.now() - entrou,
+    })
+  }, [tela])
 
   useEffect(() => {
     recarregar()
@@ -74,6 +91,11 @@ export default function CandidatoApp() {
           setErro('encerrada')
           return
         }
+        // Fricção: o candidato bateu numa porta fechada. Link vencido é a
+        // reclamação nº 1 do RH, e até aqui não havia número nenhum sobre ela
+        // — só a percepção de quem atende o telefone.
+        anotarFriccao(e.status === 404 ? 'link_invalido' : 'erro_ao_abrir',
+                      { status: e.status, detalhe: e.detail })
         setErro(e.status === 404 ? 'link' : 'geral')
       })
   }, [token])

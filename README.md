@@ -76,6 +76,14 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Uniformes**: lista com as medidas informadas no wizard, na tela e com export CSV. O e-mail ao operacional diz só que há novidade — ficha de pessoal não circula por caixa de e-mail
 - **Central de Importações**, tags, tipos de certificado, prazos por posto/cargo, identidade visual e provedor de e-mail
 
+### Telemetria de uso — enxergar o que acontece no aparelho das pessoas
+- **Erros de tela registrados**: quando algo quebra no navegador de um candidato, o RH vê — antes, esse erro morria lá e o servidor registrava um `200` tranquilo, porque do lado dele tinha dado tudo certo
+- **Onde as pessoas travam**: documento reenviado, arquivo recusado antes de sair do aparelho, formulário que não deixou avançar, link vencido. Quem desiste não reclama — simplesmente não volta, e sem isto era invisível
+- **Individualizada na ficha da pessoa** (candidato, colaborador, talento): responde *"não consigo enviar meus documentos"* com fato, não com suposição
+- **Aba própria** (Configurações → 📈 Telemetria) com os erros **agrupados** por mensagem — 300 ocorrências do mesmo erro são um problema, não trezentos — e as páginas lentas por **mediana**, que é o que a maioria realmente espera
+- **Retenção configurável** (padrão 1 ano), expurgo diário automático e limpeza por intervalo de datas
+- **Minimizada por desenho**: nada do que a pessoa digita, IP truncado (`191.180.x.x`) e token do link mágico mascarado — ele é credencial de acesso
+
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
 - **Lixeira universal** com restauração e retenção configurável · expurgo LGPD automático · rate limiting em login/2FA

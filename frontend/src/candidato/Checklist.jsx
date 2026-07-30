@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { DICAS, CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
+import { anotar, anotarFriccao } from '../telemetria.js'
 import Espera from '../Espera.jsx'
 import { Cartao } from './CandidatoApp.jsx'
 import CapturaDocumento from './Camera.jsx'
@@ -149,13 +150,34 @@ export default function Checklist({ token, aoConcluir }) {
     const erroLocal = lista.map(validarAntesDeEnviar).find(Boolean)
     if (erroLocal) {
       setErros((x) => ({ ...x, [slotId]: erroLocal }))
+      // O arquivo foi recusado ANTES de sair do aparelho (tamanho, formato).
+      // É a fricção mais invisível de todas: não gera requisição nenhuma, então
+      // nunca aparecia em log — a pessoa só desistia.
+      anotarFriccao('arquivo_recusado_no_aparelho', {
+        tipo: check.slots.find((s) => s.id === slotId)?.tipo, motivo: erroLocal.slice(0, 80),
+      })
       return
     }
     setEnviando(slotId)
     setSugestoes((s) => (s?.slotId === slotId ? null : s))
     setAvisos((a) => ({ ...a, [slotId]: null }))
+    const slotAtual = check.slots.find((s) => s.id === slotId)
+    // Reenvio é o sinal de fricção mais valioso do checklist: significa que a
+    // primeira tentativa não serviu. Muitos reenvios do MESMO tipo de documento
+    // apontam uma dica mal escrita ou uma exigência confusa — não desatenção.
+    if (slotAtual && slotAtual.status !== 'pendente') {
+      anotarFriccao('documento_reenviado', { tipo: slotAtual.tipo, status_anterior: slotAtual.status })
+    }
+    const t0 = performance.now()
     try {
       const r = await api.enviarArquivo(token, slotId, arquivo)
+      // Upload lento no 4G da pessoa — o servidor mede o próprio tempo, nunca
+      // a subida do arquivo pela rede dela.
+      const ms = performance.now() - t0
+      if (ms > 1500) {
+        anotar('upload_documento', { tipo: 'desempenho', duracao_ms: ms,
+                                     detalhe: { tipo_doc: slotAtual?.tipo } })
+      }
       if (r.sugestoes && Object.keys(r.sugestoes).length) {
         setSugestoes({ slotId, dados: r.sugestoes })
       }
@@ -168,6 +190,12 @@ export default function Checklist({ token, aoConcluir }) {
       }
       await recarregar()
     } catch (err) {
+      // Falha de upload com o motivo real do backend: distingue "arquivo
+      // grande demais" de "servidor caiu" nos números, e não só no texto que a
+      // pessoa vê.
+      anotarFriccao('falha_no_envio', {
+        tipo: slotAtual?.tipo, detalhe: err.detail, status: err.status,
+      })
       setErros((x) => ({
         ...x,
         [slotId]: CODIGOS_ERRO_UPLOAD[err.detail]

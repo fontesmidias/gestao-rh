@@ -11,6 +11,60 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.24.0] — 2026-07-30 — Telemetria de uso: o que acontece no aparelho das pessoas
+
+Resposta direta ao incidente das v2.22/v2.23. Dois candidatos travaram e o erro
+morreu no navegador deles: o servidor registrou **200 em tudo**, porque do lado
+dele deu certo — o `TypeError` aconteceu no React, depois da resposta. Não havia
+o que procurar em log nenhum.
+
+### Adicionado
+- **`EventoTelemetria`** (migration `c9d0e1f2a3b4`) com quatro famílias:
+  `erro` (exceção de JS com página, stack e versão do bundle), `friccao` (onde a
+  pessoa trava), `jornada` (por onde passou, quanto tempo) e `desempenho`
+  (quanto demorou no celular dela, não no servidor).
+- **Telemetria individualizada na ficha da pessoa** — candidato, colaborador e
+  Banco de Talentos. Responde "não consigo enviar meus documentos" com fato, e
+  não com suposição. Segue a pessoa de talento → candidato, como o mini-CRM.
+- **Aba Configurações → 📈 Telemetria**, organizada pelas três perguntas que
+  importam, nessa ordem: *está quebrando?* (erros **agrupados** por mensagem —
+  300 ocorrências do mesmo erro são UM problema, e a lista crua esconderia o
+  padrão atrás do volume), *onde as pessoas travam?* e *o que está lento?*
+- **Páginas lentas por MEDIANA, não média**: uma chamada de 40s distorceria a
+  média e faria parecer que tudo está lento. A mediana mostra o que a maioria
+  vive.
+- **Retenção configurável** (padrão **1 ano**, para permitir comparação
+  sazonal) com expurgo diário automático, e **expurgo por intervalo de datas**
+  para limpar o que testes poluíram — registrado na auditoria.
+
+### O que a telemetria NÃO guarda, por decisão de projeto
+- **Nada do que a pessoa digita** — só o nome da etapa e o que aconteceu com ela.
+- **IP truncado** (`191.180.x.x`): distingue "a operadora está com problema" de
+  "o sistema está com problema" sem localizar ninguém.
+- **Token do link mágico mascarado**: `/c/{token}` é credencial de acesso, e
+  telemetria é feita para ser lida e exportada. Gravá-lo criaria uma planilha de
+  chaves de acesso.
+
+### Não é a Auditoria
+`EventoAuditoria` responde "quem fez o quê" e é prova de ato — append-only,
+nunca expurgada. A telemetria responde "como foi usar" e é descartável por
+desenho. Misturar as duas transformaria dado de produto em prova jurídica, e
+prova jurídica em lixo que se apaga.
+
+### Verificação
+`tests/test_telemetria.py` (8 blocos) cobre mascaramento, minimização de IP,
+teto de volume (a rota é pública), agrupamento do resumo, os dois modos de
+expurgo e a telemetria por pessoa.
+
+**O teste encontrou um bug real antes do deploy**: as FKs de `candidato`/
+`talento` não resolviam sem o import dos modelos, e **toda** gravação falhava —
+em silêncio, porque `registrar_eventos` engole exceção por desenho. É a
+armadilha da v2.02 ("catch vazio não pode engolir erro de infra") do lado do
+servidor. Validado por **mutação**: removido o mascaramento do caminho de
+gravação, o teste falha; restaurado, passa.
+
+---
+
 ## [2.23.0] — 2026-07-29 — A segunda causa da tela branca: `fichas.some()` sobre `null`
 
 A v2.22 corrigiu o nginx e a tela **continuou quebrando** — agora com a

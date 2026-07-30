@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { talentos as api } from './api.js'
+import { anotar, anotarFriccao, definirContexto } from './telemetria.js'
 import logo from './assets/logo.png'
 
 // Formulário PÚBLICO do Banco de Talentos (sem login), em 3 passos curtos com
@@ -32,7 +33,20 @@ export default function BancoDeTalentos() {
 
   useEffect(() => {
     api.opcoes().then((o) => { setCargos(o.cargos || []); setRegioes(o.regioes || []) }).catch(() => {})
+    definirContexto({ origem: 'publico' })
   }, [])
+
+  // Funil do formulário público (v2.24): quanto tempo em cada passo e onde as
+  // pessoas param. O Banco de Talentos é a porta de entrada do recrutamento —
+  // sem isto, um passo que espanta candidatos é invisível: quem desiste não
+  // reclama, simplesmente não volta.
+  useEffect(() => {
+    const entrou = performance.now()
+    anotar('talento_passo', { pagina: `/talentos/passo-${passo}` })
+    return () => anotar('talento_passo_saiu', {
+      pagina: `/talentos/passo-${passo}`, duracao_ms: performance.now() - entrou,
+    })
+  }, [passo])
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const toggleLista = (k, valor) => setForm((f) => {
@@ -47,7 +61,12 @@ export default function BancoDeTalentos() {
   }
   const avancar = () => {
     const e = validarPasso()
-    if (e) { setErro(e); return }
+    if (e) {
+      // Bloqueado pela validação: a pessoa TENTOU seguir e o formulário não
+      // deixou. Se um campo concentra estes eventos, o texto dele está confuso.
+      anotarFriccao('talento_bloqueado', { passo, motivo: e.slice(0, 80) })
+      setErro(e); return
+    }
     setErro(null); setPasso((p) => Math.min(p + 1, PASSOS.length - 1))
   }
   const voltar = () => { setErro(null); setPasso((p) => Math.max(p - 1, 0)) }

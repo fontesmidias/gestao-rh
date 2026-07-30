@@ -88,6 +88,37 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Telemetria de uso** (`models/telemetria.py`, `services/telemetria.py`,
+  `api/telemetria.py`, `frontend/src/telemetria.js`, `rh/TelemetriaRH.jsx` +
+  `rh/TelemetriaPessoa.jsx`, v2.24): o que acontece no APARELHO da pessoa —
+  erro de JS, fricção, jornada e desempenho. Existe porque o incidente de
+  2026-07-29 provou que a telemetria HTTP do servidor é cega: ela registrou
+  **200 em tudo** enquanto dois candidatos viam tela branca, porque o
+  `TypeError` acontecia no React, DEPOIS da resposta.
+  - **NÃO é a auditoria.** `EventoAuditoria` = "quem fez o quê", prova de ato,
+    append-only, nunca expurgada. `EventoTelemetria` = "como foi usar", dado de
+    produto, descartável, retenção configurável (padrão 1 ano). Não fundir: daria
+    dado de produto com peso de prova jurídica, e prova jurídica que se apaga.
+  - **`registrar_eventos` é a porta única e NUNCA levanta** (mesma regra do
+    `avisar()`). Mas o silêncio já cobrou: as FKs de candidato/talento não
+    resolviam sem o import dos modelos em `models/telemetria.py`, e TODA
+    gravação falhava sem sinal nenhum. Por isso o log é `exception` com stack, e
+    o teste afirma que a gravação REALMENTE grava — não só que não levantou.
+  - **A rota de coleta é PÚBLICA** (o candidato não tem login): rate limit por
+    IP, teto de 50 eventos por lote e corte de cada campo. Excesso é descartado
+    em silêncio — nem 429 —, porque telemetria não pode virar canal de erro para
+    quem está usando. `origem="rh"` só é aceita na rota autenticada.
+  - **LGPD por desenho, na ENTRADA**: nada do que a pessoa digita; IP truncado
+    (`ip_prefixo`); e **token do link mágico mascarado** (`mascarar_pagina`) —
+    `/c/{token}` é CREDENCIAL, e telemetria é feita para ser lida e exportada.
+    Testar só a função de mascarar não basta: o teste tem que provar que ela é
+    aplicada na gravação (lacuna pega por mutação).
+  - **Resumo AGRUPA**: erros por mensagem (300 ocorrências do mesmo erro são UM
+    problema) e páginas lentas por **mediana**, não média — um caso de 40s
+    distorceria a média e faria parecer que tudo está lento.
+  - Expurgo mora em `workers/expurgo.py` (o compose já o agenda; um cron a mais
+    seria mais uma peça para esquecer de subir) e NÃO passa pela lixeira —
+    milhões de linhas de uso afogariam o que ela existe para proteger.
 - **Estado que nasce `null` NÃO pode ser usado no corpo do componente** —
   o guard tem que vir ANTES de qualquer cálculo, não junto do `return`
   (2ª causa do incidente de 2026-07-29; a 1ª está no item seguinte). Em

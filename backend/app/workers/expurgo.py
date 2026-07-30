@@ -55,6 +55,31 @@ def expurgar() -> int:
     return total
 
 
+def expurgar_telemetria() -> int:
+    """Aplica a retenção da telemetria de uso (v2.24).
+
+    Mora aqui, e não num worker novo, porque o compose já agenda este diariamente
+    — um cron a mais seria mais uma peça para esquecer de subir.
+
+    A retenção é configurável no painel (padrão 1 ano, escolha do Bruno para
+    permitir comparação sazonal). Telemetria NÃO passa pela lixeira: é dado
+    descartável de produto, e milhões de linhas de uso afogariam a lixeira, que
+    existe para proteger documento de gente.
+    """
+    from app.services.telemetria import expurgar as expurgar_tel, retencao_dias
+
+    with SessionLocal() as db:
+        dias = retencao_dias(db)
+        corte = datetime.now(timezone.utc) - timedelta(days=dias)
+        n = expurgar_tel(db, antes_de=corte)
+        db.commit()
+        if n:
+            log.info("Telemetria expurgada: %s eventos anteriores a %s (retenção de %s dias)",
+                     n, corte.date(), dias)
+        return n
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"Candidatos expurgados: {expurgar()}")
+    print(f"Eventos de telemetria expurgados: {expurgar_telemetria()}")
