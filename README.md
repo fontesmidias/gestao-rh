@@ -53,11 +53,28 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Direito de resposta** do colaborador (manifestação, com prazo), **radar** de competências + **timeline** das médias, e **calibração** que informa ao homologador quando um avaliador é mais generoso/rigoroso que os demais — sem alterar nota
 - **Frequência do Tirvu** importada por planilha entra como **contexto**, nunca nota; registro incompleto (esqueceu de bater a saída) jamais é contado como falta
 
+### Recrutamento e seleção
+- **Banco de Talentos**: formulário público (substituiu o Microsoft Forms) com currículo opcional, importação idempotente da planilha do Forms e consentimento LGPD obrigatório
+- **Match de Vagas**: o RH cadastra a vaga e o sistema ranqueia os talentos por aderência — filtro estruturado local primeiro (grátis), currículo lido por IA depois. **A IA nunca decide sozinha**: devolve nota e justificativa, o RH convoca. O ranqueamento é **assíncrono** (enfileirado), o texto do currículo é extraído **uma vez** no upload e a análise é reaproveitada por (vaga, talento)
+- **Currículo é tratado como entrada hostil**: é upload público de gente desconhecida cujo texto vai para dentro de um prompt. Cinco camadas anti-prompt-injection e o suspeito aparece marcado **"⚠️ suspeito"** no ranking — **nunca filtrado em silêncio**, porque ranking adulterado parece igual a um legítimo. CPF/RG/telefone/e-mail são removidos antes do envio à IA
+- **Ninguém some sem explicação**: sem currículo, ilegível, aguardando IA e erro são resultados **gravados e exibidos com o motivo** — não ausência
+- **Provas por cargo**: banco de provas configurável pelo RH (objetivas com correção automática e discursivas pontuadas), aplicação por link avulso com timer, aleatorização por participante e **banco de itens** reutilizável. O gabarito nunca vai ao público
+- **Teste já respondido é aproveitado**: quem fez DISC, situacional ou prova antes de virar candidato não refaz — e fica registrado se a identidade foi deduzida pelo sistema ou afirmada por uma pessoa, porque o link avulso é anônimo e homônimo existe
+- **Mini-CRM**: anotações e tags que acompanham a **pessoa** de talento → candidato → efetivo → desligado, com autor snapshot e anexo
+- **Minutário de Mensagens**: modelos de mensagem e composição assistida por IA a partir dos campos da **vaga** — o texto volta sempre editável e nunca é enviado sozinho
+
 ### Benefícios, testes, arquivo
 - **Reembolso-Creche** (IN SEGES/MGI 147/2026): elegibilidade por posto, link público de levantamento com 2FA (ou perguntas de verificação para quem não tem e-mail), assinatura do requerimento e ciclo completo de decisão do RH — aprovar, devolver para correção, indeferir, "não faço jus", suspender/encerrar — com aviso ao colaborador em cada passo
 - **Central de testes**: dashboard de todos os testes (admissão + testagem avulsa), reset, relatório de comportamento; links de testagem anônima onde a pessoa vê o próprio resultado
 - **Arquivo/backup**: inventário com filtros, download individual e **backup em lote** (ZIP por posto/pessoa + planilha XLSX), auditado
 - **DashPlanilha**: componente único de lista do RH (ordenação, filtro por coluna, seleção em massa, colunas configuráveis, export CSV e cards-métrica clicáveis) — o padrão de todas as telas de lista
+
+### O que o RH edita sem depender de deploy
+- **Textos de todos os e-mails**, com preview, histórico append-only de quem mudou o quê e restauração. O **template é apresentação, nunca decisão**: os e-mails que enumeram documentos recebem a lista pronta como `{{lista}}` — a regra do que entra continua no código. Variável obrigatória é validada no salvamento (um e-mail de acesso sem `{{codigo}}` sai bonito e vazio, e ninguém mais entra no sistema)
+- **Quem recebe cada aviso interno** (matriz evento × destinatários) — nunca a caixa de login, que é pessoal
+- **Catálogo dos documentos do sistema**: os 11 documentos da admissão com amostra em PDF de verdade, download e "criar modelo a partir deste" nos de texto corrido. Os geradores oficiais **não são substituídos** — o hash do ato de assinatura é calculado sobre o PDF gerado, então trocá-los faria os manifestos já emitidos apontarem para um hash que não se reproduz
+- **Uniformes**: lista com as medidas informadas no wizard, na tela e com export CSV. O e-mail ao operacional diz só que há novidade — ficha de pessoal não circula por caixa de e-mail
+- **Central de Importações**, tags, tipos de certificado, prazos por posto/cargo, identidade visual e provedor de e-mail
 
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
@@ -120,6 +137,19 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 ### Atualização e rollback (sem perda de dados)
 
 - **Atualizar:** `git pull` + o mesmo `up -d --build` (ou *Re-pull image* no Portainer). As migrations rodam sozinhas no start e preservam os volumes `postgres-data` e `minio-data`.
+- **Confira depois de todo deploy:** `GET /api/health` →
+
+  ```json
+  { "status": "ok", "versao": "v2.22-…",
+    "migracoes": { "em_dia": true, "no_codigo": "b8c9d0e1f2a3", "no_banco": "b8c9d0e1f2a3" } }
+  ```
+
+  `"em_dia": false` significa que o banco ficou para trás do código — o
+  `alembic upgrade head` do entrypoint falhou. A API sobe assim mesmo, e o
+  defeito aparece só quando alguém usa a tela afetada. Resolva com
+  `docker exec <api> alembic upgrade head`. **Abra também um link de candidato
+  numa aba que já estava aberta antes do deploy**: é exatamente o caso que
+  causou o incidente de 2026-07-29.
 - **Rollback de código:** aponte a stack para a tag anterior da imagem (`ghcr.io/...:vX.Y.Z`).
 - **Rollback de banco:** toda migration tem `downgrade()` que **não destrói dados**. Voltar uma revisão: `docker exec <api> alembic downgrade -1`. Backup antes: `docker exec <db> pg_dump -U $POSTGRES_USER $POSTGRES_DB > backup.sql`.
 - **Higienização de imagens** (evita acúmulo na VPS): `docker image prune -af --filter "until=168h"` — agende no cron do host (domingo de madrugada). **Nunca** `docker volume prune` na VPS.
