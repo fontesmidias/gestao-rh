@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import ErroFatal from './ErroFatal.jsx'
+import { instalarCapturaGlobal } from './telemetria.js'
 import '@fontsource/outfit/400.css'
 import '@fontsource/outfit/600.css'
 import '@fontsource/outfit/700.css'
@@ -66,6 +67,11 @@ window.addEventListener('unhandledrejection', (e) => {
 // Trinta segundos separam "recarreguei e o problema continua" de "estou usando
 // o sistema há um tempo e agora um deploy novo aconteceu".
 setTimeout(() => sessionStorage.removeItem(CHAVE_RECARGA), 30_000)
+
+// Captura erros que nenhum ErrorBoundary alcança (fora do React, promessa
+// solta). Instalada ANTES do render: se a própria montagem quebrar, o registro
+// ainda sai — que é exatamente o caso do incidente de 2026-07-29.
+instalarCapturaGlobal()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

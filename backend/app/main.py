@@ -40,6 +40,7 @@ from app.api.rh_ficha import router as rh_ficha_router
 from app.api.minutario import router as minutario_router
 from app.api.vagas import router as vagas_router
 from app.api.health import router as health_router
+from app.api.telemetria import router as telemetria_router
 from app.core.bootstrap import criar_admin_inicial
 from app.core.config import get_settings, ip_do_cliente
 from app.core.db import Base, SessionLocal, engine
@@ -125,6 +126,7 @@ async def log_requisicoes(request: Request, call_next):
     return resposta
 
 app.include_router(health_router, prefix="/api")
+app.include_router(telemetria_router, prefix="/api")
 app.include_router(auth_rh_router, prefix="/api")
 app.include_router(candidatos_router, prefix="/api")
 app.include_router(ficha_router, prefix="/api")

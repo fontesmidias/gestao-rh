@@ -1091,6 +1091,28 @@ export const rh = {
   diagnostico: (id) => req(`/rh/candidatos/${id}/diagnostico`, { headers: authRH() }),
   errosRecentes: () => req('/rh/diagnostico/erros', { headers: authRH() }),
   auditoria: () => req('/rh/auditoria', { headers: authRH() }),
+  // Telemetria de uso (v2.24) — o que acontece no aparelho das pessoas.
+  // Não confundir com a auditoria acima: aquela é prova de ato ("quem fez o
+  // quê"), esta é dado de produto ("como foi usar"), e é descartável.
+  telemetriaResumo: (dias = 7) =>
+    req(`/rh/telemetria/resumo?dias=${dias}`, { headers: authRH() }),
+  telemetria: (filtros = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(filtros).filter(([, v]) => v !== '' && v != null)).toString()
+    return req(`/rh/telemetria${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  telemetriaPessoa: (params) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v)).toString()
+    return req(`/rh/telemetria/pessoa?${q}`, { headers: authRH() })
+  },
+  telemetriaExpurgar: (dados) =>
+    req('/rh/telemetria/expurgar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  telemetriaRetencao: () => req('/rh/telemetria/retencao', { headers: authRH() }),
+  salvarTelemetriaRetencao: (dias) =>
+    req('/rh/telemetria/retencao',
+        { method: 'PUT', headers: authRH(), body: JSON.stringify({ dias }) }),
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>
     req('/rh/config/assinantes', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

@@ -11,6 +11,7 @@ import SelectBusca from '../SelectBusca.jsx'
 import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
 import TestesVinculados from './TestesVinculados.jsx'
+import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
 import { OPCOES } from '../candidato/Wizard.jsx'
 
@@ -910,6 +911,8 @@ export default function Detalhe({ id, aoVoltar }) {
           Talentos. Recolhível para não poluir a ficha. */}
       <MemoriaColaborador id={id} nome={dados.nome_completo} />
       <TestesVinculados candidatoId={id} nome={dados.nome_completo} />
+      {/* Diagnóstico: o que aconteceu na TELA desta pessoa (v2.24) */}
+      <TelemetriaPessoa candidatoId={id} />
 
       {/* Informativo de integração: só vai ao candidato assinar após o RH liberar. */}
       <PainelInformativo id={id} setMsg={setMsg} />

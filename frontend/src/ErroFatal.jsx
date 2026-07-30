@@ -1,4 +1,5 @@
 import React from 'react'
+import { anotarErro } from './telemetria.js'
 
 // Rede de segurança do render (incidente de produção 2026-07-29).
 //
@@ -27,9 +28,14 @@ export default class ErroFatal extends React.Component {
   }
 
   componentDidCatch(erro, info) {
-    // Sem serviço de telemetria de front no projeto: o console é o que existe.
-    // Fica registrado para quando alguém abrir o inspetor junto do candidato.
     console.error('[erro fatal de render]', erro, info?.componentStack)
+    // Manda para a telemetria (v2.24): sem isto, o erro morre no navegador da
+    // pessoa e o RH fica sabendo só quando ela liga reclamando — foi o que
+    // aconteceu em 2026-07-29 e custou horas de investigação às cegas.
+    anotarErro(erro?.message || String(erro), {
+      pilha: (info?.componentStack || '').slice(0, 2000),
+      onde: 'ErrorBoundary',
+    })
   }
 
   render() {

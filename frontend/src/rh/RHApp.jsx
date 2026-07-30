@@ -16,6 +16,7 @@ import DesenvolvimentoRH from './DesenvolvimentoRH.jsx'
 import DesempenhoRH from './DesempenhoRH.jsx'
 import AvaliacoesRH from './AvaliacoesRH.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
+import { anotar, definirContexto } from '../telemetria.js'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
@@ -362,6 +363,20 @@ function PainelConteudo({ aoSair }) {
   }
   const recarregarPostos = () => api.postos().then((r) => setPostos(r.postos)).catch(() => {})
   useEffect(() => { recarregar(); recarregarPostos() }, [])
+
+  // Telemetria do painel (v2.24): identifica a origem como `rh` — o servidor
+  // só aceita esse rótulo com autenticação, então ninguém finge ser o RH.
+  useEffect(() => { definirContexto({ origem: 'rh', token: null }) }, [])
+
+  // Que telas o RH usa e por quanto tempo. Serve para decidir o que melhorar
+  // com base em uso real, e não em impressão de quem pediu por último.
+  useEffect(() => {
+    const entrou = performance.now()
+    anotar('painel_pagina', { pagina: `/rh/${pagina}` })
+    return () => anotar('painel_pagina_saiu', {
+      pagina: `/rh/${pagina}`, duracao_ms: performance.now() - entrou,
+    })
+  }, [pagina])
   // no celular, as tabelas viram cards com rótulos automáticos das colunas
   useEffect(() => observarTabelas(), [])
 
