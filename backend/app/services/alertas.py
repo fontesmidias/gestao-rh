@@ -240,6 +240,14 @@ def _notificar(db: Session, disparo: dict) -> None:
     if disparo["total"] > len(disparo["itens"]):
         linhas += f"\n• (+{disparo['total'] - len(disparo['itens'])} outro(s))"
 
+    # O botão "Ver na telemetria" precisa de uma URL. O worker não tem `request`
+    # (roda no cron, não numa rota), então aqui é o único lugar do sistema em que
+    # o `BASE_URL` é mesmo obrigatório — sem ele o botão sairia vazio, e um aviso
+    # que não leva a lugar nenhum obriga o RH a caçar a tela na mão. Fora isso, o
+    # aviso continua útil: a lista de problemas está no corpo.
+    from app.core.config import get_settings
+    base = (get_settings().base_url or "").rstrip("/")
+
     enviados = 0
     try:
         enviados = avisar_modelo(db, EVENTO_MATRIZ, TEMPLATE, {
@@ -247,6 +255,7 @@ def _notificar(db: Session, disparo: dict) -> None:
             "tipo": ROTULO_TIPO.get(tipo, tipo),
             "quantidade": str(disparo["total"]),
             "lista": linhas,
+            "link": f"{base}/rh/config" if base else "",
         })
     except Exception:
         log.exception("alerta de telemetria: falha ao notificar")

@@ -95,6 +95,10 @@ services:
     command: ["while true; do python -m app.workers.alertas_telemetria; sleep 900; done"]
     environment:
       SECRET_KEY: ${SECRET_KEY}
+      # BASE_URL é obrigatório AQUI (e só aqui): o worker roda no cron, sem
+      # `request`, então não há como derivar a URL pública da requisição — sem
+      # ele o botão "Ver na telemetria" do e-mail sai vazio.
+      BASE_URL: ${BASE_URL}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}

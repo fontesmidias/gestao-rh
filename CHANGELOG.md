@@ -52,6 +52,14 @@ e a descoberta continuaria dependendo de o candidato ligar.
   incrementar a constante — um teste que não protege nada. Agora o vínculo
   aviso↔evento é derivado do próprio catálogo.
 
+### Corrigido depois, ao conferir a stack de produção
+- **O botão "Ver na telemetria" do e-mail saía vazio**: o template declarava o
+  botão, mas o `alertas.py` nunca passava a variável `link`. O worker roda no
+  cron, sem `request`, então não há como derivar a URL da requisição — é o
+  único ponto do sistema em que `BASE_URL` é mesmo obrigatório. Adicionado ao
+  serviço `alertas` nos dois compose. Um aviso que não leva a lugar nenhum
+  obriga o RH a caçar a tela na mão.
+
 ### Verificação
 `tests/test_alertas.py` (7 blocos) cobre dedup, silêncio por problema,
 agrupamento, limiar, mediana, filtro por origem, isolamento entre regras e
