@@ -966,6 +966,32 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   sobrescrito no mesmo registro, então **o último enviado continua valendo
   depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
   registro era outro, e por isso o defeito lá era grave.
+- **GET NÃO PODE TER EFEITO COLATERAL — o antivírus do e-mail abre o link
+  antes da pessoa** (v2.28, incidente de campo 2026-07-30): uma colaboradora
+  ficou SEIS HORAS sem entrar no creche, com **sete códigos enviados com
+  sucesso** (o log do M365 confirma cada um). O `GET /creche/retomar/{token}`
+  CONSUMIA o link (confirmava o acesso e zerava `link_expira_em`), e quem abre
+  o link primeiro numa empresa com Microsoft 365 **não é a pessoa — é o
+  Defender/Safe Links**, que pré-abre todo link para escanear. A assinatura no
+  log é inconfundível: o CPF é digitado do IP do órgão e o
+  `creche_entrou_pelo_link` chega segundos depois de IPs da **Azure**. Agora
+  `retomar` só LÊ; entrar é `POST /creche/entrar/{token}` (e
+  `/portal/entrar/{token}`) — **scanner segue link, não faz POST**. O front
+  mostra "É você? · Sim, entrar"; o clique consome. Ao criar QUALQUER link de
+  e-mail de uso único, a ação destrutiva vai no POST — link em e-mail
+  corporativo é sempre pré-aberto por robô.
+- **Código de acesso: TODOS os vivos valem, não só o último** (mesma leva): o
+  `confirmar` do creche conferia apenas o acesso MAIS RECENTE, então pedir um
+  segundo código invalidava calado o e-mail aberto na tela — 422 com o código
+  certo na mão. Na assinatura e no teste isso não acontece porque o código é
+  sobrescrito no MESMO registro; no creche/portal cada pedido cria um
+  `AcessoCreche` novo, então a equivalência EXIGE conferir todos dentro da
+  validade. O que limita continua sendo o TTL de 15 min e a cota de tentativas.
+- **Tentativa de acesso recusada é REGISTRO, não silêncio** (mesma leva):
+  `creche_codigo_recusado` na auditoria e terceiro motivo no relatório "Não
+  conseguiram acessar" (*Código recusado*). Antes o relatório só via quem
+  **não recebeu** e-mail — quem recebia e travava era invisível, e é o caso
+  MAIS enganoso, porque o envio funcionando dá impressão de normalidade.
 - **Link de e-mail ENTRA DIRETO no creche e no portal** (v2.17, decisão do
   Bruno que reverte a regra da v2.03): código e link chegam na MESMA caixa,
   logo provam o MESMO fator — exigir os dois era atrito duplicado, não

@@ -39,6 +39,11 @@ export default function CrecheLink() {
         if (!vivo) return
         setRetomada(r)
         if (r.pode_entrar) { setToken(tokenUrl); setEtapa('sessao') }
+        // Link vivo NÃO entra sozinho: quem abre o link primeiro, numa empresa
+        // com Microsoft 365, é o Defender/Safe Links — e a entrada automática
+        // fazia o scanner gastar o acesso da pessoa (incidente 2026-07-30).
+        // Agora ela vê "é você? entrar" e o POST do clique é que consome.
+        else if (r.pode_entrar_pelo_link) setEtapa('entrar')
         else setEtapa('codigo')
       } catch {
         if (!vivo) return
@@ -51,6 +56,19 @@ export default function CrecheLink() {
     })()
     return () => { vivo = false }
   }, [])
+
+  // O clique que consome o link. Se ele já tiver sido gasto, cai no código —
+  // nunca em tela morta.
+  const entrarPeloLink = async () => {
+    setErro(null); setCarregando(true)
+    try {
+      const r = await api.entrarPeloLink(tokenUrl)
+      setToken(r.token); setEtapa('sessao')
+    } catch {
+      setErro('Este link já foi usado. Digite o código que enviamos por e-mail.')
+      setEtapa('codigo')
+    } finally { setCarregando(false) }
+  }
 
   const iniciar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
@@ -80,15 +98,16 @@ export default function CrecheLink() {
       const r = await api.confirmar(cpf, codigo, tokenUrl || undefined)
       setToken(r.token); setEtapa('sessao')
     } catch (err) {
-      // O código vale 15 minutos e só o ÚLTIMO enviado funciona. Dizer isso é
-      // o que faltava: "código incorreto" fazia a pessoa conferir e reconferir
-      // um código que estava certo, mas era de um e-mail antigo.
+      // Desde 2026-07-30 QUALQUER código dentro dos 15 minutos vale — pedir um
+      // novo não invalida mais o que já chegou. Então a orientação deixou de
+      // ser "use o mais recente" (que mandava a pessoa desprezar um código
+      // válido) e passou a ser sobre o PRAZO, que é o que de fato expira.
       setErro(err.status === 429
         ? 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.'
         : err.detail === 'codigo_invalido'
-          ? 'Esse código não vale mais. Use o código do e-mail MAIS RECENTE — '
-            + 'ele vale por 15 minutos. Se já passou disso, toque em "Reenviar '
-            + 'o código" abaixo.'
+          ? 'Esse código não confere. Ele vale por 15 minutos — confira se '
+            + 'digitou os 6 dígitos como estão no e-mail, ou toque em "Reenviar '
+            + 'o código" abaixo para receber outro.'
           : 'Não foi possível confirmar. Tente novamente.')
     } finally { setCarregando(false) }
   }
@@ -137,6 +156,24 @@ export default function CrecheLink() {
       {etapa === 'retomando' && (
         <div className="rh-card creche-card centro">
           <p className="explica">Um instante — estamos reconhecendo o seu link…</p>
+        </div>
+      )}
+
+      {/* Um clique separa o link de virar sessão. Parece um passo a mais e é o
+          que faz o link CHEGAR: o antivírus de e-mail abre o endereço para
+          escanear, mas não aperta botão. */}
+      {etapa === 'entrar' && (
+        <div className="rh-card creche-card">
+          <h2>É você?</h2>
+          <p className="explica">Reconhecemos o seu link.
+            {retomada?.primeiro_nome ? <> Você é <strong>{retomada.primeiro_nome}</strong>,</> : ' É o CPF'}
+            {' '}terminado em <strong>{retomada?.cpf_final}</strong>.</p>
+          {erro && <div className="alerta">{erro}</div>}
+          <button className="btn-principal" disabled={carregando} onClick={entrarPeloLink}>
+            {carregando ? 'Entrando…' : 'Sim, entrar'}</button>
+          <button type="button" className="btn-link" disabled={carregando}
+                  onClick={() => { setErro(null); setEtapa('codigo') }}>
+            Prefiro digitar o código do e-mail</button>
         </div>
       )}
 

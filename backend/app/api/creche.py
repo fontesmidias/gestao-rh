@@ -376,42 +376,55 @@ def tentativas_sem_acesso(db: Session = Depends(get_db),
     base'). O gate público responde igual para todos (anti-enumeração), então
     ISTO é o único lugar onde o RH vê o que de fato aconteceu.
 
-    Dois motivos:
+    TRÊS motivos:
     - `sem_match`: o CPF digitado NÃO casou com nenhum registro. Pode ser CPF
       realmente fora da base OU cadastrado errado/incompleto (ex.: zero à
       esquerda perdido na planilha, virou registro sem CPF). O RH confere.
     - `sem_email`: o CPF casou, mas o registro está SEM e-mail — a pessoa foi
       empurrada para a verificação por perguntas (KBA) e pode ter falhado. Basta
       o RH cadastrar o e-mail (aqui aparece nome e situação para localizar).
+    - `codigo_recusado`: o código FOI enviado e mesmo assim a pessoa não
+      entrou. Acrescentado em 2026-07-30 depois de uma colaboradora passar SEIS
+      HORAS travada — sete códigos enviados com sucesso, nenhuma entrada — sem
+      aparecer neste relatório, porque ele só enxergava quem nunca recebeu
+      e-mail. Era o pior ponto cego: o envio funcionando dava a impressão de
+      que estava tudo bem. Quem aparece aqui é candidato a "Reenviar link".
 
     Agrupa por CPF, com a contagem e a última tentativa (mais recente primeiro)."""
     from app.models.evento import EventoAuditoria
     eventos = db.scalars(
         select(EventoAuditoria)
         .where(EventoAuditoria.acao.in_(
-            ["creche_iniciar_sem_match", "creche_iniciar_sem_email"]))
+            ["creche_iniciar_sem_match", "creche_iniciar_sem_email",
+             "creche_codigo_recusado"]))
         .order_by(EventoAuditoria.criado_em.desc())).all()
+    # Do mais fraco ao mais forte: um CPF que num momento não casou e depois
+    # recebeu código e travou deve aparecer pelo problema MAIS ESPECÍFICO.
+    peso = {"sem_match": 0, "sem_email": 1, "codigo_recusado": 2}
+    motivo_de = {
+        "creche_iniciar_sem_match": "sem_match",
+        "creche_iniciar_sem_email": "sem_email",
+        "creche_codigo_recusado": "codigo_recusado",
+    }
     por_cpf: dict[str, dict] = {}
     for e in eventos:
         d = e.detalhe or {}
         cpf = d.get("cpf") or "—"
+        motivo = motivo_de.get(e.acao, "sem_match")
         item = por_cpf.get(cpf)
         if item is None:
             por_cpf[cpf] = {
-                "cpf": cpf,
-                "motivo": ("sem_email" if e.acao == "creche_iniciar_sem_email"
-                           else "sem_match"),
+                "cpf": cpf, "motivo": motivo,
                 "nome": d.get("nome"), "situacao": d.get("situacao"),
                 "tentativas": 1, "ultima": e.criado_em, "primeira": e.criado_em,
             }
         else:
             item["tentativas"] += 1
             item["primeira"] = e.criado_em  # como vem desc, o último visto é o + antigo
-            # se em alguma tentativa casou (sem_email), esse motivo prevalece
-            if e.acao == "creche_iniciar_sem_email":
-                item["motivo"] = "sem_email"
-                item["nome"] = item["nome"] or d.get("nome")
-                item["situacao"] = item["situacao"] or d.get("situacao")
+            if peso[motivo] > peso[item["motivo"]]:
+                item["motivo"] = motivo
+            item["nome"] = item["nome"] or d.get("nome")
+            item["situacao"] = item["situacao"] or d.get("situacao")
     return list(por_cpf.values())
 
 

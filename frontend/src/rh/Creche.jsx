@@ -73,8 +73,8 @@ function SemAcesso() {
 
   return (
     <div className="rh-card">
-      <p className="explica">Quem digitou o CPF no link do creche mas <strong>não recebeu o
-        código</strong>. Como o sistema responde igual para todos (para não revelar quem está na
+      <p className="explica">Quem digitou o CPF no link do creche e <strong>não conseguiu
+        entrar</strong>. Como o sistema responde igual para todos (para não revelar quem está na
         base), este é o único lugar onde você vê o que de fato aconteceu:</p>
       <ul className="explica" style={{ marginTop: 0 }}>
         <li><strong>CPF não encontrado</strong>: o CPF digitado não casou com nenhum cadastro. Pode
@@ -82,6 +82,9 @@ function SemAcesso() {
           perdido na planilha). Confira na base de colaboradores.</li>
         <li><strong>Sem e-mail cadastrado</strong>: o CPF casou, mas o cadastro não tem e-mail — a
           pessoa foi para a verificação por perguntas e pode ter travado. Cadastre o e-mail dela.</li>
+        <li><strong>Código recusado</strong>: o e-mail <em>saiu normalmente</em> e mesmo assim a
+          pessoa não entrou. É o caso mais enganoso — parece que está tudo bem porque o envio
+          funcionou. Use <strong>Reenviar link</strong> para mandar um acesso direto, sem código.</li>
       </ul>
       {lista.length === 0
         ? <p>Nenhuma tentativa sem acesso registrada. 👍</p>
@@ -95,9 +98,11 @@ function SemAcesso() {
               <tbody>{lista.map((t) => (
                 <tr key={t.cpf}>
                   <td><strong>{t.cpf}</strong></td>
-                  <td>{t.motivo === 'sem_email'
-                    ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}>Sem e-mail cadastrado</span>
-                    : <span className="chip" style={{ '--chip-cor': '#c0392b' }}>CPF não encontrado</span>}</td>
+                  <td>{t.motivo === 'codigo_recusado'
+                    ? <span className="chip" style={{ '--chip-cor': '#8e44ad' }}>Código recusado</span>
+                    : t.motivo === 'sem_email'
+                      ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}>Sem e-mail cadastrado</span>
+                      : <span className="chip" style={{ '--chip-cor': '#c0392b' }}>CPF não encontrado</span>}</td>
                   <td>{t.nome ? <>{t.nome}{t.situacao ? <small> · {t.situacao}</small> : ''}</> : '—'}</td>
                   <td>{t.tentativas}</td>
                   <td>{t.ultima ? fmtDataHora(t.ultima) : '—'}</td>

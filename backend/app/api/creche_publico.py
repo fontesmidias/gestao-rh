@@ -199,7 +199,8 @@ def _invalidar_acessos(db: Session, ben: BeneficioCreche) -> None:
 
 @router.get("/creche/retomar/{token}")
 def retomar(token: str, db: Session = Depends(get_db)) -> dict:
-    """Diz de QUEM é a tentativa por trás do `?t=` — sem autenticar ninguém.
+    """Diz de QUEM é a tentativa por trás do `?t=` — sem autenticar ninguém e
+    SEM CONSUMIR NADA.
 
     É o que conserta o ciclo do webview (feedback 2026-07-28): a pessoa abre o
     link no app de e-mail, sai para ler o código, volta pelo MESMO link e o
@@ -207,11 +208,20 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
     pobre — só o primeiro nome e os 4 últimos dígitos do CPF, o suficiente para
     o front repreencher o campo e mostrar "é você?".
 
-    ``pode_entrar`` é true SÓ para o acesso direto do RH (devolução), que nasce
-    com ``confirmado_em`` preenchido porque o e-mail já foi comprovado antes.
-    Um acesso de código (``confirmado_em`` nulo) NUNCA vira sessão por aqui —
-    o link identifica, o código autentica. Sessão já expirada volta ao código,
-    e não ao acesso: por isso a checagem de ``expira_em`` vale para os dois.
+    **GET NÃO TEM EFEITO COLATERAL** (incidente de campo 2026-07-30). Até a
+    v2.27 esta rota CONSUMIA o link: confirmava o acesso e zerava
+    `link_expira_em`. Só que quem abre o link primeiro, numa empresa com
+    Microsoft 365, não é a pessoa — é o **Defender/Safe Links**, que pré-abre
+    todo link do e-mail para escanear. O log de produção mostrou o padrão sem
+    ambiguidade: a colaboradora PEDIA o código do IP do órgão e o
+    `creche_entrou_pelo_link` chegava de IPs da Azure, segundos depois. O
+    scanner ganhava a sessão, ela recebia "link expirado" e caía no código —
+    que também falhava, porque cada novo pedido criava outro acesso. Sete
+    e-mails, seis horas, nenhuma entrada.
+
+    Por isso entrar virou POST (`/creche/entrar/{token}`): scanner nenhum faz
+    POST. Aqui só se LÊ. ``pode_entrar`` sinaliza ao front que existe um link
+    vivo a ser usado — quem decide usá-lo é o clique da pessoa.
     """
     agora = datetime.now(timezone.utc)
     ac = db.scalar(select(AcessoCreche).where(AcessoCreche.token_hash == _hash(token)))
@@ -222,14 +232,44 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
     if col is None:
         raise HTTPException(status_code=404, detail="link_expirado")
 
-    # O link entra DIRETO em dois casos (v2.17): o acesso emitido pelo RH na
-    # devolução (nasce `confirmado_em`) e o link do e-mail do código, enquanto
-    # `link_expira_em` não vence. Nos dois, quem tem o link recebeu-o na
-    # própria caixa — mesmo fator que o código prova.
-    entra_pelo_link = (ac.confirmado_em is None
-                       and ac.link_expira_em is not None
-                       and ac.link_expira_em >= agora)
-    if entra_pelo_link:
+    # Sessão JÁ aberta (o acesso do RH na devolução nasce assim, e a pessoa que
+    # já entrou e voltou também): entra direto, nada a consumir.
+    ja_confirmado = ac.confirmado_em is not None
+    # Link de código ainda válido: PODE virar sessão, mas só pelo POST.
+    link_vivo = (not ja_confirmado
+                 and ac.link_expira_em is not None
+                 and ac.link_expira_em >= agora)
+
+    nome = (col.nome_completo or "").split()
+    return {
+        "primeiro_nome": nome[0].title() if nome else "",
+        "cpf_final": _digitos(col.cpf or "")[-4:],
+        "pode_entrar": ja_confirmado,
+        "pode_entrar_pelo_link": link_vivo,
+        "aguardando_codigo": not ja_confirmado and not link_vivo,
+    }
+
+
+@router.post("/creche/entrar/{token}")
+def entrar_pelo_link(token: str, db: Session = Depends(get_db)) -> dict:
+    """Consuma o link do e-mail e abra a sessão — só por ATO DELIBERADO.
+
+    Separado do `retomar` (GET) porque pré-fetch de antivírus corporativo
+    queimava o link antes de a pessoa clicar (ver a docstring de `retomar`).
+    Scanner de e-mail segue link; não envia POST.
+    """
+    agora = datetime.now(timezone.utc)
+    ac = db.scalar(select(AcessoCreche).where(AcessoCreche.token_hash == _hash(token)))
+    if ac is None or ac.expira_em < agora:
+        raise HTTPException(status_code=404, detail="link_expirado")
+    ben = db.get(BeneficioCreche, ac.beneficio_id)
+    col = db.get(Candidato, ben.candidato_id) if ben else None
+    if col is None:
+        raise HTTPException(status_code=404, detail="link_expirado")
+
+    if ac.confirmado_em is None:
+        if ac.link_expira_em is None or ac.link_expira_em < agora:
+            raise HTTPException(status_code=422, detail="link_expirado")
         ac.confirmado_em = agora
         ac.expira_em = agora + timedelta(hours=SESSAO_TTL_H)
         # uso único: o link não serve para uma segunda entrada
@@ -237,14 +277,7 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
         registrar(db, "creche_entrou_pelo_link", ator="colaborador",
                   candidato_id=col.id)
         db.commit()
-
-    nome = (col.nome_completo or "").split()
-    return {
-        "primeiro_nome": nome[0].title() if nome else "",
-        "cpf_final": _digitos(col.cpf or "")[-4:],
-        "pode_entrar": ac.confirmado_em is not None,
-        "aguardando_codigo": ac.confirmado_em is None,
-    }
+    return {"token": token}
 
 
 class IniciarIn(BaseModel):
@@ -440,15 +473,36 @@ def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
     # na mão: o link já tinha confirmado aquele acesso. O código continua
     # sendo conferido; o que mudou é não descartar o registro por já ter sido
     # aberto pelo link do MESMO e-mail.
+    #
+    # QUALQUER código ainda dentro da validade vale (2026-07-30). Antes só o
+    # acesso MAIS RECENTE era conferido: quem pedia um segundo código — porque
+    # o primeiro "não funcionou" — invalidava calado o e-mail que estava aberto
+    # na tela, e digitar o código de cima levava "código inválido" com o código
+    # certo na mão. É a mesma garantia que a assinatura e o teste já davam
+    # (lá o código é sobrescrito no MESMO registro, então o último sempre vale);
+    # aqui cada pedido cria um AcessoCreche novo, então a equivalência exige
+    # conferir todos os vivos. A validade de 15 min e a cota de 10 tentativas
+    # por CPF continuam sendo o que limita.
     agora = datetime.now(timezone.utc)
-    ac = db.scalars(
+    vivos = db.scalars(
         select(AcessoCreche)
         .where(AcessoCreche.beneficio_id == ben.id,
                AcessoCreche.codigo_hash.isnot(None),
                AcessoCreche.codigo_expira_em >= agora)
         .order_by(AcessoCreche.criado_em.desc())
-    ).first()
-    if ac is None or ac.codigo_hash != _hash(payload.codigo.strip()):
+    ).all()
+    informado = _hash(payload.codigo.strip())
+    ac = next((a for a in vivos if a.codigo_hash == informado), None)
+    if ac is None:
+        # Tentativa fracassada é REGISTRO, não silêncio: 422 repetido no mesmo
+        # CPF é o sinal mais forte de gente travada, e até 2026-07-30 não ia
+        # para lugar nenhum — a colaboradora tentou seis horas e o relatório
+        # "Não conseguiram acessar" não a via.
+        registrar(db, "creche_codigo_recusado", ator="colaborador",
+                  candidato_id=colaborador.id,
+                  detalhe={"cpf": _cpf_fmt(cpf), "nome": colaborador.nome_completo,
+                           "codigos_vivos": len(vivos)})
+        db.commit()
         raise HTTPException(status_code=422, detail="codigo_invalido")
 
     # emite token de sessão real

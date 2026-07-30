@@ -92,9 +92,11 @@ def _sessao(db: Session, token: str) -> tuple[AcessoPortal, Candidato]:
 
 @router.get("/portal/retomar/{token}")
 def retomar(token: str, db: Session = Depends(get_db)) -> dict:
-    """De quem é a tentativa por trás do `?t=` — sem autenticar (ver a gêmea em
-    ``creche_publico.retomar``, mesma regra: o link identifica, o código
-    autentica). Devolve só primeiro nome e 4 últimos dígitos do CPF."""
+    """De quem é a tentativa por trás do `?t=` — sem autenticar e SEM CONSUMIR
+    (ver a gêmea em ``creche_publico.retomar``, que traz o incidente completo:
+    o Defender/Safe Links do Microsoft 365 pré-abre todo link do e-mail e
+    queimava o acesso antes de a pessoa clicar). GET não tem efeito colateral;
+    entrar é POST. Devolve só primeiro nome e 4 últimos dígitos do CPF."""
     agora = datetime.now(timezone.utc)
     ac = db.scalar(select(AcessoPortal).where(AcessoPortal.token_hash == _hash(token)))
     if ac is None or ac.expira_em < agora:
@@ -103,25 +105,42 @@ def retomar(token: str, db: Session = Depends(get_db)) -> dict:
     if col is None:
         raise HTTPException(status_code=404, detail="link_expirado")
 
-    # O link do e-mail entra DIRETO enquanto `link_expira_em` valer (v2.17):
-    # quem o recebeu na própria caixa já provou posse do e-mail, que é o mesmo
-    # que o código de 6 dígitos prova. Uso único.
-    if (ac.confirmado_em is None and ac.link_expira_em is not None
-            and ac.link_expira_em >= agora):
+    ja_confirmado = ac.confirmado_em is not None
+    link_vivo = (not ja_confirmado and ac.link_expira_em is not None
+                 and ac.link_expira_em >= agora)
+
+    nome = (col.nome_completo or "").split()
+    return {
+        "primeiro_nome": nome[0].title() if nome else "",
+        "cpf_final": _digitos(col.cpf or "")[-4:],
+        "pode_entrar": ja_confirmado,
+        "pode_entrar_pelo_link": link_vivo,
+        "aguardando_codigo": not ja_confirmado and not link_vivo,
+    }
+
+
+@router.post("/portal/entrar/{token}")
+def entrar_pelo_link(token: str, db: Session = Depends(get_db)) -> dict:
+    """Consome o link do e-mail e abre a sessão — só por ATO DELIBERADO.
+    Gêmea de ``creche_publico.entrar_pelo_link``."""
+    agora = datetime.now(timezone.utc)
+    ac = db.scalar(select(AcessoPortal).where(AcessoPortal.token_hash == _hash(token)))
+    if ac is None or ac.expira_em < agora:
+        raise HTTPException(status_code=404, detail="link_expirado")
+    col = db.get(Candidato, ac.candidato_id)
+    if col is None:
+        raise HTTPException(status_code=404, detail="link_expirado")
+
+    if ac.confirmado_em is None:
+        if ac.link_expira_em is None or ac.link_expira_em < agora:
+            raise HTTPException(status_code=422, detail="link_expirado")
         ac.confirmado_em = agora
         ac.expira_em = agora + timedelta(hours=SESSAO_TTL_H)
         ac.link_expira_em = agora
         registrar(db, "portal_entrou_pelo_link", ator="colaborador",
                   candidato_id=col.id)
         db.commit()
-
-    nome = (col.nome_completo or "").split()
-    return {
-        "primeiro_nome": nome[0].title() if nome else "",
-        "cpf_final": _digitos(col.cpf or "")[-4:],
-        "pode_entrar": ac.confirmado_em is not None,
-        "aguardando_codigo": ac.confirmado_em is None,
-    }
+    return {"token": token}
 
 
 class IniciarIn(BaseModel):
