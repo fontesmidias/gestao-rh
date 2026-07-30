@@ -179,6 +179,9 @@ export const creche = {
   // sendo exigido). É o que devolve a pessoa ao ponto onde parou quando ela sai
   // do app de e-mail para ler o código.
   retomar: (t) => req(`/creche/retomar/${t}`),
+  // Entrar CONSOME o link — por isso é POST, e só sai daqui por clique da
+  // pessoa: antivírus de e-mail (Defender/Safe Links) segue links, não faz POST.
+  entrarPeloLink: (t) => req(`/creche/entrar/${t}`, { method: 'POST' }),
   // Verificação de identidade (KBA) para quem não tem e-mail cadastrado
   kbaIniciar: (cpf) =>
     req('/creche/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
@@ -217,6 +220,7 @@ export const portal = {
   confirmar: (cpf, codigo, retomada) =>
     req('/portal/confirmar', { method: 'POST', body: JSON.stringify({ cpf, codigo, retomada }) }),
   retomar: (t) => req(`/portal/retomar/${t}`),
+  entrarPeloLink: (t) => req(`/portal/entrar/${t}`, { method: 'POST' }),
   kbaIniciar: (cpf) =>
     req('/portal/kba/iniciar', { method: 'POST', body: JSON.stringify({ cpf }) }),
   kbaResponder: (desafio, respostas) =>

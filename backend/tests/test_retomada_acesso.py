@@ -104,7 +104,8 @@ assert d["cpf_final"] == cpf[-4:], d
 assert d["pode_entrar"] is False, "link do código NÃO pode virar sessão sozinho"
 assert d["aguardando_codigo"] is True, d
 # E não vaza dado pessoal além do necessário para reconhecer a tentativa.
-assert set(d) == {"primeiro_nome", "cpf_final", "pode_entrar", "aguardando_codigo"}, d
+assert set(d) == {"primeiro_nome", "cpf_final", "pode_entrar",
+                  "pode_entrar_pelo_link", "aguardando_codigo"}, d
 assert cpf not in r.text, "CPF completo não pode sair na resposta"
 
 # confirmar SEM cpf, só com o token da retomada: é o caminho de quem voltou
@@ -162,6 +163,12 @@ with SessionLocal() as db:
 d = c.get(f"/api/portal/retomar/{token_portal}").json()
 assert d["primeiro_nome"] == "Maria" and d["cpf_final"] == cpf2[-4:], d
 assert d["pode_entrar"] is False, "link do código do portal não pode entrar sozinho"
+# v2.28: o GET do portal também não pode consumir link (mesmo scanner, mesma
+# armadilha). Este acesso nasceu sem `link_expira_em`, então nem por POST entra.
+with SessionLocal() as db:
+    _acp = db.scalar(select(AcessoPortal).where(
+        AcessoPortal.token_hash == _hash(token_portal)))
+    assert _acp.confirmado_em is None, "GET do portal não pode confirmar acesso"
 
 r = c.post("/api/portal/confirmar", json={"codigo": "654321", "retomada": token_portal})
 assert r.status_code == 200, f"retomada do portal não confirmou: {r.text}"
@@ -201,20 +208,34 @@ try:
     tok_link = (_cap["link"] or "").split("?t=")[-1]
     assert tok_link, f"o e-mail do código precisa levar o link: {_cap}"
 
-    # 1) o link ABRE a sessão sozinho — sem digitar código
-    r = c.get(f"/api/creche/retomar/{tok_link}")
-    assert r.status_code == 200, r.text
-    assert r.json()["pode_entrar"] is True, (
-        "o link do e-mail tem que entrar direto (decisão de 2026-07-29)")
-    assert c.get(f"/api/creche/sessao/{tok_link}").status_code == 200, (
-        "o `pode_entrar` prometeu sessão que o token não abre")
+    # 1) ABRIR o link (GET) NÃO consome nada — v2.28, incidente 2026-07-30.
+    #    Quem abre primeiro numa empresa com Microsoft 365 é o Defender/Safe
+    #    Links, não a pessoa. Enquanto o GET confirmava o acesso, o scanner
+    #    ficava com a sessão e a colaboradora levava "link expirado".
+    for _ in range(3):  # o scanner pode bater várias vezes
+        r = c.get(f"/api/creche/retomar/{tok_link}")
+        assert r.status_code == 200, r.text
+        assert r.json()["pode_entrar_pelo_link"] is True, (
+            "GET repetido (scanner) não pode gastar o link")
+    with SessionLocal() as db:
+        _ac = db.scalar(select(AcessoCreche).where(
+            AcessoCreche.token_hash == _hash(tok_link)))
+        assert _ac.confirmado_em is None, "o GET não pode confirmar o acesso"
+        assert _ac.link_expira_em > datetime.now(timezone.utc), (
+            "o GET não pode queimar o link — é o que travou a Keli por 6 horas")
+    assert c.get(f"/api/creche/sessao/{tok_link}").status_code == 401, (
+        "sem POST, o token do e-mail não vale como sessão")
 
-    # 2) uso ÚNICO: um segundo clique não reabre nada por si
+    # 2) o POST (clique da pessoa) é que entra — e é de uso ÚNICO
+    r = c.post(f"/api/creche/entrar/{tok_link}")
+    assert r.status_code == 200, f"o clique deveria entrar: {r.text}"
+    assert c.get(f"/api/creche/sessao/{tok_link}").status_code == 200, (
+        "depois do POST o token abre a sessão")
     with SessionLocal() as db:
         _ac = db.scalar(select(AcessoCreche).where(
             AcessoCreche.token_hash == _hash(tok_link)))
         assert _ac.link_expira_em <= datetime.now(timezone.utc), (
-            "o link deveria ter sido consumido no primeiro uso")
+            "o link deveria ter sido consumido no POST")
 
     # 3) o CÓDIGO continua valendo depois de o link ter sido usado — quem
     #    clicou no link e mesmo assim digitou o código não pode levar erro
@@ -238,11 +259,44 @@ try:
                    .values(link_expira_em=datetime.now(timezone.utc) - timedelta(minutes=1)))
         db.commit()
     r = c.get(f"/api/creche/retomar/{tok2}")
-    assert r.status_code == 200 and r.json()["pode_entrar"] is False, (
+    assert r.status_code == 200 and r.json()["pode_entrar_pelo_link"] is False, (
         "link vencido não pode entrar direto")
+    assert c.post(f"/api/creche/entrar/{tok2}").status_code == 422, (
+        "nem o POST entra com link vencido")
+
+    # 6) QUALQUER código vivo vale — v2.28. Antes só o acesso MAIS RECENTE era
+    #    conferido: quem pedia outro código porque o primeiro "não funcionou"
+    #    invalidava calado o e-mail que estava aberto na tela. É o 422 com o
+    #    código certo na mão, seis vezes no log de 2026-07-30.
+    _cap.clear()
+    c.post("/api/creche/iniciar", json={"cpf": cpf_link})
+    codigo_antigo = _cap["codigo"]
+    _cap.clear()
+    c.post("/api/creche/iniciar", json={"cpf": cpf_link})
+    codigo_novo = _cap["codigo"]
+    assert codigo_antigo and codigo_novo and codigo_antigo != codigo_novo
+    r = c.post("/api/creche/confirmar",
+               json={"cpf": cpf_link, "codigo": codigo_antigo})
+    assert r.status_code == 200, (
+        f"o código ANTERIOR ainda dentro dos 15 min tem que valer: {r.text}")
+    # e o mais novo também continua valendo
+    assert c.post("/api/creche/confirmar",
+                  json={"cpf": cpf_link, "codigo": codigo_novo}).status_code == 200
+
+    # 7) tentativa recusada vira REGISTRO — o RH precisa ver quem travou
+    from app.models.evento import EventoAuditoria  # noqa: E402
+    assert c.post("/api/creche/confirmar",
+                  json={"cpf": cpf_link, "codigo": "000000"}).status_code == 422
+    with SessionLocal() as db:
+        recusas = db.scalars(select(EventoAuditoria).where(
+            EventoAuditoria.acao == "creche_codigo_recusado")).all()
+        assert any((e.detalhe or {}).get("cpf", "").endswith(cpf_link[-2:])
+                   for e in recusas), (
+            "código recusado tem que ir para a auditoria — sem isso a pessoa "
+            "travada fica invisível no relatório do RH")
 finally:
     _cp.enviar_modelo = _orig_env
 
-print("  (v2.17: link entra direto, código segue valendo)")
+print("  (v2.28: GET não consome o link, POST entra, código anterior vale)")
 
 print("test_retomada_acesso: OK")

@@ -35,6 +35,9 @@ export default function Portal() {
         if (!vivo) return
         setRetomada(r)
         if (r.pode_entrar) { setToken(tokenUrl); setEtapa('dentro') }
+        // Link vivo NÃO entra sozinho: o antivírus de e-mail corporativo
+        // pré-abre o endereço e gastava o acesso da pessoa (ver CrecheLink).
+        else if (r.pode_entrar_pelo_link) setEtapa('entrar')
         else setEtapa('codigo')
       } catch {
         if (!vivo) return
@@ -46,6 +49,19 @@ export default function Portal() {
     })()
     return () => { vivo = false }
   }, [])
+
+  // O clique que consome o link (POST). Link já gasto cai no código, nunca em
+  // tela morta.
+  const entrarPeloLink = async () => {
+    setErro(null); setCarregando(true)
+    try {
+      const r = await api.entrarPeloLink(tokenUrl)
+      setToken(r.token); setEtapa('dentro')
+    } catch {
+      setErro('Este link já foi usado. Digite o código que enviamos por e-mail.')
+      setEtapa('codigo')
+    } finally { setCarregando(false) }
+  }
 
   const iniciar = async (e) => {
     e.preventDefault(); setErro(null); setCarregando(true)
@@ -124,6 +140,23 @@ export default function Portal() {
       {etapa === 'retomando' && (
         <div className="rh-card creche-card centro">
           <p className="explica">Um instante — estamos reconhecendo o seu link…</p>
+        </div>
+      )}
+
+      {/* O clique é o que separa o link de virar sessão — scanner de e-mail
+          abre endereço, mas não aperta botão. */}
+      {etapa === 'entrar' && (
+        <div className="rh-card creche-card">
+          <h2>É você?</h2>
+          <p className="explica">Reconhecemos o seu link.
+            {retomada?.primeiro_nome ? <> Você é <strong>{retomada.primeiro_nome}</strong>,</> : ' É o CPF'}
+            {' '}terminado em <strong>{retomada?.cpf_final}</strong>.</p>
+          {erro && <div className="alerta">{erro}</div>}
+          <button className="btn-principal" disabled={carregando} onClick={entrarPeloLink}>
+            {carregando ? 'Entrando…' : 'Sim, entrar'}</button>
+          <button type="button" className="btn-link" disabled={carregando}
+                  onClick={() => { setErro(null); setEtapa('codigo') }}>
+            Prefiro digitar o código do e-mail</button>
         </div>
       )}
 

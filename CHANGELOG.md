@@ -11,6 +11,60 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.28.0] — 2026-07-30 — O antivírus do e-mail estava gastando o link antes da pessoa
+
+Uma colaboradora passou **seis horas** sem conseguir entrar no creche. Sete
+códigos enviados **com sucesso** — o log do M365 confirma cada um. Nenhuma
+entrada. E ela não aparecia em relatório nenhum, porque o painel só enxergava
+quem *não recebeu* e-mail.
+
+O log de produção mostrou o padrão sem ambiguidade: ela **pedia** o código do
+IP do órgão (`200.130.24.100`) e o `creche_entrou_pelo_link` chegava segundos
+depois de IPs da **Azure** (`74.179.68.x`, `135.232.x`, `72.153.x`). Não era
+ela. Era o **Microsoft Defender / Safe Links**, que pré-abre todo link de
+e-mail para escanear — comportamento padrão em qualquer empresa com Microsoft
+365, e a Green House atende órgãos públicos.
+
+Como o link era de **uso único** e o `GET /retomar` o **consumia**, o scanner
+ficava com a sessão. Ela clicava e recebia "link expirado"; caía no código; o
+código também falhava, porque cada novo pedido criava outro acesso e só o
+**mais recente** era conferido — então o e-mail aberto na tela dela já não
+valia. Pedia outro código, e o ciclo recomeçava.
+
+### Corrigido
+
+- **`GET` não tem mais efeito colateral** (`creche_publico.py`, `portal.py`):
+  `retomar` só LÊ. Entrar virou `POST /creche/entrar/{token}` e
+  `POST /portal/entrar/{token}` — **scanner de e-mail segue link, não aperta
+  botão**. No front, a pessoa vê "É você? · Sim, entrar"; o clique é que
+  consome. Um passo a mais na tela é o que faz o link **chegar**.
+- **Qualquer código dentro dos 15 minutos vale** — antes só o acesso mais
+  recente era conferido, e pedir um segundo código invalidava calado o e-mail
+  que estava aberto na tela (o 422 com o código certo na mão). É a mesma
+  garantia que a assinatura e o teste já davam; lá o código é sobrescrito no
+  MESMO registro, aqui cada pedido cria um `AcessoCreche`, então a equivalência
+  exigia conferir todos os vivos. Validade e cota de tentativas seguem iguais.
+- **Tentativa recusada virou registro** (`creche_codigo_recusado`): 422
+  repetido no mesmo CPF é o sinal mais forte de gente travada e não ia para
+  lugar nenhum. O relatório **"Não conseguiram acessar"** ganhou o terceiro
+  motivo — *Código recusado* —, que é o mais enganoso dos três: o envio
+  funcionando dá a impressão de que está tudo bem.
+- **Mensagem do código corrigida**: dizia "use o do e-mail MAIS RECENTE",
+  orientação que mandava desprezar um código válido. Agora fala do prazo, que
+  é o que de fato expira.
+
+### Notas
+
+Coberto por `tests/test_retomada_acesso.py`, **validado por mutação** (duas
+mutações: devolver o consumo ao `GET` e voltar a conferir só o código mais
+recente — as duas foram detectadas). Smoke 15/15.
+
+A regra da v2.17 (*"código e link chegam na mesma caixa, provam o mesmo
+fator"*) **continua valendo** — o que mudou não foi a confiança no link, foi
+**quem** o abre primeiro.
+
+---
+
 ## [2.27.0] — 2026-07-30 — Creche: a idade das crianças estava errada para todo mundo
 
 Feedback do Bruno: *"por que quem nasceu em 2024 você diz que não tem menos de
