@@ -88,6 +88,37 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **SPA + deploy: asset que sumiu NÃO pode virar `index.html`** (incidente de
+  produção 2026-07-29 — dois candidatos com a TELA EM BRANCO no meio do envio
+  de documentos, e ZERO linha de erro em log nenhum). O `try_files $uri
+  /index.html` do nginx é o certo para ROTA (`/c/{token}` é tratada no
+  cliente), mas valia também para `/assets/*.js`. Cada build gera hash novo e
+  APAGA o anterior; a aba que o candidato deixou aberta no celular — ele sai
+  para fotografar o documento e volta, é o uso normal — continua pedindo o
+  arquivo antigo. O nginx respondia **200 com o HTML do index no lugar do
+  JavaScript**, o navegador tentava executar `<!doctype html>` como script e o
+  React não montava. **Do ponto de vista do servidor foi um 200 bem-sucedido —
+  por isso não havia o que procurar no log.** Não depende de quando o link
+  nasceu, e sim de a aba estar aberta durante um deploy: por isso pegou também
+  um candidato criado DEPOIS da atualização. Três defesas, nenhuma cobre a
+  outra: (1) `location /assets/` com `try_files $uri =404` (+ `immutable`, que
+  é seguro porque o hash está no nome); (2) `main.jsx` detecta falha de
+  carregamento de módulo e recarrega UMA vez — a trava em `sessionStorage` é
+  obrigatória, senão falha permanente vira recarregamento infinito, pior que a
+  tela branca; (3) `ErroFatal.jsx`, o ErrorBoundary (não havia NENHUM no
+  projeto: qualquer exceção de render apagava tudo, sem uma palavra na tela).
+  Coberto por `frontend/tests/e2e/deploy-tela-branca.spec.js`, validado por
+  mutação. **Tela branca é o pior desfecho possível** — não diz se o problema
+  é a internet, o link, o celular ou o sistema; a pessoa conclui que "não
+  funciona" e desiste. Ao mexer no `nginx.conf`, no roteamento ou em
+  code-splitting, rode esse teste.
+- **`/api/health` diz se o BANCO acompanhou o código** (`migracoes.em_dia`):
+  se o `docker-entrypoint.sh` falhar no `alembic upgrade head`, a API sobe
+  assim mesmo com o schema velho e o defeito só aparece na cara do usuário
+  (com o banco atrasado, o painel do RH e o creche quebram; as rotas do
+  candidato ainda respondem 200). A revisão esperada é **lida** do diretório de
+  migrations — o `VERSAO_DEPLOY` chumbado à mão ficou congelado em `v1.50` por
+  vinte versões, mentindo com a maior confiança. Conferir depois de todo deploy.
 - **Rotas FastAPI**: declarar rotas específicas (`/lote/...`, `/massa/...`)
   ANTES das paramétricas (`/{id}`), senão o literal vira UUID inválido (422).
 - **Rota com `dados: dict` livre burla a validação do FastAPI** (v1.96,
@@ -1036,6 +1067,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 - Commits direto no `main`: `feat(vX.Y): resumo` + corpo com bullets; uma
   versão por "onda" entregue. Push e acompanhar o CI (`gh run list/view`) —
   único workflow `ci.yml` (imagens api/frontend + testes de interface).
+- **REGRA: toda leva atualiza CHANGELOG, README e os demais documentos —
+  no MESMO commit** (cravada pelo Bruno em 2026-07-29). Não é burocracia: em
+  2026-07-29 o CHANGELOG estava 20 versões atrás (parado na v2.01) e o README
+  parado na v1.85, sem Match de Vagas, Minutário, Provas, textos de e-mail,
+  catálogo de documentos, Uniformes nem mini-CRM — módulos inteiros que o
+  sistema tinha e que documento nenhum registrava. Sistema completo sem
+  histórico é sistema que ninguém além de quem o escreveu consegue operar ou
+  auditar. Checklist ao fechar uma versão: (1) entrada no `CHANGELOG.md` com o
+  PORQUÊ, não só o quê — as decisões e o que foi medido; (2) `README.md`
+  refletindo o que existe hoje; (3) `CLAUDE.md` com a armadilha nova, se
+  houver; (4) doc específico (`docs/planejamento/`) quando a leva mexe em
+  padrão.
 - Testar com dados reais antes de commitar: banco efêmero + smoke 15/15 +
   `npm run build`; para PDFs, prova visual.
 - Exclusões do RH passam pela lixeira (`app/services/lixeira.py` —

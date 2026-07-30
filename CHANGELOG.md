@@ -11,6 +11,291 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.22.0] — 2026-07-29 — Tela em branco no candidato: o deploy apagava o script que a aba pedia
+
+Incidente de produção. Dois candidatos travados no meio do envio da
+documentação, com a **tela em branco** ao reabrir o link — e nenhuma linha de
+erro em log nenhum.
+
+### Corrigido
+- **`try_files $uri /index.html` valia também para `/assets/*.js`.** Cada build
+  gera assets com hash novo (`index-C1OewSkj.js`) e apaga os anteriores. O
+  candidato deixa a página aberta no celular — ele sai para fotografar o
+  documento e volta, que é o uso normal. Se um deploy acontece nesse meio, a aba
+  pede o arquivo antigo e o nginx respondia **HTTP 200 com o HTML do index no
+  lugar do JavaScript**; o navegador tentava executar `<!doctype html>` como
+  script, e o React não montava. Agora `/assets/` usa `try_files $uri =404`.
+- **Por que não havia o que procurar no log**: do ponto de vista do servidor foi
+  um 200 bem-sucedido. O defeito era invisível para quem olhava só o servidor.
+- **Explica os dois casos, inclusive o link criado no mesmo dia**: não depende de
+  quando o link nasceu, e sim de a aba estar aberta durante um deploy.
+- **`STATUS[s.status]` sem guarda no checklist** (`Checklist.jsx`): status
+  desconhecido lançaria `TypeError` e mataria a tela igual. Não foi o gatilho
+  deste incidente, mas era a mesma bomba armada.
+
+### Adicionado
+- **`ErroFatal.jsx` — o primeiro ErrorBoundary do projeto.** Não havia nenhum:
+  qualquer exceção de render apagava a aplicação inteira, sem uma palavra na
+  tela. Tela branca é o pior desfecho para quem está do outro lado, porque não
+  diz se o problema é a internet, o link, o celular ou o sistema — a pessoa
+  conclui que "não funciona" e desiste.
+- **Recuperação automática de aba antiga** (`main.jsx`): falha ao carregar
+  módulo = versão velha, então recarrega **uma** vez buscando o `index.html`
+  novo. A trava em `sessionStorage` é obrigatória — sem ela, uma falha permanente
+  viraria recarregamento infinito, que é pior que a tela branca.
+- **`/api/health` mostra `migracoes.em_dia`**: se o `docker-entrypoint` falhar ao
+  rodar `alembic upgrade head`, a API sobe com o schema velho e o defeito só
+  aparece na cara do candidato. A revisão é **lida** do diretório de migrations —
+  o `VERSAO_DEPLOY` estava congelado em `v1.50` havia vinte versões, mentindo
+  com confiança.
+- **Cache `immutable` nos assets**: o hash está no nome, então cachear para
+  sempre é seguro e economiza banda no celular do candidato.
+
+### Verificação
+`tests/e2e/deploy-tela-branca.spec.js` roda contra o nginx real. Validado por
+**mutação**: removido o bloco `/assets/`, o asset antigo voltou a responder 200
+com `text/html` e o teste falhou onde devia; restaurado, 5/5 passam. Confirmado
+que `/c/{token}` continua servindo o SPA — consertar o asset não podia quebrar a
+navegação, que é por onde o candidato entra.
+
+### Não era migration
+Medido, não suposto: com o banco atrasado o painel do RH e o creche quebram
+(`teste_vinculado` e `link_expira_em` não existem), mas as rotas do candidato
+respondem 200. O `docker-entrypoint.sh` roda `alembic upgrade head`
+corretamente.
+
+---
+
+## [2.21.0] — 2026-07-29 — Teste já respondido aproveitado no candidato
+
+### Adicionado
+- **`TesteVinculado`**: o RH aproveita para o candidato um DISC/situacional ou
+  prova que a pessoa já respondeu antes de virar candidata. **Aponta, não copia**
+  — o resultado é lido na origem; copiar criaria duas versões do mesmo dado e
+  nenhuma confiável.
+- **A identidade é registrada como o que é**: `automatico=True` quando veio do
+  Banco de Talentos (o link tinha `talento_id`); `automatico=False` quando o RH
+  escolheu da lista, com autor snapshot. Importa porque o link avulso de testagem
+  é **anônimo** e teste decide contratação — vincular o resultado de um homônimo
+  é decidir a vida de alguém com dado de outro. Por isso a lista de escolha mostra
+  nome, data, qual teste e por qual link.
+- **Só o RH vê**: não entra no wizard nem no dossiê, que circula.
+- **Destinatários na tela dos textos de e-mail**: quem recebe cada aviso interno,
+  editável junto do texto. Grava na **mesma** matriz de Avisos internos — uma
+  fonte exposta em dois lugares, não duas verdades.
+
+## [2.20.0] — 2026-07-29 — Avisos internos entram no catálogo
+
+### Adicionado
+- **`avisar_modelo(db, evento, chave_template, contexto)`**: os 8 avisos que vão
+  à equipe passaram a ter assunto e corpo editáveis. O motivo não é cosmético —
+  **quem recebe nem sempre conhece o sistema**: o Gabriel e o Vitor recebem o de
+  uniforme, o líder de brigada recebe o de certificação vencendo.
+- Catálogo vai a 40 templates. Template ausente degrada para 0 envios + log:
+  aviso interno que falha nunca pode derrubar a ação do candidato que o disparou.
+
+### Corrigido
+- **O aviso "Dossiê pronto" lia `email_avisos_internos` direto, fora da matriz.**
+  Desligar o evento no painel não o desligava, e cadastrar destinatário não
+  funcionava — o RH configurava a matriz achando que ela governava tudo.
+
+## [2.19.0] — 2026-07-29 — Catálogo dos documentos do sistema
+
+### Adicionado
+- Os 11 documentos da admissão numa tela só, com **amostra em PDF de verdade**
+  (mesmo gerador, candidato fictício que nunca vai ao banco), download e "criar
+  modelo a partir deste" nos de texto corrido.
+- **Nenhum gerador foi substituído, e não devem ser**: o hash do ato de
+  assinatura é calculado sobre o PDF gerado — trocar por template faria os
+  manifestos já emitidos apontarem para um hash que não se reproduz.
+
+### Corrigido
+- A primeira versão trazia a lista de direitos do "Informações ao Trabalhador"
+  escrita à mão, e **perdera 6% do VT, 8% do FGTS e o 5º dia útil** — texto
+  plausível e errado num documento de contrato com órgão público. Virou
+  `fichas.DIREITOS_TRABALHADOR` (fonte única) e o teste ganhou **âncoras**;
+  "corpo não vazio + tem `{{`" deixava texto inventado passar.
+
+## [2.18.0] — 2026-07-29 — A mensagem parou de culpar a coisa errada
+
+### Corrigido
+- `Assinatura.jsx` dizia **"verifique sua conexão"** para erro de cota — pior que
+  inútil: a conexão está ótima e a frase convida a tentar de novo na hora,
+  reabastecendo a cota.
+- `AssinarExterno.jsx` tinha `catch {}` **mudo** ao pedir código: a falha não
+  aparecia em lugar nenhum.
+- "Código incorreto" passou a dizer o que resolve: **use o do e-mail mais
+  recente** — só o último vale.
+
+### Medido
+Na assinatura e no teste o código é sobrescrito no mesmo registro, então **o
+último enviado continua valendo depois do 429** (`test_codigo_cota.py`). Sem essa
+garantia, a orientação na tela seria mentira.
+
+## [2.17.0] — 2026-07-29 — O link do e-mail entra direto
+
+Feedback de campo: *"foi eu mesmo quem copiou e colou o código. Impossível ter
+erro."* Estava certo — o código era válido.
+
+### Corrigido
+- A cota é 5 pedidos por 15 min. Estourada, o e-mail **não saía**, mas o front
+  **avançava de etapa assim mesmo** — sucesso mentiroso, o mesmo defeito da
+  v2.02 pela terceira vez. A pessoa colava o código do e-mail anterior.
+- 429 ganhou frase própria; botão "🔄 Reenviar o código" na própria tela.
+- `confirmar` deixou de exigir `confirmado_em IS NULL`: quem entrava pelo link e
+  ainda digitava o código levava "código inválido" com o código certo na mão.
+
+### Adicionado
+- **Link do e-mail entra direto** (creche e portal `/meu`): código e link chegam
+  na mesma caixa, logo provam o mesmo fator — exigir os dois era atrito
+  duplicado, não segurança em camadas. Uso único, 15 min. Migration
+  `a8b9c0d1e2f3`; nulo = acesso antigo, que segue exigindo código.
+
+## [2.16.0] — 2026-07-28 — "Enviar teste para mim" nos textos de e-mail
+
+### Adicionado
+- Manda o texto **em edição** para a caixa de quem está editando — ver como
+  chega antes de valer para o candidato.
+
+## [2.15.0] — 2026-07-28 — Currículo e anotações na linha do dash
+
+### Adicionado
+- O dash de Talentos mostrava "🗒️ Anotações" em todo mundo e o RH só descobria
+  que não havia nada depois de abrir o modal. Agora vêm a contagem e a última
+  anotação, carregadas **em lote**.
+
+### Corrigido
+- **O teste de N+1 escrito para isso expôs um N+1 antigo**: `_resumo_teste_talento`
+  fazia até 3 consultas por talento, com o comentário "1 consulta, sem N+1" logo
+  acima. A listagem caiu de **43 consultas para 39 talentos → 5**, constante.
+- Armadilha registrada: medir N+1 com limite absoluto mede o tamanho do banco —
+  compare duas listagens de tamanhos diferentes.
+
+## [2.14.0] — 2026-07-28 — Arquivar talento registra motivo, autor e data
+
+### Adicionado
+- Arquivar **escreve no mini-CRM** em vez de ganhar campo próprio: a `Anotacao`
+  já tinha texto, anexo, autor snapshot e data. Desfazer é mudar o status de
+  volta; o registro permanece porque a anotação é append-only.
+- O lote **presta contas de quem não foi** — antes tinha `.catch(() => {})` e
+  dizia que arquivou tudo.
+
+### Corrigido
+- `test_jornadas_confirmar_lote` só passava em banco limpo (`descricao` é
+  `unique=True`). Teste que grava em tabela com campo único precisa gerar o valor
+  por execução.
+
+## [2.13.0] — 2026-07-28 — Confirmar em lote as jornadas que o parser leu por completo
+
+### Adicionado
+- Só as **completas** entram no lote; as demais continuam uma a uma.
+
+## [2.12.0] — 2026-07-28 — Fila de duplicidades: 199 pares viraram 3
+
+### Corrigido
+- O RH pediu ação em massa nas duplicidades de jornada. **Medindo contra os
+  dados reais, a fila tinha 199 pares e só 3 eram duplicata** — 80 eram o mesmo
+  texto com horário diferente, 40 o mesmo horário com cliente diferente.
+  Resolver "em massa" seria o merge cego que o módulo existe para impedir, e o
+  estrago é invisível: a pessoa descobre no contracheque.
+- Duas regras estruturais: **números diferentes ⇒ jornadas diferentes**;
+  **mesmos números + letras diferentes ⇒ clientes diferentes**.
+- Lição geral: quando o RH pede velocidade, conferir antes se a fila não está
+  cheia de ruído — velocidade em fila errada multiplica erro.
+
+## [2.11.0] — 2026-07-28 — Currículo em Word abria aba em branco
+
+### Corrigido
+- O log de abertura não dizia nada sobre o que falhou.
+
+## [2.10.0] — 2026-07-28 — Ficha completa do talento
+
+### Adicionado
+- Painel na própria linha com tudo do cadastro, incluindo o `resumo` e a
+  `origem` — que iam para o banco e ninguém via.
+
+### Corrigido
+- `.talento-form` perdia para `.cartao` por ordem de fonte e grudava o
+  formulário na esquerda. No mobile passava despercebido.
+- Sublinhado do menu (os itens viraram `<NavLink>` na v1.97) e chips
+  sobrepostos.
+
+## [2.09.0] — 2026-07-28 — Todos os e-mails do sistema viram texto editável
+
+### Adicionado
+- Migração completa dos e-mails externos para o catálogo.
+
+## [2.08.0] — 2026-07-28 — Tela de Uniformes
+
+### Adicionado
+- O pedido era "um e-mail com todas as informações de uniforme"; a escolha foi o
+  **contrário do pedido literal**, e combinada: nome, posto e medidas por e-mail
+  é ficha de pessoal circulando em caixa que ninguém controla, e a cada 20
+  admissões seriam 20 e-mails que o time para de ler. A lista fica na tela; o
+  aviso diz só "fulano informou os tamanhos, veja em /rh/uniformes".
+- Dispara no `concluir_envio`, **nunca no autosave** — o wizard salva a cada 900ms.
+
+## [2.07.0] — 2026-07-28 — E-mails externos migram para os textos editáveis
+
+## [2.06.0] — 2026-07-28 — Textos de e-mail editáveis pelo RH
+
+### Adicionado
+- Catálogo em `email_templates.py` como fonte da verdade; a tabela guarda só o
+  que o RH escreveu por cima. Histórico append-only, preview, restaurar versão.
+- **O template é apresentação, nunca decisão**: os e-mails que enumeram
+  documentos recebem a lista pronta como `{{lista}}` — a regra do que entra
+  continua no código.
+- **Variável obrigatória valida no salvamento**: sem `{{codigo}}` num e-mail de
+  acesso, a mensagem sai bonita e vazia e ninguém mais entra no sistema.
+- **Fallback sempre**: sem registro, texto vazio ou erro de leitura vale o padrão
+  — e-mail nenhum deixa de sair por edição ruim.
+
+### Corrigido
+- **Teste de e-mail não pode depender da redação**: o smoke extraía o OTP com
+  `split("eletrônica é: ")`. Com o texto editável, uma edição no painel derrubaria
+  o CI num commit sem relação nenhuma. Agora acha o código por padrão.
+
+## [2.05.0] — 2026-07-28 — A opção de VT se confirma antes de assinar
+
+### Corrigido
+- A troca da opção existia só dentro do card, no meio da lista de documentos;
+  quem não reparasse assinava errado — e o termo vira desconto de até 6% em
+  folha, então o erro custa salário. A confirmação foi para logo acima de
+  "Assinar os documentos", dizendo o efeito em dinheiro.
+
+## [2.04.0] — 2026-07-28 — O candidato reabre o próprio envio
+
+### Adicionado
+- Depois do "CONCLUÍ MEU ENVIO" o checklist congelava e só o RH reabria — quem
+  percebia na hora que mandou o arquivo errado ficava dependendo de socorro.
+- Guarda: **qualquer** slot já revisado recusa com 409 — trocar arquivo já
+  analisado faria a análise valer para um documento que não existe mais.
+
+## [2.03.0] — 2026-07-28 — O acesso público para de morrer no app de e-mail
+
+### Corrigido
+- **Link de e-mail identifica, nunca autentica** (regra que rege `/creche` e
+  `/meu`). O gate 2FA morria no webview: a pessoa abria o link, saía para ler o
+  código — única forma — e voltava com a tela zerada. O backend guardava a sessão
+  por 6h, mas o token vivia só em `useState`, e o front ainda apagava o `?t=`.
+- Limpar o `?t=` da URL só **depois** de resolvê-lo — apagar antes era o que
+  impedia o "voltar" de recuperar a tentativa.
+
+## [2.02.0] — 2026-07-28 — O caminho de volta do candidato estava quebrado nas três pontas
+
+### Corrigido
+- **Todo e-mail que manda a pessoa voltar ao sistema leva o link junto**: os
+  e-mails de rejeição diziam "acesse o mesmo link da sua admissão" e **não
+  mandavam link nenhum**.
+- **`catch` vazio anti-enumeração engolindo erro de infra**: `Entrar.jsx` mostrava
+  "📬 Confira seu e-mail" **mesmo com HTTP 500** — sucesso mentiroso; a pessoa
+  esperava um e-mail que nunca saiu. A resposta idêntica para CPF que existe e
+  que não existe continua certa; 5xx tem que virar erro visível.
+- Regra: **erro de negócio ≠ erro de infraestrutura**. Ao escrever `catch`
+  silencioso, pergunte qual falha ele está escondendo.
+
+---
+
 ## [2.01.0] — 2026-07-28 — Modelos de IA configuráveis e à prova de "`:free` sumiu"
 
 Salvar a chave do OpenRouter mostrava "não respondeu ou recusou a chave"
