@@ -61,6 +61,68 @@ test.describe('deploy não pode deixar o candidato com a tela em branco', () => 
     expect(r.headers()['cache-control'] || '').toContain('no-store')
   })
 
+  test("a etapa de assinatura monta — nenhum estado null usado antes do guard", async ({ page }) => {
+    // Segunda causa do MESMO incidente, encontrada quando a primeira já estava
+    // corrigida e a tela continuou quebrando (agora com a mensagem do
+    // ErrorBoundary, em vez do branco): `Assinatura.jsx` fazia
+    // `fichas.some(...)` no corpo do componente, mas `fichas` nasce null e só é
+    // preenchido pelo useEffect. O guard `if (!fichas)` existia — lá embaixo,
+    // perto do return, tarde demais para o que é calculado em cima.
+    // `null.some()` lançava TypeError e apagava a tela do candidato.
+    // Introduzido na v2.05; pegou quem estava exatamente na etapa de assinatura.
+    // Testar pela UI exigiria criar posto + jornada + candidato e conduzir o
+    // wizard inteiro — frágil e dependente do estado do banco. O defeito é de
+    // RENDER, então basta montar o componente com a resposta que o servidor
+    // realmente devolve ANTES do useEffect resolver: `fichas` ainda null.
+    //
+    // Servimos uma página que importa o bundle publicado e renderiza só o
+    // Assinatura, com a API interceptada para demorar — a janela exata em que
+    // a tela quebrava.
+    const quebras = []
+    page.on('pageerror', (e) => quebras.push(e.message))
+
+    // Segura a resposta de /fichas por 1,5s: durante esse tempo o componente
+    // fica com `fichas === null` e é exatamente aí que `fichas.some()` lançava.
+    await page.route('**/api/c/*/fichas', async (rota) => {
+      await new Promise((r) => setTimeout(r, 1500))
+      await rota.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ fichas: [
+          { documento: 'ficha_cadastro', titulo: 'Ficha Cadastral', assinado: false },
+          { documento: 'termo_vt', titulo: 'Termo de VT', assinado: false },
+        ] }),
+      })
+    })
+    // A ficha do candidato responde na hora: garante que o componente monta e
+    // fica esperando só o /fichas.
+    await page.route('**/api/c/*/ficha', (rota) => rota.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'aguardando_assinatura', aceite_lgpd_em: '2026-07-29T10:00:00Z',
+        pessoais: { nome_completo: 'Regressao Tela Branca', email: 'r@example.com' },
+        vt: { optante: true },
+      }),
+    }))
+    await page.route('**/api/c/*/testes', (rota) => rota.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ tem_testes: false, todos_concluidos: true }),
+    }))
+
+    await page.goto('/c/token-de-regressao-render')
+    // Enquanto o /fichas não responde, o componente está com fichas === null.
+    await page.waitForTimeout(700)
+
+    expect(quebras.join(' | '),
+      'exceção no render com estado ainda null apaga a tela inteira do candidato'
+    ).not.toMatch(/Cannot read propert/)
+
+    // O ErrorBoundary é a rede de segurança — se ELE apareceu, alguma coisa
+    // quebrou no caminho e o candidato está travado do mesmo jeito.
+    await expect(page.getByText('Algo deu errado ao abrir esta página')).toHaveCount(0)
+  })
+
   test('a página do candidato monta e não fica em branco', async ({ page }) => {
     // O sintoma como o candidato viveu: abrir o link e ver a tela vazia.
     // Com token inválido o certo é aparecer a mensagem de link expirado —
