@@ -214,7 +214,11 @@ export default function Checklist({ token, aoConcluir }) {
 
       {check.slots.map((s) => {
         const info = DICAS[s.tipo] || { nome: s.tipo, dica: '' }
-        const st = STATUS[s.status]
+        // Guarda igual à do `info` logo acima: `st.icone` com status
+        // desconhecido lançaria TypeError e apagaria a tela INTEIRA do
+        // candidato — o checklist não pode morrer por causa de um status novo
+        // que o backend passe a devolver antes do front conhecer.
+        const st = STATUS[s.status] || { icone: '•', texto: s.status || '—' }
         return (
           <div className={`slot ${s.status}`} key={s.id}>
             <div className="slot-linha">
