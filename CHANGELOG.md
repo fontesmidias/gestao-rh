@@ -11,6 +11,48 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.27.0] — 2026-07-30 — Creche: a idade das crianças estava errada para todo mundo
+
+Feedback do Bruno: *"por que quem nasceu em 2024 você diz que não tem menos de
+4 anos e 11 meses? A leitura foi certinha, mas as contas estão erradas."*
+Estava certo, e o problema era pior do que parecia.
+
+### Corrigido
+- **TODA criança aparecia como "❌ passou de 5a11m"**, inclusive um bebê de 2
+  anos. A causa não era a aritmética: `_idade_anos_meses` lia apenas
+  `dd/mm/aaaa`, mas o `InputData.jsx` do wizard devolve **ISO** (`aaaa-mm-dd`)
+  por padrão — e é assim que a maioria dos registros foi gravada. O
+  `split("/")` falhava, a idade virava `None`, e `None` era tratado como "não
+  elegível". **O RH indeferiria quem tem direito.**
+- `partes_da_data` aceita os dois formatos, com validação de sanidade (mês 13,
+  ano absurdo → não vira idade inventada).
+- **"Passou da idade" e "não consegui ler a data" viraram estados DIFERENTES**
+  na tela (`idade_desconhecida` → "⚠️ conferir data"). Mostrar as duas coisas
+  como ❌ é o que levaria ao indeferimento por engano.
+- O `revisar_idade` (risco de glosa) deixou de acusar quem só tem data ilegível.
+- A data agora sai sempre em `dd/mm/aaaa` na tela, venha como vier do banco.
+
+### Por que não foi feita uma migração dos dados
+O campo é `String(10)` livre e há registros das duas formas. Reescrever em lote
+significaria adivinhar formato — `03/04` é 3 de abril ou 4 de março? — em dado
+que decide dinheiro no contracheque de gente real.
+
+### Alterado
+- **O painel do benefício abre NA LINHA do colaborador**, não no fim da página
+  (*"tenho que rolar a tela lá no final para conferir e depois voltar ao topo"*).
+  O `DashPlanilha` já tinha `linhaExpandida`; o Creche não usava — renderizava o
+  detalhe depois da tabela inteira. É a regra que já estava no CLAUDE.md desde a
+  v1.83.
+
+### Verificação
+`tests/test_creche_idade.py` cobre os dois formatos, o caso real do incidente, o
+limite de 5a11m, data ilegível e a exibição. Data de referência **fixa**, senão
+o teste passaria hoje e falharia no mês que vem. Validado por **mutação**:
+repondo a leitura só-BR, 12 asserções falham. Conferido na tela com os dados do
+print: Yuri 5a0m ✅ e Hannah 2a5m ✅.
+
+---
+
 ## [2.26.0] — 2026-07-30 — A tela de Telemetria estava fora do padrão visual
 
 Feedback do Bruno: *"achei tão feia essa página, por que não seguiu o padrão de

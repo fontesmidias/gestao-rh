@@ -119,6 +119,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   - Expurgo mora em `workers/expurgo.py` (o compose já o agenda; um cron a mais
     seria mais uma peça para esquecer de subir) e NÃO passa pela lixeira —
     milhões de linhas de uso afogariam o que ela existe para proteger.
+- **Data no banco vem em DOIS formatos — leia os dois** (v2.27, incidente de
+  campo 2026-07-30): `CriancaCreche.data_nascimento` é `String(10)` com o
+  comentário "dd/mm/aaaa", mas o `InputData.jsx` devolve **ISO** (`aaaa-mm-dd`)
+  por padrão (só com `modoTexto` ele devolve BR) — e é assim que a maioria dos
+  registros foi gravada. `_idade_anos_meses` lia só o BR: o `split("/")`
+  falhava, a idade virava `None`, e `None` era tratado como "não elegível".
+  Resultado: **toda** criança marcada "❌ passou de 5a11m", inclusive um bebê de
+  2 anos, e o RH prestes a indeferir quem tem direito. Use
+  `creche.partes_da_data` / `data_br`. **NÃO migre os dados em lote**: adivinhar
+  formato (`03/04` é 3 de abril ou 4 de março?) reescreveria data de gente real
+  em algo que decide dinheiro no contracheque.
+- **"Não atende ao critério" e "não consegui ler o dado" são estados
+  DIFERENTES** (mesma leva): tratar os dois como ❌ na tela leva a decisão
+  errada — no creche, ao indeferimento de quem tem direito. Sempre que uma
+  regra de elegibilidade depender de um dado que pode estar ilegível, exponha o
+  terceiro estado ("conferir"), e não deixe que ele acione alarme de risco
+  (`revisar_idade` ignora `idade_desconhecida`).
+- **Painel de detalhe abre NA LINHA, nunca no fim da página** — regra que já
+  valia desde a v1.83 e o Creche não seguia (feedback 2026-07-30: "tenho que
+  rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
+  usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
+  tabela obriga a rolar a página inteira a cada item conferido.
 - **Classe de CSS que não existe não estiliza NADA — confira antes de usar**
   (v2.25, feedback do Bruno: "achei tão feia essa página, por que não seguiu o
   padrão?"). A 1ª tela de Telemetria inventou ONZE classes (`rh-secao`,

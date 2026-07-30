@@ -7,7 +7,7 @@ from app.core.db import engine
 router = APIRouter(tags=["health"])
 
 # Marcador de versão: muda a cada deploy que precisa ser confirmado no ar.
-VERSAO_DEPLOY = "v2.26-padrao-visual"
+VERSAO_DEPLOY = "v2.27-idade-creche"
 
 
 def _revisao_esperada() -> str | None:
