@@ -49,6 +49,20 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  # Vigia da telemetria (v2.25): avalia as regras de alerta e avisa pela matriz
+  # de avisos internos. Serviço PRÓPRIO, e não mais um comando dentro do
+  # `expurgo`, porque a cadência é outra — 15 minutos contra 24 horas. Embutir
+  # ali faria o alerta chegar um dia depois, o que anula a razão de existir.
+  alertas:
+    build: ../backend
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do python -m app.workers.alertas_telemetria; sleep 900; done"]
+    env_file: ../.env
+    depends_on:
+      - db
+    networks: [internal]
+    restart: unless-stopped
+
   frontend:
     build: ../frontend
     depends_on:

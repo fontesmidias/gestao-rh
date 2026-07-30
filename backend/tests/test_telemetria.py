@@ -44,11 +44,19 @@ def test_mascara_token_da_pagina():
     m = tel.mascarar_pagina("/c/uB0jq1m9hdmDNFygDg1p17IADXmj39ZHUDmiqrYMcY0")
     checar("uB0jq1" in m and "39ZHUDmiqrYMcY0" not in m,
            "token do candidato é mascarado, mas o prefixo fica para correlação")
-    checar(tel.mascarar_pagina("/t/abcdefghijklmnop").endswith("***"),
+    # Token real do itsdangerous: longo e com caixa mista.
+    checar(tel.mascarar_pagina("/t/kmS1Msdeh8fhW9-uLpTj8URpWNtnBNsnK3awMgpngdM").endswith("***"),
            "token de testagem também é mascarado")
     checar(tel.mascarar_pagina("/rh/talentos") == "/rh/talentos",
            "página do painel passa intacta (não tem token)")
     checar(tel.mascarar_pagina(None) is None, "página nula não quebra")
+
+    # NOME DE ETAPA não é token. Sem esta distinção, `/c/assinatura` virava
+    # `/c/assina***` e o MESMO erro aparecia duas vezes no alerta, uma por
+    # grafia — agrupar errado infla a contagem e esconde o padrão.
+    for etapa in ("/c/assinatura", "/c/documentos", "/c/formulario", "/c/acompanhamento"):
+        checar(tel.mascarar_pagina(etapa) == etapa,
+               f"'{etapa}' é nome de etapa e passa intacto")
 
     # A garantia que importa de verdade: o mascaramento é APLICADO na gravação.
     # Testar só a função deixaria passar alguém que a removesse do caminho —

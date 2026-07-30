@@ -85,6 +85,26 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  # Vigia da telemetria (v2.25): avalia as regras de alerta a cada 15 minutos e
+  # avisa pela matriz de avisos internos. Serviço próprio porque a cadência é
+  # muito menor que a do `expurgo` (24h) — embutido lá, o alerta chegaria um dia
+  # depois e não serviria para nada.
+  alertas:
+    image: ghcr.io/fontesmidias/gestao-rh-api:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do python -m app.workers.alertas_telemetria; sleep 900; done"]
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+    depends_on:
+      - db
+    networks: [internal]
+    restart: unless-stopped
+
   frontend:
     image: ghcr.io/fontesmidias/gestao-rh-frontend:latest
     ports:

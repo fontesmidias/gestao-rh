@@ -3,6 +3,7 @@ import { rh as api } from '../api.js'
 import { fmtDataHora } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import Ajuda from '../Ajuda.jsx'
+import AlertasTelemetria from './AlertasTelemetria.jsx'
 
 // Telemetria de uso (v2.24, Configurações → 📈 Telemetria).
 //
@@ -221,6 +222,8 @@ export default function TelemetriaRH() {
                         linhaExpandida={(e) => <DetalheEvento evento={e} />} />
         )}
       </details>
+
+      <AlertasTelemetria />
 
       <Retencao aoMudar={carregar} msg={msg} setMsg={setMsg} />
     </section>

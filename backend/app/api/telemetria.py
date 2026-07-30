@@ -178,6 +178,123 @@ def salvar_retencao(payload: RetencaoIn, db: Session = Depends(get_db),
     return {"dias": payload.dias}
 
 
+# ---------------------------------------------------------------------------
+# Regras de alerta (v2.25) — o sistema avisa em vez de esperar a pergunta
+# ---------------------------------------------------------------------------
+
+
+class RegraIn(BaseModel):
+    tipo: str
+    nome: str = Field(max_length=120)
+    ativa: bool = True
+    limiar: int = Field(default=1, ge=1, le=10_000_000)
+    janela_min: int = Field(default=60, ge=5, le=10_080)     # 5 min a 7 dias
+    # Silêncio mínimo de 5 min: zero transformaria o alerta em enxurrada a cada
+    # verificação, e enxurrada não é lida. É o limite que protege o recurso.
+    silencio_min: int = Field(default=60, ge=5, le=10_080)
+    origem: str | None = Field(default=None, max_length=20)
+    pagina: str | None = Field(default=None, max_length=120)
+    evento: str | None = Field(default=None, max_length=60)
+
+
+@router.get("/rh/telemetria/alertas/regras")
+def listar_regras(db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    from app.models.alerta import RegraAlerta
+    from sqlalchemy import select as _select
+    regras = db.scalars(_select(RegraAlerta).order_by(RegraAlerta.criado_em)).all()
+    return [{
+        "id": r.id, "tipo": r.tipo, "nome": r.nome, "ativa": r.ativa,
+        "limiar": r.limiar, "janela_min": r.janela_min,
+        "silencio_min": r.silencio_min, "origem": r.origem,
+        "pagina": r.pagina, "evento": r.evento,
+    } for r in regras]
+
+
+@router.post("/rh/telemetria/alertas/regras", status_code=201)
+def criar_regra(payload: RegraIn, db: Session = Depends(get_db),
+                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.models.alerta import RegraAlerta, TipoAlerta
+    from app.services.auditoria import registrar
+
+    if payload.tipo not in {t.value for t in TipoAlerta}:
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    regra = RegraAlerta(**payload.model_dump())
+    db.add(regra)
+    registrar(db, "alerta_regra_criada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": payload.nome, "tipo": payload.tipo})
+    db.commit()
+    db.refresh(regra)
+    return {"id": regra.id}
+
+
+@router.put("/rh/telemetria/alertas/regras/{regra_id}")
+def editar_regra(regra_id: uuid.UUID, payload: RegraIn,
+                 db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.models.alerta import RegraAlerta, TipoAlerta
+    from app.services.auditoria import registrar
+
+    regra = db.get(RegraAlerta, regra_id)
+    if regra is None:
+        raise HTTPException(status_code=404, detail="regra_nao_encontrada")
+    if payload.tipo not in {t.value for t in TipoAlerta}:
+        raise HTTPException(status_code=422, detail="tipo_invalido")
+    for campo, valor in payload.model_dump().items():
+        setattr(regra, campo, valor)
+    registrar(db, "alerta_regra_editada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": payload.nome})
+    db.commit()
+    return {"id": regra.id}
+
+
+@router.delete("/rh/telemetria/alertas/regras/{regra_id}", status_code=204)
+def excluir_regra(regra_id: uuid.UUID, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+    from app.models.alerta import RegraAlerta
+    from app.services.auditoria import registrar
+
+    regra = db.get(RegraAlerta, regra_id)
+    if regra is None:
+        raise HTTPException(status_code=404, detail="regra_nao_encontrada")
+    registrar(db, "alerta_regra_excluida", ator="rh", ator_detalhe=rh.email,
+              detalhe={"nome": regra.nome})
+    db.delete(regra)
+    db.commit()
+
+
+@router.post("/rh/telemetria/alertas/testar")
+def testar_regras(db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """"O que dispararia agora?" — sem enviar e sem gravar histórico.
+
+    Não consumir o silêncio nem o histórico é essencial: testar uma regra não
+    pode fazer o problema REAL deixar de avisar depois (um `erro_novo` marcado
+    como já visto nunca mais dispararia).
+    """
+    from app.services.alertas import avaliar
+    disparos = avaliar(db, enviar=False)
+    db.rollback()   # garantia extra: nada do teste persiste
+    return [{
+        "regra": d["regra"],
+        "tipo": d["tipo"].value if hasattr(d["tipo"], "value") else d["tipo"],
+        "total": d["total"],
+        "itens": [i["texto"] for i in d["itens"]],
+    } for d in disparos]
+
+
+@router.get("/rh/telemetria/alertas/historico")
+def historico_alertas(limite: int = 100, db: Session = Depends(get_db),
+                      _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+    """Alertas já disparados — a prova de que o vigia está acordado.
+
+    Sem esta lista, caixa de entrada silenciosa seria ambígua: "não houve
+    problema" e "o alerta quebrou" pareceriam a mesma coisa.
+    """
+    from app.services.alertas import historico
+    return historico(db, limite=limite)
+
+
 class ExpurgoIn(BaseModel):
     """Expurgo cirúrgico por intervalo (pedido do Bruno, 2026-07-29)."""
 

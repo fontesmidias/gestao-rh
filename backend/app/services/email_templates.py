@@ -615,6 +615,32 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        botao_texto="Ver a lista de uniformes", botao_url_var="link",
        exemplo={"nome": "Maria Souza", "link": "https://exemplo/rh/uniformes"}),
 
+    _m(chave="aviso_telemetria_alerta", grupo="Avisos internos",
+       evento="telemetria_alerta",
+       rotulo="⚠️ Telemetria: algo quebrou ou travou",
+       quando="Uma regra de alerta dispara (verificação a cada 15 minutos).",
+       assunto="⚠️ {{tipo}}: {{regra}}",
+       # A lista chega PRONTA do Python: o template é apresentação, nunca
+       # decisão — a regra do que entra continua no código (v2.06).
+       corpo="A vigilância do sistema encontrou algo que merece atenção.\n\n"
+             "Regra: {{regra}}\n"
+             "Ocorrências: {{quantidade}}\n\n"
+             "{{lista}}\n\n"
+             "Isto é um aviso automático a partir da telemetria — ninguém "
+             "precisou reclamar para ele chegar. Confira os detalhes em "
+             "Configurações → Telemetria.",
+       variaveis={"regra": "nome da regra que disparou",
+                  "tipo": "tipo do alerta (erro novo, lentidão…)",
+                  "quantidade": "quantos itens dispararam",
+                  "lista": "os itens, um por linha (montado pelo sistema)",
+                  "link": "endereço da tela de Telemetria"},
+       obrigatorias=("lista",),
+       botao_texto="Ver na telemetria", botao_url_var="link",
+       exemplo={"regra": "Erro novo na tela de alguém", "tipo": "Erro novo",
+                "quantidade": "1", "link": "https://exemplo/rh/config",
+                "lista": "• Cannot read properties of null (reading 'some') — "
+                         "em /c/assinatura (3x, 2 pessoa(s))"}),
+
     _m(chave="aviso_dossie_pronto", grupo="Avisos internos",
        evento="dossie_pronto",
        rotulo="Dossiê de admissão pronto",

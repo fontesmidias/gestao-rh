@@ -119,6 +119,38 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   - Expurgo mora em `workers/expurgo.py` (o compose já o agenda; um cron a mais
     seria mais uma peça para esquecer de subir) e NÃO passa pela lixeira —
     milhões de linhas de uso afogariam o que ela existe para proteger.
+- **Alertas de telemetria** (`models/alerta.py`, `services/alertas.py`,
+  `workers/alertas_telemetria.py`, `rh/AlertasTelemetria.jsx`, v2.25): a
+  telemetria da v2.24 é PASSIVA (alguém tem que abrir a aba); os alertas a
+  tornam ativa. Quatro tipos — `erro_novo`, `erro_volume`, `friccao_pico`,
+  `lentidao` — com regras EDITÁVEIS na tela (o Bruno pediu "customizar mais
+  cenários"; limiar chumbado exigiria deploy a cada ajuste).
+  - **Entrega pela MATRIZ** (`avisar_modelo`, evento `telemetria_alerta`), nunca
+    por caminho paralelo — é a regra da v2.21 para e-mail novo.
+  - **Silêncio é recurso escasso**: dedup por assinatura + `silencio_min` (mínimo
+    de 5, nunca zero). Alerta que vira enxurrada deixa de ser lido, e alerta
+    ignorado é PIOR que alerta nenhum — dá falsa sensação de cobertura.
+  - **`erro_novo` usa `_ja_visto_alguma_vez`, sem janela**: "novo" é para
+    sempre. Se dependesse só do silêncio, um erro conhecido voltaria a ser
+    anunciado como novidade de hora em hora. (O teste que não cobria isso
+    passava com a checagem removida — lacuna achada por mutação.)
+  - **`enviar=False` (botão "o que dispararia agora?") NÃO grava histórico**:
+    testar não pode marcar o erro como já visto e impedir o alerta real.
+  - **Lentidão por MEDIANA e mínimo de 3 amostras**: uma medição de 40s é
+    alguém no elevador, não problema do sistema.
+  - **Worker próprio a cada 15 min** (compose E `portainer-stack.yml` — sem os
+    dois, não roda em produção). NÃO embutir no `expurgo`, que roda a cada 24h:
+    o alerta chegaria um dia depois. O worker checa `has_table` antes de rodar —
+    ele sobe em paralelo com a API, que é quem aplica as migrations, e registrar
+    ERRO a cada deploy ensinaria a ignorar o log.
+  - **Histórico mostra quando o alerta saiu para NINGUÉM** (0 destinatários):
+    sem isso, caixa silenciosa seria ambígua — "sem problema" e "quebrou"
+    pareceriam iguais.
+- **Teste NÃO trava contagem de catálogo** (v2.25): `assert len(_INTERNOS) == 8`
+  quebrava a cada aviso novo e legítimo, sem apontar defeito — e a correção
+  óbvia (incrementar a constante) faz o teste não proteger nada. Derive a
+  garantia do próprio catálogo (todo aviso interno tem `evento=` existente na
+  matriz), nunca de uma lista escrita à mão no teste.
 - **Estado que nasce `null` NÃO pode ser usado no corpo do componente** —
   o guard tem que vir ANTES de qualquer cálculo, não junto do `return`
   (2ª causa do incidente de 2026-07-29; a 1ª está no item seguinte). Em

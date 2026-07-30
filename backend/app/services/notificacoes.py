@@ -73,6 +73,15 @@ EVENTOS: list[dict] = [
                      "fica pronto para download no painel.",
     },
     {
+        "chave": "telemetria_alerta",
+        "rotulo": "⚠️ Telemetria: algo quebrou ou travou",
+        "descricao": "Quando uma regra de alerta dispara — erro novo na tela de "
+                     "alguém, volume de erros, muita gente travando no mesmo "
+                     "ponto ou página lenta. Cadastre aqui quem cuida do "
+                     "sistema. As regras e os limites ficam em "
+                     "Configurações → Telemetria.",
+    },
+    {
         "chave": "uniforme_pendente",
         "rotulo": "Uniforme: tamanhos de um novo admitido",
         "descricao": "Quando um candidato informa os tamanhos de uniforme. "

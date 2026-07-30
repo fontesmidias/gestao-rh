@@ -250,27 +250,26 @@ finally:
 from app.services.notificacoes import EVENTOS, avisar_modelo  # noqa: E402
 
 _INTERNOS = [m for m in CATALOGO if m.grupo == "Avisos internos"]
-assert len(_INTERNOS) == 8, f"esperava 8 avisos internos, achei {len(_INTERNOS)}"
+# Não se trava o NÚMERO de avisos: cada aviso novo (legítimo) quebraria o teste
+# sem apontar defeito nenhum, e a tentação seria só incrementar a constante — um
+# teste que não protege nada. O que importa é a GARANTIA, cobrada logo abaixo:
+# todo aviso interno precisa de um evento correspondente na matriz, senão o RH
+# não tem onde cadastrar quem recebe.
+assert _INTERNOS, "o catálogo precisa ter avisos internos"
 
 # todo aviso interno tem que casar com um EVENTO da matriz de notificações —
 # senão o RH não teria onde cadastrar quem recebe
 _eventos = {e["chave"] for e in EVENTOS}
-_usados = {
-    "aviso_envio_concluido": "envio_concluido",
-    "aviso_documento_reenviado": "envio_concluido",
-    "aviso_uniforme": "uniforme_pendente",
-    "aviso_dossie_pronto": "dossie_pronto",
-    "aviso_creche_levantamento": "creche_levantamento_enviado",
-    "aviso_talento_cadastrado": "talento_cadastrado",
-    "aviso_desenvolvimento_enviado": "desenvolvimento_enviado",
-    "aviso_match_concluido": "match_vagas_concluido",
-}
-assert set(_usados) == {m.chave for m in _INTERNOS}, (
-    "há aviso interno no catálogo sem evento mapeado (ou vice-versa)")
-for chave, evento in _usados.items():
-    assert evento in _eventos, (
-        f"'{chave}' aponta para o evento '{evento}', que não existe em "
-        f"notificacoes.EVENTOS — o RH não teria onde cadastrar quem recebe")
+# O vínculo é DERIVADO do próprio catálogo (campo `evento=`), não de uma lista
+# escrita à mão aqui: a lista manual precisaria ser atualizada a cada aviso novo
+# e, quando alguém esquecesse, o teste acusaria o teste — não o código.
+for _m_int in _INTERNOS:
+    assert _m_int.evento, (
+        f"o aviso interno '{_m_int.chave}' não declara `evento=` — sem isso ele "
+        f"não aparece na matriz e o RH não tem onde cadastrar quem recebe")
+    assert _m_int.evento in _eventos, (
+        f"'{_m_int.chave}' aponta para o evento '{_m_int.evento}', que não existe "
+        f"em notificacoes.EVENTOS — o RH não teria onde cadastrar quem recebe")
 
 # `avisar_modelo` renderiza pelo catálogo e respeita a matriz
 _env = []
