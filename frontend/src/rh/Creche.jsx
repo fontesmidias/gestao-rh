@@ -400,85 +400,17 @@ function Levantamentos() {
       {!lista ? <p>Carregando…</p> : (
         <DashPlanilha id="creche" colunas={colunas} dados={lista} cards={cards}
                       acoesLinha={acoesLinha}
+                      linhaExpandida={(b) => (aberto === b.id
+                        ? <DetalheBeneficio
+                            b={b} historico={historico} verHistorico={verHistorico}
+                            verDocCrianca={verDocCrianca} verDocumento={verDocumento}
+                            baixarDossie={baixarDossie} ativar={ativar}
+                            indeferir={indeferir} devolver={devolver}
+                            reenviarLink={reenviarLink} />
+                        : null)}
                       vazio="Nenhum levantamento com esse filtro." />
       )}
 
-      {aberto && lista && (() => {
-        const b = lista.find((x) => x.id === aberto)
-        if (!b) return null
-        return (
-          <div className="rh-card">
-            <h3>{b.nome} — {fmtCpf(b.cpf)}</h3>
-            <p className="explica">Posto: <strong>{b.posto || '—'}</strong> ·
-              e-mail: {b.email || '—'} · telefone: {b.telefone || '—'} ·
-              valor do posto: {b.valor_posto || '— (a repactuar)'}
-              {' '}<button className="btn-link" onClick={() => reenviarLink(b)}
-                     title="Reenviar o código de acesso ao colaborador (e corrigir o e-mail, se preciso)">
-                ✉️ reenviar link</button></p>
-            {b.motivo_devolucao && (
-              <p className="explica" style={{ margin: '0 0 .6rem', color: '#7a5b1a' }}>
-                ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
-                {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
-            <div className="rh-lote" style={{ margin: '0 0 .6rem' }}>
-              <button className="btn-link" onClick={() => verHistorico(b)}>
-                🕘 {historico !== null ? 'Ocultar' : 'Ver'} histórico de decisões</button>
-            </div>
-            {historico && historico !== 'carregando' && (
-              <div className="rh-card" style={{ background: 'var(--hover)', marginBottom: '.6rem' }}>
-                <strong>Histórico</strong>
-                {historico.length === 0 ? <p className="explica">Sem eventos.</p> : (
-                  <ul className="explica" style={{ margin: '.4rem 0 0', paddingLeft: '1.1rem' }}>
-                    {historico.map((h, i) => (
-                      <li key={i}>{fmtDataHora(h.quando)} — <strong>{h.rotulo}</strong>
-                        {h.ator_detalhe ? ` (${h.ator_detalhe})` : ''}
-                        {h.motivo ? `: ${h.motivo}` : ''}</li>))}
-                  </ul>)}
-              </div>)}
-            {historico === 'carregando' && <p className="explica">Carregando histórico…</p>}
-            <table className="rh-tabela">
-              <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
-                <th>Na idade?</th><th>Docs</th></tr></thead>
-              <tbody>
-                {(b.criancas || []).map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.nome}</td><td>{c.data_nascimento}</td>
-                    <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
-                    <td>{c.parentesco}</td>
-                    <td>{c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
-                    <td>
-                      {c.tem_certidao
-                        ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
-                        : <span>⚠️ sem certidão</span>}
-                      {c.tem_guarda &&
-                        <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="rh-lote" style={{ marginTop: '.6rem' }}>
-              <button className="btn-secundario btn-mini"
-                      onClick={() => verDocumento(b, 'requerimento')}>📄 Prévia do requerimento</button>
-              <button className="btn-secundario btn-mini"
-                      onClick={() => verDocumento(b, 'declaracao')}>📄 Declaração-modelo</button>
-              <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
-            </div>
-            {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
-              <div className="navegacao">
-                <button className="btn-link" style={{ color: '#d9534f' }}
-                        onClick={() => indeferir(b)}>Indeferir</button>
-                <button className="btn-secundario btn-mini" onClick={() => devolver(b)}
-                        title="Devolver ao colaborador para corrigir e reenviar (com motivo)">
-                  ↩️ Devolver p/ correção</button>
-                {b.status === 'em_analise' && (
-                  <button className="btn-secundario" onClick={() => ativar(b, true)}>
-                    Aprovar (aguardar repactuação)</button>)}
-                <button className="btn-principal" onClick={() => ativar(b, false)}>Ativar benefício</button>
-              </div>
-            )}
-          </div>
-        )
-      })()}
     </>
   )
 }
@@ -538,6 +470,96 @@ function PorPosto() {
           </tbody>
         </table>
       )}
+    </>
+  )
+}
+
+// Painel de detalhe do benefício — abre NA PRÓPRIA LINHA do colaborador
+// (feedback do Bruno, 2026-07-30: "quando clico em abrir, ele abre lá
+// embaixo; deveria abrir a linha abaixo do colaborador, senão tenho que
+// rolar a tela até o fim para conferir e depois voltar ao topo").
+//
+// É a mesma regra já registrada no CLAUDE.md para o DashPlanilha, que o
+// Creche não seguia: o painel renderizava DEPOIS da tabela inteira.
+function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocumento,
+                           baixarDossie, ativar, indeferir, devolver, reenviarLink }) {
+  return (
+    <>
+          <h3>{b.nome} — {fmtCpf(b.cpf)}</h3>
+          <p className="explica">Posto: <strong>{b.posto || '—'}</strong> ·
+            e-mail: {b.email || '—'} · telefone: {b.telefone || '—'} ·
+            valor do posto: {b.valor_posto || '— (a repactuar)'}
+            {' '}<button className="btn-link" onClick={() => reenviarLink(b)}
+                   title="Reenviar o código de acesso ao colaborador (e corrigir o e-mail, se preciso)">
+              ✉️ reenviar link</button></p>
+          {b.motivo_devolucao && (
+            <p className="explica" style={{ margin: '0 0 .6rem', color: '#7a5b1a' }}>
+              ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
+              {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
+          <div className="rh-lote" style={{ margin: '0 0 .6rem' }}>
+            <button className="btn-link" onClick={() => verHistorico(b)}>
+              🕘 {historico !== null ? 'Ocultar' : 'Ver'} histórico de decisões</button>
+          </div>
+          {historico && historico !== 'carregando' && (
+            <div className="rh-card" style={{ background: 'var(--hover)', marginBottom: '.6rem' }}>
+              <strong>Histórico</strong>
+              {historico.length === 0 ? <p className="explica">Sem eventos.</p> : (
+                <ul className="explica" style={{ margin: '.4rem 0 0', paddingLeft: '1.1rem' }}>
+                  {historico.map((h, i) => (
+                    <li key={i}>{fmtDataHora(h.quando)} — <strong>{h.rotulo}</strong>
+                      {h.ator_detalhe ? ` (${h.ator_detalhe})` : ''}
+                      {h.motivo ? `: ${h.motivo}` : ''}</li>))}
+                </ul>)}
+            </div>)}
+          {historico === 'carregando' && <p className="explica">Carregando histórico…</p>}
+          <table className="rh-tabela">
+            <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
+              <th>Na idade?</th><th>Docs</th></tr></thead>
+            <tbody>
+              {(b.criancas || []).map((c) => (
+                <tr key={c.id}>
+                  <td>{c.nome}</td><td>{c.data_nascimento}</td>
+                  <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
+                  <td>{c.parentesco}</td>
+                  {/* TRÊS estados, não dois (incidente 2026-07-30): data que
+                      não dá para ler é dado a conferir, NÃO "passou da
+                      idade". Mostrar as duas coisas como ❌ levaria o RH a
+                      indeferir quem tem direito. */}
+                  <td>{c.idade_desconhecida
+                    ? <span title="A data de nascimento não pôde ser lida — confira o cadastro.">
+                        ⚠️ conferir data</span>
+                    : c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
+                  <td>
+                    {c.tem_certidao
+                      ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
+                      : <span>⚠️ sem certidão</span>}
+                    {c.tem_guarda &&
+                      <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="rh-lote" style={{ marginTop: '.6rem' }}>
+            <button className="btn-secundario btn-mini"
+                    onClick={() => verDocumento(b, 'requerimento')}>📄 Prévia do requerimento</button>
+            <button className="btn-secundario btn-mini"
+                    onClick={() => verDocumento(b, 'declaracao')}>📄 Declaração-modelo</button>
+            <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
+          </div>
+          {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
+            <div className="navegacao">
+              <button className="btn-link" style={{ color: '#d9534f' }}
+                      onClick={() => indeferir(b)}>Indeferir</button>
+              <button className="btn-secundario btn-mini" onClick={() => devolver(b)}
+                      title="Devolver ao colaborador para corrigir e reenviar (com motivo)">
+                ↩️ Devolver p/ correção</button>
+              {b.status === 'em_analise' && (
+                <button className="btn-secundario" onClick={() => ativar(b, true)}>
+                  Aprovar (aguardar repactuação)</button>)}
+              <button className="btn-principal" onClick={() => ativar(b, false)}>Ativar benefício</button>
+            </div>
+          )}
     </>
   )
 }

@@ -37,14 +37,55 @@ def _gerar_e_guardar_dossie(db: Session, ben: BeneficioCreche) -> str:
     return key
 
 
-def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int] | None:
-    """Idade em (anos, meses) a partir de 'dd/mm/aaaa'. A IN 147 usa o limite de
-    5 anos e 11 meses — por isso os meses importam."""
-    ref = ref or datetime.now(timezone.utc)
+def partes_da_data(nasc: str | None) -> tuple[int, int, int] | None:
+    """(dia, mês, ano) aceitando os DOIS formatos que existem no banco.
+
+    Incidente de campo 2026-07-30: toda criança aparecia como "❌ passou de
+    5a11m", inclusive um bebê de 2 anos. A causa era só isto — a função lia
+    apenas `dd/mm/aaaa`, mas o `InputData.jsx` do wizard devolve **ISO**
+    (`aaaa-mm-dd`) por padrão, e é assim que a maioria dos registros foi
+    gravada. O `split("/")` falhava, a idade virava `None`, e `None` era tratado
+    como "não elegível" — negando o benefício a quem tem direito.
+
+    Aceitar os dois formatos é o certo aqui, e não "consertar os dados": o campo
+    é `String(10)` livre e há registros antigos das duas formas. Uma migração
+    cega reescreveria data de gente real com base em palpite de formato
+    (`03/04` é 3 de abril ou 4 de março?), e isso decide dinheiro no
+    contracheque.
+    """
+    if not nasc:
+        return None
+    texto = str(nasc).strip()
     try:
-        d, m, a = (int(x) for x in nasc.split("/"))
+        if "-" in texto:                       # ISO: aaaa-mm-dd
+            a, m, d = (int(x) for x in texto.split("-"))
+        else:                                  # BR: dd/mm/aaaa
+            d, m, a = (int(x) for x in texto.split("/"))
     except (ValueError, AttributeError):
         return None
+    # Sanidade: data impossível não pode virar idade inventada.
+    if not (1 <= m <= 12 and 1 <= d <= 31 and 1900 <= a <= 2200):
+        return None
+    return d, m, a
+
+
+def data_br(nasc: str | None) -> str:
+    """Exibição sempre em dd/mm/aaaa, venha o dado em que formato vier."""
+    partes = partes_da_data(nasc)
+    if partes is None:
+        return nasc or "—"
+    d, m, a = partes
+    return f"{d:02d}/{m:02d}/{a:04d}"
+
+
+def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int] | None:
+    """Idade em (anos, meses). A IN 147 usa o limite de 5 anos e 11 meses — por
+    isso os meses importam."""
+    ref = ref or datetime.now(timezone.utc)
+    partes = partes_da_data(nasc)
+    if partes is None:
+        return None
+    d, m, a = partes
     anos = ref.year - a
     meses = ref.month - m
     if ref.day < d:
@@ -55,9 +96,18 @@ def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int]
     return (anos, meses) if anos >= 0 else None
 
 
-def _elegivel_por_idade(nasc: str) -> bool:
-    """<= 5 anos e 11 meses (art. 2º, §1º da IN 147/2026)."""
-    am = _idade_anos_meses(nasc)
+def _elegivel_por_idade(nasc: str, ref: datetime | None = None) -> bool:
+    """<= 5 anos e 11 meses (art. 2º, §1º da IN 147/2026).
+
+    `ref` existe para o teste fixar a data e não depender de quando roda — sem
+    isso, um teste de idade passa hoje e falha no mês que vem.
+
+    Data ilegível devolve False, mas quem chama precisa distinguir os dois casos
+    na TELA: "passou da idade" e "não consegui ler a data" são coisas
+    diferentes, e tratá-las igual foi o que fez o sistema negar benefício a
+    quem tinha direito (ver `idade_desconhecida` em `_dump_crianca_rh`).
+    """
+    am = _idade_anos_meses(nasc, ref)
     if am is None:
         return False
     anos, meses = am
@@ -206,10 +256,16 @@ def exportar(db: Session = Depends(get_db),
 def _dump_crianca_rh(c: CriancaCreche) -> dict:
     am = _idade_anos_meses(c.data_nascimento)
     return {
-        "id": c.id, "nome": c.nome, "data_nascimento": c.data_nascimento,
+        "id": c.id, "nome": c.nome,
+        # Sempre dd/mm/aaaa na tela, mesmo que o banco guarde ISO.
+        "data_nascimento": data_br(c.data_nascimento),
         "parentesco": c.parentesco, "tipo_comprovante": c.tipo_comprovante,
         "idade_anos": am[0] if am else None, "idade_meses": am[1] if am else None,
         "elegivel_idade": _elegivel_por_idade(c.data_nascimento),
+        # Data que não dá para ler NÃO é "fora da idade" — é dado a conferir.
+        # Sem esta distinção, os dois casos apareciam como ❌ na tela e o RH
+        # indeferiria por engano quem tem direito (incidente de 2026-07-30).
+        "idade_desconhecida": am is None,
         "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key),
     }
 
@@ -244,8 +300,13 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
         # alerta de idade (auditoria 2026-07-22): benefício ATIVO em que NENHUMA
         # criança ainda está na idade → o RH deve suspender (risco de glosa).
+        # Só acusa quem REALMENTE passou da idade: criança com data ilegível
+        # entra em `conferir_data`, não em risco de glosa — acusar as duas
+        # coisas junto faria o RH suspender benefício de quem tem direito.
         "revisar_idade": (ben.status == StatusBeneficio.ativo and bool(criancas)
-                          and not any(c["elegivel_idade"] for c in criancas)),
+                          and not any(c["elegivel_idade"] for c in criancas)
+                          and not any(c["idade_desconhecida"] for c in criancas)),
+        "conferir_data": any(c["idade_desconhecida"] for c in criancas),
     }
 
 
