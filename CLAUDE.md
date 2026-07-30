@@ -88,6 +88,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Estado que nasce `null` NÃO pode ser usado no corpo do componente** —
+  o guard tem que vir ANTES de qualquer cálculo, não junto do `return`
+  (2ª causa do incidente de 2026-07-29; a 1ª está no item seguinte). Em
+  `Assinatura.jsx`, `const [fichas, setFichas] = useState(null)` na linha 14 e
+  `fichas.some(...)` na linha 26 — mas o `if (!fichas) return` só aparecia na
+  linha 54. O `some` roda no PRIMEIRO render, antes de o `useEffect` carregar:
+  `null.some()` lança `TypeError` e apaga a tela INTEIRA do candidato.
+  Introduzido na v2.05 e pegou justamente quem estava na etapa de assinatura —
+  os dois candidatos travados. **Sintoma que engana**: parece problema de rede
+  ou de link, porque só acontece na janela em que a API ainda não respondeu.
+  Regra: ou use `(x || [])`, ou mova o guard para antes do primeiro uso. Ao
+  criar estado `useState(null)`, procure TODO uso dele acima do guard.
+  Coberto por `deploy-tela-branca.spec.js` (segura a resposta da API por 1,5s
+  para render no estado nulo), validado por mutação.
 - **SPA + deploy: asset que sumiu NÃO pode virar `index.html`** (incidente de
   produção 2026-07-29 — dois candidatos com a TELA EM BRANCO no meio do envio
   de documentos, e ZERO linha de erro em log nenhum). O `try_files $uri

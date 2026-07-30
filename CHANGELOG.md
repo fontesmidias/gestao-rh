@@ -11,6 +11,38 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.23.0] — 2026-07-29 — A segunda causa da tela branca: `fichas.some()` sobre `null`
+
+A v2.22 corrigiu o nginx e a tela **continuou quebrando** — agora com a
+mensagem do ErrorBoundary em vez do branco, o que revelou o erro que estava
+escondido por baixo: `TypeError: Cannot read properties of null (reading 'some')`.
+
+### Corrigido
+- **`Assinatura.jsx` usava `fichas.some(...)` no corpo do componente**, mas
+  `fichas` nasce `null` e só é preenchido pelo `useEffect`. O guard
+  `if (!fichas) return` existia — na linha 54, enquanto o `some` estava na 26.
+  O cálculo roda no **primeiro render**, antes de qualquer dado chegar:
+  `null.some()` lançava e apagava a tela inteira do candidato.
+- **Introduzido na v2.05** (28/07, 20:40), o que confirma a suspeita original de
+  que "foi algo das atualizações de ontem para hoje". Atingia exatamente quem
+  estava na etapa de **assinatura** — os dois candidatos travados.
+- O sintoma engana: parece problema de rede ou de link, porque só acontece na
+  janela em que a API ainda não respondeu.
+
+### Verificação
+Reproduzido com navegador real contra a stack (`pageerror` capturado, nenhuma
+requisição falhando — bug de código puro). Teste novo segura a resposta da API
+por 1,5s para renderizar no estado nulo; validado por **mutação** (bug reposto →
+o ErrorBoundary aparece e o teste falha; restaurado → 6/6). Varredura no projeto
+por `useState(null)` usado antes do guard: nenhum outro caso no caminho do
+candidato.
+
+### Lição registrada no CLAUDE.md
+Estado que nasce `null` não pode ser usado no corpo do componente — o guard vem
+antes do primeiro uso, não junto do `return`.
+
+---
+
 ## [2.22.0] — 2026-07-29 — Tela em branco no candidato: o deploy apagava o script que a aba pedia
 
 Incidente de produção. Dois candidatos travados no meio do envio da

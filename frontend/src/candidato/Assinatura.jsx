@@ -23,7 +23,14 @@ export default function Assinatura({ token, email, aoConcluir }) {
 
   // O termo de VT só entra na lista de quem tem VT a assinar; a confirmação
   // antes do botão depende disso (não faz sentido perguntar a quem não assina).
-  const temTermoVt = fichas.some((f) => f.documento === 'termo_vt' && !f.assinado)
+  //
+  // `fichas` nasce null e só é preenchido pelo useEffect — mas esta linha roda
+  // no PRIMEIRO render, antes disso. Sem o `|| []`, `null.some(...)` lançava
+  // TypeError e apagava a tela inteira do candidato (incidente de produção
+  // 2026-07-29, introduzido na v2.05). O guard `if (!fichas)` que protege o
+  // resto do componente está lá embaixo, perto do return — tarde demais para
+  // qualquer coisa calculada aqui em cima.
+  const temTermoVt = (fichas || []).some((f) => f.documento === 'termo_vt' && !f.assinado)
 
   const recarregar = () => api.fichas(token).then((r) => {
     setFichas(r.fichas)
