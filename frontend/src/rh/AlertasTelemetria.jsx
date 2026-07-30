@@ -11,6 +11,10 @@ import { fmtDataHora } from '../fmt.js'
 // As regras são editáveis aqui (pedido do Bruno: "customizar mais cenários").
 // Chumbar os limiares no código obrigaria um deploy a cada ajuste, e quem
 // convive com os números é quem deve ajustá-los.
+//
+// LAYOUT: `.rh-card`, `.rh-grid-2`, `.campo`, `.rh-tabela` — primitivas que
+// EXISTEM em styles.css (ver `08-sistema-de-design.md`). A 1ª versão inventou
+// classes que não existiam e a tela saiu sem card nem respiro.
 
 const TIPOS = {
   erro_novo: {
@@ -102,9 +106,8 @@ export default function AlertasTelemetria() {
 
   const testar = async () => {
     setOcupado(true); setMsg(null); setTeste(null)
-    try {
-      setTeste(await api.testarAlertas())
-    } catch { setMsg({ tipo: 'erro', texto: 'Não foi possível testar agora.' }) }
+    try { setTeste(await api.testarAlertas()) }
+    catch { setMsg({ tipo: 'erro', texto: 'Não foi possível testar agora.' }) }
     finally { setOcupado(false) }
   }
 
@@ -113,18 +116,18 @@ export default function AlertasTelemetria() {
   }
 
   return (
-    <details className="rh-bloco">
+    <details className="rh-card">
       <summary><strong>🔔 Alertas — o sistema avisa você</strong></summary>
 
       <p className="explica">
         Em vez de esperar alguém abrir esta tela, o sistema verifica a cada
         <strong> 15 minutos</strong> e manda e-mail quando algo merece atenção.
-        Quem recebe é definido em <strong>Configurações → Avisos internos</strong>,
-        no evento <em>“⚠️ Telemetria: algo quebrou ou travou”</em> — a mesma
-        matriz dos outros avisos.
+        Quem recebe é definido em <strong>Configurações → E-mail e integrações →
+        Avisos internos</strong>, no evento <em>“⚠️ Telemetria: algo quebrou ou
+        travou”</em> — a mesma matriz dos outros avisos.
       </p>
 
-      {regras === null ? <p>Carregando…</p> : (
+      {regras === null ? <p className="explica">Carregando…</p> : (
         <table className="rh-tabela">
           <thead><tr>
             <th>Regra</th><th>Tipo</th><th>Dispara quando</th>
@@ -138,9 +141,10 @@ export default function AlertasTelemetria() {
             )}
             {regras.map((r) => (
               <tr key={r.id}>
-                <td><strong>{r.nome}</strong>
+                <td className="dash-quebra">
+                  <strong>{r.nome}</strong>
                   {(r.origem || r.pagina || r.evento) && (
-                    <><br /><small>
+                    <><br /><small className="explica">
                       {r.origem && `origem: ${r.origem} `}
                       {r.pagina && `página: ${r.pagina} `}
                       {r.evento && `evento: ${r.evento}`}
@@ -150,14 +154,17 @@ export default function AlertasTelemetria() {
                 <td>{TIPOS[r.tipo]?.rotulo || r.tipo}</td>
                 <td className="dash-quebra">{descrever(r)}</td>
                 <td>{r.silencio_min} min</td>
-                <td>{r.ativa ? '✅' : '⏸️'}</td>
+                <td>{r.ativa
+                  ? <span className="chip" style={{ '--chip-cor': 'var(--ok)' }}>ativa</span>
+                  : <span className="chip" style={{ '--chip-cor': 'var(--cinza-txt)' }}>pausada</span>}
+                </td>
                 <td>
-                  <button className="btn-link" onClick={() => {
+                  <button className="btn-secundario btn-mini" onClick={() => {
                     setEditando(r.id)
                     setRascunho({ ...r, origem: r.origem || '', pagina: r.pagina || '',
                                   evento: r.evento || '' })
-                  }}>editar</button>
-                  <button className="btn-link" onClick={() => excluir(r)}>excluir</button>
+                  }}>Editar</button>
+                  <button className="btn-remover" onClick={() => excluir(r)}>Excluir</button>
                 </td>
               </tr>
             ))}
@@ -173,18 +180,18 @@ export default function AlertasTelemetria() {
       )}
 
       {!editando && (
-        <div className="rh-acoes">
+        <p>
           <button className="btn-secundario"
                   onClick={() => { setEditando('nova'); setRascunho(NOVA) }}>
             ＋ Nova regra
-          </button>
+          </button>{' '}
           <button className="btn-link" onClick={testar} disabled={ocupado}>
             🔎 O que dispararia agora?
-          </button>
+          </button>{' '}
           <button className="btn-link" onClick={verHistorico}>
             📜 Alertas já enviados
           </button>
-        </div>
+        </p>
       )}
 
       {msg && <div className={msg.tipo === 'ok' ? 'sucesso' : 'alerta'}>{msg.texto}</div>}
@@ -203,7 +210,7 @@ export default function AlertasTelemetria() {
               ))}
             </ul>
           )}
-          <p className="explica">
+          <p className="explica" style={{ marginBottom: 0 }}>
             Esta simulação <strong>não envia e-mail nem gasta o silêncio</strong> —
             testar aqui não impede o alerta de verdade de chegar depois.
           </p>
@@ -211,12 +218,12 @@ export default function AlertasTelemetria() {
       )}
 
       {hist && (
-        <div className="rh-bloco-interno">
+        <>
           <h4>📜 Alertas já enviados</h4>
           {hist.length === 0 ? (
             <p className="explica">
-              Nenhum alerta enviado ainda. Isto é uma boa notícia — mas confira
-              se há destinatário cadastrado em Avisos internos.
+              Nenhum alerta enviado ainda. Isto é uma boa notícia — mas confira se
+              há destinatário cadastrado em Avisos internos.
             </p>
           ) : (
             <table className="rh-tabela">
@@ -233,14 +240,14 @@ export default function AlertasTelemetria() {
                         chegou a ninguém. Precisa ser visível, senão o RH
                         acharia que está coberto quando não está. */}
                     <td>{h.destinatarios > 0 ? `${h.destinatarios} e-mail(s)`
-                      : <span className="chip" style={{ '--chip-cor': '#c33' }}>
+                      : <span className="chip" style={{ '--chip-cor': 'var(--perigo)' }}>
                           ninguém cadastrado</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </div>
+        </>
       )}
     </details>
   )
@@ -259,22 +266,24 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
   const set = (k) => (e) => setRascunho({ ...rascunho, [k]: e.target.value })
 
   return (
-    <div className="rh-form-inline">
-      <label className="campo"><span className="rotulo">Tipo de alerta</span>
-        <select value={rascunho.tipo} onChange={set('tipo')}>
-          {Object.entries(TIPOS).map(([v, t]) => (
-            <option key={v} value={v}>{t.rotulo}</option>
-          ))}
-        </select>
-        <small className="explica">{tipo.ajuda}</small>
-      </label>
+    <div className="rh-card">
+      <div className="rh-grid-2">
+        <label className="campo"><span className="rotulo">Tipo de alerta</span>
+          <select value={rascunho.tipo} onChange={set('tipo')}>
+            {Object.entries(TIPOS).map(([v, t]) => (
+              <option key={v} value={v}>{t.rotulo}</option>
+            ))}
+          </select>
+          <small className="explica">{tipo.ajuda}</small>
+        </label>
 
-      <label className="campo"><span className="rotulo">Nome da regra</span>
-        <input value={rascunho.nome} onChange={set('nome')}
-               placeholder="ex.: Candidato travando no envio" />
-        <small className="explica">Aparece no assunto do e-mail — escreva algo
-          que você entenda às 7h da manhã.</small>
-      </label>
+        <label className="campo"><span className="rotulo">Nome da regra</span>
+          <input value={rascunho.nome} onChange={set('nome')}
+                 placeholder="ex.: Candidato travando no envio" />
+          <small className="explica">Aparece no assunto do e-mail — escreva algo
+            que você entenda às 7h da manhã.</small>
+        </label>
+      </div>
 
       <div className="rh-grid-2">
         {/* `erro_novo` dispara na primeira ocorrência: limiar não faz sentido */}
@@ -308,7 +317,8 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
             </select>
           </label>
           <label className="campo"><span className="rotulo">Só nesta página (contém)</span>
-            <input value={rascunho.pagina} onChange={set('pagina')} placeholder="ex.: /c/documentos" />
+            <input value={rascunho.pagina} onChange={set('pagina')}
+                   placeholder="ex.: /c/documentos" />
           </label>
           <label className="campo"><span className="rotulo">Só neste evento</span>
             <input value={rascunho.evento} onChange={set('evento')}
@@ -317,18 +327,18 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
         </div>
       </details>
 
-      <label className="campo-check">
+      <label className="campo">
         <input type="checkbox" checked={rascunho.ativa}
                onChange={(e) => setRascunho({ ...rascunho, ativa: e.target.checked })} />
-        <span>Regra ativa</span>
+        {' '}Regra ativa
       </label>
 
-      <div className="rh-acoes">
+      <p>
         <button className="btn-principal" onClick={salvar} disabled={ocupado}>
           {ocupado ? 'Salvando…' : 'Salvar regra'}
-        </button>
+        </button>{' '}
         <button className="btn-link" onClick={cancelar}>cancelar</button>
-      </div>
+      </p>
     </div>
   )
 }

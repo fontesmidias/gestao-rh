@@ -11,6 +11,37 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.26.0] — 2026-07-30 — A tela de Telemetria estava fora do padrão visual
+
+Feedback do Bruno: *"achei tão feia essa página, por que não seguiu o padrão de
+layout? de cards, espaçamentos, alinhamentos?"*. Estava certo, e a causa não era
+gosto.
+
+### Corrigido
+- **Onze classes de CSS inventadas** (`rh-secao`, `rh-bloco`, `rh-acoes`,
+  `rh-form-inline`, `campo-check`…) que **não existiam** no `styles.css`. O JSX
+  parecia correto e o build passava — CSS não reclama de seletor inexistente —,
+  mas a tela saía crua: sem card, sem borda, sem espaçamento.
+- As três telas (`TelemetriaRH`, `AlertasTelemetria`, `TelemetriaPessoa`)
+  reescritas com as primitivas reais de `08-sistema-de-design.md`: `.rh-card`,
+  `.rh-grid-2`, `.rh-topo`, `.rh-metricas`, `.rh-tabela`, `.campo`/`.rotulo`.
+- **Cores em hex cru** (`'#c33'`, `'#c80'`) trocadas pelos tokens semânticos
+  `var(--perigo)` / `var(--atencao)`, que invertem no tema escuro.
+- Duas classes genuinamente novas entraram no `styles.css` com tokens, em vez de
+  serem inventadas no JSX: `.bloco-codigo` (JSON de detalhe, rola na horizontal
+  em vez de esticar o card) e `.campo-sem-margem`.
+
+### Verificação
+Auditoria automática dos três arquivos: nenhuma classe sem CSS, nenhum token
+inexistente, nenhum hex cru. Conferido visualmente nos temas **claro e escuro**.
+
+### Lição registrada no CLAUDE.md
+Classe que não existe não estiliza nada, e o build não avisa. Antes de commitar
+tela nova: `grep` de cada classe usada no `styles.css` — e ler o sistema de
+design **antes** de escrever, não depois do feedback.
+
+---
+
 ## [2.25.0] — 2026-07-30 — Alertas: o sistema avisa em vez de esperar a pergunta
 
 A telemetria da v2.24 grava tudo certo, mas é **passiva** — alguém precisa abrir
