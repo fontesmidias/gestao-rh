@@ -116,6 +116,16 @@ export const CODIGOS_ERRO_UPLOAD = {
   comprovante_antigo: 'Este comprovante tem mais de 90 dias. Envie uma conta recente (luz, água, telefone ou internet) do último mês.',
   cpf_divergente: 'O número neste documento não é o mesmo CPF que você informou na ficha. Confira se enviou o documento certo — ou corrija o CPF digitado na etapa de dados.',
   sem_conexao: 'Parece que você está sem internet agora. Verifique a conexão e toque em Enviar de novo — nada foi perdido.',
+  // Estas duas existem porque "o fetch rejeitou" NÃO é sinônimo de "sem
+  // internet" (relato de campo 2026-07-30): conexão cortada no meio do envio
+  // dá o mesmo erro de quem está sem sinal. Mandar "verifique a internet" para
+  // quem está com a internet boa faz a pessoa tentar de novo na hora — e a
+  // tentativa nova estoura no mesmo ponto.
+  demorou_demais: 'O envio demorou mais do que o esperado e foi interrompido — não foi a sua internet. '
+    + 'Isso costuma acontecer com foto muito pesada: tente uma foto com menos resolução, '
+    + 'ou envie uma página por vez. Nada do que você já preencheu foi perdido.',
+  conexao_interrompida: 'A conexão caiu no meio do envio. Toque em Enviar de novo — '
+    + 'nada do que você já preencheu foi perdido. Se acontecer outra vez, tente uma foto menor.',
   dados_invalidos: 'O envio chegou incompleto ou em um formato que não reconhecemos. Selecione o arquivo de novo e tente outra vez.',
   envio_ja_concluido: 'Seu envio já foi concluído e está com o RH. Se precisar trocar algum documento, fale com o RH.',
   arquivos_demais: 'Selecione apenas um arquivo para este documento.',

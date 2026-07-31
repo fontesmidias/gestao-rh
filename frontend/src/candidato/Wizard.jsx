@@ -3,6 +3,7 @@ import { candidato as api } from '../api.js'
 import { Cartao } from './CandidatoApp.jsx'
 import { CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import { fmtCpf, cpfValido, fmtTelefone } from '../fmt.js'
+import { anotarFriccao } from '../telemetria.js'
 import Espera from '../Espera.jsx'
 import InputData from '../InputData.jsx'
 import CapturaDocumento from './Camera.jsx'
@@ -83,8 +84,17 @@ function LeitorRG({ token, dados, setDados, salvar }) {
       }
       setResultado(aplicados.length ? { aplicados, cnh } : { vazio: true, cnh })
     } catch (err) {
+      // Mesma correção do LeitorComprovante (2026-07-30): falha de ENVIO não
+      // pode ser anunciada como "não conseguimos ler a foto", e tem que
+      // aparecer nos números.
+      anotarFriccao('falha_no_envio', {
+        tipo: 'identidade', onde: 'wizard_pessoais',
+        detalhe: err.detail, status: err.status, rede: err.rede ? 1 : 0,
+      })
       setErro(CODIGOS_ERRO_UPLOAD?.[err.detail]
-        || 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.')
+        || (err.status >= 500
+            ? 'Tivemos um problema no servidor ao processar o arquivo. Você pode preencher normalmente abaixo.'
+            : 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.'))
     } finally { setLendo(false) }
   }
 
@@ -149,8 +159,19 @@ function LeitorComprovante({ token, aoCep }) {
       if (cep) await aoCep(cep)
       setResultado(cep ? 'cep' : 'so-envio')
     } catch (err) {
+      // Este é o OUTRO ponto de envio do comprovante (o do checklist é o
+      // primeiro). Até 2026-07-30 ele não emitia telemetria NENHUMA e traduzia
+      // qualquer falha como "não conseguimos ler a foto" — culpando a foto
+      // mesmo quando o problema foi o ENVIO. Agora a mensagem separa os casos
+      // e a falha aparece nos números, como a do checklist.
+      anotarFriccao('falha_no_envio', {
+        tipo: 'comp_endereco', onde: 'wizard_endereco',
+        detalhe: err.detail, status: err.status, rede: err.rede ? 1 : 0,
+      })
       setErro(CODIGOS_ERRO_UPLOAD?.[err.detail]
-        || 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.')
+        || (err.status >= 500
+            ? 'Tivemos um problema no servidor ao processar o arquivo. Você pode preencher o endereço normalmente abaixo.'
+            : 'Não conseguimos ler a foto. Você pode preencher normalmente abaixo.'))
     } finally { setLendo(false) }
   }
 

@@ -26,13 +26,29 @@ async function req(caminho, opcoes = {}) {
 // TypeError. Só ESSE caso vira "sem conexão" — resposta HTTP ruim é outra
 // coisa e carrega o detail real do backend (bug de campo: upload de arquivo
 // grande demais aparecia como "sem internet").
+//
+// MAS "o fetch rejeitou" não é sinônimo de "sem internet" (relato de campo
+// 2026-07-30, comprovante de residência): a conexão cortada no MEIO do envio
+// — timeout do proxy, RST, servidor demorando além do limite do nginx —
+// rejeita com o mesmo TypeError de quem está sem sinal. Dizer "verifique a
+// internet" para quem está com a internet boa manda a pessoa tentar de novo
+// na hora, e a nova tentativa gasta o mesmo tempo até estourar de novo.
+// `navigator.onLine` é falível para dizer que ESTÁ online (pode haver Wi-Fi
+// sem saída), mas é confiável quando diz que NÃO está — então só afirmamos
+// falta de conexão quando ele confirma.
 async function buscar(url, opcoes) {
+  const inicio = Date.now()
   try {
     return await fetch(url, opcoes)
   } catch (e) {
-    const erro = new Error('sem_conexao')
-    erro.detail = 'sem_conexao'
-    erro.offline = true
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+    // Demorou muito e caiu com a rede de pé: quem cortou foi o servidor/proxy.
+    const demorou = Date.now() - inicio > 20000
+    const erro = new Error(offline ? 'sem_conexao'
+      : demorou ? 'demorou_demais' : 'conexao_interrompida')
+    erro.detail = erro.message
+    erro.offline = offline
+    erro.rede = true          // veio do fetch, não de uma resposta HTTP
     throw erro
   }
 }

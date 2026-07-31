@@ -979,6 +979,23 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   sobrescrito no mesmo registro, então **o último enviado continua valendo
   depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
   registro era outro, e por isso o defeito lá era grave.
+- **"Sem internet" quase nunca é sem internet — e o comprovante lia o OCR
+  DUAS vezes** (v2.31, relato de campo 2026-07-30): o `comp_endereco` é o
+  ÚNICO slot com OCR bloqueante, e `_texto_do_envio` era chamado com os MESMOS
+  bytes em `validar_comprovante_recente` (regra dos 90 dias) E no `_texto` de
+  `documentos.py` (sugestões). 30s de timeout cada, contra os **60s de
+  `proxy_read_timeout`** do nginx: o nginx cortava, o `fetch` rejeitava e o
+  front dizia "você está sem internet" para quem estava com a internet boa.
+  Quatro camadas: (1) `_texto_do_envio` memoiza por SHA-256 do conteúdo +
+  extensão — **a chave TEM que incluir o conteúdo**, senão o texto de um
+  documento vaza para a ficha de outro (mutação que o teste pega); (2)
+  `location ~ ^/api/c/[^/]+/documentos/` no `nginx.conf` com 300s; (3)
+  `api.js` distingue `sem_conexao` (confirmado por `navigator.onLine === false`)
+  de `demorou_demais` e `conexao_interrompida` — `fetch` rejeitado NÃO é
+  sinônimo de offline; (4) `LeitorComprovante`/`LeitorRG` do wizard pararam de
+  dizer "não conseguimos ler a foto" para falha de ENVIO e passaram a emitir
+  `falha_no_envio` (não tinham telemetria nenhuma — o ponto mais cego do
+  fluxo). Ao mexer no `nginx.conf`, rodar `deploy-tela-branca.spec.js`.
 - **Logs dos serviços em ARQUIVO + tela no painel** (`services/logs.py`,
   `api/logs.py`, `workers/logs_email.py`, `rh/LogsRH.jsx`, v2.29): o
   `docker logs` MORRE no restart do container — o diagnóstico do incidente do
