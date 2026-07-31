@@ -330,9 +330,12 @@ function Levantamentos() {
       render: (b) => `${(b.criancas || []).length} (${(b.criancas || []).filter((c) => c.elegivel_idade).length} na idade)` },
     { chave: 'prazo', rotulo: 'Prazo', oculta: true, valor: (b) => b.dia_entrega_mensal,
       render: (b) => `dia ${b.dia_entrega_mensal}` },
-    { chave: 'status', rotulo: 'Status', ordenavel: true, filtro: 'select',
-      opcoes: [...Object.values(STATUS_BEN).map((s) => ({ v: s.rot, r: s.rot })),
-               { v: 'Devolvido — aguarda reenvio', r: 'Devolvido — aguarda reenvio' }],
+    // SEM `filtro:` de propósito (2026-07-30). Quem filtra status é o seletor
+    // "Situação", que recarrega a API — ter os dois deixava duas caixas de
+    // status na mesma tela, e filtrar por uma enquanto a outra dizia algo
+    // diferente dava resultado que parecia errado. A coluna continua
+    // ordenável, e os cards (Devolvidos/Ativos) seguem filtrando por ela.
+    { chave: 'status', rotulo: 'Status', ordenavel: true,
       valor: rotStatus,
       render: (b) => (<>
         {b.aguardando_correcao
@@ -383,27 +386,33 @@ function Levantamentos() {
       filtro: { chave: 'status', valor: STATUS_BEN.ativo.rot } },
   ] : null
 
+  // O filtro server-side entra na grade do dash (feedback 2026-07-30: "tem
+  // dois cards, acho que apenas um, tudo concentrado e coeso de filtros").
+  // Ele NÃO vira filtro de coluna: recarrega a API, e a base é a folha inteira
+  // — trazer tudo ao cliente seria regressão de performance e de LGPD.
+  const filtrosExtras = [{
+    chave: 'situacao', rotulo: 'Situação', valor: filtro,
+    vazioRotulo: 'Situação: todas',
+    aoMudar: (v) => { setFiltro(v); carregar(v) },
+    opcoes: [
+      { v: 'em_analise', r: 'Aguardando análise' },
+      { v: '__devolvidos', r: 'Devolvidos — aguardando correção' },
+      { v: 'aguardando_repactuacao', r: 'Aguardando repactuação' },
+      { v: 'ativo', r: 'Ativos' },
+      { v: 'indeferido', r: 'Indeferidos' },
+      { v: 'levantamento', r: 'Ainda preenchendo' },
+      { v: 'sem_direito_declarado', r: 'Sem direito (declarado)' },
+    ],
+  }]
+
   return (
     <>
-      <div className="rh-card rh-lote">
-        <select value={filtro} style={{ maxWidth: 240 }}
-                onChange={(e) => { setFiltro(e.target.value); carregar(e.target.value) }}>
-          <option value="">Todos os status</option>
-          <option value="em_analise">Aguardando análise</option>
-          <option value="__devolvidos">Devolvidos — aguardando correção</option>
-          <option value="aguardando_repactuacao">Aguardando repactuação</option>
-          <option value="ativo">Ativos</option>
-          <option value="indeferido">Indeferidos</option>
-          <option value="levantamento">Ainda preenchendo</option>
-          <option value="sem_direito_declarado">Sem direito (declarado)</option>
-        </select>
-        <span className="explica" style={{ margin: 0 }}>{lista ? `${lista.length} registro(s)` : ''}</span>
-      </div>
       {msg && <div className="sucesso">{msg}</div>}
       {erro && <div className="alerta">{erro}</div>}
 
       {!lista ? <p>Carregando…</p> : (
         <DashPlanilha id="creche" colunas={colunas} dados={lista} cards={cards}
+                      filtrosExtras={filtrosExtras}
                       acoesLinha={acoesLinha}
                       linhaExpandida={(b) => (aberto === b.id
                         ? <DetalheBeneficio

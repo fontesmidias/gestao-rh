@@ -17,6 +17,10 @@ export default function DashPlanilha({
   colunas,
   dados,            // array de linhas (objetos)
   cards,            // [{rotulo, valor, cor?, filtro?}]  (opcional)
+  // Filtros que o PAI controla (tipicamente server-side, que recarregam a
+  // API): [{chave, rotulo, valor, opcoes, aoMudar, vazioRotulo?}]. Aparecem na
+  // MESMA grade dos filtros de coluna, para a tela ter um bloco de filtros só.
+  filtrosExtras,
   chaveLinha = (l) => l.id,
   acoesLinha,       // (linha) => JSX  (opcional)
   linhaExpandida,   // (linha) => JSX | null — detalhe aberto LOGO ABAIXO da linha
@@ -126,6 +130,23 @@ export default function DashPlanilha({
           funcional; todos eu possa começar a digitar e ir aparecendo"). Os de
           texto já filtram ao digitar em memória. Ver 08-sistema-de-design.md. */}
       <div className="rh-card dash-filtros">
+        {/* Filtros do PAI (server-side) entram na MESMA grade dos de coluna —
+            feedback do Bruno 2026-07-30 sobre o creche: "tem dois cards, acho
+            que apenas um, tudo concentrado e coeso de filtros, seria mais
+            interessante". Antes, o filtro pesado ficava num card à parte e o
+            dash tinha o seu — dois controles de status na mesma tela, um
+            acima do outro, que é convite a filtrar por um e estranhar o
+            resultado do outro. */}
+        {(filtrosExtras || []).map((f) => (
+          <label key={f.chave} className="dash-filtro">
+            <span className="dash-filtro-rot">{f.rotulo}</span>
+            <SelectBusca
+              opcoes={(f.opcoes || []).map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) }))}
+              valor={f.valor || ''} aoEscolher={f.aoMudar}
+              placeholder={`${f.rotulo}…`} vazioRotulo={f.vazioRotulo || `${f.rotulo}: todos`}
+              style={{ minWidth: '100%' }} />
+          </label>
+        ))}
         {colunas.filter((c) => c.filtro).map((c) => (
           <label key={c.chave} className="dash-filtro">
             <span className="dash-filtro-rot">{c.rotulo}</span>

@@ -11,6 +11,40 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.30.0] — 2026-07-30 — Reembolso-Creche: um bloco de filtros, não dois
+
+Feedback do Bruno, com print: *"na página de dash do reembolso creche tem dois
+cards, acho que apenas um, tudo concentrado e coeso de filtros, seria mais
+interessante"*.
+
+Havia **dois filtros de status na mesma tela** — o de cima (server-side,
+"Aguardando análise") num card próprio, e o `Status: todos` dentro da barra do
+dash. Filtrar por um enquanto o outro dizia coisa diferente dava resultado que
+parecia errado.
+
+### Modificado
+
+- `DashPlanilha` ganhou a prop **`filtrosExtras`**: filtros que o pai controla
+  (tipicamente server-side) entram na **mesma grade** dos filtros de coluna, com
+  o mesmo `SelectBusca`. O card separado deixou de existir.
+- No creche, a coluna Status **perdeu o `filtro:`** — quem filtra status agora é
+  só o seletor "Situação". A coluna segue ordenável e os cards clicáveis
+  (Devolvidos/Ativos) continuam funcionando, porque a filtragem em memória roda
+  sobre todas as colunas, não só as que declaram `filtro`.
+- O contador "34 registro(s)" saiu: o card **"No filtro"** já mostrava o mesmo
+  número, logo acima — era outra duplicação.
+
+### Notas
+
+O filtro **continua server-side**: verificado no navegador que trocar a situação
+dispara `GET /rh/creche/levantamentos?status=ativo`. Trazer a base para o
+cliente seria regressão de performance e de LGPD — por isso ele não virou filtro
+de coluna. Regra registrada em `08-sistema-de-design.md` §6c: **um assunto, um
+controle**. Conferido na tela real (login, navegação e troca de filtro por
+Playwright), `npm run build` limpo.
+
+---
+
 ## [2.29.0] — 2026-07-30 — Logs no painel: ler sem SSH, receber por e-mail
 
 Pedido do Bruno no mesmo dia do incidente do Defender (v2.28), quando o
