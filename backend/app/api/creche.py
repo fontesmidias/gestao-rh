@@ -130,6 +130,7 @@ def resumo(db: Session = Depends(get_db)) -> dict:
     ids = [p.id for p in postos]
     # contagem de colaboradores ATIVOS por posto elegível (uma consulta só)
     por_posto: dict = {pid: 0 for pid in ids}
+    ativos = []
     if ids:
         ativos = db.scalars(
             select(Candidato).where(
@@ -147,9 +148,32 @@ def resumo(db: Session = Depends(get_db)) -> dict:
         "colaboradores_ativos": por_posto.get(p.id, 0),
     } for p in postos]
 
+    # QUADRO DA CONSULTA (v2.34): quantos elegíveis, quantos se manifestaram e
+    # quantos faltam. Antes o RH via o total de elegíveis num lugar e a lista de
+    # pendentes em outro, sem nunca ver a conta fechar — e a pergunta do órgão
+    # ("vocês consultaram todos?") não tinha uma resposta de uma linha.
+    #
+    # "Respondeu" inclui quem declarou que NÃO tem direito: a manifestação é o
+    # que se prova, não o pedido. Um levantamento aberto e nunca enviado NÃO
+    # conta — a pessoa entrou e parou no meio.
+    ativos_ids = [c.id for c in ativos]
+    respondidos = declararam_sem_direito = 0
+    if ativos_ids:
+        for b in db.scalars(select(BeneficioCreche).where(
+                BeneficioCreche.candidato_id.in_(ativos_ids))).all():
+            if b.status == StatusBeneficio.levantamento and b.enviado_em is None:
+                continue
+            respondidos += 1
+            if b.status == StatusBeneficio.sem_direito_declarado:
+                declararam_sem_direito += 1
+    elegiveis = sum(por_posto.values())
+
     return {
         "postos_elegiveis": len(postos),
-        "colaboradores_em_postos_elegiveis": sum(por_posto.values()),
+        "colaboradores_em_postos_elegiveis": elegiveis,
+        "responderam": respondidos,
+        "declararam_sem_direito": declararam_sem_direito,
+        "faltam_responder": max(0, elegiveis - respondidos),
         "por_posto": linhas,
     }
 

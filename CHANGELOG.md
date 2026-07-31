@@ -11,6 +11,58 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.34.0] — 2026-07-31 — Creche: a pessoa se manifesta, não some em silêncio
+
+Pedido do Bruno em 2026-07-30:
+
+> *"eu quero fazer um movimento que a pessoa manifeste que de fato tem ou não
+> tem crianças, e não simplesmente entrar no link e, como não tem, não fazer
+> nada e sair. E hoje a pessoa pode não ter filhos, mas amanhã pode ter — então
+> é importante deixar tudo bem registrado."*
+
+A diferença é jurídica, não cosmética: sem manifestação, **"não respondeu" e
+"não tem direito" são a mesma linha em branco** na planilha, e daqui a dois
+anos ninguém demonstra que o elegível foi consultado.
+
+### Modificado
+
+- **A pergunta vem primeiro**, com as duas respostas lado a lado e o mesmo peso
+  visual: *"Sim, tenho — quero solicitar"* / *"Não tenho criança nessa idade"*.
+  O formulário só aparece depois da escolha. Antes, quem não tinha filho abria
+  a tela, via um cadastro que não lhe dizia respeito e ia embora — e a opção de
+  declarar era um link de texto pequeno **depois** do botão de enviar, dentro
+  de um cartão chamado "Crianças".
+- **A declaração diz o que significa e que não é definitiva**: quem passar a ter
+  criança procura o RH e o levantamento é reaberto. Registro guarda **quem,
+  quando e o IP** (auditoria) — é o que sustenta a prova se for contestada.
+- **Quadro da consulta no painel**: elegíveis · responderam · declararam não
+  ter · faltam responder. Aparece **inclusive quando não falta ninguém**, que é
+  justamente quando o RH precisa dele para provar que consultou todos.
+
+### Corrigido
+
+- Quem declarava "não tenho" via *"Levantamento enviado! … se aprovado, você
+  receberá as orientações por e-mail"* — texto de quem pediu o benefício, que
+  faria a pessoa esperar por um e-mail que nunca viria. Agora tem tela própria:
+  *"Resposta registrada"*.
+- **409 `ha_criancas_cadastradas`**: quem já cadastrou criança não declara que
+  não tem nenhuma. O registro não pode contradizer o dado ao lado dele — e é o
+  registro que vira prova.
+
+### Notas
+
+Coberto por `tests/test_creche_manifestacao.py` (rastro da declaração, guarda
+de coerência, dupla declaração, quadro fechando, reversibilidade), **validado
+por mutação** nas duas garantias centrais. Smoke 15/15. Conferido no navegador
+nos dois caminhos, com o registro verificado no banco (`sem_direito_declarado`
+/ `colaborador` / data).
+
+"Declarou que não tem" **conta como resposta** — a manifestação é o que se
+prova, não o pedido. Levantamento aberto e nunca enviado **não** conta: a
+pessoa entrou e parou no meio, e continua na fila de cobrança.
+
+---
+
 ## [2.33.0] — 2026-07-31 — Documento renderiza na tela (e o PDF no celular nunca funcionou)
 
 Pedido do Bruno: *"que não baixasse necessariamente o currículo, mas que tivesse
