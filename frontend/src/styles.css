@@ -657,6 +657,16 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-visualizador { background: var(--cartao); border-radius: var(--raio); min-height: 75vh;
                    box-shadow: var(--sombra-cartao); display: flex; flex-direction: column; }
 .rh-visualizador > p { margin: auto; }
+/* Documento renderizado DENTRO de um painel de linha (creche, talentos —
+   v2.33). A coluna da admissão quer 75vh; aqui isso empurraria o resto da
+   ficha para fora da tela, então o bloco tem altura própria e cabeçalho com o
+   nome do arquivo + baixar/fechar. */
+.rh-visualizador.na-linha { min-height: 0; padding: var(--esp-3); gap: var(--esp-2);
+                            margin: var(--esp-3) 0; }
+.rh-visualizador.na-linha .pdf-iframe { min-height: 55vh; }
+.visualizador-imagem { display: block; max-width: 100%; height: auto; margin: 0 auto;
+                       border: 1px solid var(--borda); border-radius: var(--raio);
+                       background: #fff; }
 /* Desktop: iframe nativo ocupando todo o painel (com a barra do navegador). */
 .pdf-iframe { width: 100%; flex: 1; border: 0; border-radius: var(--raio); min-height: 75vh; }
 .so-celular { display: none; }

@@ -11,6 +11,55 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.33.0] — 2026-07-31 — Documento renderiza na tela (e o PDF no celular nunca funcionou)
+
+Pedido do Bruno: *"que não baixasse necessariamente o currículo, mas que tivesse
+opção para renderizar o currículo na tela"* — e, como regra geral, *"todo
+documento que a gente tentar abrir ali, seja currículo ou seja a certidão de
+nascimento para análise de auxílio creche, que renderize ali na tela, para a
+gente não precisar ficar baixando"*.
+
+### Adicionado
+
+- **`VisualizadorArquivo`**: componente único que renderiza **PDF**, **imagem**
+  e **Word** (convertido) dentro do painel da linha, com cabeçalho, ⬇ Baixar e
+  ✕ Fechar. Antes só a tela de admissão renderizava; o resto do painel abria
+  aba nova — e no Word abria aba **em branco**.
+- **Currículo em Word é convertido para PDF ao servir** (`talentos.py`), com o
+  LibreOffice que já roda no container. Decisão do Bruno: converter, não mandar
+  baixar. O **original continua guardado** — a conversão é de exibição.
+- Ligado no **Banco de Talentos** (currículo na ficha) e no **Reembolso-Creche**
+  (certidão e guarda das crianças, logo abaixo da tabela).
+
+### Corrigido — o defeito que o teste não pegava
+
+**O visualizador de PDF no celular nunca funcionou.** O `mime.types` do nginx
+não conhece `.mjs`, então o worker do pdf.js era servido como
+`application/octet-stream` e o navegador **recusava o módulo** ("Strict MIME
+type checking is enforced for module scripts"). No celular o pdf.js é o
+**único** caminho — o Chrome do Android não tem visualizador embutido —, então
+todo PDF caía em *"não conseguimos exibir este PDF aqui"*. Inclusive para o
+candidato.
+
+Achado **conferindo a tela**, não em teste: o iframe existia, tinha altura, o
+blob estava correto (`application/pdf`, 1117 bytes) e mesmo assim a área ficava
+branca.
+
+### Notas
+
+⚠️ **`types { }` no nginx SUBSTITUI o mapa inteiro de MIME.** A primeira versão
+da correção fez o `index.html` sair como octet-stream e o site virou
+**download**. É preciso `include mime.types` antes da exceção — e agora há
+teste para as duas coisas.
+
+Coberto por `tests/test_curriculo_word.py` (conversão, original preservado,
+falha degradando para download, PDF/imagem intocados) e por dois testes novos
+em `deploy-tela-branca.spec.js` (8/8). **Validado por mutação nos quatro
+casos.** Smoke 15/15. Conferido no navegador: o currículo renderiza legível,
+numa aba só.
+
+---
+
 ## [2.32.0] — 2026-07-30 — Os macaquinhos no campo de senha
 
 Pedido do Bruno: *"o emoji do macaquinho tampando o olho quando está oculta, e

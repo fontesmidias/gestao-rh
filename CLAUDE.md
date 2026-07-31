@@ -979,6 +979,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   sobrescrito no mesmo registro, então **o último enviado continua valendo
   depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
   registro era outro, e por isso o defeito lá era grave.
+- **Documento RENDERIZA na tela — `VisualizadorArquivo`** (v2.33,
+  `frontend/src/VisualizadorArquivo.jsx`): PDF, imagem e Word (convertido) num
+  componente só, dentro do painel da linha, com Baixar/Fechar. Regra do Bruno:
+  *"todo documento que a gente tentar abrir renderiza na tela, para não
+  precisar ficar baixando"*. NÃO use `window.open(URL.createObjectURL(...))` em
+  tela nova — era o padrão antigo e, no Word, abria aba EM BRANCO. Word é
+  convertido para PDF ao SERVIR (`talentos.py`, via `_word_para_pdf`); o
+  **original fica intacto** no MinIO (conversão é de exibição — currículo é
+  documento de terceiro).
+- **`.mjs` precisa de MIME explícito no nginx — o PDF no CELULAR nunca
+  funcionou sem isso** (v2.33, achado em 2026-07-31 conferindo a TELA, não em
+  teste): o `mime.types` não conhece `.mjs`, o worker do pdf.js saía como
+  `application/octet-stream` e o navegador RECUSAVA o módulo ("Strict MIME type
+  checking"). No celular o pdf.js é o ÚNICO caminho (Chrome do Android não tem
+  visualizador), então todo PDF caía em "não conseguimos exibir este PDF aqui"
+  — inclusive para o candidato. **⚠️ `types { }` SUBSTITUI o mapa inteiro de
+  MIME**: sem `include /etc/nginx/mime.types` antes, o `index.html` vira
+  octet-stream e o site inteiro vira DOWNLOAD (regressão real, pega pelo teste
+  novo). Coberto por `deploy-tela-branca.spec.js`.
 - **"Sem internet" quase nunca é sem internet — e o comprovante lia o OCR
   DUAS vezes** (v2.31, relato de campo 2026-07-30): o `comp_endereco` é o
   ÚNICO slot com OCR bloqueante, e `_texto_do_envio` era chamado com os MESMOS
