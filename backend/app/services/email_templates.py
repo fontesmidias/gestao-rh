@@ -664,6 +664,19 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                   "criancas": "quantas crianças foram cadastradas"},
        exemplo={"nome": "Maria Souza", "criancas": "2"}),
 
+    _m(chave="aviso_logs_periodico", grupo="Avisos internos",
+       evento="logs_periodico",
+       rotulo="Logs dos serviços (4x ao dia)",
+       quando="A cada 6 horas, com o resumo do período e os arquivos em anexo.",
+       assunto="🧾 Logs do sistema — {{janela}}",
+       corpo="Resumo do período ({{janela}}):\n\n{{resumo}}\n\n"
+             "Os arquivos completos vão em anexo (.txt).\n\n"
+             "Para filtrar e pesquisar, use Configurações → Logs dos serviços.",
+       variaveis={"janela": "período coberto por este envio",
+                  "resumo": "linhas, erros e avisos por serviço"},
+       exemplo={"janela": "30/07/2026 12h–18h",
+                "resumo": "api: 1.240 linhas · 3 erros · 12 avisos"}),
+
     _m(chave="aviso_talento_cadastrado", grupo="Avisos internos",
        evento="talento_cadastrado",
        rotulo="Banco de Talentos: novo cadastro",

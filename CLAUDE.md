@@ -966,6 +966,29 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   sobrescrito no mesmo registro, então **o último enviado continua valendo
   depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
   registro era outro, e por isso o defeito lá era grave.
+- **Logs dos serviços em ARQUIVO + tela no painel** (`services/logs.py`,
+  `api/logs.py`, `workers/logs_email.py`, `rh/LogsRH.jsx`, v2.29): o
+  `docker logs` MORRE no restart do container — o diagnóstico do incidente do
+  Defender só existiu por sorte. Cada serviço escreve seu arquivo num volume
+  compartilhado (`LOG_DIR`/`LOG_SERVICO` no compose E no `portainer-stack.yml`
+  — sem os dois, não roda em produção); a tela fica em Configurações → Logs.
+  - **NÃO montar `/var/run/docker.sock` na API** para ler o stdout dos outros
+    containers: isso dá controle TOTAL do Docker do host a quem comprometer a
+    API, que é o que está exposto à internet. Aceita-se ver só os serviços
+    nossos; Postgres/MinIO ficam no `docker logs`.
+  - **`servico` e `dia` vêm da URL e são validados por regex** antes de virar
+    caminho (`_caminho`) — sem isso, `../../etc/passwd` seria leitura de
+    arquivo do sistema por rota autenticada. Mesma regra do `export_planilha.slug()`.
+  - **Retenção `0` = INDETERMINADO** (decisão do Bruno): não apaga nada.
+    Cuidado ao refatorar — trocar `if dias <= 0` por `if dias is not None`
+    transformaria "guardar para sempre" em "apagar tudo hoje", em silêncio.
+    O log CORRENTE nunca é apagado, só os rotacionados por dia.
+  - **Baixar vai para a AUDITORIA** (`logs_baixados`): o arquivo tem CPF,
+    e-mail e nome de gente real; tirar isso do servidor é export de dado
+    pessoal. Antes eram voláteis, agora são dado ARMAZENADO.
+  - Envio 4x/dia pela MATRIZ (`avisar_modelo` com `anexos`, evento
+    `logs_periodico`); a janela de 6h fica na config, então o worker rodando a
+    cada 15 min não duplica nem pula envio ao reiniciar.
 - **GET NÃO PODE TER EFEITO COLATERAL — o antivírus do e-mail abre o link
   antes da pessoa** (v2.28, incidente de campo 2026-07-30): uma colaboradora
   ficou SEIS HORAS sem entrar no creche, com **sete códigos enviados com

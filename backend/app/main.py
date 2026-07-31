@@ -40,6 +40,7 @@ from app.api.rh_ficha import router as rh_ficha_router
 from app.api.minutario import router as minutario_router
 from app.api.vagas import router as vagas_router
 from app.api.health import router as health_router
+from app.api.logs import router as logs_router
 from app.api.telemetria import router as telemetria_router
 from app.core.bootstrap import criar_admin_inicial
 from app.core.config import get_settings, ip_do_cliente
@@ -60,6 +61,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# Log também em ARQUIVO (v2.29): o do container morre no restart, e foi só por
+# sorte que o incidente do Defender (v2.28) ainda tinha rastro para ler. O
+# stdout continua igual — se o volume não estiver montado, degrada para ele.
+from app.services.logs import configurar as _configurar_logs  # noqa: E402
+
+_configurar_logs()
 telemetria = logging.getLogger("telemetria")
 
 app = FastAPI(
@@ -127,6 +134,7 @@ async def log_requisicoes(request: Request, call_next):
 
 app.include_router(health_router, prefix="/api")
 app.include_router(telemetria_router, prefix="/api")
+app.include_router(logs_router, prefix="/api")
 app.include_router(auth_rh_router, prefix="/api")
 app.include_router(candidatos_router, prefix="/api")
 app.include_router(ficha_router, prefix="/api")

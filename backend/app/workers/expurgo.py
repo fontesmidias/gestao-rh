@@ -79,7 +79,28 @@ def expurgar_telemetria() -> int:
         return n
 
 
+def expurgar_logs() -> int:
+    """Aplica a retenção dos arquivos de log (v2.29).
+
+    Mesma carona do expurgo diário, pelo mesmo motivo da telemetria. **Retenção
+    0 = indeterminado** e não apaga nada — opção que o Bruno pediu
+    explicitamente. O log CORRENTE nunca é removido, só os rotacionados por dia.
+    """
+    from app.services.logs import expurgar as expurgar_logs_svc, retencao_dias
+
+    with SessionLocal() as db:
+        dias = retencao_dias(db)
+    if dias <= 0:
+        log.info("Retenção de logs indeterminada; nada a expurgar.")
+        return 0
+    n = expurgar_logs_svc(dias)
+    if n:
+        log.info("Logs expurgados: %s arquivo(s) com mais de %s dias", n, dias)
+    return n
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"Candidatos expurgados: {expurgar()}")
     print(f"Eventos de telemetria expurgados: {expurgar_telemetria()}")
+    print(f"Arquivos de log expurgados: {expurgar_logs()}")
