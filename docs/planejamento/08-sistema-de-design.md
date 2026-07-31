@@ -230,6 +230,27 @@ linha por filtro. Todo filtro `'select'` vira `SelectBusca` (começa a digitar e
 a lista filtra) — filtro é funcional, a pessoa não deve rolar 300 opções. Não
 escreva barra de filtro à mão: use a config de colunas do DashPlanilha.
 
+**Filtro server-side entra na MESMA barra, via `filtrosExtras`** (2026-07-30).
+Filtro que recarrega a API (status do creche, posto dos colaboradores) não pode
+virar filtro de coluna — a base é a folha inteira, e trazer tudo ao cliente é
+regressão de performance e de LGPD. Mas ele também não pode morar num card
+próprio acima do dash: era assim no Reembolso-Creche e o Bruno resumiu o
+problema —
+
+> *"tem dois cards, acho que apenas um, tudo concentrado e coeso de filtros,
+> seria mais interessante"*
+
+Havia **duas caixas de status na mesma tela**, uma acima da outra, e filtrar por
+uma enquanto a outra dizia coisa diferente dava resultado que parecia errado.
+Passe esses filtros em `filtrosExtras={[{chave, rotulo, valor, opcoes, aoMudar}]}`
+— eles aparecem na grade, com o mesmo `SelectBusca`, antes dos de coluna.
+
+**Regra que vem junto: um assunto, um controle.** Se o filtro do pai já cobre
+uma coluna, tire o `filtro:` daquela coluna (a coluna segue ordenável, e os
+cards clicáveis continuam funcionando, porque a filtragem em memória roda sobre
+todas as colunas, não só as que declaram `filtro`). Dois controles para o mesmo
+campo é pior do que dois cards.
+
 ## 7. Tooltips e ajuda: um padrão só
 
 Dois níveis, ambos por CSS (nunca por estado/onClick), sempre no hover e some ao

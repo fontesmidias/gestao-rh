@@ -571,6 +571,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   de Benefícios é fluxo de 2 passos com decisões linha a linha (embutir seria
   reescrevê-la à toa) e a padronização de cargos/jornadas é texto colado, não
   upload de arquivo — ambas ganharam só um card-atalho na central.
+- **Filtro server-side vai em `filtrosExtras`, NÃO num card à parte** (v2.30,
+  feedback do Bruno com print: *"tem dois cards, acho que apenas um, tudo
+  concentrado e coeso de filtros"*): o creche tinha DUAS caixas de status na
+  mesma tela — a server-side num `rh-card rh-lote` acima e a `Status: todos` da
+  barra do dash. Filtrar por uma enquanto a outra dizia outra coisa dava
+  resultado que parecia errado. `DashPlanilha` aceita
+  `filtrosExtras={[{chave, rotulo, valor, opcoes, aoMudar, vazioRotulo?}]}` e
+  os renderiza na MESMA grade. **Um assunto, um controle**: se o filtro do pai
+  cobre uma coluna, tire o `filtro:` dela — a coluna segue ordenável e os cards
+  clicáveis continuam, porque a filtragem em memória roda sobre TODAS as
+  colunas, não só as que declaram `filtro`. O filtro continua server-side (não
+  virou filtro de coluna: a base é a folha inteira, trazer ao cliente é
+  regressão de performance E de LGPD).
 - **Dash-planilha** (`frontend/src/rh/DashPlanilha.jsx`): componente RH reutilizável
   — ordena por qualquer coluna, filtra por coluna (texto/select), seleção + ações
   em massa (reusa `CheckMestre`), colunas configuráveis (mostrar/ocultar, salvo em
