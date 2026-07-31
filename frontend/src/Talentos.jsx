@@ -79,10 +79,22 @@ export default function BancoDeTalentos() {
     try {
       const { website, ...dados } = form
       const r = await api.cadastrar({ ...dados, website })
+      // Daqui em diante a pessoa tem nome no sistema: o que acontecer depois
+      // (o envio do currículo, que é onde mais se trava) fica ligado ao
+      // cadastro dela. O que identifica é o `upload_token` — assinado e com
+      // prazo —, nunca o id solto (v2.36).
+      if (r?.upload_token) definirContexto({ talentoToken: r.upload_token })
       // currículo é opcional: se anexou e o cadastro devolveu token, envia
       if (curriculo && r?.id && r?.upload_token) {
         try { await api.enviarCurriculo(r.id, r.upload_token, curriculo) }
-        catch { /* currículo é opcional — não bloqueia o cadastro já gravado */ }
+        catch (e3) {
+          // Era um `catch {}` mudo: o currículo é opcional, mas falhar em
+          // silêncio esconde justamente o problema que a telemetria existe
+          // para achar (a lição da v2.02).
+          anotarFriccao('talento_curriculo_falhou', {
+            detalhe: e3?.detail || e3?.message, tamanho: curriculo.size,
+          })
+        }
       }
       setEnviado(true)
     } catch (err2) {

@@ -84,6 +84,25 @@ def _upload_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(get_settings().secret_key, salt=UPLOAD_SALT)
 
 
+def talento_do_upload_token(token: str | None) -> uuid.UUID | None:
+    """Talento provado pelo `upload_token`, ou None.
+
+    Existe para que a telemetria pública não aceite um `talento_id` cru vindo
+    do navegador (v2.36): a rota de coleta é aberta, e um id sem prova deixaria
+    qualquer um pendurar eventos na jornada de outra pessoa — dado de produto
+    que o RH lê como se fosse o comportamento dela. O token já é emitido no
+    cadastro, tem assinatura e TTL curto; reusá-lo é mais barato e mais seguro
+    do que inventar outra credencial.
+    """
+    if not token:
+        return None
+    try:
+        dados = _upload_serializer().loads(token, max_age=UPLOAD_TTL_S)
+        return uuid.UUID(str(dados.get("tid")))
+    except (BadSignature, ValueError, TypeError):
+        return None
+
+
 # ---------- Público (sem autenticação) ----------
 
 

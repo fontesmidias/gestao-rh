@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { rh as api } from '../api.js'
 import { fmtDataHora } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
@@ -46,9 +47,33 @@ const ORIGENS = [
 const ROTULO_TIPO = { erro: '🔴 Erro', friccao: '🟠 Fricção',
                       jornada: '🔵 Jornada', desempenho: '🟣 Desempenho' }
 
+// A telemetria é IDENTIFICADA por decisão do Bruno (v2.24) — o caso de uso é
+// "a pessoa ligou dizendo que não consegue". Mas até a v2.36 a tela geral não
+// mostrava de QUEM era o evento: o backend gravava o vínculo, a lista não o
+// exibia, e só existia o caminho inverso (abrir a ficha e olhar). Sem nome, a
+// lista era estatística; com nome e link, vira atendimento.
+const PessoaDaLinha = ({ evento: e }) => {
+  if (e.candidato_id) {
+    return <Link to={`/rh/candidato/${e.candidato_id}`}>{e.pessoa || 'abrir ficha'}</Link>
+  }
+  if (e.pessoa) {
+    return (
+      <span>{e.pessoa}
+        {e.pessoa_tipo === 'talento' && <span className="explica"> · talento</span>}
+        {e.pessoa_tipo === 'rh' && <span className="explica"> · painel</span>}
+      </span>
+    )
+  }
+  // Visita pública sem vínculo: anônima, e continua assim.
+  return <span className="explica">—</span>
+}
+
 const COLUNAS = [
   { chave: 'quando', rotulo: 'Quando', ordenavel: true, sempreVisivel: true,
     valor: (e) => e.quando, render: (e) => fmtDataHora(e.quando) },
+  { chave: 'pessoa', rotulo: 'Pessoa', ordenavel: true, filtro: 'texto',
+    valor: (e) => e.pessoa || '', quebra: true,
+    render: (e) => <PessoaDaLinha evento={e} /> },
   { chave: 'tipo', rotulo: 'Tipo', ordenavel: true, filtro: 'select',
     opcoes: Object.values(ROTULO_TIPO).map((r) => ({ v: r, r })),
     valor: (e) => ROTULO_TIPO[e.tipo] || e.tipo },
@@ -227,10 +252,71 @@ export default function TelemetriaRH() {
                         linhaExpandida={(e) => <DetalheEvento evento={e} />}
                         vazio="Nenhum evento no período." />
         )}
+        <p className="explica">
+          A lista traz os <strong>300 mais recentes</strong> do período. Para
+          analisar o caminho completo das pessoas, use o export abaixo.
+        </p>
       </details>
 
+      <ExportJornada dias={dias} origem={filtros.origem} />
       <Retencao aoMudar={carregar} />
     </>
+  )
+}
+
+// Export de JORNADA (v2.36) — a tela responde "está quebrando?", "onde travam?"
+// e "o que está lento?". Não responde "por onde passaram antes de desistir":
+// isso é análise de sequência, e trazê-la para dentro do painel significaria
+// pandas e biblioteca de gráficos na imagem por uma pergunta ocasional. O
+// arquivo sai no formato que as ferramentas de análise de caminho esperam
+// (`user_id,event,timestamp`) e roda onde a pessoa quiser.
+function ExportJornada({ dias, origem }) {
+  const [ocupado, setOcupado] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const baixar = async () => {
+    setOcupado(true); setMsg(null)
+    try {
+      const r = await api.telemetriaJornadaCsv({ dias, origem })
+      const url = URL.createObjectURL(r.blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `jornada-${dias}d.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      setMsg({
+        tipo: r.truncado ? 'erro' : 'ok',
+        texto: r.truncado
+          // Corte silencioso faria o RH analisar um pedaço achando que é o todo.
+          ? `${r.linhas} eventos baixados — o período tem MAIS que isso e o arquivo `
+            + 'foi cortado. Escolha menos dias ou filtre a origem para pegar tudo.'
+          : `${r.linhas} evento(s) no arquivo.`,
+      })
+    } catch {
+      setMsg({ tipo: 'erro', texto: 'Não foi possível gerar o arquivo agora.' })
+    } finally { setOcupado(false) }
+  }
+
+  return (
+    <details className="rh-card">
+      <summary><strong>🧭 Exportar jornada</strong> — analisar o caminho das pessoas</summary>
+      <p className="explica">
+        Todos os eventos do período <strong>em ordem cronológica</strong>, um por
+        linha, com quem, o quê e quando. Serve para ver por onde as pessoas
+        passam antes de concluir — ou de desistir.
+      </p>
+      <p className="explica">
+        As três primeiras colunas são <code>user_id</code>, <code>event</code> e{' '}
+        <code>timestamp</code>, o formato que as ferramentas de análise de caminho
+        esperam (retentioneering e afins) <Ajuda texto="Nada é instalado no servidor: o arquivo sai daqui e a análise roda onde você quiser. Em pandas: read_csv(arquivo, sep=';')." />.
+        Abre direto no Excel. Leva <strong>nome de gente real</strong>, então o
+        download fica registrado na auditoria.
+      </p>
+      <button className="btn-secundario" onClick={baixar} disabled={ocupado}>
+        {ocupado ? 'Gerando…' : `⬇ Baixar jornada (${dias} dia(s)${origem ? `, ${origem}` : ''})`}
+      </button>
+      {msg && <div className={msg.tipo === 'ok' ? 'sucesso' : 'alerta'}>{msg.texto}</div>}
+    </details>
   )
 }
 

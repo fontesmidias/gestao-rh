@@ -108,6 +108,27 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
     IP, teto de 50 eventos por lote e corte de cada campo. Excesso é descartado
     em silêncio — nem 429 —, porque telemetria não pode virar canal de erro para
     quem está usando. `origem="rh"` só é aceita na rota autenticada.
+  - **IDENTIDADE NA ROTA PÚBLICA SÓ COM PROVA** (v2.36): o candidato vem pelo
+    token do link mágico (resolvido no servidor) e o talento pelo
+    `upload_token` do cadastro (`talento_do_upload_token`, assinado e com TTL)
+    — **nunca** por um id cru no corpo. Um `talento_id` sem prova deixaria
+    qualquer um pendurar eventos na jornada de outra pessoa, e o RH leria
+    aquilo como o comportamento dela: dado de produto falso é pior que dado
+    nenhum, porque parece verdadeiro. Sem prova, o evento é gravado SEM
+    vínculo — some a identificação, não o registro.
+  - **A tela geral mostra a PESSOA** (v2.36, `anexar_pessoa`): telemetria
+    identificada que não diz de quem é o evento vira estatística — o caso de
+    uso é "a pessoa ligou dizendo que não consegue". Nome em LOTE (3 consultas
+    no total: eventos + candidatos + talentos), nunca uma por linha. Quem não
+    se identificou continua ANÔNIMO.
+  - **Análise de caminho é EXPORT, não biblioteca no servidor** (v2.36,
+    `jornada_csv` + `/rh/telemetria/jornada.csv`): CSV cronológico com
+    `user_id,event,timestamp` nas três primeiras colunas (formato do
+    retentioneering e afins), `;` + BOM como todo CSV do projeto (`sep=';'` no
+    pandas). Trazer pandas/plotly para a imagem por uma pergunta ocasional não
+    se paga. O download vai para a AUDITORIA (leva nome de gente real, mesma
+    regra do log da v2.29) e o corte no teto é ANUNCIADO na tela — corte
+    silencioso faria analisar um pedaço achando que é o período inteiro.
   - **LGPD por desenho, na ENTRADA**: nada do que a pessoa digita; IP truncado
     (`ip_prefixo`); e **token do link mágico mascarado** (`mascarar_pagina`) —
     `/c/{token}` é CREDENCIAL, e telemetria é feita para ser lida e exportada.
