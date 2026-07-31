@@ -193,8 +193,13 @@ export default function Checklist({ token, aoConcluir }) {
       // Falha de upload com o motivo real do backend: distingue "arquivo
       // grande demais" de "servidor caiu" nos números, e não só no texto que a
       // pessoa vê.
+      // `rede` separa "o fetch nem chegou a receber resposta" de "o servidor
+      // respondeu com erro" — sem isso, timeout de proxy e falta de sinal
+      // ficavam indistinguíveis nos números, que foi o que atrasou o
+      // diagnóstico do comprovante em 2026-07-30.
       anotarFriccao('falha_no_envio', {
         tipo: slotAtual?.tipo, detalhe: err.detail, status: err.status,
+        rede: err.rede ? 1 : 0, ms: Math.round(performance.now() - t0),
       })
       setErros((x) => ({
         ...x,

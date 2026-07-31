@@ -2,6 +2,7 @@
 inteligentes: nitidez (foto borrada é recusada na hora) e data do comprovante
 de residência (OCR; mais de 90 dias é recusado)."""
 
+import hashlib
 import io
 import logging
 import re
@@ -38,6 +39,13 @@ _EXT_WORD = {".doc", ".docx", ".odt", ".rtf"}
 # positivo em documento com fundo claro.
 NITIDEZ_MINIMA = 3.0
 VALIDADE_COMPROVANTE_DIAS = 90
+
+# Memória de curtíssimo prazo do OCR, por conteúdo do arquivo. Existe para o
+# comprovante de residência, que é lido DUAS vezes na mesma requisição (ver
+# `_texto_do_envio`). Teto baixo de propósito: não é cache de aplicação, e o
+# texto de documento é dado pessoal — não deve ficar parado na memória.
+_CACHE_TEXTO: dict[tuple[str, str], str] = {}
+_CACHE_TEXTO_MAX = 32
 
 
 class ArquivoInvalido(Exception):
@@ -278,8 +286,37 @@ def _texto_do_envio(ext: str, dados: bytes, pdf: bytes) -> str:
     """Texto do documento. Ordem (decisão do RH, 2026-07-16): OCR com IA
     (Mistral) SEMPRE em primeiro lugar quando há chave; depois a camada de
     texto do PDF; por fim o Tesseract local. Qualquer degrau indisponível cai
-    para o seguinte em silêncio."""
+    para o seguinte em silêncio.
+
+    **Memoizado por conteúdo** (v2.31): no comprovante de residência esta
+    função era chamada DUAS vezes com os MESMOS bytes na mesma requisição — uma
+    em `validar_comprovante_recente` (a regra dos 90 dias) e outra no `_texto`
+    de `documentos.py` (as sugestões de ficha). Cada chamada é uma ida à
+    Mistral com timeout de 30s, então um comprovante de duas páginas podia
+    passar de 120s de trabalho síncrono contra os **60s de `proxy_read_timeout`
+    do nginx**. O nginx cortava, o `fetch` do navegador rejeitava, e o front
+    traduzia qualquer rejeição como **"você está sem internet"** — foi o
+    relato do colaborador em 2026-07-30. Cache pequeno e por processo: o
+    upload é curto e os bytes são os mesmos dentro da requisição.
+    """
     from app.services.ocr_ia import texto_via_mistral
+
+    chave = (ext, hashlib.sha256(dados).hexdigest())
+    if chave in _CACHE_TEXTO:
+        return _CACHE_TEXTO[chave]
+    texto = _texto_do_envio_sem_cache(ext, dados, pdf, texto_via_mistral)
+    # Teto pequeno: isto existe para a MESMA requisição, não para virar cache
+    # de aplicação. Sem o teto, um processo longevo acumularia o texto de todo
+    # documento que passou por ele — dado pessoal parado na memória.
+    if len(_CACHE_TEXTO) >= _CACHE_TEXTO_MAX:
+        _CACHE_TEXTO.clear()
+    _CACHE_TEXTO[chave] = texto
+    return texto
+
+
+def _texto_do_envio_sem_cache(ext: str, dados: bytes, pdf: bytes,
+                              texto_via_mistral) -> str:
+    """A leitura de fato (ver `_texto_do_envio`, que memoiza)."""
 
     if ext == ".pdf":
         # Lê SEMPRE o PDF original (`dados`), não a versão já colocada no papel

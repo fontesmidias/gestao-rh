@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.31.0] — 2026-07-30 — "Sem internet" no comprovante de residência: não era a internet
+
+Relato de campo: *"no campo de comprovante de residência do Jonatas, na hora
+que tenta puxar o arquivo do celular, informa que está sem internet"*.
+
+A internet dele estava boa. O comprovante é o **único** slot com OCR
+bloqueante, e o texto era lido **duas vezes com os mesmos bytes** na mesma
+requisição — uma para a regra dos 90 dias, outra para as sugestões de ficha.
+Cada leitura é uma ida à Mistral com `timeout=30s`, então um comprovante de
+duas páginas podia passar de **120s** de trabalho síncrono contra os **60s** de
+`proxy_read_timeout` do nginx. O nginx cortava, o `fetch` rejeitava, e o front
+traduzia **qualquer** rejeição como "você está sem internet" — mensagem que
+ainda convida a tentar de novo, gastando outros 60s.
+
+Quatro correções, em camadas independentes:
+
+### Corrigido
+
+- **OCR roda uma vez por arquivo** (`normalizacao.py`): `_texto_do_envio`
+  passou a memoizar por conteúdo (SHA-256 dos bytes + extensão). O tempo do
+  upload do comprovante caiu pela metade. Cache com teto baixo (32) e limpeza
+  ao encher — texto de documento é dado pessoal, não pode acumular na memória
+  do processo.
+- **O nginx deixou de cortar aos 60s** na rota de upload do candidato
+  (`location ~ ^/api/c/[^/]+/documentos/`): `proxy_read_timeout`,
+  `proxy_send_timeout` e `client_body_timeout` em 300s. Não é licença para
+  demorar — é a rede de segurança para 4G com foto pesada, já que a causa de
+  origem foi cortada acima.
+- **"Sem internet" só quando é sem internet** (`api.js`): o `fetch` rejeita
+  igual para falta de sinal e para conexão cortada no meio. Agora o erro
+  distingue três casos — `sem_conexao` (confirmado por `navigator.onLine`),
+  `demorou_demais` (rejeitou após 20s com a rede de pé) e
+  `conexao_interrompida` —, cada um com a sua mensagem. A de `demorou_demais`
+  diz explicitamente *"não foi a sua internet"* e orienta a reduzir a foto.
+- **Os leitores do wizard pararam de culpar a foto**: `LeitorComprovante` e
+  `LeitorRG` traduziam qualquer falha como *"não conseguimos ler a foto"*,
+  mesmo quando o problema era o envio, e **não emitiam telemetria nenhuma** —
+  o ponto mais cego do fluxo. Agora separam erro de servidor e registram
+  `falha_no_envio`, como o checklist.
+
+### Notas
+
+Coberto por `tests/test_comprovante_ocr.py`, **validado por mutação** (remover
+o cache e trocar a chave por uma fixa — as duas detectadas). A segunda mutação
+protege o risco que o próprio cache introduz: chave errada faria o endereço de
+uma pessoa aparecer na ficha de outra, bem pior que a lentidão original.
+Smoke 15/15, E2E de tela branca 6/6 (regra do CLAUDE.md ao mexer no
+`nginx.conf`), `nginx -t` na rede do compose.
+
+A telemetria de `falha_no_envio` ganhou `rede` e `ms`: sem isso, timeout de
+proxy e falta de sinal ficavam indistinguíveis nos números — foi o que atrasou
+este diagnóstico.
+
+---
+
 ## [2.30.0] — 2026-07-30 — Reembolso-Creche: um bloco de filtros, não dois
 
 Feedback do Bruno, com print: *"na página de dash do reembolso creche tem dois
