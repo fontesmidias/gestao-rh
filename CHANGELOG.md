@@ -11,6 +11,33 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.32.0] — 2026-07-30 — Os macaquinhos no campo de senha
+
+Pedido do Bruno: *"o emoji do macaquinho tampando o olho quando está oculta, e
+o macaquinho olhando entre as mãos quando visível — acho que ficaria melhor, um
+pouco de clima"*.
+
+### Modificado
+
+- `InputSenha` agora mostra **🙈 quando o texto está oculto** (ele tampa os
+  olhos, como o campo) e **🙊 quando está visível**. Antes era 👁️/🙈, com o
+  macaquinho no estado invertido. Um componente, **18 campos** — login do
+  painel, troca de senha, chaves de API, secrets de OAuth e webhooks.
+- A tela de **Assinaturas** era o último `<input type="password">` cru do
+  projeto, sem olhinho nenhum: passou a usar o `InputSenha`. Errar a senha por
+  não conseguir conferir o que digitou é atrito à toa num ato jurídico.
+- `.rejeicao .campo-senha { flex: 1 }` no `styles.css`: o campo de senha é um
+  `<span>` que ENVOLVE o input, então a regra antiga (`.rejeicao input`) não o
+  alcançava e ele ficaria espremido na linha.
+
+### Notas
+
+Conferido no navegador nos dois estados: 🙈 com `type=password`, 🙊 com
+`type=text`, `aria-label` acompanhando. O emoji é `aria-hidden` — quem usa
+leitor de tela continua ouvindo "Mostrar/Ocultar o que digitei".
+
+---
+
 ## [2.31.0] — 2026-07-30 — "Sem internet" no comprovante de residência: não era a internet
 
 Relato de campo: *"no campo de comprovante de residência do Jonatas, na hora
