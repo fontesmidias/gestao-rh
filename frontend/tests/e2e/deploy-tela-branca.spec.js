@@ -45,6 +45,39 @@ test.describe('deploy não pode deixar o candidato com a tela em branco', () => 
     expect(r.headers()['content-type']).toContain('javascript')
   })
 
+  test('o index.html é servido como HTML, não como download', async ({ request }) => {
+    // Regressão de 2026-07-31: um bloco `types { application/javascript mjs; }`
+    // solto no server SUBSTITUIU o mapa inteiro de MIME do nginx, e o
+    // index.html passou a sair como `application/octet-stream` — o site virava
+    // DOWNLOAD em vez de abrir. O `include mime.types` tem que vir antes da
+    // exceção. Este teste é barato e pega a classe toda de erro.
+    const r = await request.get('/')
+    expect(r.headers()['content-type'] || '').toContain('text/html')
+  })
+
+  test('o worker do pdf.js (.mjs) é servido como JavaScript', async ({ request }) => {
+    // O `mime.types` do nginx não conhece `.mjs`: sem a exceção, o arquivo sai
+    // como octet-stream e o navegador RECUSA o módulo ("Strict MIME type
+    // checking is enforced for module scripts"). O efeito é invisível no
+    // desktop e total no CELULAR, onde o pdf.js é o ÚNICO caminho para exibir
+    // PDF (o Chrome do Android não tem visualizador embutido): todo documento
+    // caía em "não conseguimos exibir este PDF aqui".
+    const html = await (await request.get('/')).text()
+    // o worker não é referenciado no index (o pdf.js o carrega sob demanda),
+    // então descobrimos o nome pelo próprio bundle
+    const bundle = html.match(/\/assets\/index-[\w-]+\.js/)?.[0]
+    expect(bundle, 'o index.html precisa referenciar o bundle').toBeTruthy()
+    const js = await (await request.get(bundle)).text()
+    const worker = js.match(/assets\/pdf\.worker[\w.-]*\.mjs/)?.[0]
+    test.skip(!worker, 'bundle sem worker de pdf.js — nada a checar')
+
+    const r = await request.get(`/${worker}`)
+    expect(r.status()).toBe(200)
+    expect(r.headers()['content-type'] || '',
+           'módulo ES servido com MIME errado é recusado pelo navegador')
+      .toContain('javascript')
+  })
+
   test('a rota do candidato continua servindo o SPA', async ({ request }) => {
     // Garantia INVERSA: /c/{token} é rota tratada no cliente e PRECISA do
     // fallback para index.html. Consertar o asset não pode ter quebrado a

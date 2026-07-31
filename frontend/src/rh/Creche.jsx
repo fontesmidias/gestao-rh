@@ -4,6 +4,7 @@ import { comAmpulheta } from '../Carregando.jsx'
 import { fmtCpf as fmtCpfBase, soDigitos, fmtDataHora } from '../fmt.js'
 import Ajuda from '../Ajuda.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
+import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 
 // exibição em tabela: CPF completo mascarado, senão travessão
 const fmtCpf = (c) => (soDigitos(c).length === 11 ? fmtCpfBase(c) : (c || '—'))
@@ -161,6 +162,7 @@ function Levantamentos() {
   const [erro, setErro] = useState(null)
   const [msg, setMsg] = useState(null)
   const [aberto, setAberto] = useState(null) // benefício em detalhe
+  const [doc, setDoc] = useState(null)       // {blob, nome} exibido na tela
   const [historico, setHistorico] = useState(null) // timeline do benefício aberto
 
   const verHistorico = async (ben) => {
@@ -289,28 +291,30 @@ function Levantamentos() {
         : `Não foi possível reenviar (${e.detail || e.message}).`)
     }
   }
-  const abrirBlob = (blob) => {
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank')
-    setTimeout(() => URL.revokeObjectURL(url), 30000)
-  }
+  // Documento abre NA TELA, não em aba nova (v2.33, pedido do Bruno: "que esse
+  // documento ele renderize ali na tela, para a gente não precisar ficar
+  // baixando"). A certidão da criança é o caso que ele citou: conferir a data
+  // de nascimento era baixar arquivo por arquivo.
+  const mostrar = (blob, nome) => setDoc({ blob, nome })
   const baixarDossie = async (ben) => {
     setErro(null)
     try {
       const blob = await comAmpulheta('Montando o dossiê do benefício…',
                                       () => api.crecheBaixarDossie(ben.id))
-      abrirBlob(blob)
+      mostrar(blob, `dossie-${(ben.nome || 'beneficio').split(' ')[0].toLowerCase()}.pdf`)
     } catch (e) { setErro(`Falha ao gerar o dossiê (${e.detail || e.message}).`) }
   }
   const verDocumento = async (ben, tipo) => {
     setErro(null)
-    try { abrirBlob(await api.crecheBaixarDocumento(ben.id, tipo)) }
+    try { mostrar(await api.crecheBaixarDocumento(ben.id, tipo), `${tipo}.pdf`) }
     catch (e) { setErro(`Falha ao abrir o documento (${e.detail || e.message}).`) }
   }
   const verDocCrianca = async (ben, crianca, tipo) => {
     setErro(null)
-    try { abrirBlob(await api.crecheBaixarDocCrianca(ben.id, crianca.id, tipo)) }
-    catch (e) { setErro(`Falha ao abrir o arquivo (${e.detail || e.message}).`) }
+    try {
+      mostrar(await api.crecheBaixarDocCrianca(ben.id, crianca.id, tipo),
+              `${tipo}-${(crianca.nome || 'crianca').split(' ')[0].toLowerCase()}`)
+    } catch (e) { setErro(`Falha ao abrir o arquivo (${e.detail || e.message}).`) }
   }
 
   // --- config do DashPlanilha (v1.78): sort/filtro por coluna + cards clicáveis ---
@@ -420,7 +424,8 @@ function Levantamentos() {
                             verDocCrianca={verDocCrianca} verDocumento={verDocumento}
                             baixarDossie={baixarDossie} ativar={ativar}
                             indeferir={indeferir} devolver={devolver}
-                            reenviarLink={reenviarLink} />
+                            reenviarLink={reenviarLink}
+                            doc={doc} fecharDoc={() => setDoc(null)} />
                         : null)}
                       vazio="Nenhum levantamento com esse filtro." />
       )}
@@ -496,7 +501,8 @@ function PorPosto() {
 // É a mesma regra já registrada no CLAUDE.md para o DashPlanilha, que o
 // Creche não seguia: o painel renderizava DEPOIS da tabela inteira.
 function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocumento,
-                           baixarDossie, ativar, indeferir, devolver, reenviarLink }) {
+                           baixarDossie, ativar, indeferir, devolver, reenviarLink,
+                           doc, fecharDoc }) {
   return (
     <>
           <h3>{b.nome} — {fmtCpf(b.cpf)}</h3>
@@ -554,6 +560,11 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
               ))}
             </tbody>
           </table>
+          {/* O documento aparece AQUI, logo abaixo das crianças — perto do
+              botão que o abriu. Antes ia para uma aba nova, e conferir a data
+              de nascimento na certidão obrigava a trocar de aba a cada
+              criança. */}
+          {doc && <VisualizadorArquivo blob={doc.blob} nome={doc.nome} aoFechar={fecharDoc} />}
           <div className="rh-lote" style={{ marginTop: '.6rem' }}>
             <button className="btn-secundario btn-mini"
                     onClick={() => verDocumento(b, 'requerimento')}>📄 Prévia do requerimento</button>

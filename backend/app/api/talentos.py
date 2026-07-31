@@ -4,6 +4,7 @@ pré-cadastro: multi-etapas, campos ricos e currículo opcional (PDF/foto/Word).
 
 import logging
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
@@ -30,6 +31,22 @@ UPLOAD_SALT = "talento-curriculo"
 UPLOAD_TTL_S = 1800  # 30 min para anexar o currículo ao cadastro recém-criado
 CURRICULO_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 CURRICULO_EXTS = {"pdf", "jpg", "jpeg", "png", "heic", "webp", "doc", "docx"}
+# Word não renderiza em navegador nenhum: estes são convertidos para PDF na
+# hora de SERVIR, para o RH ler na tela (v2.33). O arquivo GUARDADO continua
+# sendo o original que a pessoa enviou — a conversão é só de exibição.
+_EXTS_WORD = {".doc", ".docx", ".odt", ".rtf"}
+_CT_WORD = {"application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.oasis.opendocument.text", "application/rtf"}
+
+
+def _ehWord(nome: str | None, ct: str | None) -> bool:
+    """Casa por extensão OU content-type: o upload público às vezes chega com
+    `application/octet-stream` (depende do celular), e aí só o nome denuncia."""
+    if (ct or "") in _CT_WORD:
+        return True
+    return Path((nome or "").lower()).suffix in _EXTS_WORD
+
 CURRICULO_CT = {
     "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg",
     "png": "image/png", "heic": "image/heic", "webp": "image/webp",
@@ -306,6 +323,21 @@ def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
                            "erro": type(exc).__name__})
         db.commit()
         raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
+
+    # Word CONVERTE para PDF em vez de mandar baixar (v2.33, decisão do Bruno
+    # em 2026-07-30 — perguntado, ele escolheu "converter"). O LibreOffice já
+    # roda neste container para a normalização de documentos; aqui ele serve
+    # para o RH LER o currículo na tela, que é o pedido. Se a conversão falhar,
+    # cai no comportamento antigo (baixar) — nunca deixa o RH sem o arquivo.
+    if _ehWord(nome, ct):
+        try:
+            from app.services.normalizacao import _word_para_pdf
+            conteudo = _word_para_pdf(Path(nome.lower()).suffix, conteudo)
+            ct = "application/pdf"
+            nome = f"{Path(nome).stem}.pdf"
+        except Exception:
+            log.warning("conversão do currículo %s falhou; servindo o original", nome,
+                        exc_info=True)
 
     # Só é `inline` o que o navegador SABE exibir. Word/octet-stream com
     # `inline` abria uma aba em branco — o arquivo vinha certo, o navegador é

@@ -5,6 +5,7 @@ import DashPlanilha from './DashPlanilha.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
 import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
+import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 
 const STATUS = {
   novo: ['Novo', '#5bc0de'],
@@ -35,6 +36,9 @@ export default function TalentosRH({ aoAbrir }) {
   // Vai no painel e não em coluna nova: o dash já tem coluna demais, e resumo
   // e origem são texto livre que não cabe em célula.
   const [aberto, setAberto] = useState(null)
+  // {blob, nome, talento} — currículo exibido na tela, amarrado ao talento
+  // para não reaparecer no painel de outra pessoa.
+  const [doc, setDoc] = useState(null)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
   useEffect(() => { recarregar() }, [])
@@ -75,28 +79,17 @@ export default function TalentosRH({ aoAbrir }) {
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível atualizar (${e.detail || e.message}).` }) }
   }
 
-  // PDF e imagem abrem em aba nova; Word (e qualquer outro tipo que o navegador
-  // não renderiza) BAIXA. Antes tudo ia para window.open e o Word abria uma aba
-  // em branco — o arquivo estava certo, o navegador é que não exibe (feedback
-  // 2026-07-28: "deu bom para baixar, mas não abriu").
+  // O currículo abre NA TELA (v2.33, pedido do Bruno): "não baixasse
+  // necessariamente o currículo, mas que tivesse opção para renderizar o
+  // currículo na tela ali na versão desktop, como no módulo de admissão".
+  // Word chega aqui já convertido em PDF pelo backend (LibreOffice), então o
+  // caso "abriu uma aba em branco" da v2.11 deixou de existir. O botão de
+  // baixar continua dentro do visualizador.
   const verCurriculo = async (t) => {
     setMsg(null)
     try {
       const blob = await api.baixarCurriculoTalento(t.id)
-      const url = URL.createObjectURL(blob)
-      const exibivel = blob.type === 'application/pdf' || blob.type.startsWith('image/')
-      if (exibivel) {
-        window.open(url, '_blank')
-      } else {
-        const a = document.createElement('a')
-        a.href = url
-        a.download = t.curriculo_nome || 'curriculo'
-        document.body.appendChild(a); a.click(); a.remove()
-        setMsg({ tipo: 'ok', texto: `O currículo de ${t.nome} está em `
-          + `${t.curriculo_nome || 'arquivo'} — o navegador não exibe esse formato, `
-          + 'então baixamos para você abrir no Word.' })
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
+      setDoc({ blob, nome: t.curriculo_nome || 'curriculo', talento: t.id })
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível abrir o currículo (${e.detail || e.message}).` }) }
   }
 
@@ -262,7 +255,9 @@ export default function TalentosRH({ aoAbrir }) {
         <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
                       linhaExpandida={(t) => (aberto === t.id
-                        ? <FichaTalento t={t} verCurriculo={verCurriculo} /> : null)}
+                        ? <FichaTalento t={t} verCurriculo={verCurriculo}
+                                        doc={doc?.talento === t.id ? doc : null}
+                                        fecharDoc={() => setDoc(null)} /> : null)}
                       vazio="Nenhum talento cadastrado ainda." />
       )}
       {anotando && (
@@ -291,7 +286,7 @@ function Campo({ rotulo, children, largo }) {
   )
 }
 
-function FichaTalento({ t, verCurriculo }) {
+function FichaTalento({ t, verCurriculo, doc, fecharDoc }) {
   const lista = (v) => (Array.isArray(v) && v.length ? v.join(' · ') : null)
   return (
     <div className="ficha-talento">
@@ -318,6 +313,10 @@ function FichaTalento({ t, verCurriculo }) {
           {t.consentimento_lgpd_em ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}` : null}</Campo>
         <Campo rotulo="Cadastro">{fmtDataHora(t.criado_em)}</Campo>
       </div>
+      {/* O currículo renderiza AQUI, na ficha, e não em aba nova (v2.33) — é o
+          "analisa na hora" que o Bruno pediu: ler o currículo com os dados da
+          pessoa do lado, sem trocar de aba nem baixar. */}
+      {doc && <VisualizadorArquivo blob={doc.blob} nome={doc.nome} aoFechar={fecharDoc} />}
       {/* Diagnóstico: o que aconteceu na TELA desta pessoa (v2.24). Recolhido —
           só importa quando ela relata que não conseguiu se cadastrar. */}
       <TelemetriaPessoa talentoId={t.id} />
