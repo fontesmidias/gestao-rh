@@ -3,6 +3,7 @@ import { candidato as api } from '../api.js'
 import { DICAS, CODIGOS_ERRO_UPLOAD, NOMES_SUGESTAO, SECAO_SUGESTAO } from '../tooltips.js'
 import { anotar, anotarFriccao } from '../telemetria.js'
 import Espera from '../Espera.jsx'
+import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 import { Cartao } from './CandidatoApp.jsx'
 import CapturaDocumento from './Camera.jsx'
 
@@ -44,6 +45,95 @@ const MOTIVOS = {
   vencido: 'O documento está vencido — emita um novo.',
   incompleto: 'Faltou parte do documento (frente ou verso).',
   outro: 'Houve um problema com o arquivo.',
+}
+
+// "Ver o que enviei" mostra o ORIGINAL — a foto que a pessoa tirou —, na tela,
+// dentro do próprio item do checklist.
+//
+// Antes isto era um link para a API numa aba nova, e o que abria era o PDF
+// normalizado: a foto reduzida e centralizada numa página A4 no papel
+// timbrado. Para o dossiê do RH está certo; para alguém conferir se a PRÓPRIA
+// foto saiu legível antes de concluir o envio, é o documento errado — a
+// miniatura faz uma foto boa parecer ruim. Pior no celular, onde a aba nova
+// com um PDF vira download (v2.33).
+//
+// Um envio pode ter várias partes (frente e verso do RG, páginas de certidão):
+// todas aparecem, senão dizer "é isto que você enviou" mostrando só a frente é
+// mentira. O PDF que o RH recebe continua a um toque de distância.
+function MeuEnvio({ token, slot, aoFechar }) {
+  const [arquivos, setArquivos] = useState(null)   // [{indice, nome}]
+  const [atual, setAtual] = useState(null)         // {chave, nome, blob}
+  const [erro, setErro] = useState(null)
+
+  const abrir = async (alvo) => {                  // alvo: {indice, nome} | 'pdf'
+    setErro(null)
+    setAtual(null)
+    try {
+      const pdf = alvo === 'pdf'
+      const blob = pdf ? await api.meuArquivoPdf(token, slot.id)
+        : await api.meuOriginal(token, slot.id, alvo.indice)
+      setAtual({ chave: pdf ? 'pdf' : alvo.indice,
+                 nome: pdf ? 'documento.pdf' : alvo.nome, blob })
+    } catch (err) {
+      // Não conseguir ver o que enviou é fricção invisível: a pessoa conclui
+      // que o envio se perdeu e reenvia tudo, ou desiste e liga para o RH.
+      anotarFriccao('ver_envio_falhou', {
+        tipo: slot.tipo, alvo: alvo === 'pdf' ? 'pdf' : 'original',
+        detalhe: err.detail, status: err.status,
+      })
+      setErro('Não conseguimos abrir seu arquivo agora. Tente de novo em instantes — '
+              + 'o envio continua guardado.')
+    }
+  }
+
+  useEffect(() => {
+    let vivo = true
+    api.meusOriginais(token, slot.id)
+      .then((r) => {
+        if (!vivo) return
+        setArquivos(r.arquivos)
+        // Sem original guardado (envio antigo) o PDF ainda existe: cai nele em
+        // vez de dizer que não há nada.
+        abrir(r.arquivos.length ? r.arquivos[0] : 'pdf')
+      })
+      .catch(() => { if (vivo) { setArquivos([]); abrir('pdf') } })
+    return () => { vivo = false }
+  }, [token, slot.id])
+
+  if (erro) {
+    return (
+      <div className="slot-dica" role="status">⚠️ {erro}{' '}
+        <button className="btn-link" onClick={aoFechar}>fechar</button>
+      </div>
+    )
+  }
+  if (!atual) return <Espera texto="Abrindo seu documento…" />
+
+  const varios = (arquivos?.length || 0) > 1
+  const rotulo = (nome) => nome.replace(/\.[^.]+$/, '').slice(0, 14) || 'arquivo'
+
+  return (
+    <>
+      <div className="slot-arquivo-acoes">
+        {varios && arquivos.map((a) => (
+          <button key={a.indice} title={a.nome}
+                  className={`btn-mini ${atual.chave === a.indice ? 'btn-principal' : 'btn-secundario'}`}
+                  onClick={() => abrir(a)}>{rotulo(a.nome)}</button>
+        ))}
+        <button className={`btn-mini ${atual.chave === 'pdf' ? 'btn-principal' : 'btn-secundario'}`}
+                onClick={() => abrir(arquivos?.length && atual.chave === 'pdf' ? arquivos[0] : 'pdf')}>
+          {atual.chave === 'pdf' ? '↩ Ver o que enviei' : '📄 Como o RH recebe'}
+        </button>
+      </div>
+      <VisualizadorArquivo blob={atual.blob} nome={atual.nome} aoFechar={aoFechar} />
+      <p className="explica">
+        {atual.chave === 'pdf'
+          ? 'É assim que o RH recebe seu documento: no papel timbrado da empresa.'
+          : 'É o arquivo exatamente como você enviou. Se estiver tremido ou cortado, '
+            + 'use "Reenviar" — dá para trocar enquanto o RH não analisa.'}
+      </p>
+    </>
+  )
 }
 
 // Documento lido por OCR trouxe dados da ficha? Perguntamos ANTES de usar —
@@ -105,6 +195,7 @@ export default function Checklist({ token, aoConcluir }) {
   const [sugestoes, setSugestoes] = useState(null) // {slotId, dados}
   const [avisos, setAvisos] = useState({})
   const [camera, setCamera] = useState(null) // {slotId, formato, titulo}
+  const [vendo, setVendo] = useState(null)   // id do slot com o envio aberto na tela
   const inputRef = useRef(null)
   const slotAtual = useRef(null)
 
@@ -275,13 +366,15 @@ export default function Checklist({ token, aoConcluir }) {
             </div>
             {['enviado', 'aprovado'].includes(s.status) && (
               <div className="slot-arquivo-acoes">
-                <a className="btn-link" target="_blank" rel="noreferrer"
-                   href={api.meuArquivoUrl(token, s.id)}>👁 Ver o que enviei</a>
+                <button className="btn-link"
+                        onClick={() => setVendo(vendo === s.id ? null : s.id)}>
+                  {vendo === s.id ? '✕ Fechar' : '👁 Ver o que enviei'}</button>
                 {s.status === 'enviado' && (
                   <button className="btn-link" onClick={async () => {
                     if (!window.confirm('Excluir este arquivo? Você poderá enviar outro no lugar.')) return
                     try {
                       await api.excluirArquivo(token, s.id)
+                      setVendo(null)   // o arquivo aberto na tela acabou de deixar de existir
                       await recarregar()
                     } catch {
                       setErros((x) => ({ ...x, [s.id]: 'Não foi possível excluir agora. Tente de novo.' }))
@@ -289,6 +382,9 @@ export default function Checklist({ token, aoConcluir }) {
                   }}>🗑 Excluir e enviar outro</button>
                 )}
               </div>
+            )}
+            {vendo === s.id && (
+              <MeuEnvio token={token} slot={s} aoFechar={() => setVendo(null)} />
             )}
             {enviando === s.id && <Espera texto="Enviando e conferindo seu documento…" />}
             {dicaAberta === s.id && <div className="slot-dica">💡 {info.dica}</div>}

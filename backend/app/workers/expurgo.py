@@ -19,6 +19,27 @@ from app.services import storage
 log = logging.getLogger(__name__)
 
 
+def _arquivos_do_slot(slot: SlotDocumento) -> list[str]:
+    """TODOS os arquivos do slot no storage, não só os dois do registro.
+
+    Um envio pode ter várias partes (frente e verso do RG, páginas de
+    certidão): `_gravar_partes_no_slot` grava `original/{i}-{nome}` para cada
+    uma, mas o registro guarda a key de UMA só (`arquivo_original_key`, a
+    primeira). Expurgar pelo registro deixava o VERSO no MinIO para sempre —
+    dado pessoal que a retenção diz que já não deveria existir, e que nenhuma
+    tela mostra para alguém notar a sobra. Por isso a lista vem do prefixo,
+    como em `documentos.py::expurgar_arquivos_do_slot`; o registro é o
+    fallback de quando o storage não lista.
+    """
+    base = f"candidatos/{slot.candidato_id}/slots/{slot.id}/"
+    try:
+        keys = storage.listar(base)
+    except Exception:
+        log.exception("Falha ao listar %s; caindo nas keys do registro", base)
+        keys = []
+    return keys or [k for k in (slot.arquivo_original_key, slot.arquivo_pdf_key) if k]
+
+
 def expurgar() -> int:
     settings = get_settings()
     limite = datetime.now(timezone.utc) - timedelta(days=settings.retention_days)
@@ -40,12 +61,11 @@ def expurgar() -> int:
                 select(SlotDocumento).where(SlotDocumento.candidato_id == cand.id)
             ).all()
             for slot in slots:
-                for key in (slot.arquivo_original_key, slot.arquivo_pdf_key):
-                    if key:
-                        try:
-                            storage.remover(key)
-                        except Exception:
-                            log.exception("Falha ao remover %s", key)
+                for key in _arquivos_do_slot(slot):
+                    try:
+                        storage.remover(key)
+                    except Exception:
+                        log.exception("Falha ao remover %s", key)
                 slot.arquivo_original_key = None
                 slot.arquivo_pdf_key = None
             cand.arquivos_expurgados_em = datetime.now(timezone.utc)

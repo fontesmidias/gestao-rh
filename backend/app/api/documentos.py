@@ -1,5 +1,6 @@
 """Checklist de documentos do candidato: listar slots, enviar arquivo, concluir envio."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -19,6 +20,7 @@ from app.services.normalizacao import (ArquivoInvalido, combinar_pdfs,
                                        validar_comprovante_recente)
 from app.services.slots import sincronizar_slots
 
+log = logging.getLogger(__name__)
 router = APIRouter(tags=["documentos"])
 
 
@@ -240,13 +242,142 @@ def _conferir_cpf_no_texto(db: Session, candidato: Candidato, texto: str) -> Non
 @router.get("/c/{token}/documentos/{slot_id}/arquivo")
 def ver_meu_arquivo(token: str, slot_id: uuid.UUID,
                     db: Session = Depends(get_db)) -> Response:
-    """O candidato confere o que ele mesmo enviou (PDF normalizado)."""
+    """O candidato confere o documento como o RH o recebe (PDF no timbrado)."""
     candidato = _candidato_do_token(token, db)
     slot = db.get(SlotDocumento, slot_id)
     if slot is None or slot.candidato_id != candidato.id or slot.arquivo_pdf_key is None:
         raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
     return Response(content=storage.ler(slot.arquivo_pdf_key),
                     media_type="application/pdf")
+
+
+# O que TODO navegador exibe sem ajuda. O resto (HEIC do iPhone, Word) é
+# convertido ao SERVIR — mesma decisão da v2.33 no currículo do talento.
+_CT_EXIBIVEL = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
+
+
+def _originais_do_slot(slot: SlotDocumento) -> list[tuple[int, str, str]]:
+    """(indice, nome, key) dos arquivos ORIGINAIS do slot, em ordem de envio.
+
+    Os originais são gravados como `original/{i}-{nome}` (frente, verso,
+    páginas…), mas o registro guarda a key de UM só (`arquivo_original_key`, o
+    primeiro) — então a lista vem do storage, não do banco. A ordem é pelo
+    número do prefixo, nunca a lexicográfica do listar: com 10 partes, "10-"
+    viria antes de "2-" e o verso apareceria no lugar da frente.
+    """
+    base = f"candidatos/{slot.candidato_id}/slots/{slot.id}/original/"
+    itens: list[tuple[int, str, str]] = []
+    try:
+        keys = storage.listar(base)
+    except Exception:
+        # Silêncio aqui viraria "você não enviou nada" para quem enviou — a
+        # lição da v2.02: catch que engole falha de INFRA mente para o usuário.
+        log.exception("Falha ao listar %s; caindo na key do registro", base)
+        keys = []
+    for key in keys:
+        num, _, nome = key[len(base):].partition("-")
+        if num.isdigit() and nome:
+            itens.append((int(num), nome, key))
+    if not itens and slot.arquivo_original_key:
+        # Envio antigo, ou storage que não listou: ao menos o primeiro arquivo.
+        # O nome sai do MESMO recorte usado acima — `rsplit("-")` perderia
+        # metade de "1-doc-frente.jpg".
+        _, _, nome = slot.arquivo_original_key.rpartition("/original/")[2].partition("-")
+        itens.append((1, nome or "documento", slot.arquivo_original_key))
+    itens.sort(key=lambda t: t[0])
+    return itens
+
+
+@router.get("/c/{token}/documentos/{slot_id}/originais")
+def meus_originais(token: str, slot_id: uuid.UUID,
+                   db: Session = Depends(get_db)) -> dict:
+    """Lista o que a pessoa enviou neste slot — uma foto, frente e verso, ou as
+    páginas de uma certidão. Consultada só quando ela pede para ver; sair
+    perguntando ao storage a cada abertura do checklist seria uma chamada ao
+    MinIO por documento da lista."""
+    candidato = _candidato_do_token(token, db)
+    slot = db.get(SlotDocumento, slot_id)
+    if slot is None or slot.candidato_id != candidato.id:
+        raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    return {"arquivos": [{"indice": i, "nome": nome}
+                         for i, nome, _ in _originais_do_slot(slot)],
+            "tem_pdf": slot.arquivo_pdf_key is not None}
+
+
+@router.get("/c/{token}/documentos/{slot_id}/original/{indice}")
+def ver_meu_original(token: str, slot_id: uuid.UUID, indice: int,
+                     db: Session = Depends(get_db)) -> Response:
+    """Serve o arquivo COMO A PESSOA ENVIOU — a foto dela, não o PDF que o
+    sistema montou.
+
+    O PDF do slot é a foto reduzida e centralizada numa página A4 no papel
+    timbrado: serve para o dossiê do RH, mas é o lugar errado para alguém
+    conferir se a própria foto ficou legível, que é o que ela quer saber antes
+    de concluir o envio.
+
+    O arquivo é escolhido pelo ÍNDICE, resolvido contra a listagem do storage —
+    nome de arquivo é texto do usuário e nunca vira caminho (mesma regra do
+    `export_planilha.slug()`).
+    """
+    candidato = _candidato_do_token(token, db)
+    slot = db.get(SlotDocumento, slot_id)
+    if slot is None or slot.candidato_id != candidato.id:
+        raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    achado = next((t for t in _originais_do_slot(slot) if t[0] == indice), None)
+    if achado is None:
+        raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
+    _, nome, key = achado
+    try:
+        dados = storage.ler(key)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="arquivo_nao_encontrado") from exc
+    return _resposta_exibivel(nome, dados)
+
+
+def _resposta_exibivel(nome: str, dados: bytes) -> Response:
+    """Devolve o arquivo pronto para RENDERIZAR na tela.
+
+    HEIC (foto de iPhone, caso comum aqui) e Word são convertidos ao servir; o
+    arquivo guardado continua o original — a conversão é de exibição. Se a
+    conversão falhar, o arquivo sai como veio, marcado para download: melhor
+    baixar do que ficar sem ele.
+    """
+    from pathlib import Path
+
+    ext = Path(nome.lower()).suffix
+    ct = _CT_EXIBIVEL.get(ext)
+    if ct is None:
+        try:
+            if ext in (".heic", ".heif", ".bmp"):
+                dados, ct = _imagem_para_jpeg(dados), "image/jpeg"
+                nome = f"{Path(nome).stem}.jpg"
+            elif ext in (".doc", ".docx", ".odt", ".rtf"):
+                from app.services.normalizacao import _word_para_pdf
+                dados, ct = _word_para_pdf(ext, dados), "application/pdf"
+                nome = f"{Path(nome).stem}.pdf"
+        except Exception:
+            log.warning("conversão de %s para exibição falhou; servindo como veio",
+                        nome, exc_info=True)
+            ct = None
+    disp = "inline" if ct else "attachment"
+    return Response(content=dados, media_type=ct or "application/octet-stream",
+                    headers={"Content-Disposition": f'{disp}; filename="{nome}"'})
+
+
+def _imagem_para_jpeg(dados: bytes) -> bytes:
+    """HEIC/BMP → JPEG. O `pillow_heif` já é registrado no import de
+    `normalizacao` (é o que faz o Pillow abrir foto de iPhone)."""
+    import io as _io
+
+    from PIL import Image
+
+    from app.services import normalizacao  # noqa: F401  (registra o HEIF opener)
+    img = Image.open(_io.BytesIO(dados))
+    img = img.convert("RGB")
+    saida = _io.BytesIO()
+    img.save(saida, format="JPEG", quality=90)
+    return saida.getvalue()
 
 
 @router.delete("/c/{token}/documentos/{slot_id}/arquivo")
