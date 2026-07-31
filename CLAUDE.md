@@ -994,6 +994,27 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   painel, o quadro `elegíveis · responderam · declararam não ter · faltam`
   aparece SEMPRE, inclusive com zero pendentes. "Declarou que não tem" conta
   como resposta; levantamento aberto e nunca enviado NÃO conta.
+- **Um envio tem N ARQUIVOS, o registro guarda a key de UM** (v2.35):
+  `_gravar_partes_no_slot` grava `slots/{id}/original/{i}-{nome}` para cada
+  parte (frente, verso, páginas da certidão), mas `SlotDocumento` só tem
+  `arquivo_original_key` — a do PRIMEIRO. Quem tratar esse campo como "o
+  original" erra por omissão, e a omissão é invisível: **o expurgo deixava o
+  verso do RG no MinIO para sempre** (LGPD), e "ver o que enviei" mostraria a
+  frente dizendo que era o envio inteiro. Liste pelo PREFIXO do slot
+  (`storage.listar`, como `expurgar_arquivos_do_slot` e
+  `documentos.py::_originais_do_slot` fazem), com o campo do registro só como
+  fallback. **Ordene pelo número do prefixo**: a listagem do storage é
+  lexicográfica e põe `10-` antes de `2-` — o verso no lugar da frente.
+  Servir por ÍNDICE resolvido contra a listagem, nunca montar caminho com o
+  nome do arquivo (é texto do usuário; mesma regra do `export_planilha.slug()`).
+- **O PDF do slot é o documento do RH, não o da pessoa** (v2.35): o
+  `arquivo` do candidato (`/c/{token}/documentos/{id}/arquivo`) serve o PDF
+  TIMBRADO — a foto reduzida e centralizada numa A4. Está certo para o dossiê
+  e ERRADO para alguém julgar se a própria foto ficou legível: a miniatura faz
+  foto boa parecer ruim. Quem confere o próprio envio vê o ORIGINAL
+  (`/original/{indice}`), com o timbrado a um toque. Vale a regra geral da
+  v2.33 — renderiza na tela, nunca `<a target="_blank">` para a API (PDF em
+  aba nova no Chrome do Android BAIXA, e no wizard isso atinge o candidato).
 - **Documento RENDERIZA na tela — `VisualizadorArquivo`** (v2.33,
   `frontend/src/VisualizadorArquivo.jsx`): PDF, imagem e Word (convertido) num
   componente só, dentro do painel da linha, com Baixar/Fechar. Regra do Bruno:

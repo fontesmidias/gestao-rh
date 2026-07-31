@@ -11,6 +11,59 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.35.0] — 2026-07-31 — "Ver o que enviei" mostra o que a pessoa enviou
+
+Fecha o último item da leva de 2026-07-30. O botão **"👁 Ver o que enviei"**
+existia desde sempre no checklist do candidato — e mostrava outro documento.
+
+O que abria era o PDF que o sistema monta: a foto **reduzida e centralizada
+numa página A4 no papel timbrado**. Para o dossiê do RH está certo. Para
+alguém conferir se a *própria* foto saiu legível antes de concluir o envio, é
+o documento errado — a miniatura faz uma foto boa parecer ruim e uma ruim
+parecer aceitável, que é exatamente a decisão que a pessoa está tentando
+tomar ali. Pior no celular: era um link para a API numa aba nova, e PDF em aba
+nova no Chrome do Android **baixa** em vez de abrir (o mesmo defeito que a
+v2.33 corrigiu no painel).
+
+### Adicionado
+
+- `GET /c/{token}/documentos/{id}/originais` e `…/original/{indice}` — a
+  lista do que foi enviado e cada arquivo **como veio**. O `arquivo_original_key`
+  existia no modelo desde o schema inicial e **nenhuma rota o servia**.
+- O checklist renderiza o documento **dentro do próprio item**, com
+  `VisualizadorArquivo` (o componente da v2.33), botão para alternar entre as
+  partes do envio e um toque para ver o PDF como o RH recebe.
+- **Todas as partes aparecem** (frente, verso, páginas da certidão): dizer "é
+  isto que você enviou" mostrando só a frente é mentira. A lista vem do
+  storage, não do banco — o registro guarda a key de **uma** parte só.
+- HEIC (foto de iPhone) e Word são **convertidos ao servir**, como no currículo
+  da v2.33; o arquivo guardado continua o original. Conversão que falha
+  degrada para download — nunca deixa a pessoa sem o arquivo.
+
+### Corrigido
+
+- **LGPD — o expurgo deixava o verso para trás.** `workers/expurgo.py` apagava
+  as duas keys do registro (`arquivo_original_key`, `arquivo_pdf_key`), mas um
+  envio tem **N** partes gravadas como `original/{i}-{nome}`. O verso do RG,
+  as páginas 2..N das certidões e tudo que veio depois do primeiro arquivo
+  ficavam no MinIO **para sempre**, passada a retenção — sem nenhuma tela onde
+  alguém notasse a sobra. Agora varre o prefixo do slot, como
+  `documentos.py::expurgar_arquivos_do_slot` já fazia.
+- **A ordem é a do envio, pelo número do prefixo.** A listagem do storage é
+  lexicográfica: com 10 partes, `10-` vem antes de `2-` e o verso apareceria no
+  lugar da frente.
+
+### Notas
+
+Coberto por `tests/test_documento_original.py` (original ≠ PDF timbrado, frente
+≠ verso, ordem numérica, isolamento por token, expurgo completo, conversão e
+degradação, envio antigo sem original), **validado por mutação** nas três
+garantias centrais — servir sempre a key do registro, expurgar só pelo
+registro e não ordenar. Smoke 15/15, `npm run build` limpo.
+
+Envio antigo sem originais no storage: a lista vem vazia e a tela cai no PDF —
+o que a pessoa via antes, nunca um erro.
+
 ## [2.34.0] — 2026-07-31 — Creche: a pessoa se manifesta, não some em silêncio
 
 Pedido do Bruno em 2026-07-30:

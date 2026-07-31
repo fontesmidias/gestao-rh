@@ -149,6 +149,13 @@ export const candidato = {
     return r.json()
   },
   meuArquivoUrl: (t, slotId) => `${BASE}/c/${t}/documentos/${slotId}/arquivo`,
+  // O PDF no timbrado (o que o RH recebe) — blob, para renderizar na tela em
+  // vez de mandar o navegador baixar.
+  meuArquivoPdf: (t, slotId) => req(`/c/${t}/documentos/${slotId}/arquivo`),
+  // O que a pessoa ENVIOU: a lista (frente, verso, páginas) e cada arquivo.
+  meusOriginais: (t, slotId) => req(`/c/${t}/documentos/${slotId}/originais`),
+  meuOriginal: (t, slotId, indice) =>
+    req(`/c/${t}/documentos/${slotId}/original/${indice}`),
   excluirArquivo: (t, slotId) =>
     req(`/c/${t}/documentos/${slotId}/arquivo`, { method: 'DELETE' }),
   concluirEnvio: (t) => req(`/c/${t}/concluir-envio`, { method: 'POST' }),

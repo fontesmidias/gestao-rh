@@ -24,6 +24,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Wizard de 6 etapas com autosave por campo** — fecha o navegador e continua depois; máscara de datas, busca de CEP, validação de CPF, nome social (Decreto 8.727/2016)
 - **Câmera guiada**: moldura por tipo de documento, semáforo de luz/foco, captura frente e verso, conferência antes do envio — sempre com a alternativa de enviar arquivo
 - **OCR** (Tesseract local, opcionalmente Mistral com chave própria) que *sugere* o preenchimento a partir do RG/CNH/CPF/comprovante — só com consentimento, nunca sobrescrevendo o que foi digitado
+- **"Ver o que enviei"**: cada documento enviado abre **na própria tela**, mostrando o arquivo *como a pessoa mandou* (todas as partes — frente, verso, páginas), com o PDF que o RH recebe a um toque de distância
 - **Testes comportamentais** antes do cadastro: inventário DISC e teste situacional, com timer e telemetria; o resultado é restrito ao RH
 
 ### Base de colaboradores e postos (RH)
