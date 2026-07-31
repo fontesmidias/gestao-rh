@@ -20,6 +20,11 @@ services:
       - db
       - redis
       - minio
+    environment:
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: api
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -32,6 +37,11 @@ services:
     depends_on:
       - redis
       - minio
+    environment:
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: worker
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -46,6 +56,11 @@ services:
     depends_on:
       - db
       - minio
+    environment:
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: expurgo
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -56,10 +71,15 @@ services:
   alertas:
     build: ../backend
     entrypoint: ["/bin/sh", "-c"]
-    command: ["while true; do python -m app.workers.alertas_telemetria; sleep 900; done"]
+    command: ["while true; do python -m app.workers.alertas_telemetria; python -m app.workers.logs_email; sleep 900; done"]
     env_file: ../.env
     depends_on:
       - db
+    environment:
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: alertas
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -96,5 +116,7 @@ networks:
   internal:
 
 volumes:
+  # Logs em arquivo (v2.29) — ver services/logs.py
+  logs-data:
   postgres-data:
   minio-data:

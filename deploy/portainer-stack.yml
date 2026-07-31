@@ -41,10 +41,14 @@ services:
       MAGIC_LINK_TTL_HOURS: ${MAGIC_LINK_TTL_HOURS:-72}
       OTP_TTL_MINUTES: ${OTP_TTL_MINUTES:-10}
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: api
     depends_on:
       - db
       - redis
       - minio
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -61,9 +65,13 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: worker
     depends_on:
       - redis
       - minio
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -79,9 +87,13 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: expurgo
     depends_on:
       - db
       - minio
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -92,7 +104,11 @@ services:
   alertas:
     image: ghcr.io/fontesmidias/gestao-rh-api:latest
     entrypoint: ["/bin/sh", "-c"]
-    command: ["while true; do python -m app.workers.alertas_telemetria; sleep 900; done"]
+    # O `logs_email` pega carona aqui (v2.29) em vez de ganhar container
+    # próprio: ele só ENVIA quando entra numa janela nova de 6h, então rodar a
+    # cada 15 min é barato e faz o envio sobreviver a reinício — um container
+    # que estava fora do ar às 12h ainda manda ao voltar.
+    command: ["while true; do python -m app.workers.alertas_telemetria; python -m app.workers.logs_email; sleep 900; done"]
     environment:
       SECRET_KEY: ${SECRET_KEY}
       # BASE_URL é obrigatório AQUI (e só aqui): o worker roda no cron, sem
@@ -104,8 +120,12 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: alertas
     depends_on:
       - db
+    volumes:
+      - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
 
@@ -164,3 +184,6 @@ networks:
 volumes:
   postgres-data:
   minio-data:
+  # Logs dos serviços em arquivo (v2.29): o `docker logs` morre no restart
+  # do container, e é dele que sai o diagnóstico quando alguém trava.
+  logs-data:

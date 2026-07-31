@@ -1131,6 +1131,27 @@ export const rh = {
   salvarTelemetriaRetencao: (dias) =>
     req('/rh/telemetria/retencao',
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dias }) }),
+  // Logs dos serviços (v2.29) — ler no painel, sem SSH.
+  logServicos: () => req('/rh/logs/servicos', { headers: authRH() }),
+  logLer: ({ servico, dia, busca, nivel, limite }) => {
+    const q = new URLSearchParams()
+    if (dia) q.set('dia', dia)
+    if (busca) q.set('busca', busca)
+    if (nivel) q.set('nivel', nivel)
+    if (limite) q.set('limite', String(limite))
+    const s = q.toString()
+    return req(`/rh/logs/${servico}${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  logBaixarUrl: (servico, dia) =>
+    `${BASE}/rh/logs/${servico}/baixar${dia ? `?dia=${encodeURIComponent(dia)}` : ''}`,
+  logBaixar: (servico, dia) =>
+    req(`/rh/logs/${servico}/baixar${dia ? `?dia=${encodeURIComponent(dia)}` : ''}`,
+        { headers: authRH() }),  // devolve blob
+  salvarLogRetencao: (dias) =>
+    req('/rh/logs/retencao',
+        { method: 'PUT', headers: authRH(), body: JSON.stringify({ dias }) }),
+  logEnviarAgora: () =>
+    req('/rh/logs/enviar-agora', { method: 'POST', headers: authRH() }),
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>
     req('/rh/config/assinantes', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

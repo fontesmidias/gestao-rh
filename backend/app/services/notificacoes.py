@@ -47,6 +47,13 @@ EVENTOS: list[dict] = [
                      "do reembolso-creche para análise.",
     },
     {
+        "chave": "logs_periodico",
+        "rotulo": "Logs dos serviços (4x ao dia)",
+        "descricao": "A cada 6 horas, com o resumo do período e os arquivos "
+                     "de log em anexo. Desligue este evento para parar de "
+                     "receber — a tela de Logs continua funcionando.",
+    },
+    {
         "chave": "talento_cadastrado",
         "rotulo": "Banco de Talentos: novo cadastro",
         "descricao": "Quando alguém se cadastra pelo formulário público do "
@@ -179,7 +186,7 @@ def destinatarios(db: Session, evento: str) -> list[str]:
 
 
 def avisar_modelo(db: Session, evento: str, chave_template: str,
-                  contexto: dict) -> int:
+                  contexto: dict, anexos: list[tuple[str, bytes]] | None = None) -> int:
     """Aviso interno com o texto vindo do CATÁLOGO de e-mails (v2.20).
 
     Mesma entrega de `avisar` (matriz de destinatários, nunca levanta), mas o
@@ -201,7 +208,7 @@ def avisar_modelo(db: Session, evento: str, chave_template: str,
     enviados = 0
     for endereco in destinatarios(db, evento):
         try:
-            enviar_email(endereco, assunto, corpo, html)
+            enviar_email(endereco, assunto, corpo, html, anexos=anexos)
             enviados += 1
         except Exception:
             log.warning("falha ao avisar %s sobre %s", endereco, evento, exc_info=True)

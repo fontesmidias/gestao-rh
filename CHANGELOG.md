@@ -11,6 +11,59 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.29.0] — 2026-07-30 — Logs no painel: ler sem SSH, receber por e-mail
+
+Pedido do Bruno no mesmo dia do incidente do Defender (v2.28), quando o
+diagnóstico só saiu porque ele abriu terminal na VPS: *"não seria o caso todos
+os logs de cada serviço ficarem armazenados em um arquivo, de modo que eu
+possa lê-los a qualquer momento, sem a necessidade de dar comandos no terminal
+SSH"* — e **"quero muito a tela de logs no painel"**.
+
+O motivo é concreto: **o log do container morre no restart**. Se a Keli tivesse
+travado um dia antes, não haveria rastro nenhum para ler.
+
+### Adicionado
+
+- **Tela `Configurações → 🧾 Logs dos serviços`**: escolhe o serviço e o dia,
+  procura no texto (ex.: os 4 últimos dígitos de um CPF), filtra por nível, e
+  **baixa em .txt**. Linhas de erro saem em vermelho e avisos em âmbar — é o
+  que o olho procura primeiro.
+- **Logs em arquivo** (`services/logs.py`): cada serviço escreve o próprio
+  arquivo num volume compartilhado, com rotação diária. O stdout continua
+  existindo (`docker logs` segue funcionando) — se o volume falhar, degrada
+  para ele em vez de derrubar o serviço.
+- **Envio por e-mail 4× ao dia** (`workers/logs_email.py`), a cada 6 horas, com
+  resumo do período e os arquivos em anexo. Entrega pela **matriz de avisos
+  internos** (evento `logs_periodico`), então os destinatários se editam na
+  tela, vários por vírgula — regra da v2.21 para e-mail novo. Botão
+  **"Enviar os logs agora"** para conferir sem esperar a janela.
+- **Retenção configurável, com `0` = indeterminado** (escolha explícita do
+  Bruno). O expurgo pega carona no worker diário e **nunca** apaga o log
+  corrente, só os rotacionados por dia.
+
+### Decisões
+
+- **Não montamos o socket do Docker.** Ler `docker logs` de dentro da API
+  exigiria `/var/run/docker.sock` no container — isso daria à API **controle
+  total do Docker do host**, e a API é justamente o que está exposto à
+  internet. Consequência aceita: aparecem aqui os serviços nossos (api,
+  worker, alertas, expurgo); Postgres e MinIO seguem no `docker logs`.
+- **LGPD**: estas linhas contêm CPF, e-mail e nome — foi o CPF completo no log
+  que permitiu achar a colaboradora travada. Antes eram voláteis; em arquivo,
+  viram dado pessoal armazenado. Por isso a retenção é configurável e **baixar
+  vai para a auditoria** (`logs_baixados`), como qualquer export de dado
+  pessoal.
+
+### Notas
+
+Coberto por `tests/test_logs.py`, **validado por mutação** (retenção 0 voltando
+a apagar e a validação de path traversal removida — as duas detectadas).
+Validado também contra a stack real: arquivo escrito, volume compartilhado
+entre containers, busca, download (2.974 bytes), `../../etc/passwd` barrado e
+e-mail entregue. Smoke 15/15.
+
+---
+
 ## [2.28.0] — 2026-07-30 — O antivírus do e-mail estava gastando o link antes da pessoa
 
 Uma colaboradora passou **seis horas** sem conseguir entrar no creche. Sete
