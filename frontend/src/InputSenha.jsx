@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
-// Campo de senha com o "olhinho" (👁 mostrar / ocultar). Aceita as mesmas
-// props de um <input> comum — troca só a apresentação.
+// Campo de senha com os macaquinhos: 🙈 quando o texto está OCULTO (ele tampa
+// os olhos, como o campo) e 🙊 quando está VISÍVEL — pedido do Bruno em
+// 2026-07-30, "um pouco de clima" na tela do RH. O emoji é decorativo
+// (`aria-hidden`); quem usa leitor de tela continua ouvindo o `aria-label`.
+// Aceita as mesmas props de um <input> comum — troca só a apresentação.
 export default function InputSenha(props) {
   const [visivel, setVisivel] = useState(false)
   return (
@@ -13,7 +16,7 @@ export default function InputSenha(props) {
               title={visivel ? 'Ocultar o que digitei' : 'Mostrar o que digitei'}
               aria-label={visivel ? 'Ocultar o que digitei' : 'Mostrar o que digitei'}
               onClick={() => setVisivel(!visivel)}>
-        <span aria-hidden="true">{visivel ? '🙈' : '👁️'}</span>
+        <span aria-hidden="true">{visivel ? '🙊' : '🙈'}</span>
       </button>
     </span>
   )

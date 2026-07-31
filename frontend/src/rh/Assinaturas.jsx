@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { Papeis, Assinantes } from './Config.jsx'
+import InputSenha from '../InputSenha.jsx'
 
 // Central de assinaturas (menu próprio): aguardando minha assinatura, o que já
 // assinei, e gerenciar todos os roteiros. Antes espalhado em "Minhas
@@ -161,8 +162,12 @@ function Pendentes() {
                 <td className="acoes-candidato">
                   {assinando === p.etapa_id ? (
                     <span className="rejeicao">
-                      <input type="password" placeholder="Sua senha" value={senha} autoFocus
-                             onChange={(e) => setSenha(e.target.value)} />
+                      {/* Único campo de senha do projeto que ainda era um
+                          <input> cru, sem o olhinho (2026-07-30). Assinar
+                          errando a senha por não conseguir conferir o que
+                          digitou é atrito à toa num ato jurídico. */}
+                      <InputSenha placeholder="Sua senha" value={senha} autoFocus
+                                  onChange={(e) => setSenha(e.target.value)} />
                       <button className="btn-principal btn-mini" onClick={async () => {
                         setMsg(null)
                         try {

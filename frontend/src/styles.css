@@ -682,6 +682,10 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-adicional input, .rh-adicional select { flex: 1; min-width: 90px; }
 .rejeicao { display: flex; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
 .rejeicao select, .rejeicao input { width: auto; flex: 1; }
+/* O campo de senha é um <span> que ENVOLVE o input (por causa do olhinho):
+   sem isto ele não cresce na linha e o campo fica espremido. */
+.rejeicao .campo-senha { flex: 1; }
+.rejeicao .campo-senha input { width: 100%; }
 
 /* Campo dentro de um `.rh-topo` (seletor de período ao lado do título): sem a
    margem inferior do `.campo`, que desalinharia o controle do cabeçalho. */
