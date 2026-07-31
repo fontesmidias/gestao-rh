@@ -218,7 +218,12 @@ export default function CrecheLink() {
       )}
 
       {etapa === 'sessao' && token && (
-        <SessaoCreche token={token} aoEnviar={() => setEtapa('enviado')}
+        // `aoEnviar` recebe o QUE aconteceu: quem declarou não ter criança não
+        // pode ler "se aprovado, você receberá as orientações" (v2.34) — não
+        // há pedido a aprovar, e a mensagem faria a pessoa esperar por um
+        // e-mail que nunca vem.
+        <SessaoCreche token={token}
+                      aoEnviar={(tipo) => setEtapa(tipo === 'sem_direito' ? 'declarado' : 'enviado')}
                       aoExpirar={() => { setToken(null); setEtapa('cpf') }} />
       )}
 
@@ -228,6 +233,17 @@ export default function CrecheLink() {
           <h2>Levantamento enviado!</h2>
           <p className="explica">Recebemos suas informações. O RH vai analisar a elegibilidade ao
             benefício e, se aprovado, você receberá as orientações por e-mail. Obrigado!</p>
+        </div>
+      )}
+
+      {etapa === 'declarado' && (
+        <div className="rh-card creche-card centro">
+          <div style={{ fontSize: '3rem' }}>📄</div>
+          <h2>Resposta registrada</h2>
+          <p className="explica">Você declarou que <strong>não tem</strong> criança de até 5 anos
+            e 11 meses. Obrigado por responder — fica registrado que você foi consultado(a).</p>
+          <p className="explica">Se isso mudar (nascimento, adoção ou guarda), procure o RH: o
+            levantamento pode ser reaberto a qualquer momento.</p>
         </div>
       )}
 
@@ -339,10 +355,20 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
   const [enviando, setEnviando] = useState(false)
   // form de nova criança
   const [nova, setNova] = useState({ nome: '', data_nascimento: '', parentesco: 'filho', tipo_comprovante: 'declaracao' })
+  // 'tenho' | 'nao_tenho' | null — a manifestação do colaborador (v2.34).
+  // Começa NULA de propósito: a pessoa tem que escolher, e não encontrar um
+  // formulário já aberto que ela ignora se não lhe disser respeito.
+  const [resposta, setResposta] = useState(null)
 
   // Link do e-mail vencido (7 dias) cai aqui: em vez de tela morta, volta ao
   // CPF — o caminho normal com 2FA continua valendo.
-  const recarregar = () => api.sessao(token).then(setDados).catch(() => {
+  const recarregar = () => api.sessao(token).then((d) => {
+    setDados(d)
+    // Quem JÁ tem criança cadastrada (ou voltou de uma devolução) não pode
+    // cair na pergunta zerada: ele já respondeu na prática, e obrigá-lo a
+    // responder de novo esconderia o trabalho que ele já fez.
+    if ((d.criancas || []).length) setResposta('tenho')
+  }).catch(() => {
     setErro('Este link expirou. Entre com seu CPF para continuar.')
     if (aoExpirar) aoExpirar()
   })
@@ -371,14 +397,20 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
         : 'Não foi possível enviar. Confira os dados.')
     } finally { setEnviando(false) }
   }
+  // A confirmação já está NA TELA (o texto da declaração + o botão), então não
+  // há `window.confirm` aqui: um alerta do navegador em cima de um texto que a
+  // pessoa acabou de ler é ruído, não segurança.
   const semDireito = async () => {
-    if (!window.confirm('Confirmar que você NÃO tem filhos ou dependentes de até 5 anos '
-      + 'que dão direito ao reembolso-creche?\n\nIsto encerra o levantamento sem pedido.')) return
     setErro(null); setEnviando(true)
-    try { await api.crecheSemDireito(token); aoEnviar() }
-    catch { setErro('Não foi possível registrar. Tente de novo.') }
-    finally { setEnviando(false) }
+    try { await api.crecheSemDireito(token); aoEnviar('sem_direito') }
+    catch (e) {
+      setErro(e.detail === 'ha_criancas_cadastradas'
+        ? 'Você já cadastrou uma criança abaixo. Remova-a antes de declarar que não tem.'
+        : 'Não foi possível registrar. Tente de novo.')
+    } finally { setEnviando(false) }
   }
+
+  const temCriancas = (dados?.criancas || []).length > 0
 
   if (!dados) return <div className="rh-card creche-card"><p>Carregando…</p></div>
   if (dados.status !== 'levantamento') {
@@ -395,6 +427,49 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
           Corrija o que for necessário abaixo e reenvie.
         </div>
       )}
+      {/* A PERGUNTA vem primeiro (v2.34, pedido do Bruno): "que a pessoa
+          manifeste que de fato tem ou não tem crianças, e não simplesmente
+          entre no link e, como não tem, não faça nada e saia". Antes, quem não
+          tinha filho abria a tela, via um formulário que não lhe dizia
+          respeito e ia embora — e "não respondeu" ficava igual a "não tem
+          direito" na planilha do RH. */}
+      <div className="rh-card creche-card">
+        <h2>Você tem criança que dá direito ao benefício?</h2>
+        <p className="explica">O reembolso-creche vale para filho(a), enteado(a) ou criança sob
+          sua guarda judicial <strong>de até 5 anos e 11 meses</strong>. Responda abaixo — mesmo
+          que a resposta seja "não", a sua manifestação fica registrada.</p>
+        <div className="creche-escolha">
+          <button type="button"
+                  className={resposta === 'tenho' ? 'btn-principal' : 'btn-secundario'}
+                  onClick={() => setResposta('tenho')}>
+            ✅ Sim, tenho — quero solicitar</button>
+          <button type="button"
+                  className={resposta === 'nao_tenho' ? 'btn-principal' : 'btn-secundario'}
+                  disabled={temCriancas}
+                  title={temCriancas
+                    ? 'Você já cadastrou uma criança abaixo — remova-a antes de declarar que não tem.'
+                    : undefined}
+                  onClick={() => setResposta('nao_tenho')}>
+            🚫 Não tenho criança nessa idade</button>
+        </div>
+        {resposta === 'nao_tenho' && (
+          <div className="creche-declaracao">
+            <p className="explica">Você declara que <strong>não possui</strong> filho(a),
+              enteado(a) ou criança sob guarda de até 5 anos e 11 meses. O levantamento é
+              encerrado sem pedido, e fica registrado que você foi consultado(a) e respondeu.</p>
+            <p className="explica"><strong>Isso não é definitivo.</strong> Se você passar a ter
+              uma criança nessa idade, procure o RH — o pedido pode ser reaberto a qualquer
+              momento.</p>
+            {erro && <div className="alerta">{erro}</div>}
+            <button className="btn-principal" disabled={enviando} onClick={semDireito}>
+              {enviando ? 'Registrando…' : 'Confirmar que não tenho'}</button>
+            <button type="button" className="btn-link" disabled={enviando}
+                    onClick={() => setResposta(null)}>← voltar</button>
+          </div>
+        )}
+      </div>
+
+      {resposta !== 'tenho' ? null : (<>
       <div className="rh-card creche-card">
         <h2>Seus dados de contato</h2>
         <p className="explica">Confira o que já temos e <strong>complete o que estiver em branco</strong>.
@@ -466,11 +541,10 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
       <button className="btn-principal creche-enviar" disabled={enviando || !(dados.criancas || []).length}
               onClick={enviar}>
         {enviando ? 'Enviando…' : 'Enviar levantamento'}</button>
-      <p className="explica centro" style={{ marginTop: '.8rem' }}>
-        Não tem filhos ou dependentes de até 5 anos?{' '}
-        <button className="btn-link" onClick={semDireito} disabled={enviando}>
-          Declarar que não tenho direito ao benefício</button>
-      </p>
+      {/* O "não tenho" saiu daqui (v2.34): era um link de texto pequeno DEPOIS
+          do botão principal, num cartão chamado "Crianças" — quem não tinha
+          filho nunca chegava até ele. Virou uma das duas respostas no topo. */}
+      </>)}
     </div>
   )
 }

@@ -979,6 +979,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   sobrescrito no mesmo registro, então **o último enviado continua valendo
   depois do 429** (é o que autoriza a orientação na tela); no creche/portal o
   registro era outro, e por isso o defeito lá era grave.
+- **Creche: a pessoa MANIFESTA, não some em silêncio** (v2.34, pedido do Bruno
+  2026-07-30): o link abre com a PERGUNTA ("você tem criança que dá direito?")
+  e as duas respostas lado a lado, com o mesmo peso; o formulário só aparece
+  depois da escolha. Antes, o "não tenho" era um `btn-link` de texto pequeno
+  DEPOIS do botão de enviar, dentro do cartão "Crianças" — quem não tinha filho
+  nunca chegava lá. **O motivo é jurídico**: sem manifestação, "não respondeu"
+  e "não tem direito" são a MESMA linha em branco, e não se prova que o
+  elegível foi consultado. Regras: `sem_direito` registra quem/quando/IP;
+  **409 `ha_criancas_cadastradas`** (o registro não pode contradizer o dado ao
+  lado); a declaração é REVERSÍVEL pelo `/reabrir` (quem não tem filho hoje
+  pode ter amanhã); e quem declara vê tela PRÓPRIA ("Resposta registrada"), não
+  a de "Levantamento enviado" — que faria esperar um e-mail que nunca vem. No
+  painel, o quadro `elegíveis · responderam · declararam não ter · faltam`
+  aparece SEMPRE, inclusive com zero pendentes. "Declarou que não tem" conta
+  como resposta; levantamento aberto e nunca enviado NÃO conta.
 - **Documento RENDERIZA na tela — `VisualizadorArquivo`** (v2.33,
   `frontend/src/VisualizadorArquivo.jsx`): PDF, imagem e Word (convertido) num
   componente só, dentro do painel da linha, com Baixar/Fechar. Regra do Bruno:

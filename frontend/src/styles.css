@@ -1381,6 +1381,14 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 }
 .creche-card.centro { text-align: center; }
 .creche-card h2 { margin-top: 0; }
+/* As DUAS respostas do levantamento, lado a lado e com o mesmo peso visual
+   (v2.34): a pessoa escolhe, em vez de encontrar um formulário já aberto e ir
+   embora se ele não lhe disser respeito. No celular empilham. */
+.creche-escolha { display: flex; gap: var(--esp-3); flex-wrap: wrap;
+                  margin-top: var(--esp-4); }
+.creche-escolha button { flex: 1 1 15rem; }
+.creche-declaracao { margin-top: var(--esp-4); padding-top: var(--esp-4);
+                     border-top: 1px solid var(--borda); }
 .creche-dados { display: grid; gap: .7rem; }
 .creche-dados > div { display: flex; flex-direction: column; }
 .creche-sessao { display: flex; flex-direction: column; }

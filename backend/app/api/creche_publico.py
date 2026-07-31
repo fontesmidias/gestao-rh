@@ -664,18 +664,44 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/creche/sessao/{token}/sem-direito")
-def declarar_sem_direito(token: str, db: Session = Depends(get_db)) -> dict:
-    """O colaborador declara que NÃO tem dependentes que dão direito ao benefício
-    (feedback 2026-07-21). Some da fila de ação, mas fica no relatório do RH como
-    'consultado e não pediu'. Só quando ainda está preenchendo (levantamento)."""
+def declarar_sem_direito(token: str, request: Request,
+                         db: Session = Depends(get_db)) -> dict:
+    """O colaborador DECLARA que não tem criança elegível ao benefício.
+
+    Deixou de ser uma saída discreta e passou a ser uma das DUAS respostas
+    possíveis, lado a lado, no topo do link (v2.34 — pedido do Bruno em
+    2026-07-30):
+
+        *"eu quero fazer um movimento que a pessoa manifeste que de fato tem ou
+        não tem crianças, e não simplesmente entrar no link e, como não tem, não
+        fazer nada e sair. E hoje a pessoa pode não ter filhos, mas amanhã pode
+        ter — então é importante deixar tudo bem registrado."*
+
+    A diferença é jurídica, não cosmética: sem manifestação, "não respondeu" e
+    "não tem direito" são a MESMA linha em branco na planilha, e daqui a dois
+    anos ninguém consegue demonstrar que o elegível foi consultado. Por isso o
+    registro guarda **quem, quando e por qual caminho** — e a auditoria fica
+    com o IP, que é o que sustenta a declaração se ela for contestada.
+
+    Reversível de propósito: quem passa a ter filho usa o mesmo link (o RH
+    reabre em `/reabrir`). Declarar hoje não fecha a porta amanhã.
+    """
     _, ben = _requer_sessao(token, db)
     if ben.status != StatusBeneficio.levantamento:
         raise HTTPException(status_code=409, detail="levantamento_encerrado")
+    # Guarda de coerência: quem já cadastrou criança não pode declarar que não
+    # tem nenhuma sem antes removê-las — senão o registro contradiz o dado ao
+    # lado dele, e é o registro que o RH vai usar como prova.
+    if ben.criancas:
+        raise HTTPException(status_code=409, detail="ha_criancas_cadastradas")
     ben.status = StatusBeneficio.sem_direito_declarado
     ben.sem_direito_em = datetime.now(timezone.utc)
     ben.sem_direito_por = "colaborador"
+    col = db.get(Candidato, ben.candidato_id)
     registrar(db, "creche_sem_direito", ator="colaborador",
-              candidato_id=ben.candidato_id, detalhe={"por": "colaborador"})
+              candidato_id=ben.candidato_id,
+              detalhe={"por": "colaborador", "nome": col.nome_completo if col else None,
+                       "ip": ip_do_cliente(request)})
     db.commit()
     return {"status": ben.status}
 

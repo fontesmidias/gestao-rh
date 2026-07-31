@@ -119,7 +119,14 @@ function SemAcesso() {
 // Elegíveis que ainda NÃO responderam — prova de consulta p/ os órgãos + cobrança.
 function Pendentes() {
   const [lista, setLista] = useState(null)
-  useEffect(() => { api.crechePendentesResposta().then(setLista).catch(() => setLista([])) }, [])
+  const [resumo, setResumo] = useState(null)
+  useEffect(() => {
+    api.crechePendentesResposta().then(setLista).catch(() => setLista([]))
+    // O quadro fechado (v2.34): consultei X, responderam Y, faltam Z. Sem ele,
+    // o RH via o total num lugar e os pendentes em outro, e a pergunta do órgão
+    // — "vocês consultaram todos?" — não tinha resposta de uma linha.
+    api.crecheResumo().then(setResumo).catch(() => {})
+  }, [])
   const exportarCsv = () => {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`
     const linhas = [['Nome', 'CPF', 'Matrícula', 'E-mail', 'Posto', 'Situação'].map(esc).join(';'),
@@ -130,8 +137,30 @@ function Pendentes() {
     a.download = `creche-pendentes-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
   }
   if (!lista) return <p>Carregando…</p>
-  if (!lista.length) return <p className="explica centro">Todos os elegíveis responderam. 🎉</p>
+
+  // O quadro aparece SEMPRE — inclusive quando não falta ninguém, que é
+  // justamente quando o RH precisa dele para provar que consultou todos.
+  const quadro = resumo && (
+    <div className="rh-metricas">
+      <div className="rh-metrica">
+        <strong>{resumo.colaboradores_em_postos_elegiveis}</strong><span>Elegíveis</span></div>
+      <div className="rh-metrica">
+        <strong>{resumo.responderam}</strong><span>Responderam</span></div>
+      <div className="rh-metrica">
+        <strong>{resumo.declararam_sem_direito}</strong><span>Declararam não ter</span></div>
+      <div className="rh-metrica">
+        <strong>{resumo.faltam_responder}</strong><span>Faltam responder</span></div>
+    </div>
+  )
+
+  if (!lista.length) {
+    return (<>
+      {quadro}
+      <p className="explica centro">Todos os elegíveis responderam. 🎉</p>
+    </>)
+  }
   return (<>
+    {quadro}
     <div className="rh-card rh-lote">
       <button className="btn-principal btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
       <span className="explica" style={{ margin: 0 }}><strong>{lista.length}</strong> colaborador(es)
