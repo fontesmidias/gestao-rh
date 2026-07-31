@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.36.0] — 2026-07-31 — Telemetria com nome: de estatística a atendimento
+
+Termina a v2.24. A telemetria é **identificada** por decisão do Bruno — o caso
+de uso é *"a pessoa ligou dizendo que não consegue"* —, o backend gravava o
+vínculo desde o primeiro dia… e a tela geral não mostrava de **quem** era o
+evento. O RH via o erro e não sabia a quem telefonar; só existia o caminho
+inverso (abrir a ficha e olhar), que exige já saber quem procurar.
+
+### Adicionado
+
+- **Coluna "Pessoa"** na lista de eventos, com **link para a ficha**. Evento do
+  painel mostra o usuário do RH; visita pública fica sem nome — identificar
+  quem não se identificou seria inventar vínculo. O nome vem em **lote** (3
+  consultas no total, não uma por linha).
+- **Export de jornada** (`/rh/telemetria/jornada.csv`): os eventos do período
+  em ordem **cronológica**, com as três primeiras colunas no formato que as
+  ferramentas de análise de caminho esperam — `user_id,event,timestamp`. A
+  tela responde *está quebrando?*, *onde travam?* e *o que está lento?*; não
+  responde *por onde passaram antes de desistir*, e trazer essa análise para
+  dentro do painel significaria pandas e biblioteca de gráficos na imagem por
+  uma pergunta ocasional. O arquivo sai daqui e a análise roda onde quiserem.
+  Vai para a **auditoria**: leva nome de gente real para fora do servidor,
+  como o download de log (v2.29).
+- **O talento passa a ser identificado de verdade**: `definirContexto` só era
+  chamado com `origem`/`token`, nunca com o talento — ou seja, o campo
+  `talento_id` **nunca era gravado** e o painel da ficha do talento consultava
+  algo que não existia. Agora o formulário público liga o contexto assim que o
+  cadastro nasce, e o envio do currículo (onde mais se trava) fica ligado à
+  pessoa.
+
+### Corrigido
+
+- **Segurança: identidade de talento agora exige PROVA.** A rota de coleta é
+  pública e aceitava um `talento_id` cru vindo do navegador — bastava
+  conhecer um id para pendurar eventos na jornada de outra pessoa, e o RH
+  leria aquilo como o comportamento dela (pior do que não ter registro). O
+  contrato passou a receber o `upload_token` do cadastro — assinado, com
+  prazo, já existente — e o id sem prova **não vincula**: o evento é
+  registrado, mas de ninguém. Mesma regra que já valia para o token do
+  candidato.
+- `catch {}` mudo no envio do currículo do Banco de Talentos: falhar em
+  silêncio escondia justamente o problema que a telemetria existe para achar
+  (a lição da v2.02). Virou fricção registrada.
+
+### Notas
+
+Coberto por `tests/test_telemetria.py` (nome na listagem, anonimato de quem
+não se identificou, ausência de N+1, prova do talento, ordem e corte do
+export), **validado por mutação** nas três garantias centrais — listagem sem
+nome, `talento_id` cru aceito e CSV em ordem invertida. Smoke 15/15,
+`npm run build` limpo.
+
+O corte do export é **anunciado** na tela (`X-Telemetria-Truncado`): silêncio
+faria o RH analisar um pedaço achando que era o período inteiro.
+
 ## [2.35.0] — 2026-07-31 — "Ver o que enviei" mostra o que a pessoa enviou
 
 Fecha o último item da leva de 2026-07-30. O botão **"👁 Ver o que enviei"**

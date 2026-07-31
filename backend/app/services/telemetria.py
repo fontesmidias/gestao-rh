@@ -229,12 +229,54 @@ def da_pessoa(db: Session, *, candidato_id: uuid.UUID | None = None,
     return [_serializar(e) for e in eventos]
 
 
-def listar(db: Session, *, tipo: str | None = None, origem: str | None = None,
-           evento: str | None = None, pagina: str | None = None,
-           desde: datetime | None = None, ate: datetime | None = None,
-           limite: int = 300) -> list[dict]:
-    """Consulta geral, com os filtros da aba de Telemetria."""
-    q = select(EventoTelemetria)
+def anexar_pessoa(db: Session, eventos: list[dict]) -> list[dict]:
+    """Preenche `pessoa` (o NOME) em cada evento — em DUAS consultas, nunca uma
+    por linha.
+
+    A telemetria é identificada por decisão do Bruno (v2.24): o caso de uso é
+    "a pessoa ligou dizendo que não consegue", e agregado não responde isso. Só
+    que a tela geral mostrava `candidato_id`/`talento_id` em lugar nenhum — o
+    RH via o erro e não sabia de quem era, o que reduzia a lista a uma
+    curiosidade estatística.
+
+    Quem não tem pessoa vinculada mostra o usuário do RH (quando o evento veio
+    do painel); o resto fica sem nome mesmo — visita pública é anônima e tem
+    que continuar sendo.
+    """
+    ids_cand = {e["candidato_id"] for e in eventos if e.get("candidato_id")}
+    ids_tal = {e["talento_id"] for e in eventos if e.get("talento_id")}
+    nomes_c: dict = {}
+    nomes_t: dict = {}
+    if ids_cand:
+        from app.models.candidato import Candidato
+        nomes_c = dict(db.execute(
+            select(Candidato.id, Candidato.nome_completo)
+            .where(Candidato.id.in_(ids_cand))).all())
+    if ids_tal:
+        from app.models.talento import Talento
+        nomes_t = dict(db.execute(
+            select(Talento.id, Talento.nome).where(Talento.id.in_(ids_tal))).all())
+
+    for e in eventos:
+        nome = nomes_c.get(e.get("candidato_id")) or nomes_t.get(e.get("talento_id"))
+        if nome:
+            e["pessoa"] = nome
+            e["pessoa_tipo"] = ("candidato" if nomes_c.get(e.get("candidato_id"))
+                                else "talento")
+        elif e.get("usuario_rh"):
+            e["pessoa"] = e["usuario_rh"]
+            e["pessoa_tipo"] = "rh"
+        else:
+            e["pessoa"] = None
+            e["pessoa_tipo"] = None
+    return eventos
+
+
+def _filtrar(q, *, tipo: str | None, origem: str | None, evento: str | None,
+             pagina: str | None, desde: datetime | None, ate: datetime | None):
+    """Filtros da aba, num lugar só — a listagem e o export de jornada
+    precisam recortar o MESMO conjunto, senão o arquivo baixado não bate com o
+    que está na tela."""
     if tipo:
         q = q.where(EventoTelemetria.tipo == tipo)
     if origem:
@@ -247,9 +289,77 @@ def listar(db: Session, *, tipo: str | None = None, origem: str | None = None,
         q = q.where(EventoTelemetria.criado_em >= desde)
     if ate:
         q = q.where(EventoTelemetria.criado_em <= ate)
+    return q
+
+
+def listar(db: Session, *, tipo: str | None = None, origem: str | None = None,
+           evento: str | None = None, pagina: str | None = None,
+           desde: datetime | None = None, ate: datetime | None = None,
+           limite: int = 300) -> list[dict]:
+    """Consulta geral, com os filtros da aba de Telemetria."""
+    q = _filtrar(select(EventoTelemetria), tipo=tipo, origem=origem, evento=evento,
+                 pagina=pagina, desde=desde, ate=ate)
     eventos = db.scalars(
         q.order_by(EventoTelemetria.criado_em.desc()).limit(min(limite, 1000))).all()
-    return [_serializar(e) for e in eventos]
+    return anexar_pessoa(db, [_serializar(e) for e in eventos])
+
+
+# Teto do export de jornada. Alto o bastante para meses de uso real e baixo o
+# bastante para não montar um arquivo de centenas de MB em memória. Quando
+# corta, a tela DIZ que cortou — corte silencioso faria o RH analisar um
+# pedaço achando que é o todo.
+MAX_LINHAS_JORNADA = 50_000
+
+
+def jornada_csv(db: Session, *, dias: int = 30, origem: str | None = None,
+                limite: int = MAX_LINHAS_JORNADA) -> tuple[str, int, bool]:
+    """Eventos em ordem CRONOLÓGICA, no formato de análise de jornada.
+
+    Devolve `(csv, linhas, truncado)`. As três primeiras colunas são
+    `user_id,event,timestamp` — o trio que as ferramentas de análise de
+    caminho (retentioneering e afins) esperam, sem precisar de nada instalado
+    no servidor: o arquivo sai daqui e a análise roda onde a pessoa quiser.
+
+    `user_id` é a PESSOA quando ela é conhecida (é o que permite seguir alguém
+    de talento a colaborador) e a sessão quando não é — visita pública continua
+    anônima.
+
+    Separador `;` e BOM, como todo CSV do projeto (abre no Excel-BR com dois
+    cliques). Em pandas: `read_csv(..., sep=';')`.
+    """
+    corte = datetime.now(timezone.utc) - timedelta(days=max(1, dias))
+    q = _filtrar(select(EventoTelemetria), tipo=None, origem=origem, evento=None,
+                 pagina=None, desde=corte, ate=None)
+    eventos = db.scalars(
+        q.order_by(EventoTelemetria.criado_em).limit(min(limite, MAX_LINHAS_JORNADA) + 1)
+    ).all()
+    truncado = len(eventos) > min(limite, MAX_LINHAS_JORNADA)
+    eventos = eventos[:min(limite, MAX_LINHAS_JORNADA)]
+    dados = anexar_pessoa(db, [_serializar(e) for e in eventos])
+
+    import csv
+    import io
+
+    saida = io.StringIO()
+    escritor = csv.writer(saida, delimiter=";", lineterminator="\n")
+    escritor.writerow(["user_id", "event", "timestamp", "pessoa", "tipo",
+                       "origem", "pagina", "duracao_ms", "versao"])
+    for e in dados:
+        if e.get("candidato_id"):
+            user = f"candidato:{e['candidato_id']}"
+        elif e.get("talento_id"):
+            user = f"talento:{e['talento_id']}"
+        elif e.get("usuario_rh"):
+            user = f"rh:{e['usuario_rh']}"
+        else:
+            user = f"sessao:{e.get('sessao') or 'desconhecida'}"
+        quando = e["quando"]
+        escritor.writerow([
+            user, e["evento"], quando.isoformat() if quando else "",
+            e.get("pessoa") or "", e["tipo"], e["origem"], e.get("pagina") or "",
+            e.get("duracao_ms") or "", e.get("versao") or "",
+        ])
+    return "﻿" + saida.getvalue(), len(dados), truncado
 
 
 def resumo(db: Session, dias: int = 7) -> dict:

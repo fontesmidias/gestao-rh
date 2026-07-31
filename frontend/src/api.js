@@ -1136,6 +1136,19 @@ export const rh = {
   telemetriaExpurgar: (dados) =>
     req('/rh/telemetria/expurgar',
         { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // Export de jornada (v2.36): CSV cronológico para análise de caminho fora do
+  // painel. Precisa do fetch cru porque o front lê os cabeçalhos — quantas
+  // linhas vieram e se o período foi cortado.
+  telemetriaJornadaCsv: async ({ dias = 30, origem = '' } = {}) => {
+    const q = new URLSearchParams({ dias, ...(origem ? { origem } : {}) })
+    const r = await buscar(`${BASE}/rh/telemetria/jornada.csv?${q}`, { headers: authRH() })
+    if (!r.ok) await lancarErro(r)
+    return {
+      blob: await r.blob(),
+      linhas: Number(r.headers.get('X-Telemetria-Linhas') || 0),
+      truncado: r.headers.get('X-Telemetria-Truncado') === '1',
+    }
+  },
   // Alertas: regras editáveis que fazem o sistema AVISAR (v2.25)
   alertaRegras: () => req('/rh/telemetria/alertas/regras', { headers: authRH() }),
   criarAlertaRegra: (dados) =>

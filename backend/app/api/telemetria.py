@@ -11,7 +11,7 @@ A consulta é restrita ao RH, como todo o resto do painel.
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -42,7 +42,10 @@ class LoteIn(BaseModel):
     origem: str = "publico"
     # Token do link mágico, quando é candidato: identifica sem exigir login.
     token: str | None = Field(default=None, max_length=100)
-    talento_id: uuid.UUID | None = None
+    # Talento: o `upload_token` do cadastro, NUNCA o id cru (v2.36). A rota é
+    # pública — um id sem prova deixaria qualquer um pendurar eventos na
+    # jornada de outra pessoa, e o RH leria aquilo como comportamento dela.
+    talento_token: str | None = Field(default=None, max_length=400)
 
 
 @router.post("/telemetria", status_code=202)
@@ -74,6 +77,13 @@ def coletar(payload: LoteIn, request: Request,
         else:
             origem = "publico"      # token inválido não vira evento de ninguém
 
+    # Mesma regra do token do candidato: sem prova, o evento é de ninguém —
+    # some a identificação, não o registro.
+    from app.api.talentos import talento_do_upload_token
+    talento_id = talento_do_upload_token(payload.talento_token)
+    if talento_id is not None and candidato_id is None:
+        origem = "talento"
+
     # `rh` só é aceito com autenticação — senão qualquer um poluiria a visão do
     # painel fingindo ser o RH.
     if origem == "rh":
@@ -81,7 +91,7 @@ def coletar(payload: LoteIn, request: Request,
 
     n = tel.registrar_eventos(
         db, [e.model_dump() for e in payload.eventos],
-        origem=origem, candidato_id=candidato_id, talento_id=payload.talento_id,
+        origem=origem, candidato_id=candidato_id, talento_id=talento_id,
         sessao=payload.sessao, user_agent=request.headers.get("user-agent"), ip=ip,
     )
     if n:
@@ -125,6 +135,39 @@ def listar(tipo: str | None = None, origem: str | None = None,
     desde = (datetime.now(timezone.utc) - timedelta(days=dias)) if dias else None
     return tel.listar(db, tipo=tipo, origem=origem, evento=evento,
                       pagina=pagina, desde=desde, limite=limite)
+
+
+@router.get("/rh/telemetria/jornada.csv")
+def exportar_jornada(dias: int = 30, origem: str | None = None,
+                     db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Os eventos em ordem cronológica, para análise de CAMINHO fora daqui.
+
+    A tela responde "está quebrando?", "onde travam?" e "o que está lento?".
+    Não responde "por onde as pessoas passam antes de desistir" — isso é
+    análise de sequência, e fazê-la no painel significaria trazer pandas e uma
+    biblioteca de gráficos para dentro da imagem, para uma pergunta que se faz
+    de vez em quando. O arquivo sai daqui no formato que essas ferramentas
+    esperam (`user_id,event,timestamp`) e a análise roda onde quiserem.
+
+    Vai para a AUDITORIA: leva nome de gente real para fora do servidor, como
+    o download de log (v2.29).
+    """
+    from app.services.auditoria import registrar
+
+    csv_txt, linhas, truncado = tel.jornada_csv(db, dias=min(max(dias, 1), 365),
+                                                origem=origem)
+    registrar(db, "telemetria_jornada_exportada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"dias": dias, "origem": origem, "linhas": linhas,
+                       "truncado": truncado})
+    db.commit()
+    return Response(
+        content=csv_txt, media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="jornada-{dias}d.csv"',
+                 # A tela avisa quando cortou: corte silencioso faria o RH
+                 # analisar um pedaço achando que é o período inteiro.
+                 "X-Telemetria-Linhas": str(linhas),
+                 "X-Telemetria-Truncado": "1" if truncado else "0"})
 
 
 @router.get("/rh/telemetria/pessoa")

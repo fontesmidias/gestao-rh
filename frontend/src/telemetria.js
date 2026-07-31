@@ -17,7 +17,11 @@
 
 const FILA = []
 let temporizador = null
-let contexto = { origem: 'publico', token: null, talentoId: null }
+// `talentoToken` é o `upload_token` que o cadastro devolve — NUNCA o id do
+// talento. A rota de coleta é pública: um id cru pendurado no corpo deixaria
+// qualquer um escrever na jornada de outra pessoa, e o RH leria aquilo como
+// comportamento dela (v2.36).
+let contexto = { origem: 'publico', token: null, talentoToken: null }
 
 // Sessão anônima: liga os eventos de uma MESMA visita sem identificar ninguém.
 // Vive só na aba (sessionStorage) — fechou, acabou.
@@ -59,7 +63,7 @@ async function enviar() {
   const lote = FILA.splice(0, 50)
   const corpo = JSON.stringify({
     eventos: lote, sessao: SESSAO, origem: contexto.origem,
-    token: contexto.token, talento_id: contexto.talentoId,
+    token: contexto.token, talento_token: contexto.talentoToken,
   })
   try {
     // A rota do painel identifica o usuário do RH; a pública, não.
@@ -126,7 +130,8 @@ export function instalarCapturaGlobal() {
     try {
       navigator.sendBeacon?.('/api/telemetria', new Blob([JSON.stringify({
         eventos: FILA.splice(0, 50), sessao: SESSAO,
-        origem: contexto.origem, token: contexto.token, talento_id: contexto.talentoId,
+        origem: contexto.origem, token: contexto.token,
+        talento_token: contexto.talentoToken,
       })], { type: 'application/json' }))
     } catch { /* ignora */ }
   }

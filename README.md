@@ -83,6 +83,8 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Individualizada na ficha da pessoa** (candidato, colaborador, talento): responde *"não consigo enviar meus documentos"* com fato, não com suposição
 - **Aba própria** (Configurações → 📈 Telemetria) com os erros **agrupados** por mensagem — 300 ocorrências do mesmo erro são um problema, não trezentos — e as páginas lentas por **mediana**, que é o que a maioria realmente espera
 - **O sistema avisa você** — não espera alguém abrir a tela: a cada 15 minutos ele verifica e manda e-mail quando um erro **novo** aparece, quando um erro conhecido dispara de volume, quando muita gente trava no mesmo ponto ou quando uma página fica lenta. As regras e os limites são editáveis no painel, e quem recebe sai da mesma matriz de Avisos internos
+- **Com nome e link para a ficha**: a lista de eventos diz de *quem* é cada linha e abre a pessoa em um clique — quem não se identificou continua anônimo
+- **Export de jornada** em CSV cronológico (`user_id,event,timestamp`), para analisar por onde as pessoas passam antes de concluir — ou de desistir — em qualquer ferramenta de análise de caminho, sem nada instalado no servidor
 - **Retenção configurável** (padrão 1 ano), expurgo diário automático e limpeza por intervalo de datas
 - **Minimizada por desenho**: nada do que a pessoa digita, IP truncado (`191.180.x.x`) e token do link mágico mascarado — ele é credencial de acesso
 
