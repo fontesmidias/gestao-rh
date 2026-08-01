@@ -11,6 +11,60 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.37.0] — 2026-08-01 — O endereço estava no banco e faltava no papel
+
+Feedback do Bruno:
+
+> *"No Termo de opção de VT, no campo Endereço Residencial, deve constar o
+> endereço completo, pois está vindo apenas a cidade, estado e cep — cadê os
+> outros dados que já foram coletados?"*
+
+Estavam coletados, sim. O endereço mora no banco em **dois formatos**: a string
+única legada (`logradouro_numero_complemento`) e os campos separados —
+logradouro, número, complemento — que a integração com o Tirvu exigiu. Quem
+preenche a ficha hoje grava o formato **atual** e deixa o legado nulo; nada
+sincroniza os dois. Quatro geradores liam só o legado e imprimiam um traço no
+lugar da rua.
+
+É a mesma armadilha dos dois formatos de data do creche (v2.27), noutro campo:
+**leia os dois, nunca migre em lote.**
+
+### Corrigido
+
+- **Termo de Opção pelo VT** — o endereço é o objeto da declaração ("resido no
+  endereço acima informado, assumindo inteira responsabilidade pela
+  veracidade") e do desconto de 6% em folha. Sai completo.
+- **Ficha de emergência** — endereço residencial.
+- **Ficha cadastral do terceirizado** (kit Presidência/INFRAERO).
+- **Ofício de apresentação à Presidência** — o endereço caía na linha de
+  pontinhos de preencher à mão, com o dado inteiro guardado no banco ao lado.
+- **Planilha geral do RH** (`export_planilha`) — a coluna Endereço saía vazia.
+- **CEP com hífen** nos documentos (`72215-342`, não `72215342`) — achado na
+  conferência visual do PDF, não em teste: o banco guarda só os dígitos, o que
+  está certo para armazenar e parece dado sujo no papel.
+
+### Notas
+
+A leitura dos dois formatos passou a viver num lugar só,
+`services/endereco.py` — `rua()` para quem já imprime bairro/cidade/CEP em
+campos próprios, `completo()` para texto corrido. Parte ausente é **omitida**,
+não vira traço: "Rua X, 123, -, Brasília/DF" parece defeito.
+
+**A ficha cadastral principal e a autodeclaração de residência já tratavam os
+dois formatos** e não foram tocadas — o teste garante que continuam iguais.
+
+Por decisão do Bruno, **documentos já assinados não são reemitidos**: o dado
+completo sempre esteve no banco, na tela e no export do Tirvu, e obrigar quem
+já assinou a assinar de novo por um erro de impressão nosso custaria mais do
+que resolve. Daqui em diante todo PDF gerado sai certo — inclusive a reemissão
+de quem assinou, quando ela acontecer por outro motivo.
+
+Coberto por `tests/test_endereco_documentos.py`, **validado por mutação** nas
+duas direções (esquecer o formato atual reproduz o defeito relatado, letra por
+letra: *"Ceilândia Norte, Brasília/DF — CEP …"*; esquecer o legado quebra as
+fichas antigas). Smoke 15/15 e **conferência visual do PDF** — que foi o que
+revelou o CEP sem máscara.
+
 ## [2.36.0] — 2026-07-31 — Telemetria com nome: de estatística a atendimento
 
 Termina a v2.24. A telemetria é **identificada** por decisão do Bruno — o caso

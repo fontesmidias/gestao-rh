@@ -19,6 +19,7 @@ from app.models.ficha import (ContatoEmergencia, DadosPessoais,
                               DadosProfissionaisBancarios, Dependente,
                               DocumentosIdentificacao, Endereco, FichaEmergencia,
                               ValeTransporte)
+from app.services.endereco import rua as endereco_rua
 
 # Nomes reservados do Windows (o RH abre o ZIP no Windows).
 _RESERVADOS_WINDOWS = {
@@ -89,7 +90,10 @@ def linha_completa(db: Session, c: Candidato) -> dict:
         })
     if e:
         linha.update({
-            "CEP": _fmt(e.cep), "Endereço": _fmt(e.logradouro_numero_complemento),
+            # Lê os dois formatos do banco (ver services/endereco.py): quem
+            # preencheu na coleta atual tem a string legada nula, e a planilha
+            # do RH saía com a coluna Endereço vazia.
+            "CEP": _fmt(e.cep), "Endereço": _fmt(endereco_rua(e)),
             "Bairro": _fmt(e.bairro), "Cidade": _fmt(e.cidade), "UF": _fmt(e.uf),
         })
     if d:
