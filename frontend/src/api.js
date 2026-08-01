@@ -473,6 +473,15 @@ export const rh = {
     req('/rh/tirvu-txt/confirmar-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   confirmarJornadasTirvu: ({ itens }) =>
     req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
+  // Vínculo em massa (v2.39): a planilha de Colaboradores traz jornada, cargo,
+  // lotação e PCD por pessoa. Preview PROPÕE, aplicar GRAVA o confirmado.
+  previewVinculos: (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    return req('/rh/colaboradores/vinculos/preview', { method: 'POST', headers: authRH(), body: fd })
+  },
+  aplicarVinculos: (itens) =>
+    req('/rh/colaboradores/vinculos/aplicar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Export em massa vive em Colaboradores: só vai para o Tirvu quem já foi
   // efetivado. Por padrão exclui os importados (já existem lá).
   pendenciasTirvu: (filtros = {}) => {

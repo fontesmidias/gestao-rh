@@ -11,6 +11,54 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.39.0] — 2026-08-01 — Vincular mil colaboradores de uma vez
+
+Pedido do Bruno:
+
+> *"precisa vincular os colaboradores em massa também a seus respectivos
+> postos, cargos e jornadas, conforme Tirvu, quero evitar trabalho manual"*
+
+A planilha de Colaboradores do Tirvu — a mesma que já era importada — traz, por
+pessoa, `Lotação`, `Cargo`, `Jornada de Trabalho` e `PCD?`. O portal usava as
+duas primeiras e ignorava as outras duas.
+
+### Adicionado
+
+- **Card "Vincular colaboradores"** na Central de Importações: sobe a planilha,
+  o sistema cruza por CPF e mostra os números **antes de gravar** — prontos,
+  divergentes, fora da base, e o que não tem par aqui.
+- **Vínculo de jornada por pessoa** (`jornada_id`), que a importação nunca
+  gravou: a coluna existia na planilha e não era lida.
+- **PCD do Tirvu**, opcional e marcado por você: nos dados reais são **23
+  pessoas** cuja condição o Tirvu registra e o portal não sabia. Cria a ficha
+  se ela não existir, e fica na auditoria com quem aplicou.
+
+### Notas — o que este módulo se recusa a fazer
+
+**Campo com valor DIFERENTE não é sobrescrito.** Vazio aqui → o Tirvu manda;
+diferente → vira lista para você decidir. O valor do portal pode ser correção
+feita à mão, e passar por cima de mil registros é irreversível na prática.
+
+**Nada é vinculado no chute.** Medido contra os dados reais: cargo casa em
+100% e jornada em 99%, mas **posto casa em 11%** — a lotação vem abreviada
+("INEP ADM" sozinha vale 174 pessoas; "ANAC" pode ser sede ou aeroporto). As
+lotações sem par saem em fila **com quantas pessoas dependem de cada uma**,
+para o de-para assistido da próxima leva. Silêncio aqui faria o RH achar que
+vinculou todo mundo.
+
+**CPF com 11 dígitos não basta:** `000.000.000-00` passaria como pessoa e
+inflaria o número de "não está no portal", escondendo a causa real (cadastro
+sujo na origem).
+
+O cargo não precisa de vínculo por pessoa — `cargo_funcao` é texto e o export
+resolve o ID pelo de-para da v2.38; aqui ele só preenche quem está vazio.
+
+Coberto por `tests/test_vinculo_tirvu.py` (classificação, gravação pela rota,
+ausência de N+1 — 1 linha e 40 linhas custam as mesmas 5 consultas — e a
+planilha real de 1.156 pessoas), **validado por mutação** nas duas garantias
+centrais: sobrescrever quem diverge e esconder a fila de lotações. Smoke
+15/15, `npm run build` limpo.
+
 ## [2.38.0] — 2026-08-01 — Subir o .txt do Tirvu, sem copiar e colar
 
 Pedido do Bruno:

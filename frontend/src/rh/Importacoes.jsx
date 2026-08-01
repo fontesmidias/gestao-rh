@@ -135,6 +135,8 @@ export default function Importacoes() {
         <p className="explica">→ Acesse em <strong>Postos → 📊 Incidência de Benefícios</strong>.</p>
       </div>
 
+      <CardVinculos />
+
       <CardTirvuTxt
         titulo="🧾 Cargos (arquivo .txt copiado do Tirvu)"
         instrucoes={<>O Tirvu não exporta cargos: selecione a lista inteira na tela dele,
@@ -164,6 +166,134 @@ export default function Importacoes() {
         rotuloAmbiguo="descrição repetida com IDs diferentes"
         ondeDecidir="Configurações → Empresas e jornadas"
       />
+    </div>
+  )
+}
+
+// Vínculo em massa (v2.39): a MESMA planilha de Colaboradores do Tirvu traz,
+// por pessoa, Lotação, Cargo, Jornada de Trabalho e PCD — e o portal só usava
+// as duas primeiras. Este card cruza tudo e mostra o que vai gravar ANTES de
+// gravar: são ~1.000 registros, e o que se sobrescreve não volta.
+//
+// Divergência (valor diferente aqui) fica FORA do lote: pode ser correção que
+// o RH fez à mão, e passar por cima em massa é irreversível na prática.
+function CardVinculos() {
+  const inputRef = useRef(null)
+  const [previa, setPrevia] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [feito, setFeito] = useState(null)
+  const [incluirPcd, setIncluirPcd] = useState(true)
+
+  const enviar = async (arquivo) => {
+    if (!arquivo) return
+    setMsg(null); setPrevia(null); setFeito(null)
+    try {
+      setPrevia(await comAmpulheta('Cruzando a planilha com a base…',
+        () => api.previewVinculos(arquivo)))
+    } catch (e) {
+      setMsg(e.detail === 'sem_coluna_cpf'
+        ? 'A planilha não tem coluna de CPF — é ela que identifica cada pessoa.'
+        : `Não foi possível ler a planilha (${e.detail || e.message}).`)
+    } finally { if (inputRef.current) inputRef.current.value = '' }
+  }
+
+  const aplicar = async () => {
+    setMsg(null)
+    try {
+      const itens = previa.itens.map((i) => ({
+        cpf: i.cpf,
+        jornada_id: i.jornada.situacao === 'preencher' ? i.jornada.id : null,
+        cargo_funcao: i.cargo.situacao === 'preencher' ? i.cargo.texto : null,
+        posto_id: i.posto.situacao === 'preencher' ? i.posto.id : null,
+        pcd: incluirPcd && i.pcd.situacao === 'preencher' ? i.pcd.valor : null,
+        pcd_deficiencia: incluirPcd ? i.pcd.deficiencia : null,
+      }))
+      setFeito(await comAmpulheta('Gravando os vínculos…', () => api.aplicarVinculos(itens)))
+      setPrevia(null)
+    } catch (e) {
+      setMsg(`Não foi possível gravar (${e.detail || e.message}).`)
+    }
+  }
+
+  const comPcd = (previa?.itens || []).filter((i) => i.pcd.situacao === 'preencher' && i.pcd.valor)
+
+  return (
+    <div className="rh-card">
+      <h3>🔗 Vincular colaboradores (posto, cargo e jornada do Tirvu)</h3>
+      <p className="explica">Use a <strong>mesma planilha de Colaboradores</strong> exportada do
+        Tirvu. O sistema cruza por CPF e preenche a jornada, o cargo e o posto de quem está sem
+        eles aqui — <strong>sem tocar</strong> em quem já tem valor diferente (isso vira uma lista
+        para você decidir). Nada é gravado antes de você conferir os números.</p>
+      <input ref={inputRef} type="file" accept=".xlsx" hidden
+             onChange={(e) => enviar(e.target.files?.[0])} />
+      <button className="btn-secundario btn-mini" onClick={() => inputRef.current?.click()}>
+        📥 Escolher a planilha…</button>
+
+      {previa && (
+        <>
+          <div className="rh-metricas" style={{ marginTop: '.6rem' }}>
+            <div className="rh-metrica"><strong>{previa.linhas}</strong><span>na planilha</span></div>
+            <div className="rh-metrica"><strong>{previa.prontas}</strong><span>prontos para vincular</span></div>
+            <div className="rh-metrica"><strong>{previa.divergentes}</strong><span>divergem (você decide)</span></div>
+            <div className="rh-metrica"><strong>{previa.fora_da_base}</strong><span>não estão no portal</span></div>
+          </div>
+
+          {comPcd.length > 0 && (
+            <label className="campo campo-sem-margem">
+              <span>
+                <input type="checkbox" checked={incluirPcd}
+                       onChange={(e) => setIncluirPcd(e.target.checked)} />{' '}
+                Registrar também <strong>{comPcd.length} pessoa(s) como PCD</strong>, conforme o
+                Tirvu
+              </span>
+              <small className="explica">É informação de saúde e vem da base do Tirvu, não de
+                declaração da pessoa. Fica registrado quem aplicou e quando.</small>
+            </label>
+          )}
+
+          {previa.lotacoes_sem_par.length > 0 && (
+            <div className="alerta">
+              <strong>{previa.lotacoes_sem_par.length} lotações</strong> da planilha não têm posto
+              correspondente aqui — a lotação vem abreviada no Tirvu e o mesmo nome pode ser dois
+              postos (&ldquo;ANAC&rdquo; é sede ou aeroporto?). Ninguém é vinculado no chute; o
+              de-para assistido resolve isso:
+              <ul>
+                {previa.lotacoes_sem_par.slice(0, 5).map((l, i) => (
+                  <li key={i}>{l.texto} — <strong>{l.pessoas}</strong> pessoa(s)</li>
+                ))}
+                {previa.lotacoes_sem_par.length > 5
+                  && <li>…e mais {previa.lotacoes_sem_par.length - 5}.</li>}
+              </ul>
+            </div>
+          )}
+
+          {previa.jornadas_sem_par.length > 0 && (
+            <div className="alerta">
+              <strong>{previa.jornadas_sem_par.length}</strong> descrição(ões) de jornada da
+              planilha não existem aqui. Suba o <strong>.txt de Jornadas</strong> (card acima) e
+              rode de novo:
+              <ul>
+                {previa.jornadas_sem_par.slice(0, 3).map((j, i) => (
+                  <li key={i}>{j.texto} — {j.pessoas} pessoa(s)</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <button className="btn-principal btn-mini" onClick={aplicar} disabled={!previa.prontas}>
+            Vincular {previa.prontas} colaborador(es)
+          </button>
+        </>
+      )}
+
+      {feito && (
+        <div className="sucesso" style={{ marginTop: '.6rem' }}>
+          {feito.jornada} jornada(s), {feito.cargo} cargo(s), {feito.posto} posto(s)
+          {feito.pcd > 0 && `, ${feito.pcd} PCD`} gravados.
+          {feito.ignorados > 0 && ` ${feito.ignorados} ignorado(s) (CPF fora do portal).`}
+        </div>
+      )}
+      {msg && <div className="alerta" style={{ marginTop: '.6rem' }}>{msg}</div>}
     </div>
   )
 }
