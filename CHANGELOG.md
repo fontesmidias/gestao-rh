@@ -11,6 +11,51 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.40.0] — 2026-08-01 — De-para de lotações: os 11% viram o resto
+
+Fecha a lacuna medida na v2.39. Cargo casa em 100% e jornada em 99%, mas
+**posto casava em 11%**: a lotação vem abreviada na planilha do Tirvu
+("INEP ADM", "ANAC") e o apelido do posto aqui é o padrão longo
+("ANAC - 14/2026 - AEROPORTO"). Não é falha de parser — `ANAC` **é** ambíguo:
+pode ser a sede ou o aeroporto.
+
+### Adicionado
+
+- **Card "De-para de lotações"** na Central de Importações: sobe a planilha de
+  Colaboradores, o sistema lista o que não casou **ordenado por quantas
+  pessoas dependem** e ordena os postos candidatos; o RH escolhe. Feito uma
+  vez, as importações seguintes já sabem (tabela `lotacao_tirvu`, migration
+  `f2a3b4c5d6e7`).
+- O de-para entra no mesmo mapa que o vínculo em massa usa — a decisão do RH
+  passa a valer para todo mundo, senão seria decoração.
+- Reconfirmar **corrige** o destino em vez de duplicar; o que já foi decidido
+  some da fila.
+
+### Corrigido — o defeito que os dados reais revelaram
+
+A primeira versão ordenava só por semelhança de caracteres, e nos dados de
+produção **`INEP ADM` (174 pessoas) sugeria `IPAM` com 0,67**, à frente do
+posto certo (`INEP - 37/2025 - APOIO ADM`, 0,47) — as letras I-P-A-M estão
+todas lá, na ordem. Um RH apressado mandaria 174 pessoas para o contrato de
+outro cliente, e **nada** acusaria o erro depois.
+
+Agora a **palavra inteira** pesa mais que a coincidência de letras. Efeito nas
+maiores da fila: `INEP ADM`, `CNJ MOTORISTAS`, `ANATEL`, `MME`, `INFRAERO SCS`
+e `INTERMITENTE` passaram a sugerir o posto certo em primeiro lugar.
+
+### Notas
+
+**Onde há empate real, o campo vem vazio de propósito.** Duas sugestões com
+pontuação parecida (o caso "ANAC") não são pré-selecionadas: escolher uma
+delas seria decidir no lugar do RH disfarçando de sugestão. E a lista completa
+de postos fica sempre disponível — a sugestão pode simplesmente não ter o
+posto certo.
+
+Fila real medida: **90 lotações, 1.156 pessoas esperando** (`INEP ADM` sozinha
+vale 174). Coberto por `tests/test_de_para_lotacao.py`, **validado por
+mutação** — desligar a regra da palavra inteira reproduz a sugestão errada do
+caso real. Smoke 15/15, `npm run build` limpo.
+
 ## [2.39.1] — 2026-08-01 — Correção: o upload dizia "não foi possível ler o arquivo"
 
 Relatado pelo Bruno minutos depois da v2.39, com print e log: os cards novos

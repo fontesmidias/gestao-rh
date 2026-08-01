@@ -498,6 +498,20 @@ export const rh = {
   aplicarVinculos: (itens) =>
     req('/rh/colaboradores/vinculos/aplicar',
         { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
+  // De-para lotação → posto (v2.40): a lotação do Tirvu vem abreviada e o
+  // mesmo texto pode ser dois postos. O sistema sugere, o RH decide uma vez.
+  deParaLotacoes: () => req('/rh/postos/de-para', { headers: authRH() }),
+  previewDeParaLotacoes: async (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    // multipart: nunca pelo req() (ver comentário acima)
+    const r = await buscar(`${BASE}/rh/postos/de-para/preview`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  confirmarDeParaLotacoes: (itens) =>
+    req('/rh/postos/de-para/confirmar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Export em massa vive em Colaboradores: só vai para o Tirvu quem já foi
   // efetivado. Por padrão exclui os importados (já existem lá).
   pendenciasTirvu: (filtros = {}) => {

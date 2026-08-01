@@ -404,6 +404,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Sugestão por similaridade: PALAVRA inteira vence semelhança de letras**
+  (v2.40, `colaboradores.py::_sugerir_postos`): o `SequenceMatcher` sozinho
+  colocou **`IPAM` na frente de `INEP - 37/2025 - APOIO ADM`** para a lotação
+  `INEP ADM` — 174 pessoas —, porque as letras I-P-A-M aparecem na ordem. Erro
+  desse tipo é aceito num clique e **nada o acusa depois**: a pessoa fica no
+  contrato errado e o sistema não tem como saber. Some um bônus por palavra do
+  texto que reaparece INTEIRA no candidato. Onde o empate é real (`ANAC` = sede
+  ou aeroporto), a tela deixa o campo VAZIO — pré-selecionar seria decidir no
+  lugar do RH disfarçando de sugestão. Vale para qualquer fila de equivalência
+  assistida (a da Incidência de Benefícios usa o mesmo raciocínio).
 - **Upload de arquivo NUNCA passa pelo `req()` do `api.js`** (v2.39.1, bug de
   campo 2026-08-01): `_req` força `Content-Type: application/json`, e com
   `FormData` quem precisa escrever o cabeçalho é o NAVEGADOR — só ele conhece o

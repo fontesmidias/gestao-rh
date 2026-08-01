@@ -153,6 +153,34 @@ class Jornada(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class LotacaoTirvu(Base):
+    """De-para LOTAÇÃO (como o Tirvu escreve) → posto de serviço daqui (v2.40).
+
+    Irmã do `CargoTirvu`, e pelo mesmo motivo: o texto do Tirvu não casa com o
+    nosso. Só que aqui é pior — a lotação vem ABREVIADA na planilha de
+    colaboradores ("INEP ADM", "ANAC") e o apelido do posto é o padrão longo
+    ("ANAC - 14/2026 - AEROPORTO", "ANAC - 14/2026 - SEDE"). Medido nos dados
+    reais: só 11% casam sozinhos, e "ANAC" pode legitimamente ser dois postos
+    diferentes — ambiguidade do DADO, que nenhum algoritmo resolve.
+
+    Por isso é de-para CONFIRMADO por gente: o sistema ordena candidatos por
+    similaridade, o RH escolhe, e a escolha fica gravada para as importações
+    seguintes não perguntarem de novo.
+    """
+
+    __tablename__ = "lotacao_tirvu"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Texto da lotação normalizado (minúsculo, sem acento) — chave de casamento.
+    lotacao_normalizada: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    # Como aparece na planilha, para a tela mostrar sem desfigurar.
+    lotacao_rotulo: Mapped[str] = mapped_column(String(200))
+    posto_servico_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posto_servico.id"))
+    # Quem confirmou (snapshot, não FK: não some se o usuário for removido).
+    confirmado_por: Mapped[str | None] = mapped_column(String(200))
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CargoTirvu(Base):
     """De-para cargo (texto livre) → ID do cargo na base do Tirvu (feedback
     2026-07-24: a importação casa o CARGO por ID numérico; o texto "veio zerado").

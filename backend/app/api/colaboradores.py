@@ -689,6 +689,13 @@ def _mapas_para_vinculo(db: Session) -> tuple[dict, dict, dict]:
         c.pcd = pcd_por_candidato.get(c.id)
     jornadas = {normalizar(j.descricao): j.id for j in db.scalars(select(Jornada)).all()}
     postos = {normalizar(p.nome): p.id for p in db.scalars(select(PostoServico)).all()}
+    # O de-para confirmado pelo RH entra no MESMO mapa (v2.40): é o que faz
+    # "INEP ADM" casar com o posto certo. Vem DEPOIS do nome, e por isso vence
+    # — foi decisão humana explícita, enquanto o casamento por nome é
+    # coincidência de texto.
+    from app.models.candidato import LotacaoTirvu
+    for m in db.scalars(select(LotacaoTirvu)).all():
+        postos[m.lotacao_normalizada] = m.posto_servico_id
     return pessoas, jornadas, postos
 
 
@@ -807,3 +814,161 @@ def aplicar_vinculos(payload: AplicarVinculosIn, db: Session = Depends(get_db),
                        "origem": "planilha do Tirvu"})
     db.commit()
     return {**tocados, "ignorados": ignorados}
+
+
+# ======================================================================
+# De-para LOTAÇÃO → posto de serviço (v2.40)
+# ======================================================================
+#
+# A lotação da planilha vem abreviada ("INEP ADM", "ANAC") e o apelido do posto
+# é o padrão longo ("ANAC - 14/2026 - AEROPORTO"). Medido nos dados reais: 11%
+# casam sozinhos, e "ANAC" pode ser SEDE ou AEROPORTO — ambiguidade do dado,
+# que nenhum algoritmo resolve. Então o sistema ordena candidatos e o RH
+# decide; a escolha fica gravada e as importações seguintes não perguntam de
+# novo. Mesma mecânica da Incidência de Benefícios, e pela mesma razão.
+
+
+def _similaridade(a: str, b: str) -> float:
+    from difflib import SequenceMatcher
+
+    from app.services.vinculo_tirvu import normalizar
+    return SequenceMatcher(None, normalizar(a), normalizar(b)).ratio()
+
+
+def _sugerir_postos(lotacao: str, postos: list) -> list[dict]:
+    """Até 3 postos candidatos, do mais parecido para o menos. NUNCA decide.
+
+    O bônus de contenção é o que resolve o caso real: "ANAC" está contido em
+    "ANAC - 14/2026 - AEROPORTO" e em "- SEDE", então os DOIS sobem juntos — é
+    exatamente a ambiguidade que precisa chegar aos olhos do RH, e não ser
+    desempatada no escuro por um centésimo de similaridade.
+    """
+    from app.services.vinculo_tirvu import normalizar
+
+    alvo = normalizar(lotacao)
+    palavras_alvo = [p for p in alvo.split() if len(p) > 1]
+    ranqueados = []
+    for p in postos:
+        campos = [p.nome or "", p.sigla or "", p.razao_social or ""]
+        score = max((_similaridade(lotacao, c) for c in campos if c), default=0.0)
+        if alvo and any(alvo in normalizar(c) for c in campos if c):
+            score = max(score, 0.9)
+        # Semelhança de LETRAS engana, e engana no caso que mais importa: nos
+        # dados reais "INEP ADM" (174 pessoas) pontuava 0.67 com "IPAM" e só
+        # 0.47 com "INEP - 37/2025 - APOIO ADM", porque as letras I-P-A-M estão
+        # todas lá na ordem. Um RH apressado aceitaria a sugestão errada e 174
+        # pessoas iriam para o posto de outro contrato.
+        #
+        # A palavra INTEIRA é o sinal forte: "INEP" aparece como palavra no
+        # nome do posto certo e não aparece em "IPAM". Cada palavra do texto do
+        # Tirvu que reaparece inteira no posto vale mais que qualquer
+        # coincidência de caracteres.
+        palavras_posto = {w for c in campos for w in normalizar(c).split()}
+        if palavras_alvo:
+            casadas = sum(1 for w in palavras_alvo if w in palavras_posto)
+            if casadas:
+                score = max(score, 0.55 + 0.35 * (casadas / len(palavras_alvo)))
+        ranqueados.append((score, p))
+    ranqueados.sort(key=lambda t: (-t[0], t[1].nome or ""))
+    return [{"posto_id": str(p.id), "posto_nome": p.nome, "sigla": p.sigla,
+             "razao_social": p.razao_social, "score": round(s, 2)}
+            for s, p in ranqueados[:3] if s > 0.35]
+
+
+@router.get("/rh/postos/de-para")
+def listar_de_para_lotacao(db: Session = Depends(get_db)) -> list[dict]:
+    """O que já foi decidido — para o RH conferir e corrigir sem reimportar."""
+    from app.models.candidato import LotacaoTirvu
+
+    postos = {p.id: p.nome for p in db.scalars(select(PostoServico)).all()}
+    return [{"id": m.id, "lotacao": m.lotacao_rotulo,
+             "posto_id": m.posto_servico_id,
+             "posto_nome": postos.get(m.posto_servico_id),
+             "confirmado_por": m.confirmado_por, "criado_em": m.criado_em}
+            for m in db.scalars(select(LotacaoTirvu)
+                                .order_by(LotacaoTirvu.lotacao_rotulo)).all()]
+
+
+@router.post("/rh/postos/de-para/preview")
+async def preview_de_para_lotacao(arquivo: UploadFile, db: Session = Depends(get_db),
+                                  _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Lotações da planilha que ainda não têm posto, com candidatos ordenados.
+
+    Ordena pela quantidade de PESSOAS afetadas, não alfabeticamente: resolver
+    "INEP ADM" (174 pessoas) antes de uma lotação com 1 vale mais o tempo do
+    RH — a lição do módulo de duplicidade de jornada, onde a fila cheia de
+    ruído fazia perder o que importava.
+    """
+    from app.api.postos import _ler_linhas_xlsx
+    from app.models.candidato import LotacaoTirvu
+    from app.services.vinculo_tirvu import analisar, normalizar
+
+    try:
+        linhas = _ler_linhas_xlsx(await arquivo.read())
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="planilha_ilegivel") from exc
+    finally:
+        await arquivo.close()
+
+    pessoas, jornadas, postos_map = _mapas_para_vinculo(db)
+    ja = {m.lotacao_normalizada for m in db.scalars(select(LotacaoTirvu)).all()}
+    try:
+        analise = analisar(linhas, candidatos_por_cpf=pessoas,
+                           jornadas_por_descricao=jornadas, postos_por_nome=postos_map)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    postos = db.scalars(select(PostoServico).order_by(PostoServico.nome)).all()
+    pendentes = []
+    for texto, quantas in sorted(analise.lotacoes_sem_par.items(), key=lambda kv: -kv[1]):
+        if normalizar(texto) in ja:
+            continue     # já decidido numa rodada anterior
+        pendentes.append({"lotacao": texto, "pessoas": quantas,
+                          "sugestoes": _sugerir_postos(texto, postos)})
+    return {"pendentes": pendentes,
+            "total_pessoas": sum(p["pessoas"] for p in pendentes),
+            "ja_mapeadas": len(ja),
+            "postos": [{"id": str(p.id), "nome": p.nome} for p in postos]}
+
+
+class DeParaLotacaoItem(BaseModel):
+    lotacao: str
+    posto_id: uuid.UUID
+
+
+class DeParaLotacaoIn(BaseModel):
+    itens: list[DeParaLotacaoItem]
+
+
+@router.post("/rh/postos/de-para/confirmar")
+def confirmar_de_para_lotacao(payload: DeParaLotacaoIn, db: Session = Depends(get_db),
+                              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Grava as escolhas do RH. Reenviar a mesma lotação ATUALIZA o destino —
+    corrigir um de-para errado não pode exigir apagar e recriar."""
+    from app.models.candidato import LotacaoTirvu
+    from app.services.vinculo_tirvu import normalizar
+
+    existentes = {m.lotacao_normalizada: m for m in db.scalars(select(LotacaoTirvu)).all()}
+    criados = atualizados = 0
+    for item in payload.itens:
+        chave = normalizar(item.lotacao)
+        if not chave:
+            continue
+        if db.get(PostoServico, item.posto_id) is None:
+            raise HTTPException(status_code=422, detail="posto_nao_encontrado")
+        m = existentes.get(chave)
+        if m:
+            if m.posto_servico_id != item.posto_id:
+                m.posto_servico_id = item.posto_id
+                m.confirmado_por = rh.email
+                atualizados += 1
+        else:
+            db.add(LotacaoTirvu(lotacao_normalizada=chave,
+                                lotacao_rotulo=item.lotacao.strip()[:200],
+                                posto_servico_id=item.posto_id,
+                                confirmado_por=rh.email))
+            criados += 1
+    registrar(db, "lotacoes_mapeadas", ator="rh", ator_detalhe=rh.email,
+              detalhe={"criados": criados, "atualizados": atualizados})
+    db.commit()
+    return {"criados": criados, "atualizados": atualizados}
