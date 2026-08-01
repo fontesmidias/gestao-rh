@@ -27,6 +27,25 @@ _CABECALHO_TOTAL = re.compile(r"Lista de (Cargos|Jornadas)\s+(\d+)", re.IGNORECA
 _SUJEIRA_VINCULOS = re.compile(r"(?:sem|\d+)\s*v[ií]nculos?\s*$", re.IGNORECASE)
 
 
+def decodificar(dados: bytes) -> str:
+    """Texto do .txt que o RH salvou, venha ele em que codificação vier.
+
+    O arquivo nasce de um Ctrl+C na tela do Tirvu colado no Bloco de Notas —
+    que grava em UTF-8, UTF-8 com BOM ou ANSI (cp1252) conforme a versão do
+    Windows e o que a pessoa escolheu no "Salvar como". Errar aqui não dá erro:
+    dá "GERENTE DE RESTAURANTE" virando "GERENTE DE RESTAURANTE" com acento
+    quebrado, e o casamento por texto falhando calado justamente nos cargos com
+    acento. Por isso a ordem é a da probabilidade, e o último recurso é
+    substituir o byte ruim em vez de recusar o arquivo inteiro.
+    """
+    for codec in ("utf-8-sig", "utf-8", "cp1252"):
+        try:
+            return dados.decode(codec)
+        except UnicodeDecodeError:
+            continue
+    return dados.decode("utf-8", errors="replace")
+
+
 def normalizar_texto(s) -> str:
     """Minúsculo, sem acento, espaços colapsados — mesma chave de casamento
     usada em `export_tirvu.normalizar_cargo` (consistência entre os dois

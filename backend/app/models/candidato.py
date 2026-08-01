@@ -118,6 +118,13 @@ class Jornada(Base):
     # cadastra o ID no painel de Jornadas; o export escreve o ID. A `descricao`
     # continua canônica para todo o resto do sistema.
     tirvu_id: Mapped[str | None] = mapped_column(String(30))
+    # Como o TIRVU classifica esta jornada — vem junto do ID na lista dele
+    # ("Semanal", "BANCO DE HORAS") e decide folha. Prefixo `tirvu_` de
+    # propósito: a `escala` logo abaixo é metadado INTERNO do parser
+    # (seg-sex, 12x36…), com outro vocabulário. Ler um achando que é o outro
+    # seria erro invisível.
+    tirvu_escala: Mapped[str | None] = mapped_column(String(40))
+    tirvu_tratamento: Mapped[str | None] = mapped_column(String(60))
     posto_servico_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("posto_servico.id"), nullable=True)
     # --- Estrutura (opcional; proposta pelo parser, confirmada pelo RH) ---
@@ -164,6 +171,11 @@ class CargoTirvu(Base):
     # Como o RH digitou (para exibir na tela sem desfigurar acento/caixa).
     cargo_rotulo: Mapped[str] = mapped_column(String(160))
     tirvu_id: Mapped[str] = mapped_column(String(30))
+    # CBO do cargo na base do Tirvu. É o que DISTINGUE cargo homônimo: nos dados
+    # reais "AUXILIAR DE SERVIÇOS GERAIS" tem 514225 (limpeza) e 763125
+    # (produção), com 87 pessoas usando o mesmo texto. Sem ele, a tela pede uma
+    # decisão sem mostrar o que a fundamenta.
+    cbo: Mapped[str | None] = mapped_column(String(10))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
