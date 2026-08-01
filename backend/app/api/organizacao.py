@@ -675,6 +675,40 @@ class TxtIn(BaseModel):
     texto: str
 
 
+async def _texto_do_upload(arquivo: UploadFile) -> str:
+    """Bytes do .txt enviado, decodificados e com o spool em disco fechado.
+
+    O `close()` no finally é regra da casa: o Starlette faz spool em disco
+    acima de ~1MB, e o arquivo de jornadas reais tem 110 KB hoje mas cresce —
+    temp file esquecido no container é dado do RH parado onde ninguém olha.
+    """
+    from app.services.importar_tirvu_txt import decodificar
+    try:
+        return decodificar(await arquivo.read())
+    finally:
+        await arquivo.close()
+
+
+@router.post("/rh/tirvu-txt/preview-cargos-arquivo")
+async def preview_cargos_arquivo(arquivo: UploadFile, db: Session = Depends(get_db),
+                                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Mesmo preview de cargos, a partir do .txt salvo pelo RH.
+
+    O Tirvu não tem botão de exportar cargos: o RH seleciona a tela inteira,
+    cola no Bloco de Notas e salva. Subir o arquivo evita o passo de colar num
+    campo de texto — e o resultado é o MESMO preview, porque continua valendo
+    a regra da casa: propor, nunca gravar sozinho.
+    """
+    return preview_cargos_tirvu(TxtIn(texto=await _texto_do_upload(arquivo)), db)
+
+
+@router.post("/rh/tirvu-txt/preview-jornadas-arquivo")
+async def preview_jornadas_arquivo(arquivo: UploadFile, db: Session = Depends(get_db),
+                                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Mesmo preview de jornadas, a partir do .txt salvo pelo RH."""
+    return preview_jornadas_tirvu(TxtIn(texto=await _texto_do_upload(arquivo)), db)
+
+
 @router.post("/rh/tirvu-txt/preview-cargos")
 def preview_cargos_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
     """Lê o texto colado da tela 'Cargos' do Tirvu e PROPÕE o de-para —
@@ -729,6 +763,10 @@ def preview_cargos_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
 class ConfirmarCargoItem(BaseModel):
     tirvu_id: str
     cargo: str
+    # CBO vem do próprio arquivo do Tirvu. Guardar é o que permite, depois,
+    # distinguir os homônimos ("AUXILIAR DE SERVIÇOS GERAIS" 514225 x 763125)
+    # na hora de decidir — sem ele a tela pede escolha sem mostrar a diferença.
+    cbo: str = ""
     aplicar: bool = True
 
 
@@ -750,13 +788,18 @@ def confirmar_cargos_tirvu(dados: ConfirmarCargosIn, db: Session = Depends(get_d
         chave = normalizar_cargo(item.cargo)
         if not chave:
             continue
+        cbo = (item.cbo or "").strip()[:10] or None
         m = db.scalar(select(CargoTirvu).where(CargoTirvu.cargo_normalizado == chave))
         if m:
             m.tirvu_id = item.tirvu_id
             m.cargo_rotulo = item.cargo.strip()
+            # CBO vazio não apaga o que já estava gravado: o arquivo pode vir
+            # sem a coluna, e perder dado por omissão é pior que não atualizar.
+            if cbo:
+                m.cbo = cbo
         else:
             db.add(CargoTirvu(cargo_normalizado=chave, cargo_rotulo=item.cargo.strip(),
-                              tirvu_id=item.tirvu_id))
+                              tirvu_id=item.tirvu_id, cbo=cbo))
         gravados += 1
     registrar(db, "cargos_tirvu_importados_em_massa", ator="rh", ator_detalhe=rh.email,
               detalhe={"gravados": gravados, "total_enviado": len(dados.itens)})
@@ -829,13 +872,27 @@ def confirmar_jornadas_tirvu(dados: ConfirmarJornadasIn, db: Session = Depends(g
         descricao = item.descricao.strip()
         if not descricao:
             continue
+        # Escala e tratamento vêm da lista do Tirvu junto do ID. Vazio não
+        # apaga o que já existe, mesma regra do CBO.
+        escala = (item.escala or "").strip()[:40] or None
+        tratamento = (item.tratamento or "").strip()[:60] or None
         atual = existentes.get(_norm(descricao))
         if atual:
+            mudou = False
             if atual.tirvu_id != item.tirvu_id:
                 atual.tirvu_id = item.tirvu_id
+                mudou = True
+            if escala and atual.tirvu_escala != escala:
+                atual.tirvu_escala = escala
+                mudou = True
+            if tratamento and atual.tirvu_tratamento != tratamento:
+                atual.tirvu_tratamento = tratamento
+                mudou = True
+            if mudou:
                 atualizadas += 1
         else:
-            nova = Jornada(descricao=descricao, tirvu_id=item.tirvu_id)
+            nova = Jornada(descricao=descricao, tirvu_id=item.tirvu_id,
+                           tirvu_escala=escala, tirvu_tratamento=tratamento)
             db.add(nova)
             existentes[_norm(descricao)] = nova
             criadas += 1

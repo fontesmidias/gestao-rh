@@ -11,6 +11,57 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.38.0] — 2026-08-01 — Subir o .txt do Tirvu, sem copiar e colar
+
+Pedido do Bruno:
+
+> *"quero fazer o mesmo pelo front, de apenas subir os txts e o sistema
+> entender"*
+
+O Tirvu não tem botão de exportar cargos nem jornadas: o RH seleciona a lista
+na tela, cola no Bloco de Notas e salva. A padronização em massa (v1.96) já
+lia esse texto — mas exigia colar num campo.
+
+### Adicionado
+
+- **Dois cards novos na Central de Importações** (Configurações → 📥
+  Importações): cargos e jornadas por **upload do .txt**. Rotas
+  `preview-cargos-arquivo` e `preview-jornadas-arquivo`.
+- **Codificação tolerante** (`decodificar`): UTF-8, UTF-8 com BOM e ANSI
+  (cp1252) dão o mesmo resultado. Errar isso não levanta erro — quebra o acento
+  e faz o casamento por texto falhar **em silêncio**, justamente nos cargos
+  acentuados. O Bloco de Notas grava nos três formatos conforme a versão do
+  Windows.
+- **O que se perdia agora é gravado**: `cargo_tirvu.cbo`,
+  `jornada.tirvu_escala` e `jornada.tirvu_tratamento` (migration
+  `e1f2a3b4c5d6`, aditiva). O parser já lia essas colunas e as jogava fora.
+- O card mostra **o que vai gravar antes de gravar**: quantos estão prontos,
+  quantos precisam de decisão, e quais são — com o CBO e quantas pessoas usam
+  cada um.
+
+### Notas
+
+**A porta de entrada mudou; a regra não.** O sistema continua propondo e o RH
+confirmando. Cargo homônimo e jornada duplicada seguem fora do lote
+automático: nos dados reais são 2 cargos ("auxiliar de serviços gerais",
+"supervisor administrativo") que **87 pessoas** usam, e o que os distingue é o
+CBO — que agora fica gravado para sustentar a decisão.
+
+**`tirvu_escala` não é `escala`**: a segunda é metadado interno do parser
+(seg-sex, 12x36…), com outro vocabulário. Fundir faria ler um achando que é o
+outro.
+
+**Postos já estavam resolvidos** — a importação da planilha casa por ID e já
+grava razão social, CNPJ e endereço, desambiguando apelidos truncados. Nada a
+fazer ali.
+
+Medido contra os arquivos reais de 01/08: **111 cargos** (87 ativos, 2
+homônimos), **464 jornadas**, **108 postos**. Coberto por
+`tests/test_tirvu_txt_upload.py`, que roda com os arquivos de produção quando
+existem e com uma amostra equivalente no CI — **validado por mutação** (só
+UTF-8 quebra o Bloco de Notas em ANSI; CBO vazio apagando o gravado). Smoke
+15/15, `npm run build` limpo.
+
 ## [2.37.0] — 2026-08-01 — O endereço estava no banco e faltava no papel
 
 Feedback do Bruno:

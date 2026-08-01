@@ -30,6 +30,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 ### Base de colaboradores e postos (RH)
 - Candidato e colaborador são o **mesmo registro** — em admissão (`situação` nula), ativo ou desligado
 - **Importação idempotente** da base do Tirvu (.xlsx) por CPF; postos de serviço com documentos específicos por posto/regime (INFRAERO, Presidência, intermitente)
+- **Cargos e jornadas do Tirvu por upload de .txt** (o Tirvu não exporta: o RH copia a tela, salva no Bloco de Notas e sobe o arquivo) — com ID, CBO, escala e tratamento; o sistema propõe o de-para e separa o que é ambíguo para o RH decidir, nunca funde sozinho
 - Dashboard, filtros e **exportação Excel** com uma linha por colaborador e todas as respostas
 
 ### Documentos e assinaturas

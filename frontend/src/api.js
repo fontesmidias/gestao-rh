@@ -459,6 +459,20 @@ export const rh = {
     req('/rh/tirvu-txt/preview-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
   confirmarJornadasTirvuTxt: (itens) =>
     req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
+  // Mesma coisa a partir do .txt salvo pelo RH (v2.38) — só muda a porta de
+  // entrada; a proposta e a confirmação continuam idênticas.
+  previewCargosArquivo: (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    return req('/rh/tirvu-txt/preview-cargos-arquivo', { method: 'POST', headers: authRH(), body: fd })
+  },
+  previewJornadasArquivo: (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    return req('/rh/tirvu-txt/preview-jornadas-arquivo', { method: 'POST', headers: authRH(), body: fd })
+  },
+  confirmarCargosTirvu: ({ itens }) =>
+    req('/rh/tirvu-txt/confirmar-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
+  confirmarJornadasTirvu: ({ itens }) =>
+    req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Export em massa vive em Colaboradores: só vai para o Tirvu quem já foi
   // efetivado. Por padrão exclui os importados (já existem lá).
   pendenciasTirvu: (filtros = {}) => {

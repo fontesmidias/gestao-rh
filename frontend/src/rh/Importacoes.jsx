@@ -135,12 +135,126 @@ export default function Importacoes() {
         <p className="explica">→ Acesse em <strong>Postos → 📊 Incidência de Benefícios</strong>.</p>
       </div>
 
-      <div className="rh-card">
-        <h3>📋 Cargos e jornadas (colados da tela do Tirvu)</h3>
-        <p className="explica">Não é upload de arquivo — o RH cola o texto copiado direto da tela do
-          Tirvu. Continua na aba <strong>Empresas e jornadas</strong>, logo abaixo do de-para de
-          cargos, por ser o mesmo assunto.</p>
-      </div>
+      <CardTirvuTxt
+        titulo="🧾 Cargos (arquivo .txt copiado do Tirvu)"
+        instrucoes={<>O Tirvu não exporta cargos: selecione a lista inteira na tela dele,
+          cole no Bloco de Notas e salve o <strong>.txt</strong>. O sistema lê o ID, o cargo e
+          o <strong>CBO</strong> de cada linha. Cargo com dois IDs ativos (o CBO diferencia)
+          nunca é resolvido sozinho — fica separado para você decidir.</>}
+        aoEnviar={api.previewCargosArquivo}
+        aoAplicar={api.confirmarCargosTirvu}
+        campoNome="cargo"
+        montarItem={(p) => ({ tirvu_id: p.tirvu_id, cargo: p.cargo, cbo: p.cbo, aplicar: true })}
+        rotuloAmbiguo="cargo com mais de um ID ativo"
+        ondeDecidir="Configurações → Empresas e jornadas"
+      />
+
+      <CardTirvuTxt
+        titulo="🕕 Jornadas (arquivo .txt copiado do Tirvu)"
+        instrucoes={<>Mesma coisa da lista de <strong>Jornadas</strong>: o sistema lê o ID, a
+          descrição, a escala e o tratamento (banco de horas). Descrição repetida com IDs
+          diferentes fica separada — fundir jornada é errar turno de gente, e o erro só
+          aparece no contracheque.</>}
+        aoEnviar={api.previewJornadasArquivo}
+        aoAplicar={api.confirmarJornadasTirvu}
+        campoNome="descricao"
+        montarItem={(p) => ({ tirvu_id: p.tirvu_id, descricao: p.descricao,
+                              escala: p.escala || '', tratamento: p.tratamento || '',
+                              aplicar: true })}
+        rotuloAmbiguo="descrição repetida com IDs diferentes"
+        ondeDecidir="Configurações → Empresas e jornadas"
+      />
+    </div>
+  )
+}
+
+// Upload do .txt copiado da tela do Tirvu (v2.38, pedido do Bruno: "quero
+// apenas subir os txts e o sistema entender").
+//
+// O que MUDOU foi a porta de entrada — subir o arquivo em vez de colar o texto.
+// O que NÃO mudou é a regra da casa: o sistema PROPÕE e o RH confirma. Por isso
+// o card mostra o que vai gravar ANTES de gravar, e separa o que é ambíguo:
+// nos dados reais são 2 cargos homônimos que 87 pessoas usam, e adivinhar qual
+// é qual muda o CBO de gente de verdade.
+function CardTirvuTxt({ titulo, instrucoes, aoEnviar, aoAplicar, campoNome,
+                        montarItem, rotuloAmbiguo, ondeDecidir }) {
+  const inputRef = useRef(null)
+  const [previa, setPrevia] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [feito, setFeito] = useState(null)
+
+  const enviar = async (arquivo) => {
+    if (!arquivo) return
+    setMsg(null); setPrevia(null); setFeito(null)
+    try {
+      setPrevia(await comAmpulheta('Lendo o arquivo…', () => aoEnviar(arquivo)))
+    } catch (e) {
+      // A contagem do cabeçalho não bater é o erro ÚTIL aqui: significa cópia
+      // parcial da tela, e importar metade calado seria pior que recusar.
+      setMsg(e.detail?.includes?.('contagem')
+        ? `O arquivo parece incompleto (${e.detail}). Copie a lista inteira da tela do Tirvu.`
+        : `Não foi possível ler o arquivo (${e.detail || e.message}).`)
+    } finally { if (inputRef.current) inputRef.current.value = '' }
+  }
+
+  const seguros = (previa?.propostas || []).filter((p) => p.aplicar_sugerido)
+  const ambiguos = (previa?.propostas || []).filter((p) => !p.aplicar_sugerido)
+
+  const aplicar = async () => {
+    setMsg(null)
+    try {
+      const r = await comAmpulheta('Gravando…',
+        () => aoAplicar({ itens: seguros.map(montarItem) }))
+      setFeito(r)
+      setPrevia(null)
+    } catch (e) {
+      setMsg(`Não foi possível gravar (${e.detail || e.message}).`)
+    }
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>{titulo}</h3>
+      <p className="explica">{instrucoes}</p>
+      <input ref={inputRef} type="file" accept=".txt,text/plain" hidden
+             onChange={(e) => enviar(e.target.files?.[0])} />
+      <button className="btn-secundario btn-mini" onClick={() => inputRef.current?.click()}>
+        📥 Escolher o .txt…</button>
+
+      {previa && (
+        <>
+          <div className="rh-metricas" style={{ marginTop: '.6rem' }}>
+            <div className="rh-metrica"><strong>{previa.total}</strong><span>no arquivo</span></div>
+            <div className="rh-metrica"><strong>{seguros.length}</strong><span>prontos para gravar</span></div>
+            <div className="rh-metrica"><strong>{ambiguos.length}</strong><span>precisam de você</span></div>
+          </div>
+          {ambiguos.length > 0 && (
+            <div className="alerta">
+              <strong>{ambiguos.length}</strong> {ambiguos.length === 1 ? 'item' : 'itens'} com{' '}
+              {rotuloAmbiguo} — o sistema não escolhe por você. Depois de gravar os demais,
+              resolva em <strong>{ondeDecidir}</strong>:
+              <ul>
+                {ambiguos.slice(0, 5).map((p, i) => (
+                  <li key={i}>{p[campoNome]}{p.cbo ? ` (CBO ${p.cbo})` : ''}
+                    {p.pessoas_usando > 0 && ` — ${p.pessoas_usando} pessoa(s) usam`}</li>
+                ))}
+                {ambiguos.length > 5 && <li>…e mais {ambiguos.length - 5}.</li>}
+              </ul>
+            </div>
+          )}
+          <button className="btn-principal btn-mini" onClick={aplicar} disabled={!seguros.length}>
+            Gravar {seguros.length} sem ambiguidade
+          </button>
+        </>
+      )}
+
+      {feito && (
+        <div className="sucesso" style={{ marginTop: '.6rem' }}>
+          {feito.gravados != null && `${feito.gravados} cargo(s) gravado(s).`}
+          {feito.criadas != null && `${feito.criadas} criada(s), ${feito.atualizadas} atualizada(s).`}
+        </div>
+      )}
+      {msg && <div className="alerta" style={{ marginTop: '.6rem' }}>{msg}</div>}
     </div>
   )
 }

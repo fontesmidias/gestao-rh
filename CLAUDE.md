@@ -404,6 +404,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Arquivo .txt do Tirvu: decodifique os TRÊS formatos** (v2.38,
+  `importar_tirvu_txt.decodificar`): o RH cola a tela do Tirvu no Bloco de
+  Notas e salva — que grava em UTF-8, UTF-8 com BOM ou ANSI (cp1252) conforme a
+  versão do Windows. Ler com o codec errado NÃO levanta erro: quebra o acento e
+  o casamento por texto falha CALADO, justamente nos cargos acentuados. As
+  rotas `preview-cargos-arquivo`/`preview-jornadas-arquivo` só trocam a porta
+  de entrada — delegam ao MESMO preview do texto colado, e a regra de propor +
+  confirmar continua valendo. `cargo_tirvu.cbo` guarda o que DISTINGUE
+  homônimo; `jornada.tirvu_escala`/`tirvu_tratamento` são do cadastro do Tirvu
+  e NÃO se confundem com `jornada.escala` (metadado interno do parser, outro
+  vocabulário). Campo vazio no arquivo NUNCA apaga o já gravado.
 - **Padronização em massa de cargos/jornadas do Tirvu** (v1.96,
   `services/importar_tirvu_txt.py`, rotas `/rh/tirvu-txt/*`, tela em
   Config→Empresas e jornadas): resolve a causa raiz das pendências manuais do
