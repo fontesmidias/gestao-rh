@@ -404,6 +404,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Upload de arquivo NUNCA passa pelo `req()` do `api.js`** (v2.39.1, bug de
+  campo 2026-08-01): `_req` força `Content-Type: application/json`, e com
+  `FormData` quem precisa escrever o cabeçalho é o NAVEGADOR — só ele conhece o
+  `boundary` que separa as partes. Sobrescrito, o FastAPI não separa nada e
+  responde **422 `Field required`** para o campo do arquivo… com o multipart
+  inteiro impresso no log ao lado, arquivo e conteúdo à vista. É o erro mais
+  enganoso do projeto: parece falta de dado onde o dado está. Use `buscar()`
+  direto (é o que os uploads antigos sempre fizeram, por isso funcionam).
+  Coberto por `tests/test_upload_multipart.py`, que é ESTRUTURAL: lê o `api.js`
+  e cobra a regra de toda função que monta `FormData` — vale para o próximo
+  upload, não só para os de hoje.
 - **Vínculo em massa pela planilha do Tirvu** (v2.39,
   `services/vinculo_tirvu.py`, rotas `/rh/colaboradores/vinculos/preview` e
   `/aplicar`): a planilha de Colaboradores traz `Lotação`, `Cargo`, `Jornada de

@@ -461,13 +461,25 @@ export const rh = {
     req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Mesma coisa a partir do .txt salvo pelo RH (v2.38) — só muda a porta de
   // entrada; a proposta e a confirmação continuam idênticas.
-  previewCargosArquivo: (arquivo) => {
+  // ATENÇÃO: upload NÃO passa por `req()` — ele força
+  // `Content-Type: application/json`, e aí o navegador não escreve o
+  // `boundary` do multipart. O FastAPI recebe um corpo que não sabe separar e
+  // responde 422 "Field required" com o arquivo visivelmente presente no log,
+  // que é o erro mais enganoso possível (bug de campo 2026-08-01). Use
+  // `buscar()` direto e deixe o navegador definir o Content-Type.
+  previewCargosArquivo: async (arquivo) => {
     const fd = new FormData(); fd.append('arquivo', arquivo)
-    return req('/rh/tirvu-txt/preview-cargos-arquivo', { method: 'POST', headers: authRH(), body: fd })
+    const r = await buscar(`${BASE}/rh/tirvu-txt/preview-cargos-arquivo`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
   },
-  previewJornadasArquivo: (arquivo) => {
+  previewJornadasArquivo: async (arquivo) => {
     const fd = new FormData(); fd.append('arquivo', arquivo)
-    return req('/rh/tirvu-txt/preview-jornadas-arquivo', { method: 'POST', headers: authRH(), body: fd })
+    const r = await buscar(`${BASE}/rh/tirvu-txt/preview-jornadas-arquivo`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
   },
   confirmarCargosTirvu: ({ itens }) =>
     req('/rh/tirvu-txt/confirmar-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
@@ -475,9 +487,13 @@ export const rh = {
     req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
   // Vínculo em massa (v2.39): a planilha de Colaboradores traz jornada, cargo,
   // lotação e PCD por pessoa. Preview PROPÕE, aplicar GRAVA o confirmado.
-  previewVinculos: (arquivo) => {
+  previewVinculos: async (arquivo) => {
     const fd = new FormData(); fd.append('arquivo', arquivo)
-    return req('/rh/colaboradores/vinculos/preview', { method: 'POST', headers: authRH(), body: fd })
+    // idem: multipart não pode passar pelo req (ver comentário acima)
+    const r = await buscar(`${BASE}/rh/colaboradores/vinculos/preview`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
   },
   aplicarVinculos: (itens) =>
     req('/rh/colaboradores/vinculos/aplicar',

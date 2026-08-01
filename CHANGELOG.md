@@ -11,6 +11,36 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.39.1] — 2026-08-01 — Correção: o upload dizia "não foi possível ler o arquivo"
+
+Relatado pelo Bruno minutos depois da v2.39, com print e log: os cards novos
+de importação respondiam *"Não foi possível ler o arquivo (dados_invalidos)"*.
+
+O log mostrava a coisa mais enganosa possível — `422 Field required` para o
+campo `arquivo`, **com o multipart inteiro impresso ao lado**: nome do arquivo,
+tipo, conteúdo, tudo à vista. Parecia falta de dado onde o dado estava.
+
+### Corrigido
+
+As três chamadas novas mandavam o `FormData` pelo `req()` do `api.js`, que
+**força `Content-Type: application/json`**. Com multipart, quem precisa
+escrever esse cabeçalho é o navegador — só ele conhece o `boundary` que separa
+as partes. Sobrescrito o cabeçalho, o boundary some e o FastAPI conclui que o
+campo não veio. Agora usam `buscar()` direto, como os uploads antigos
+(colaboradores, ponto, currículo) sempre fizeram — era por isso que eles
+funcionavam.
+
+### Notas
+
+A regra nunca esteve escrita em lugar nenhum, então o próximo upload repetiria
+o erro. Virou `tests/test_upload_multipart.py`, que é **estrutural**: lê o
+`api.js`, encontra toda função que monta `FormData` e cobra que ela não use
+`req()`. Validado por mutação — reintroduzir exatamente o defeito do print faz
+o teste falhar.
+
+Os testes de backend não pegavam isto e não pegariam: o `TestClient` monta o
+multipart corretamente, então o defeito só existia no caminho do navegador.
+
 ## [2.39.0] — 2026-08-01 — Vincular mil colaboradores de uma vez
 
 Pedido do Bruno:
