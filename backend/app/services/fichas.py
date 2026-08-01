@@ -26,6 +26,9 @@ from app.models.ficha import (
     FichaEmergencia,
     ValeTransporte,
 )
+from app.services.endereco import cep_formatado
+from app.services.endereco import completo as endereco_completo
+from app.services.endereco import rua as endereco_rua
 from sqlalchemy import select
 
 VERDE = (140, 198, 63)
@@ -329,7 +332,9 @@ def gerar_ficha_cadastro(db: Session, candidato: Candidato,
             pdf.campo("Endereço", e.logradouro_numero_complemento)
         pdf.campo("Bairro", e.bairro)
         pdf.campo("Cidade/UF", f"{e.cidade or '-'}/{e.uf or '-'}")
-        pdf.campo("CEP", e.cep)
+        # Com hífen: o banco guarda só os dígitos, mas "CEP 72215342" num
+        # documento parece dado sujo.
+        pdf.campo("CEP", cep_formatado(e.cep))
 
     pdf.ln(2); pdf.secao("3. DOCUMENTOS")
     if d:
@@ -464,8 +469,11 @@ def gerar_ficha_emergencia(db: Session, candidato: Candidato,
         pdf.campo("CPF", d.cpf)
         pdf.campo("RG", d.rg_numero)
     if e:
-        pdf.campo("Endereço residencial", e.logradouro_numero_complemento)
-        pdf.campo("Cidade/UF — CEP", f"{e.cidade or '-'}/{e.uf or '-'} — {e.cep or '-'}")
+        # `endereco.rua` lê os DOIS formatos do banco — a coleta atual grava
+        # logradouro/número/complemento separados e deixa a string legada nula.
+        pdf.campo("Endereço residencial", endereco_rua(e))
+        pdf.campo("Cidade/UF — CEP",
+                  f"{e.cidade or '-'}/{e.uf or '-'} — {cep_formatado(e.cep) or '-'}")
     pdf.campo("Celular / WhatsApp", candidato.celular_whatsapp or "-")
     pdf.campo("E-mail", candidato.email or "-")
 
@@ -529,9 +537,12 @@ def gerar_termo_vt(db: Session, candidato: Candidato,
     if optante and vt:
         pdf.secao("Dados do optante")
         if e:
-            pdf.campo("Endereço residencial",
-                      f"{e.logradouro_numero_complemento or '-'}, {e.bairro or '-'}, "
-                      f"{e.cidade or '-'}/{e.uf or '-'} — CEP {e.cep or '-'}")
+            # O endereço é o OBJETO desta declaração — o item (b) abaixo diz
+            # "resido no endereço acima informado, assumindo inteira
+            # responsabilidade pela veracidade". Sair pela metade (só cidade,
+            # UF e CEP, como acontecia com quem preencheu no formato atual)
+            # descaracteriza o documento que a pessoa assina.
+            pdf.campo("Endereço residencial", endereco_completo(e) or "-")
         pdf.campo("Número do cartão DFTrans (de sua titularidade)", vt.cartao_dftrans)
         pdf.campo("Percurso (ida e volta) — linhas, empresas e valores", vt.trajeto_descricao)
         pdf.ln(2)
@@ -1457,11 +1468,11 @@ def gerar_ficha_cadastral_terceirizado(db: Session, candidato: Candidato,
               f" / {(d.rg_data_expedicao if d else None) or '-'}")
     pdf.campo("Estado civil", _campo(p, "estado_civil"))
     pdf.campo("Escolaridade", _campo(p, "escolaridade"))
-    pdf.campo("Endereço", e.logradouro_numero_complemento if e else None)
+    pdf.campo("Endereço", endereco_rua(e))
     pdf.campo("Bairro", e.bairro if e else None)
     pdf.campo("Cidade / UF / CEP",
               f"{(e.cidade if e else None) or '-'} / {(e.uf if e else None) or '-'}"
-              f" / {(e.cep if e else None) or '-'}")
+              f" / {cep_formatado(e.cep if e else None) or '-'}")
     pdf.campo("Celular / WhatsApp", candidato.celular_whatsapp)
     pdf.campo("E-mail", candidato.email)
     pdf.campo("Cargo / função", candidato.cargo_funcao)
@@ -1480,7 +1491,10 @@ def gerar_oficio_apresentacao_presidencia(db: Session, candidato: Candidato,
     cpf = _cpf_formatado(d.cpf if d else None)
     rg = (d.rg_numero if d else None) or "................."
     orgao = (d.rg_orgao_emissor if d else None) or "SSP/____"
-    endereco = (e.logradouro_numero_complemento if e else None) or "................................"
+    # Ofício de credenciamento: aqui o endereço vai COMPLETO, e a linha de
+    # pontinhos é o último recurso — quem preenchia no formato atual caía nela
+    # com o endereço inteiro guardado no banco ao lado.
+    endereco = endereco_completo(e) or "................................"
     quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
               else date.today())
 

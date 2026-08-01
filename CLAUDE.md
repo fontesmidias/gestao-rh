@@ -140,6 +140,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   - Expurgo mora em `workers/expurgo.py` (o compose já o agenda; um cron a mais
     seria mais uma peça para esquecer de subir) e NÃO passa pela lixeira —
     milhões de linhas de uso afogariam o que ela existe para proteger.
+- **Endereço também vem em DOIS formatos — use `services/endereco.py`** (v2.37,
+  feedback de campo 2026-08-01): `Endereco` guarda a string única legada
+  (`logradouro_numero_complemento`) E os campos separados
+  (`logradouro`/`numero`/`complemento`) que o layout do Tirvu exigiu. A coleta
+  ATUAL grava os separados e deixa o legado **nulo** — nada sincroniza os dois.
+  Quem lia só o legado imprimia traço no lugar da rua: Termo de VT (o documento
+  que declara "resido no endereço acima" e autoriza 6% de desconto), ficha de
+  emergência, ficha cadastral do terceirizado, ofício à Presidência (caía na
+  linha de pontinhos) e a planilha geral do RH. Use `endereco.rua()` onde já
+  existem campos de bairro/cidade/CEP e `endereco.completo()` em texto corrido;
+  `cep_formatado()` para imprimir (o banco guarda 8 dígitos sem máscara).
+  Parte ausente é OMITIDA, nunca vira `-`. **NÃO migre em lote** — mesma regra
+  da data do creche. A ficha cadastral principal e a autodeclaração de
+  residência já tratavam os dois: não "consertar" o que está certo.
 - **Data no banco vem em DOIS formatos — leia os dois** (v2.27, incidente de
   campo 2026-07-30): `CriancaCreche.data_nascimento` é `String(10)` com o
   comentário "dd/mm/aaaa", mas o `InputData.jsx` devolve **ISO** (`aaaa-mm-dd`)
