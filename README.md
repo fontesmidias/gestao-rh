@@ -30,6 +30,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 ### Base de colaboradores e postos (RH)
 - Candidato e colaborador são o **mesmo registro** — em admissão (`situação` nula), ativo ou desligado
 - **Importação idempotente** da base do Tirvu (.xlsx) por CPF; postos de serviço com documentos específicos por posto/regime (INFRAERO, Presidência, intermitente)
+- **De-para de lotações**: a lotação vem abreviada no Tirvu ("INEP ADM") e o posto tem nome completo — o sistema ordena os candidatos por semelhança **de palavra**, mostra quantas pessoas dependem de cada decisão, e onde há empate real deixa a escolha em branco de propósito
 - **Vínculo em massa**: a mesma planilha de Colaboradores preenche jornada, cargo, posto e PCD de mil pessoas de uma vez — quem já tem valor diferente **nunca é sobrescrito** (vira lista de decisão), e o que não casa aparece com quantas pessoas dependem
 - **Cargos e jornadas do Tirvu por upload de .txt** (o Tirvu não exporta: o RH copia a tela, salva no Bloco de Notas e sobe o arquivo) — com ID, CBO, escala e tratamento; o sistema propõe o de-para e separa o que é ambíguo para o RH decidir, nunca funde sozinho
 - Dashboard, filtros e **exportação Excel** com uma linha por colaborador e todas as respostas

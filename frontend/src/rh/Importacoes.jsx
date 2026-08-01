@@ -135,6 +135,7 @@ export default function Importacoes() {
         <p className="explica">→ Acesse em <strong>Postos → 📊 Incidência de Benefícios</strong>.</p>
       </div>
 
+      <CardDeParaLotacoes />
       <CardVinculos />
 
       <CardTirvuTxt
@@ -166,6 +167,142 @@ export default function Importacoes() {
         rotuloAmbiguo="descrição repetida com IDs diferentes"
         ondeDecidir="Configurações → Empresas e jornadas"
       />
+    </div>
+  )
+}
+
+// De-para lotação → posto (v2.40). É a peça que faltava para o vínculo em
+// massa alcançar todo mundo: a lotação vem abreviada na planilha ("INEP ADM",
+// "ANAC") e o apelido do posto aqui é o padrão longo. Só 11% casam sozinhos, e
+// "ANAC" pode ser SEDE ou AEROPORTO — ambiguidade do DADO, que nenhum
+// algoritmo resolve honestamente.
+//
+// Por isso a tela ordena por QUANTAS PESSOAS dependem de cada lotação: resolver
+// "INEP ADM" (174 pessoas) antes de uma com 1 é o que respeita o tempo do RH.
+function CardDeParaLotacoes() {
+  const inputRef = useRef(null)
+  const [previa, setPrevia] = useState(null)
+  const [escolhas, setEscolhas] = useState({})
+  const [msg, setMsg] = useState(null)
+  const [feito, setFeito] = useState(null)
+
+  const enviar = async (arquivo) => {
+    if (!arquivo) return
+    setMsg(null); setPrevia(null); setFeito(null); setEscolhas({})
+    try {
+      const r = await comAmpulheta('Procurando as lotações sem posto…',
+        () => api.previewDeParaLotacoes(arquivo))
+      setPrevia(r)
+      // Pré-seleciona a melhor sugestão SÓ quando ela é folgadamente a melhor:
+      // com duas parecidas (o caso "ANAC"), o campo fica vazio de propósito —
+      // pré-selecionar uma delas é decidir no lugar do RH disfarçando de
+      // sugestão.
+      const inicial = {}
+      for (const p of r.pendentes) {
+        const [a, b] = p.sugestoes
+        if (a && (!b || a.score - b.score > 0.15)) inicial[p.lotacao] = a.posto_id
+      }
+      setEscolhas(inicial)
+    } catch (e) {
+      setMsg(`Não foi possível ler a planilha (${e.detail || e.message}).`)
+    } finally { if (inputRef.current) inputRef.current.value = '' }
+  }
+
+  const confirmar = async () => {
+    setMsg(null)
+    const itens = Object.entries(escolhas)
+      .filter(([, posto_id]) => posto_id)
+      .map(([lotacao, posto_id]) => ({ lotacao, posto_id }))
+    if (!itens.length) { setMsg('Escolha ao menos um posto.'); return }
+    try {
+      setFeito(await comAmpulheta('Gravando o de-para…',
+        () => api.confirmarDeParaLotacoes(itens)))
+      setPrevia(null)
+    } catch (e) {
+      setMsg(`Não foi possível gravar (${e.detail || e.message}).`)
+    }
+  }
+
+  const escolhidos = Object.values(escolhas).filter(Boolean).length
+  const pessoasCobertas = (previa?.pendentes || [])
+    .filter((p) => escolhas[p.lotacao]).reduce((s, p) => s + p.pessoas, 0)
+
+  return (
+    <div className="rh-card">
+      <h3>🗺️ De-para de lotações (Tirvu → posto daqui)</h3>
+      <p className="explica">A lotação vem <strong>abreviada</strong> na planilha do Tirvu
+        (&ldquo;INEP ADM&rdquo;, &ldquo;ANAC&rdquo;) e aqui o posto tem o nome completo — por isso
+        a maioria não casa sozinha. Suba a <strong>planilha de Colaboradores</strong>: o sistema
+        ordena os postos mais parecidos e <strong>você escolhe</strong>. Feito uma vez, as
+        próximas importações já sabem.</p>
+      <input ref={inputRef} type="file" accept=".xlsx" hidden
+             onChange={(e) => enviar(e.target.files?.[0])} />
+      <button className="btn-secundario btn-mini" onClick={() => inputRef.current?.click()}>
+        📥 Escolher a planilha…</button>
+
+      {previa && previa.pendentes.length === 0 && (
+        <div className="sucesso" style={{ marginTop: '.6rem' }}>
+          Todas as lotações desta planilha já têm posto. Nada a decidir.
+        </div>
+      )}
+
+      {previa && previa.pendentes.length > 0 && (
+        <>
+          <div className="rh-metricas" style={{ marginTop: '.6rem' }}>
+            <div className="rh-metrica"><strong>{previa.pendentes.length}</strong><span>lotações sem posto</span></div>
+            <div className="rh-metrica"><strong>{previa.total_pessoas}</strong><span>pessoas esperando</span></div>
+            <div className="rh-metrica"><strong>{previa.ja_mapeadas}</strong><span>já decididas antes</span></div>
+          </div>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Lotação (Tirvu)</th><th>Pessoas</th><th>Posto daqui</th></tr></thead>
+              <tbody>
+                {previa.pendentes.map((p) => (
+                  <tr key={p.lotacao}>
+                    <td className="dash-quebra">{p.lotacao}</td>
+                    <td><strong>{p.pessoas}</strong></td>
+                    <td>
+                      <select value={escolhas[p.lotacao] || ''}
+                              onChange={(e) => setEscolhas(
+                                (x) => ({ ...x, [p.lotacao]: e.target.value }))}>
+                        <option value="">— deixar para depois —</option>
+                        {p.sugestoes.map((s) => (
+                          <option key={s.posto_id} value={s.posto_id}>
+                            {s.posto_nome} ({Math.round(s.score * 100)}%)
+                          </option>
+                        ))}
+                        {/* A lista inteira: a sugestão pode simplesmente não ter
+                            o posto certo, e sem esta saída o RH ficaria preso. */}
+                        <optgroup label="Todos os postos">
+                          {previa.postos.map((s) => (
+                            <option key={s.id} value={s.id}>{s.nome}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="explica">
+            Onde duas sugestões ficaram parecidas, o campo vem <strong>vazio de
+            propósito</strong> — &ldquo;ANAC&rdquo; pode ser a sede ou o aeroporto, e essa
+            escolha é sua. O que ficar em branco continua na fila.
+          </p>
+          <button className="btn-principal btn-mini" onClick={confirmar} disabled={!escolhidos}>
+            Gravar {escolhidos} de-para ({pessoasCobertas} pessoa(s))
+          </button>
+        </>
+      )}
+
+      {feito && (
+        <div className="sucesso" style={{ marginTop: '.6rem' }}>
+          {feito.criados} de-para criado(s), {feito.atualizados} atualizado(s). Agora rode
+          o card abaixo (&ldquo;Vincular colaboradores&rdquo;) para essas pessoas ganharem o posto.
+        </div>
+      )}
+      {msg && <div className="alerta" style={{ marginTop: '.6rem' }}>{msg}</div>}
     </div>
   )
 }
