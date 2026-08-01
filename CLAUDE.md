@@ -404,6 +404,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Vínculo em massa pela planilha do Tirvu** (v2.39,
+  `services/vinculo_tirvu.py`, rotas `/rh/colaboradores/vinculos/preview` e
+  `/aplicar`): a planilha de Colaboradores traz `Lotação`, `Cargo`, `Jornada de
+  Trabalho` e `PCD?` por pessoa — a importação lia só as duas primeiras. O
+  módulo é PURO (recebe MAPAS prontos, não a sessão) justamente para obrigar o
+  chamador a carregar em lote: com 1.156 linhas, uma consulta por linha é a
+  diferença entre segundos e minutos. Regras que não devem ser afrouxadas:
+  **campo vazio no portal é preenchido, campo DIFERENTE nunca é sobrescrito**
+  (pode ser correção manual do RH; vira lista de decisão) e **o que não casa
+  sai em fila com quantas pessoas dependem**. Números reais medidos: cargo casa
+  100%, jornada 99%, **posto 11%** — a lotação vem abreviada ("INEP ADM" = 174
+  pessoas) e o mesmo texto pode ser dois postos, então posto NÃO se resolve
+  sozinho. CPF de 11 dígitos não basta: `000.000.000-00` viraria "pessoa fora
+  do portal" e esconderia o cadastro sujo na origem.
 - **Arquivo .txt do Tirvu: decodifique os TRÊS formatos** (v2.38,
   `importar_tirvu_txt.decodificar`): o RH cola a tela do Tirvu no Bloco de
   Notas e salva — que grava em UTF-8, UTF-8 com BOM ou ANSI (cp1252) conforme a

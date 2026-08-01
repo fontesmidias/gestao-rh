@@ -653,3 +653,157 @@ def transferir(cid: uuid.UUID, payload: TransferenciaIn, db: Session = Depends(g
               detalhe={"nome": c.nome_completo, "de": origem, "para": str(posto.id)})
     db.commit()
     return {"id": c.id, "posto_servico_id": c.posto_servico_id, "posto_nome": posto.nome}
+
+
+# ======================================================================
+# Vínculo em massa: posto, cargo e jornada conforme o Tirvu (v2.39)
+# ======================================================================
+#
+# Pedido do Bruno (2026-08-01): "precisa vincular os colaboradores em massa
+# também a seus respectivos postos, cargos e jornadas, conforme Tirvu, quero
+# evitar trabalho manual".
+#
+# Por que NÃO virou parte da importação de colaboradores, que lê a mesma
+# planilha: aquela grava direto, e aqui o RH precisa CONFERIR antes — são ~1.000
+# registros e o que se sobrescreve não volta. Preview e aplicação separados,
+# como na Incidência de Benefícios.
+
+
+def _mapas_para_vinculo(db: Session) -> tuple[dict, dict, dict]:
+    """Tudo que o cruzamento precisa, em 3 consultas — nunca uma por linha.
+
+    Com 1.156 pessoas na planilha, consultar por linha seria a diferença entre
+    segundos e minutos (e a lição de N+1 que a v2.15 já cobrou neste projeto).
+    """
+    from app.models.candidato import Jornada
+    from app.services.vinculo_tirvu import normalizar, so_digitos
+
+    pessoas = {}
+    for c in db.scalars(select(Candidato).where(Candidato.cpf.is_not(None))).all():
+        pessoas[so_digitos(c.cpf)] = c
+    # PCD mora na FICHA (`DadosPessoais`, 1:1), não no Candidato. Carrego em
+    # lote e penduro no objeto como atributo efêmero, só para o analisador ler:
+    # é o que evita uma consulta de ficha por linha da planilha.
+    pcd_por_candidato = {dp.candidato_id: dp.pcd for dp in db.scalars(select(DadosPessoais)).all()}
+    for c in pessoas.values():
+        c.pcd = pcd_por_candidato.get(c.id)
+    jornadas = {normalizar(j.descricao): j.id for j in db.scalars(select(Jornada)).all()}
+    postos = {normalizar(p.nome): p.id for p in db.scalars(select(PostoServico)).all()}
+    return pessoas, jornadas, postos
+
+
+def _resumo_decisao(d) -> dict:
+    return {
+        "cpf": d.cpf, "nome": d.nome, "achou_cadastro": d.achou_cadastro,
+        "jornada": {"texto": d.jornada_texto, "id": d.jornada_id,
+                    "situacao": d.jornada_situacao},
+        "cargo": {"texto": d.cargo_texto, "situacao": d.cargo_situacao,
+                  "atual": d.cargo_atual},
+        "posto": {"texto": d.lotacao_texto, "id": d.posto_id,
+                  "situacao": d.posto_situacao},
+        "pcd": {"valor": d.pcd, "deficiencia": d.pcd_deficiencia,
+                "situacao": d.pcd_situacao},
+    }
+
+
+@router.post("/rh/colaboradores/vinculos/preview")
+async def preview_vinculos(arquivo: UploadFile, db: Session = Depends(get_db),
+                           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Lê a planilha de Colaboradores do Tirvu e PROPÕE os vínculos. Não grava.
+
+    Devolve o que está pronto (campo vazio no portal), o que DIVERGE (valor
+    diferente aqui — pode ser correção feita à mão, então é decisão humana) e o
+    que não tem par na base, com quantas pessoas dependem de cada item.
+    """
+    from app.api.postos import _ler_linhas_xlsx
+    from app.services.vinculo_tirvu import analisar
+
+    try:
+        linhas = _ler_linhas_xlsx(await arquivo.read())
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="planilha_ilegivel") from exc
+    finally:
+        await arquivo.close()   # spool em disco com CPF de mil pessoas
+
+    pessoas, jornadas, postos = _mapas_para_vinculo(db)
+    try:
+        analise = analisar(linhas, candidatos_por_cpf=pessoas,
+                           jornadas_por_descricao=jornadas, postos_por_nome=postos)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def fila(d: dict) -> list[dict]:
+        return [{"texto": k, "pessoas": v}
+                for k, v in sorted(d.items(), key=lambda kv: -kv[1])]
+
+    return {
+        "linhas": len(analise.decisoes),
+        "sem_cpf": analise.sem_cpf,
+        "fora_da_base": len(analise.fora_da_base),
+        "prontas": len(analise.prontas),
+        "divergentes": len(analise.divergentes),
+        "jornadas_sem_par": fila(analise.jornadas_sem_par),
+        "lotacoes_sem_par": fila(analise.lotacoes_sem_par),
+        # O que a tela precisa para o RH conferir e para o aplicar receber de volta
+        "itens": [_resumo_decisao(d) for d in analise.prontas],
+        "itens_divergentes": [_resumo_decisao(d) for d in analise.divergentes],
+    }
+
+
+class VinculoItemIn(BaseModel):
+    cpf: str
+    jornada_id: uuid.UUID | None = None
+    cargo_funcao: str | None = None
+    posto_id: uuid.UUID | None = None
+    pcd: bool | None = None
+    pcd_deficiencia: str | None = None
+
+
+class AplicarVinculosIn(BaseModel):
+    itens: list[VinculoItemIn]
+
+
+@router.post("/rh/colaboradores/vinculos/aplicar")
+def aplicar_vinculos(payload: AplicarVinculosIn, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Grava os vínculos que o RH confirmou. Só toca o que veio na lista.
+
+    O PCD é dado de saúde e vem da base do Tirvu, não de declaração da pessoa:
+    é gravado com o rastro de que veio de lá (auditoria), como qualquer outro
+    registro que o RH faz sobre alguém.
+    """
+    from app.services.vinculo_tirvu import so_digitos
+
+    pessoas = {so_digitos(c.cpf): c
+               for c in db.scalars(select(Candidato).where(Candidato.cpf.is_not(None))).all()}
+    tocados = {"jornada": 0, "cargo": 0, "posto": 0, "pcd": 0}
+    ignorados = 0
+    for item in payload.itens:
+        c = pessoas.get(so_digitos(item.cpf))
+        if c is None:
+            ignorados += 1
+            continue
+        if item.jornada_id is not None:
+            c.jornada_id = item.jornada_id
+            tocados["jornada"] += 1
+        if item.cargo_funcao:
+            c.cargo_funcao = item.cargo_funcao.strip()
+            tocados["cargo"] += 1
+        if item.posto_id is not None:
+            c.posto_servico_id = item.posto_id
+            tocados["posto"] += 1
+        if item.pcd is not None:
+            dp = db.get(DadosPessoais, c.id)
+            if dp is None:
+                dp = DadosPessoais(candidato_id=c.id)
+                db.add(dp)
+            dp.pcd = item.pcd
+            if item.pcd_deficiencia and not dp.pcd_tipo:
+                dp.pcd_tipo = item.pcd_deficiencia.strip()[:30]
+            tocados["pcd"] += 1
+
+    registrar(db, "colaboradores_vinculados_em_massa", ator="rh", ator_detalhe=rh.email,
+              detalhe={**tocados, "enviados": len(payload.itens), "ignorados": ignorados,
+                       "origem": "planilha do Tirvu"})
+    db.commit()
+    return {**tocados, "ignorados": ignorados}
