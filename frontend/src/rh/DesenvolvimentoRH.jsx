@@ -69,7 +69,7 @@ function Fila() {
       opcoes: ['Crítico', 'Comum'],
       valor: (l) => (l.critico ? 'Crítico' : 'Comum'),
       render: (l) => (l.critico
-        ? <span className="chip" style={{ '--chip-cor': '#e5484d' }}>Crítico</span>
+        ? <span className="chip" style={{ '--chip-cor': 'var(--erro)' }}>Crítico</span>
         : <span className="chip">Comum</span>) },
     { chave: 'status', rotulo: 'Situação', filtro: 'select',
       opcoes: ['Em análise', 'Validado', 'Devolvido', 'Não aceito'],
@@ -176,7 +176,7 @@ function Conferencia({ registro, aoFechar, aoErro }) {
           </span>
           {registro.critico && (
             <div style={{ marginTop: '.35rem' }}>
-              <span className="chip" style={{ '--chip-cor': '#e5484d' }}>
+              <span className="chip" style={{ '--chip-cor': 'var(--erro)' }}>
                 Crítico — confira com atenção</span>
             </div>
           )}
@@ -294,13 +294,13 @@ function ChipStatus({ registro: r }) {
   // O PRAZO manda sobre o status: certificado validado que já venceu é um
   // problema, não uma conquista.
   if (r.status === 'validado' && r.situacao_validade === 'vencido') {
-    return <span className="chip" style={{ '--chip-cor': '#e5484d' }}>Vencido</span>
+    return <span className="chip" style={{ '--chip-cor': 'var(--erro)' }}>Vencido</span>
   }
   if (r.status === 'validado' && r.situacao_validade === 'a_vencer') {
-    return <span className="chip" style={{ '--chip-cor': '#f5a623' }}>A vencer</span>
+    return <span className="chip" style={{ '--chip-cor': 'var(--ambar)' }}>A vencer</span>
   }
   if (r.status === 'validado' && r.situacao_validade === 'valido') {
-    return <span className="chip" style={{ '--chip-cor': '#0a8f46' }}>Válido</span>
+    return <span className="chip" style={{ '--chip-cor': 'var(--verde-escuro)' }}>Válido</span>
   }
   return <span className="chip" style={{ '--chip-cor': cores[r.status] }}>
     {ROTULO_STATUS[r.status] || r.status}</span>
@@ -355,7 +355,7 @@ function Brigada() {
       valor: (l) => (l.pronto ? 'Pronto' : 'Incompleto'),
       quebra: true,
       render: (l) => (l.pronto
-        ? <span className="chip" style={{ '--chip-cor': '#0a8f46' }}>Pronto</span>
+        ? <span className="chip" style={{ '--chip-cor': 'var(--verde-escuro)' }}>Pronto</span>
         : <span className="aviso-pendente">⚠️ falta {l.pendencias.join(', ')}</span>) },
   ]
 
@@ -628,7 +628,7 @@ function Tipos() {
           <div className="rh-topo" style={{ marginBottom: '.3rem' }}>
             <h4 style={{ margin: 0 }}>
               {t.nome}{' '}
-              {t.critico && <span className="chip" style={{ '--chip-cor': '#e5484d' }}>
+              {t.critico && <span className="chip" style={{ '--chip-cor': 'var(--erro)' }}>
                 Crítico</span>}
               {!t.ativo && <span className="chip">Inativo</span>}
             </h4>

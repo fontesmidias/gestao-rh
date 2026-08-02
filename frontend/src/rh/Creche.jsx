@@ -377,7 +377,7 @@ function Levantamentos() {
           : <span className="chip" style={{ '--chip-cor': (STATUS_BEN[b.status] || {}).cor || '#889' }}>
               {(STATUS_BEN[b.status] || {}).rot || b.status}</span>}
         {b.reenviado_apos_correcao && (
-          <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.3rem' }}
+          <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)', marginLeft: '.3rem' }}
                 title="O colaborador reenviou após a devolução">✓ reenviado</span>)}
         {b.revisar_idade && (
           <span className="chip" style={{ '--chip-cor': '#d9534f', marginLeft: '.3rem' }}

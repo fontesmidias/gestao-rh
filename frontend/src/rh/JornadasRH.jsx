@@ -92,7 +92,7 @@ export default function JornadasRH({ aoVoltar }) {
       opcoes: [{ v: 'Confirmada', r: 'Confirmada' }, { v: 'A confirmar', r: 'A confirmar' }],
       valor: (j) => (j.estruturado ? 'Confirmada' : 'A confirmar'),
       render: (j) => j.estruturado
-        ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✓ Confirmada</span>
+        ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✓ Confirmada</span>
         : <span className="chip" style={{ '--chip-cor': '#e9a63a' }}>A confirmar</span> },
   ]
 

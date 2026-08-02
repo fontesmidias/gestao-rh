@@ -210,7 +210,7 @@ export default function Modelos() {
                             ✍️ assinatura{m.papel_assinatura ? ` (${m.papel_assinatura})` : ''}</span>
                         )}{' '}
                         {m.enviar_por_email && (
-                          <span className="chip" style={{ '--chip-cor': '#0fb257' }}
+                          <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}
                                 title="Ao enviar, a pessoa recebe por e-mail">✉️ e-mail</span>
                         )}
                         {!m.exige_assinatura && !m.enviar_por_email &&

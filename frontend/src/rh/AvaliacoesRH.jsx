@@ -4,6 +4,7 @@ import DashPlanilha from './DashPlanilha.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 import Formulario from './FormularioAvaliacao.jsx'
 import RadarCompetencias from './RadarCompetencias.jsx'
+import Ajuda from '../Ajuda.jsx'
 
 // Avaliação de Desempenho (Onda C) — o formulário da cartilha de 17/06/2026.
 //
@@ -112,7 +113,7 @@ function Lista({ somenteMinhas }) {
       <p className="explica" style={{ marginTop: '.4rem' }}>
         {somenteMinhas
           ? 'As avaliações que você precisa preencher e dar o feedback.'
-          : 'Todas as avaliações — é aqui que o RH homologa.'}
+          : <>Todas as avaliações — é aqui que o RH homologa.<Ajuda termo="homologar" /></>}
       </p>
       <Msg msg={msg} />
 
@@ -175,7 +176,8 @@ function NovaAvaliacao({ colaboradores, ciclos, aoFechar, aoErro }) {
             {Object.entries(ROTULO_OCASIAO).map(([v, r]) =>
               <option key={v} value={v}>{r}</option>)}
           </select></label>
-        <label className="campo"><span className="rotulo">Sua relação com a pessoa</span>
+        <label className="campo"><span className="rotulo">Sua relação com a pessoa
+          <Ajuda termo="avaliacao_horizontal" /></span>
           <select value={f.relacao} onChange={(e) => setF({ ...f, relacao: e.target.value })}>
             {Object.entries(ROTULO_RELACAO).map(([v, r]) =>
               <option key={v} value={v}>{r}</option>)}

@@ -599,10 +599,10 @@ function SituacaoChip({ registro: r }) {
   }
   // validado mas vencendo: o prazo importa mais que o status
   if (r.status === 'validado' && r.situacao_validade === 'vencido') {
-    return <span className="chip" style={{ '--chip-cor': '#e5484d' }}>Vencido</span>
+    return <span className="chip" style={{ '--chip-cor': 'var(--erro)' }}>Vencido</span>
   }
   if (r.status === 'validado' && r.situacao_validade === 'a_vencer') {
-    return <span className="chip" style={{ '--chip-cor': '#f5a623' }}>A vencer</span>
+    return <span className="chip" style={{ '--chip-cor': 'var(--ambar)' }}>A vencer</span>
   }
   const m = mapa[r.status] || mapa.pendente
   return <span className="chip" style={{ '--chip-cor': m.cor }}>{m.texto}</span>

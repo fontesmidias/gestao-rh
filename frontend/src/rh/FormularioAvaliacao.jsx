@@ -80,7 +80,7 @@ export default function Formulario({ avaliacaoId, form, homologando,
           <div style={{ marginTop: '.35rem' }}>
             <span className="chip">{ROTULO_OCASIAO[a.ocasiao] || a.ocasiao}</span>{' '}
             <span className="chip">{a.relacao === 'vertical' ? 'Vertical' : a.relacao === 'horizontal' ? 'Horizontal' : 'Autoavaliação'}</span>{' '}
-            {a.media != null && <span className="chip" style={{ '--chip-cor': '#0a8f46' }}>
+            {a.media != null && <span className="chip" style={{ '--chip-cor': 'var(--verde-escuro)' }}>
               média {a.media.toFixed(2)}</span>}
           </div>
         </div>

@@ -19,6 +19,19 @@ const GLOSSARIO = {
   situacional: 'Teste situacional: apresenta situações reais de trabalho e avalia a qualidade das reações escolhidas.',
   dois_fatores: 'Confirmação em duas etapas: além do link, a pessoa confirma um código recebido no e-mail, provando que é ela mesma.',
   lgpd: 'LGPD: Lei Geral de Proteção de Dados (Lei nº 13.709/2018) — regras para uso e guarda de dados pessoais.',
+  // Gestão de Desempenho (Onda C). Os termos vêm da Cartilha do Avaliador — o
+  // instrumento oficial do RH —, e saíram sem explicação nenhuma na tela.
+  homologar: 'Homologar: o RH confere e encerra a avaliação, tornando-a oficial. Só depois da conversa de feedback e do prazo de manifestação do colaborador.',
+  manifestacao: 'Manifestação: o direito do colaborador de registrar a própria opinião sobre a avaliação recebida (seção 9 da cartilha). Tem prazo de 7 dias — passado ele, o RH pode homologar assim mesmo.',
+  feedback_dado: 'Feedback dado: marca que a conversa presencial entre líder e colaborador aconteceu. A cartilha exige a conversa — por isso não dá para homologar sem passar por aqui.',
+  avaliacao_vertical: 'Vertical: avaliação feita pelo líder direto. É identificada — é ele quem conduz a conversa de feedback.',
+  avaliacao_horizontal: 'Horizontal: avaliação feita por colegas do mesmo nível. É sempre anônima e agregada; com menos de 2 respondentes o resultado é suprimido, porque média de um só é o individual com outro nome.',
+  calibracao: 'Calibração: compara a média das notas que um avaliador dá com a dos demais avaliadores. Serve para INFORMAR quem homologa ("este líder é mais rigoroso"), nunca para alterar nota.',
+  fato_observado: 'Fato observado: registro de algo concreto que aconteceu no trabalho, anotado quando acontece. Existe para a avaliação se apoiar em fatos, não na lembrança do último mês (efeito de recência).',
+  pdi: 'PDI: Plano de Desenvolvimento Individual — o que a pessoa vai fazer para evoluir, combinado na conversa de feedback.',
+  // Desenvolvimento (Onda B)
+  reciclagem: 'Reciclagem: refazer um curso ou certificação que venceu (ou está para vencer), para manter a habilitação válida.',
+  documento_critico: 'Documento crítico: certificação cuja validade não pode falhar (brigada, NR, habilitação). Nunca entra em aprovação em lote — precisa de conferência individual.',
 }
 
 export default function Ajuda({ termo, texto }) {

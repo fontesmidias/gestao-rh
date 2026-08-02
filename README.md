@@ -92,6 +92,13 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Minimizada por desenho**: nada do que a pessoa digita, IP truncado (`191.180.x.x`) e token do link mágico mascarado — ele é credencial de acesso
 - **Logs que permitem investigar**: cada linha traz o identificador da requisição e quem estava agindo, então dá para pegar um erro e ver a sequência inteira — inclusive o que veio antes dele; e-mails registram se saíram ou não, o storage acusa o que está lento, e a hora é sempre a de Brasília
 
+### Experiência de uso e acessibilidade
+- **Tour guiado** na primeira visita — no wizard do candidato e no painel do RH (17 telas em 6 grupos), sempre disponível para rever
+- **Glossário embutido**: um `?` ao lado dos termos de negócio (*homologar*, *fato observado*, *repactuação*, *calibração*…) explica a **consequência**, não a palavra — e cita a norma quando ela existe
+- **Contraste verificado por medição**, não a olho: todo texto passa no mínimo AA da WCAG (4,5:1) **nos dois temas**, conferido no navegador com a folha de estilo real
+- **Sistema de design com guarda-corpo automático** ([`08-sistema-de-design.md`](docs/planejamento/08-sistema-de-design.md) + `test_design_system.py`, que roda no CI): classe ou token que não existe, tabela que estoura a tela e remendo inline reprovam antes do merge
+- Nada estoura a tela na horizontal (**68 combinações tela × largura verificadas**) · foco visível para navegação por teclado · botão só com ícone tem nome acessível
+
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
 - **Lixeira universal** com restauração e retenção configurável · expurgo LGPD automático · rate limiting em login/2FA
