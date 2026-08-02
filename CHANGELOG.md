@@ -11,6 +11,62 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.57.0] — 2026-08-02 — O nome como se escreve, sem o espaço sobrando
+
+> *"as vezes fica tudo minúsculo, as vezes digita tudo maiúsculo [...] e tem
+> gente que quando termina de digitar o nome ainda dá um espaço depois da
+> última palavra"*
+
+A capitalização já vinha da v2.54, mas só valia para o NOME e só do momento da
+gravação em diante. Duas lacunas fechadas.
+
+### O espaço sobrando saía só do nome
+
+Em endereço, cidade, bairro, cargo e documentos, o texto ia como digitado. Não
+quebrava nada visivelmente — e é justamente por isso que passava:
+
+- sujava o export do Tirvu/Dexion, lido por outro sistema;
+- **duplicava a opção no filtro de coluna**: `"Taguatinga"` e `"Taguatinga "`
+  viravam duas entradas na lista suspensa, e nenhuma achava as pessoas da
+  outra;
+- quebrava casamento por TEXTO (cargo, lotação, jornada), que é como boa parte
+  do sistema liga as coisas;
+- e, no e-mail, produzia um erro que **mentia**: o `EmailStr` recusava
+  `"jose@x.com "` e a pessoa via *"e-mail inválido"* olhando para um endereço
+  perfeitamente correto.
+
+Agora todos os schemas da ficha herdam de `_AparaEspacos`, que apara todo campo
+de texto com `mode="before"` — antes da validação de tipo, que é o que conserta
+o caso do e-mail. Campo deixado só com espaços vira `None`, não `""`.
+
+### A base existente foi padronizada
+
+Decisão do Bruno: *"corrigir tudo automaticamente agora"*. Isso contraria a
+regra do `CLAUDE.md` ("não migre nome em lote"), e a ressalva foi registrada
+antes de executar — mas a decisão é dele, e a migração foi feita de um jeito
+que a torna **reversível**: o nome original de cada registro alterado fica
+guardado, e o `downgrade()` restaura o valor **exato** (verificado byte a byte,
+espaços inclusive).
+
+Alcança candidato, talento, nome de mãe/pai/social, dependentes, contatos de
+emergência e crianças do creche. Quem já estava no padrão **não é tocado** e nem
+entra no backup.
+
+**O acento não é inventado**: `MARIA DE FATIMA` vira `Maria de Fatima`, nunca
+`Maria de Fátima` (decisão do Bruno na mesma conversa). O acento se perdeu na
+origem, e adivinhar escreveria errado o nome de alguém — pior que deixá-lo sem
+acento.
+
+Um defeito encontrado ao testar a migração, e que vale registrar: a primeira
+versão assumia que toda tabela tem coluna `id`, mas `dados_pessoais` é 1:1 com o
+candidato e usa `candidato_id`. A migração estourou no meio — e o rollback
+transacional por revisão devolveu tudo ao estado anterior, sem alteração
+parcial. É o que se espera do `transaction_per_migration`, confirmado na
+prática.
+
+Validação: **smoke 15/15**, build limpo, upgrade e downgrade testados contra
+banco com dados sujos reais, e as mutações do teste novo detectadas.
+
 ## [2.56.0] — 2026-08-02 — Atendimento presencial, e o upload com guarda-corpo
 
 ### Admissão presencial assistida

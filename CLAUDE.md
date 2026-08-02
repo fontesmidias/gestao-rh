@@ -88,6 +88,33 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Espaço sobrando não é inofensivo — apare TODO campo de texto, não só o
+  nome** (v2.57, `ficha.py::_AparaEspacos`): *"tem gente que quando termina de
+  digitar o nome ainda dá um espaço depois da última palavra"*. No nome o
+  `capitalizar_nome` já resolvia; nos demais campos o texto ia como digitado, e
+  `"Taguatinga "` **duplica a opção no filtro de coluna** (duas entradas na
+  lista suspensa, nenhuma achando as pessoas da outra), suja o export lido por
+  outro sistema e quebra casamento por TEXTO (cargo, lotação, jornada). Pior:
+  no e-mail o `EmailStr` recusava `"jose@x.com "` e a tela dizia *"e-mail
+  inválido"* para um endereço correto. O `model_validator` é `mode="before"`
+  justamente por isso — aparar DEPOIS da validação de tipo não salvaria o
+  e-mail. Campo só com espaços vira `None`, não `""`.
+- **Migração que percorre tabelas não pode assumir que a PK é `id`** (v2.57,
+  `e7f8a9b0c1d2`): `dados_pessoais` é 1:1 com o candidato e usa `candidato_id`.
+  A primeira versão estourou no meio do lote — e o `transaction_per_migration`
+  do `env.py` devolveu tudo, sem alteração parcial (confirmado na prática).
+  Declare a PK por tabela. E, ao guardar backup em chave composta, use um
+  separador que NÃO apareça no conteúdo: com `.` o split quebrava no UUID e o
+  downgrade restauraria o registro errado, em silêncio.
+- **Migração de dado de gente real: guarde o original** (v2.57): o Bruno pediu
+  para padronizar os nomes já gravados, contrariando a regra "não migre nome em
+  lote" — decisão dele, com a ressalva registrada antes. O que torna isso
+  aceitável é a migração guardar o valor ANTERIOR de cada registro alterado
+  (em `configuracao`) e o `downgrade()` restaurar o valor EXATO, espaços
+  inclusive. Teste o downgrade de verdade, não só o upgrade: "reversível" que
+  ninguém executou é promessa, não garantia. E **não invente acento** —
+  `FATIMA` continua `Fatima`; adivinhar escreve errado o nome de alguém.
+
 - **`await arquivo.close()` no `finally` mora DENTRO do serviço, não no
   call-site** (v2.56, `services/upload_seguro.py`): as duas rotas de upload do
   creche eram as ÚNICAS do backend inteiro sem o `close()` — e são PÚBLICAS. O
