@@ -251,6 +251,29 @@ const acoesAdmissao = (c, abrir) => (<>
               : (c.email ? '⚠ E-mail falhou' : '⚠ Sem e-mail')
             setTimeout(() => { btn.textContent = original }, 2500)
           }}>✉️ Reenviar</button>
+  {/* Atendimento presencial (v2.56): para quem chega com os documentos na mão
+      e não tem prática com tecnologia. Abre o MESMO wizard numa aba, marcado
+      como sessão assistida — o que muda é o registro, não o fluxo: o manifesto
+      da assinatura passa a dizer que o preenchimento foi operado pelo RH, na
+      presença da pessoa, em vez de afirmar que ela assinou sozinha. */}
+  <button className="btn-secundario btn-mini"
+          title="Abre o formulário aqui, para preencher COM a pessoa presente. A assinatura continua sendo dela, com o código no e-mail dela."
+          onClick={async (e) => {
+            if (!window.confirm(
+              `Atender ${c.nome_completo} presencialmente?\n\n`
+              + 'Abre o formulário numa aba nova para você preencher com a pessoa ao lado.\n'
+              + 'No fim, ela assina com o código que chega no e-mail DELA — e o documento '
+              + 'registra que o atendimento foi assistido por você.')) return
+            const btn = e.currentTarget
+            try {
+              const r = await api.sessaoAssistida(c.id)
+              window.open(r.link_magico, '_blank', 'noopener')
+            } catch (err) {
+              const original = btn.textContent
+              btn.textContent = err.detail === 'sem_email' ? '⚠ Cadastre o e-mail' : '⚠ Falhou'
+              setTimeout(() => { btn.textContent = original }, 3000)
+            }
+          }}>🧑‍💼 Atender presencial</button>
 </>)
 
 // Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos

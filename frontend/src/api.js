@@ -573,6 +573,10 @@ export const rh = {
         body: JSON.stringify({ posto_id, data_transferencia }) }),
   novoCandidato: (dados) =>
     req('/rh/candidatos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  // Abre o wizard marcado como atendimento presencial: o RH preenche com a
+  // pessoa ao lado, e a assinatura dela registra que foi assistida.
+  sessaoAssistida: (id) =>
+    req(`/rh/candidatos/${id}/sessao-assistida`, { method: 'POST', headers: authRH() }),
   reenviarLink: (id) =>
     req(`/rh/candidatos/${id}/reenviar-link`, { method: 'POST', headers: authRH() }),
   gerarLink: (id) =>
@@ -699,6 +703,12 @@ export const rh = {
   // continuar respondendo sem login é o que a torna útil quando o painel está
   // fora do ar. Não começa com `/rh`, então não aciona o indicador de ocupado.
   saude: () => req('/health'),
+  // Tamanho máximo de arquivo que o colaborador consegue enviar — editável no
+  // painel para não exigir deploy quando o teto se mostra pequeno demais.
+  tetoUpload: () => req('/rh/config/upload', { headers: authRH() }),
+  salvarTetoUpload: (mb) =>
+    req('/rh/config/upload', { method: 'PUT', headers: authRH(),
+                               body: JSON.stringify({ mb }) }),
   lixeira: () => req('/rh/lixeira', { headers: authRH() }),
   lixeiraRestaurar: (id) =>
     req(`/rh/lixeira/${id}/restaurar`, { method: 'POST', headers: authRH() }),

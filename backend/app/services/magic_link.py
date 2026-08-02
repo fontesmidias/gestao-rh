@@ -13,20 +13,49 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def emitir_link(db: Session, candidato: Candidato, base_url: str | None = None) -> str:
+def emitir_link(db: Session, candidato: Candidato, base_url: str | None = None,
+                assistido_por: str | None = None,
+                horas: int | None = None) -> str:
     """Gera um token de acesso e retorna a URL completa a ser enviada ao candidato.
+
     base_url deve vir da requisição (core.config.base_url_publica); sem ela, cai
-    no BASE_URL do .env."""
+    no BASE_URL do .env.
+
+    `assistido_por` marca o link como sessão ASSISTIDA (v2.56): o RH abre no
+    computador do escritório e preenche COM A PESSOA PRESENTE. Guarda o e-mail
+    do operador, que vai parar no manifesto da assinatura — é o que impede o
+    documento de afirmar que a pessoa assinou sozinha na plataforma.
+
+    `horas` encurta a validade. A sessão assistida usa poucas horas em vez das
+    72 do convite: o link é para usar AGORA, com a pessoa na sala, e um link de
+    preenchimento-por-terceiro válido por três dias é superfície de risco sem
+    nenhuma contrapartida.
+    """
     settings = get_settings()
     token = secrets.token_urlsafe(32)
     acesso = AcessoMagico(
         candidato_id=candidato.id,
         token_hash=_hash(token),
-        expira_em=datetime.now(timezone.utc) + timedelta(hours=settings.magic_link_ttl_hours),
+        assistido_por=assistido_por,
+        expira_em=datetime.now(timezone.utc) + timedelta(
+            hours=horas if horas is not None else settings.magic_link_ttl_hours),
     )
     db.add(acesso)
     db.flush()
     return f"{base_url or settings.base_url}/c/{token}"
+
+
+def operador_assistente(db: Session, token: str) -> str | None:
+    """E-mail do RH que abriu esta sessão assistida, ou `None` se é remota.
+
+    Consultado no momento da ASSINATURA, para o manifesto registrar quem operou
+    o preenchimento. Devolve `None` para todo link comum — que é a esmagadora
+    maioria e continua funcionando exatamente como antes.
+    """
+    acesso = db.scalar(select(AcessoMagico).where(AcessoMagico.token_hash == _hash(token)))
+    if acesso is None or acesso.revogado:
+        return None
+    return acesso.assistido_por
 
 
 def resolver_token(db: Session, token: str) -> Candidato | None:

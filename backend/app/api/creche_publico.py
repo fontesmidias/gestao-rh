@@ -35,6 +35,7 @@ from app.models.ficha import DadosPessoais, Endereco
 from app.services import kba, storage
 from app.services.auditoria import registrar
 from app.services.email_templates import enviar_modelo
+from app.services.upload_seguro import extensao_de, ler_upload
 from app.services.validacao import cpf_valido
 
 router = APIRouter(tags=["creche-publico"])
@@ -664,10 +665,12 @@ async def subir_documento(token: str, crianca_id: str, tipo: str, arquivo: Uploa
         raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
     if tipo not in ("certidao", "guarda"):
         raise HTTPException(status_code=422, detail="tipo_invalido")
-    conteudo = await arquivo.read()
-    if not conteudo:
-        raise HTTPException(status_code=422, detail="arquivo_vazio")
-    ext = (arquivo.filename or "").rsplit(".", 1)[-1].lower()[:5] or "bin"
+    # Teto de tamanho, extensão da lista e — principalmente — `close()` do
+    # spool. Esta rota é PÚBLICA e gravava qualquer coisa, de qualquer tamanho,
+    # deixando o arquivo temporário no container: o que sobrava ali era
+    # certidão de nascimento de criança (v2.56).
+    conteudo = await ler_upload(db, arquivo)
+    ext = extensao_de(arquivo)
     key = f"creche/{ben.id}/{crianca_id}/{tipo}.{ext}"
     storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
     if tipo == "certidao":
@@ -904,10 +907,12 @@ async def creche_admissao_doc(token: str, crianca_id: str, tipo: str, arquivo: U
         raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
     if tipo not in ("certidao", "guarda"):
         raise HTTPException(status_code=422, detail="tipo_invalido")
-    conteudo = await arquivo.read()
-    if not conteudo:
-        raise HTTPException(status_code=422, detail="arquivo_vazio")
-    ext = (arquivo.filename or "").rsplit(".", 1)[-1].lower()[:5] or "bin"
+    # Teto de tamanho, extensão da lista e — principalmente — `close()` do
+    # spool. Esta rota é PÚBLICA e gravava qualquer coisa, de qualquer tamanho,
+    # deixando o arquivo temporário no container: o que sobrava ali era
+    # certidão de nascimento de criança (v2.56).
+    conteudo = await ler_upload(db, arquivo)
+    ext = extensao_de(arquivo)
     key = f"creche/{ben.id}/{crianca_id}/{tipo}.{ext}"
     storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
     if tipo == "certidao":

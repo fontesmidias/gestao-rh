@@ -156,10 +156,16 @@ class _FichaPDF(FPDF):
         self.set_font("helvetica", "", 8)
         quando = assinatura.assinado_em.strftime("%d/%m/%Y %H:%M:%S UTC")
         papel = f", na qualidade de {assinatura.papel}" if assinatura.papel else ""
+        # Mesma correção do manifesto (v2.56): no atendimento assistido, o
+        # bloco não pode sugerir que a pessoa operou o sistema sozinha. Usa a
+        # mesma técnica de interpolação condicional do `papel`, logo acima.
+        assistida = (f" Coletada presencialmente, em atendimento assistido por "
+                     f"{assinatura.assistida_por}, na presença do titular."
+                     if getattr(assinatura, "assistida_por", None) else "")
         self.multi_cell(
             182, 4.5,
             f"Assinado por {nome}{papel} em {quando}, mediante código de verificação enviado ao "
-            f"titular. IP: {assinatura.ip or '-'}\n"
+            f"titular.{assistida} IP: {assinatura.ip or '-'}\n"
             f"Integridade (SHA-256 do documento sem este bloco): {assinatura.hash_sha256}\n"
             f"O manifesto completo de assinatura, com todas as evidências, está na última "
             f"página deste documento.",
@@ -200,6 +206,20 @@ class _FichaPDF(FPDF):
         self.campo("Método", "Código de verificação numérico de uso único, enviado ao "
                              "e-mail do titular e validado nesta plataforma antes da "
                              "aposição da assinatura.")
+        # SESSÃO ASSISTIDA (v2.56): o código continua indo ao e-mail do titular
+        # — a prova de identidade é a mesma —, mas quem operou o preenchimento
+        # foi o RH, com a pessoa presente. Sem esta linha, o manifesto
+        # descreveria um ato que não aconteceu exatamente assim.
+        #
+        # É o princípio já cravado na `AutorizacaoEquipe`, que diz "emitido sob
+        # autorização permanente de X" em vez de "X assinou": o documento
+        # descreve o ato REAL, nunca a versão mais conveniente dele.
+        if getattr(assinatura, "assistida_por", None):
+            self.campo("Forma de coleta",
+                       "Assinatura colhida PRESENCIALMENTE, em atendimento assistido: "
+                       f"o preenchimento foi operado por {assinatura.assistida_por}, "
+                       "a pedido e na presença do titular, que validou o código "
+                       "recebido em seu próprio e-mail.")
         self.campo("Modalidade", "Assinatura eletrônica simples — art. 4º, I, da "
                                  "Lei nº 14.063/2020.")
 

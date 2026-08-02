@@ -142,6 +142,22 @@ export default function CandidatoApp() {
         <button className="btn-ajuda" title="Rever explicação" onClick={() => tour.drive()}>?</button>
       </header>
 
+      {/* Atendimento presencial (v2.56): a faixa fica VISÍVEL o tempo todo
+          porque o wizard é idêntico ao que o candidato vê sozinho em casa — e
+          quem opera precisa saber, sem procurar, que está na aba do
+          atendimento e não numa janela qualquer. Diz também o que vai
+          acontecer no fim (o código chega no e-mail DELA), que é a parte que
+          costuma pegar de surpresa com a pessoa já sentada ao lado. */}
+      {estado?.sessao_assistida && (
+        <div className="aviso-assistido">
+          <strong>🧑‍💼 Atendimento presencial</strong> — você está preenchendo com{' '}
+          <strong>{estado?.nome_completo || 'o candidato'}</strong> presente.
+          No fim, a assinatura é dela: o código chega no e-mail dela
+          {estado?.email ? <> (<strong>{estado.email}</strong>)</> : null}, e o documento
+          registra que o atendimento foi assistido por você.
+        </div>
+      )}
+
       <nav className="stepper" aria-label="Etapas da admissão">
         {PASSOS.map((nome, i) => (
           <div key={nome}

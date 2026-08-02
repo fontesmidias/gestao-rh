@@ -104,7 +104,20 @@ requerimento duplicado — que é exatamente o que o Bruno pediu.
 
 ---
 
-## 2. Admissão presencial assistida
+## 2. Admissão presencial assistida — ✅ IMPLEMENTADO na v2.56
+
+> Decisões que o Bruno tomou em 2026-08-02, ao pedir a implementação:
+>
+> * **código por E-MAIL da própria pessoa** — e o RH cadastra na hora se
+>   faltar (a prova de identidade não é enfraquecida). SMS ficou como
+>   possibilidade futura: não há serviço gratuito confiável no Brasil, e o
+>   e-mail já funciona e custa zero;
+> * **qualquer usuário do RH** pode abrir a sessão (a auditoria registra quem).
+>
+> O achado que reduziu o tamanho do item: o link mágico já ERA o mecanismo — o
+> RH podia abrir no próprio computador. Faltava o registro, não o fluxo.
+>
+> Ver `CHANGELOG.md` [2.56.0] e `tests/test_admissao_assistida.py`.
 
 ### O problema, nas palavras do Bruno
 
@@ -236,6 +249,11 @@ furaram.
 **Recomendação:** tratar o `close()` + teto de tamanho + validação de extensão
 como conserto de segurança na próxima leva, independentemente de quando a câmera
 e o timbrado forem implementados.
+
+> ✅ **A parte de SEGURANÇA foi feita na v2.56**: `services/upload_seguro.py`
+> fecha o spool, aplica teto (configurável no painel) e valida a extensão nas
+> duas rotas do creche. **Câmera guiada e papel timbrado continuam pendentes** —
+> são experiência, e ficaram para a próxima leva.
 
 ---
 

@@ -394,6 +394,12 @@ def estado_ficha(token: str, db: Session = Depends(get_db)) -> dict:
     """Estado completo para o front retomar de onde parou."""
     candidato = _candidato_do_token(token, db)
     saida = montar_ficha(db, candidato)
+    # Sessão ASSISTIDA (v2.56): este link foi emitido pelo RH para preencher
+    # com a pessoa presente? O wizard mostra uma faixa dizendo isso — sem ela,
+    # quem opera não tem como saber se está na aba certa, e a diferença
+    # importa: é o que decide o que o manifesto da assinatura vai declarar.
+    from app.services.magic_link import operador_assistente
+    saida["sessao_assistida"] = operador_assistente(db, token)
     db.commit()
     return saida
 

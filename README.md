@@ -36,6 +36,9 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - Dashboard, filtros e **exportação Excel** com uma linha por colaborador e todas as respostas
 - **Exportação para os sistemas de folha**, fiel ao layout de cada um: **Tirvu** (28 colunas, aba `Plan1`, sem autofiltro — ele recusa a "decoração") e **Dexion** (97 colunas A→CS, cabeçalho de 4 linhas, datas em serial do Excel e `autoFilter`, que o outro rejeita). Cada um tem gerador próprio: os dois só se parecem de longe, e copiar um produziria um arquivo que *parece* certo. Antes do download, uma **pré-checagem diz quem tem campo faltando, com nome e motivo** — no Dexion, código do eSocial errado não dá erro na importação: entra limpo e sai errado na declaração meses depois
 
+### Atendimento presencial
+- Para quem chega com os documentos na mão e não tem prática com tecnologia: o RH abre o **mesmo formulário** e preenche com a pessoa ao lado. O que muda não é o fluxo — é o **registro**: a assinatura continua sendo dela (código no e-mail dela), e o manifesto do documento passa a declarar *"colhida presencialmente, em atendimento assistido por [nome], na presença do titular"*, em vez de afirmar que ela assinou sozinha na plataforma
+
 ### Documentos e assinaturas
 - **Modelos de documento** no papel timbrado, com variáveis (`{{nome}}`, `{{cargo}}`…), prévia, envio pontual e predefinições (Ofício, Comunicado, Contrato, Declaração)
 - **Assinatura eletrônica simples** (Lei 14.063/2020, art. 4º, I): código de uso único por e-mail, manifesto de evidências no PDF (hash SHA-256, IP, dispositivo, data) e **verificador público por QR code**

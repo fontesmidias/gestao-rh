@@ -1006,6 +1006,44 @@ def restaurar_email(chave: str, versao: int | None = None,
         assunto=v.assunto, corpo=v.corpo, botao_texto=v.botao_texto), db, rh)
 
 
+# ---------- Limite de upload ----------
+
+
+class TetoUploadIn(BaseModel):
+    mb: int
+
+
+@router.get("/rh/config/upload")
+def ver_teto_upload(db: Session = Depends(get_db),
+                    _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.upload_seguro import (TETO_MB_MAX, TETO_MB_MIN,
+                                            EXTENSOES_DOCUMENTO, teto_bytes)
+    return {"mb": teto_bytes(db) // (1024 * 1024),
+            "minimo": TETO_MB_MIN, "maximo": TETO_MB_MAX,
+            "formatos": sorted(EXTENSOES_DOCUMENTO)}
+
+
+@router.put("/rh/config/upload")
+def salvar_teto_upload(payload: TetoUploadIn, db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Tamanho máximo de arquivo que o colaborador consegue enviar.
+
+    Editável no painel (pedido do Bruno, 2026-08-02) porque limite chumbado no
+    código exige deploy para ajustar — e quem descobre que o teto é pequeno
+    demais é o RH, com o colaborador do outro lado da linha tentando mandar a
+    foto de um celular novo.
+    """
+    from app.services.upload_seguro import (CHAVE_TETO_MB, TETO_MB_MAX,
+                                            TETO_MB_MIN)
+    if not (TETO_MB_MIN <= payload.mb <= TETO_MB_MAX):
+        raise HTTPException(status_code=422, detail="fora_da_faixa")
+    gravar_config(db, {CHAVE_TETO_MB: str(payload.mb)})
+    registrar(db, "upload_teto_config", ator="rh", ator_detalhe=rh.email,
+              detalhe={"mb": payload.mb})
+    db.commit()
+    return {"mb": payload.mb}
+
+
 # ---------- Auditoria ----------
 
 
