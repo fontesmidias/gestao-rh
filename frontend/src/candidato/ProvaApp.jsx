@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { prova as api } from '../api.js'
 import { iniciarTelemetria } from './telemetria.js'
+import DemoTeste from './DemoTeste.jsx'
 import logo from '../assets/logo.png'
 
 // Aplicação PÚBLICA de uma prova por cargo (link /p/{token}). A pessoa se
@@ -55,6 +56,22 @@ export default function ProvaApp() {
     <Casca>
       <h2>{info?.titulo || 'Prova'}</h2>
       {info?.descricao && <p className="explica centro">{info.descricao}</p>}
+      {/* O que a pessoa precisa saber ANTES de aceitar (v2.53): quanto tempo
+          tem, quantas questões são e como se responde. Antes ela só via o
+          campo do nome e descobria o resto com o cronômetro já correndo. */}
+      {(info?.tempo_segundos || info?.qtd_questoes > 0) && (
+        <ul className="teste-orientacoes">
+          {info.qtd_questoes > 0 && (
+            <li>📋 São <strong>{info.qtd_questoes} questão(ões)</strong>.</li>
+          )}
+          {info.tempo_segundos > 0 && (
+            <li>⏱️ Você terá <strong>{Math.round(info.tempo_segundos / 60)} minutos</strong> a
+              partir do momento em que começar. O tempo corre mesmo se você fechar a tela.</li>
+          )}
+          <li>➡️ A resposta é salva a cada questão; ao final, toque em <strong>Enviar</strong>.</li>
+        </ul>
+      )}
+      <DemoTeste tipo="prova" />
       <form onSubmit={participar}>
         <label className="campo"><span className="rotulo">Seu nome completo</span>
           <input value={nome} onChange={(e) => setNome(e.target.value)} autoFocus autoComplete="name" /></label>

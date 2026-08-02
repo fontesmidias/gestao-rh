@@ -11,6 +11,52 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.53.0] — 2026-08-02 — Ver como se responde, antes de começar
+
+Ideia do Bruno, e melhor que os casos que eu tinha avaliado para animação:
+
+> *"talvez o CSS/SVG seria interessante apenas para os testes DISC e
+> situacionais e também os testes de processo seletivo, antes da pessoa
+> iniciar, de modo que ela entre nos testes sem dúvidas."*
+
+Quem está prestes a fazer um teste que pode decidir a contratação dele não
+deveria gastar atenção descobrindo a mecânica. E a instrução do DISC é a mais
+difícil de entender lendo — *"marque na coluna da esquerda a que MAIS tem a ver
+e, na da direita, a que MENOS, uma em cada coluna, nunca a mesma palavra"*.
+Isso se entende **vendo**.
+
+### Adicionado
+
+- **`DemoTeste.jsx`** — uma questão de mentira que se responde sozinha, na tela
+  de instruções do **DISC**, do **situacional**, da **testagem avulsa** (`/t/`)
+  e das **provas de seleção** (`/p/`). No DISC as marcações aparecem em
+  sequência, uma em cada coluna, mostrando a regra em vez de descrevê-la.
+- **A prova agora diz o tamanho da tarefa antes de aceitar**: quantas questões
+  e quantos minutos. Antes a pessoa via só o campo do nome e descobria o resto
+  com o cronômetro correndo. A rota pública `GET /p/{token}` passou a devolver
+  `tempo_segundos` e `qtd_questoes` — o **gabarito continua fora** (verificado).
+
+### Por que CSS/SVG e não GIF
+
+Decisão do Bruno na abertura da reforma, e aqui ela se paga: um GIF pesaria
+centenas de KB no celular de quem já sofre com conexão ruim, congelaria a tela
+do dia em que foi gravado, e não seria legível por leitor de tela. A demo usa
+as **mesmas classes da tela real** (`.teste-linha`, `.teste-adjetivo`,
+`.teste-tag`) — se o teste mudar de aparência, ela muda junto.
+
+Acessibilidade: a animação é decorativa (`aria-hidden`) e o texto ao lado diz a
+mesma coisa em palavras. Com `prefers-reduced-motion`, some o movimento e fica
+o estado final preenchido — que é o que a animação queria comunicar.
+
+### Verificação
+
+Build ok · `test_design_system` OK · `deploy-tela-branca` 8/8 · demo conferida
+**renderizada** nos dois temas, no DISC, no situacional e na prova · rota
+pública conferida: devolve tempo e quantidade, **não devolve gabarito**.
+
+O guarda-corpo da v2.48 pegou uma classe fantasma minha (`demo-linha-unica`)
+antes do commit — era exatamente para isso que ele existia.
+
 ## [2.52.0] — 2026-08-02 — Filtro de coluna também escolhe da lista
 
 Continuação do pedido da v2.50, agora nos filtros das tabelas. O Bruno mandou
