@@ -3,6 +3,7 @@ import { creche as api } from './api.js'
 import { fmtTelefone } from './fmt.js'
 import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
+import SelectBusca from './SelectBusca.jsx'
 
 // Link público único do levantamento do Reembolso-Creche (IN SEGES/MGI 147/2026).
 // Etapas: CPF -> código 2FA (e-mail) -> conferir dados -> crianças + certidão -> enviar.
@@ -527,11 +528,11 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
               <InputData valor={nova.data_nascimento}
                          onChange={(iso) => setNova({ ...nova, data_nascimento: iso || '' })} /></label>
             <label className="campo"><span className="rotulo">Vínculo</span>
-              <select value={nova.parentesco} onChange={(e) => setNova({ ...nova, parentesco: e.target.value })}>
+              <SelectBusca valor={nova.parentesco} aoEscolher={(v) => setNova({ ...nova, parentesco: v })}>
                 <option value="filho">Filho(a)</option>
                 <option value="enteado">Enteado(a)</option>
                 <option value="guarda">Guarda judicial</option>
-              </select></label>
+              </SelectBusca></label>
           </div>
           <button className="btn-secundario" onClick={addCrianca}>+ Adicionar criança</button>
         </div>

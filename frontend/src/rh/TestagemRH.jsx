@@ -4,6 +4,7 @@ import { rh as api } from '../api.js'
 import { ResultadoDisc, ResultadoSituacional } from '../ResultadoTeste.jsx'
 import { ComportamentoTeste } from './Detalhe.jsx'
 import ProvasRH from './ProvasRH.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Página de TESTES: dash unificado (admissão + testagem avulsa) com status,
 // duração, resultado e comportamento (telemetria), reset para refazer, e a
@@ -95,20 +96,20 @@ function Dash({ aoAbrirPessoa }) {
       <div className="rh-card rh-lote">
         <input placeholder="🔎 Buscar por nome…" value={busca} style={{ maxWidth: 220 }}
                onChange={(e) => setBusca(e.target.value)} />
-        <select value={origem} onChange={(e) => setOrigem(e.target.value)}>
+        <SelectBusca valor={origem} aoEscolher={(v) => setOrigem(v)}>
           <option value="">Origem: todas</option>
           <option value="admissao">Admissão</option>
           <option value="testagem">Testagem avulsa</option>
-        </select>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+        </SelectBusca>
+        <SelectBusca valor={tipo} aoEscolher={(v) => setTipo(v)}>
           <option value="">Teste: todos</option>
           <option value="disc">DISC</option>
           <option value="situacional">Situacional</option>
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)}>
+        </SelectBusca>
+        <SelectBusca valor={status} aoEscolher={(v) => setStatus(v)}>
           <option value="">Status: todos</option>
           {Object.entries(STATUS).map(([v, [r]]) => <option key={v} value={v}>{r}</option>)}
-        </select>
+        </SelectBusca>
         <span className="explica" style={{ margin: 0 }}>{itens.length} teste(s)</span>
       </div>
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import Ajuda from '../Ajuda.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Logs dos serviços — pedido do Bruno em 2026-07-30: "quero muito a tela de
 // logs no painel", para não depender de SSH quando alguém liga travado. Foi o
@@ -118,16 +119,16 @@ export default function LogsRH() {
           <div className="rh-card">
             <div className="rh-grid-2">
               <label className="campo"><span className="rotulo">Serviço</span>
-                <select value={servico} onChange={(e) => { setServico(e.target.value); setDia('') }}>
+                <SelectBusca valor={servico} aoEscolher={(v) => { setServico(v); setDia('') }}>
                   {info.servicos.map((s) => (
                     <option key={s.nome} value={s.nome}>{s.nome}</option>))}
-                </select></label>
+                </SelectBusca></label>
               <label className="campo"><span className="rotulo">Dia</span>
-                <select value={dia} onChange={(e) => setDia(e.target.value)}>
+                <SelectBusca valor={dia} aoEscolher={(v) => setDia(v)}>
                   <option value="">Hoje</option>
                   {(atual?.dias || []).map((d) => (
                     <option key={d} value={d}>{d}</option>))}
-                </select></label>
+                </SelectBusca></label>
             </div>
             <div className="rh-grid-2">
               <label className="campo"><span className="rotulo">Procurar no texto</span>
@@ -136,15 +137,15 @@ export default function LogsRH() {
                 <small className="explica">Vários termos: a linha precisa ter
                   todos. Ex.: <code>creche ERROR</code>.</small></label>
               <label className="campo"><span className="rotulo">Nível</span>
-                <select value={nivel} onChange={(e) => setNivel(e.target.value)}>
+                <SelectBusca valor={nivel} aoEscolher={(v) => setNivel(v)}>
                   {NIVEIS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-                </select></label>
+                </SelectBusca></label>
             </div>
             <div className="rh-grid-2">
               <label className="campo"><span className="rotulo">Assunto</span>
-                <select value={assunto} onChange={(e) => setAssunto(e.target.value)}>
+                <SelectBusca valor={assunto} aoEscolher={(v) => setAssunto(v)}>
                   {ASSUNTOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-                </select>
+                </SelectBusca>
                 <small className="explica">Atalhos para o que se procura num
                   aperto. Some com a busca acima.</small></label>
               <label className="campo"><span className="rotulo">&nbsp;</span>

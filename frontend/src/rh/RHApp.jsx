@@ -498,25 +498,26 @@ function PainelConteudo({ aoSair }) {
                    onChange={(e) => setNovo({ ...novo, celular_whatsapp: fmtTelefone(e.target.value) })} />
           </div>
           <div className="linha3">
-            <select value={novo.posto_id || ''} onChange={(e) => {
-              if (e.target.value === '__novo') { setNovo({ ...novo, criandoPosto: '' }); return }
-              setNovo({ ...novo, posto_id: e.target.value, criandoPosto: undefined })
-            }}>
+            <SelectBusca valor={novo.posto_id || ''} placeholder="Buscar posto…"
+                         aoEscolher={(v) => {
+                           if (v === '__novo') { setNovo({ ...novo, criandoPosto: '' }); return }
+                           setNovo({ ...novo, posto_id: v, criandoPosto: undefined })
+                         }}>
               <option value="">— posto de serviço (obrigatório) —</option>
               {postos.map((p) => <option key={p.id} value={p.id}>
                 {p.sigla || p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
               <option value="__novo">➕ Outro (cadastrar novo posto)</option>
-            </select>
-            <select value={novo.jornada_id || ''}
-                    onChange={(e) => setNovo({ ...novo, jornada_id: e.target.value })}>
+            </SelectBusca>
+            <SelectBusca valor={novo.jornada_id || ''} placeholder="Buscar jornada…"
+                         aoEscolher={(v) => setNovo({ ...novo, jornada_id: v })}>
               <option value="">— jornada (obrigatória) —</option>
               {jornadasConvite.map((j) => <option key={j.id} value={j.id}>{j.descricao}</option>)}
-            </select>
-            <select value={novo.regime || 'efetivo'}
-                    onChange={(e) => setNovo({ ...novo, regime: e.target.value })}>
+            </SelectBusca>
+            <SelectBusca valor={novo.regime || 'efetivo'}
+                         aoEscolher={(v) => setNovo({ ...novo, regime: v })}>
               <option value="efetivo">Regime: Efetivo</option>
               <option value="intermitente">Regime: Intermitente</option>
-            </select>
+            </SelectBusca>
           </div>
           <div className="linha2">
             {digitandoCargoConvite ? (
@@ -542,24 +543,24 @@ function PainelConteudo({ aoSair }) {
                 "é uma das coisas fundamentais para o Tirvu"). Antes só virava
                 pendência na hora do export — e o Tirvu aceita a célula vazia
                 calado, então o colaborador nascia lá sem a marcação. */}
-            <select value={novo.registra_ponto === undefined || novo.registra_ponto === null
+            <SelectBusca valor={novo.registra_ponto === undefined || novo.registra_ponto === null
               ? '' : String(novo.registra_ponto)}
-                    onChange={(e) => setNovo({ ...novo,
-                      registra_ponto: e.target.value === '' ? null : e.target.value === 'true' })}>
+                         aoEscolher={(v) => setNovo({ ...novo,
+                           registra_ponto: v === '' ? null : v === 'true' })}>
               <option value="">— registra ponto? (obrigatório) —</option>
               <option value="true">Registra ponto: Sim</option>
               <option value="false">Registra ponto: Não</option>
-            </select>
+            </SelectBusca>
             {/* Empresa: o grupo opera com UMA empregadora, então o campo vem
                 escolhido e serve ao cadastro. Obrigar um clique numa lista de
                 um item seria teatro; com duas ou mais, o RH decide. */}
             {empresasConvite.length > 1 && (
-              <select value={novo.empresa_id || ''}
-                      onChange={(e) => setNovo({ ...novo, empresa_id: e.target.value || null })}>
+              <SelectBusca valor={novo.empresa_id || ''} placeholder="Buscar empresa…"
+                           aoEscolher={(v) => setNovo({ ...novo, empresa_id: v || null })}>
                 <option value="">— empresa (empregadora) —</option>
                 {empresasConvite.map((e2) => (
                   <option key={e2.id} value={e2.id}>{e2.nome_fantasia || e2.razao_social}</option>))}
-              </select>
+              </SelectBusca>
             )}
             {jornadasConvite.length === 0 && (
               <span className="explica" style={{ margin: 0, alignSelf: 'center' }}>

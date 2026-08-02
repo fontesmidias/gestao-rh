@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import DashPlanilha from './DashPlanilha.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Cadastro de Desenvolvimento — painel do RH (Onda B).
 //
@@ -103,13 +104,12 @@ function Fila() {
     <>
       <div className="rh-lote" style={{ margin: '.4rem 0 1rem' }}>
         <strong>Mostrar:</strong>
-        <select value={filtroStatus} style={{ maxWidth: 220 }}
-                onChange={(e) => setFiltroStatus(e.target.value)}>
+        <SelectBusca style={{ maxWidth: 220 }} valor={filtroStatus} aoEscolher={(v) => setFiltroStatus(v)}>
           <option value="">Aguardando decisão</option>
           <option value="validado">Validados</option>
           <option value="recusado">Não aceitos</option>
           <option value="pendente,validado,recusado,devolvido">Todos</option>
-        </select>
+        </SelectBusca>
       </div>
       <Msg msg={msg} />
 
@@ -550,10 +550,10 @@ function FormTurma({ aoFechar, aoErro }) {
         <input type="date" value={f.inicio_em}
                onChange={(e) => setF({ ...f, inicio_em: e.target.value })} /></label>
       <label className="campo"><span className="rotulo">Período</span>
-        <select value={f.periodo} onChange={(e) => setF({ ...f, periodo: e.target.value })}>
+        <SelectBusca valor={f.periodo} aoEscolher={(v) => setF({ ...f, periodo: v })}>
           <option value="noturno">Noturno</option>
           <option value="diurno">Diurno</option>
-        </select></label>
+        </SelectBusca></label>
       <label className="campo"><span className="rotulo">Entidade</span>
         <input value={f.entidade}
                onChange={(e) => setF({ ...f, entidade: e.target.value })} /></label>

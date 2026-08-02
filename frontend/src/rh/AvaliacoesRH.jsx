@@ -172,16 +172,16 @@ function NovaAvaliacao({ colaboradores, ciclos, aoFechar, aoErro }) {
                      aoEscolher={(v) => setF({ ...f, candidato_id: v })} /></label>
       <div className="linha2">
         <label className="campo"><span className="rotulo">Ocasião</span>
-          <select value={f.ocasiao} onChange={(e) => setF({ ...f, ocasiao: e.target.value })}>
+          <SelectBusca valor={f.ocasiao} aoEscolher={(v) => setF({ ...f, ocasiao: v })}>
             {Object.entries(ROTULO_OCASIAO).map(([v, r]) =>
               <option key={v} value={v}>{r}</option>)}
-          </select></label>
+          </SelectBusca></label>
         <label className="campo"><span className="rotulo">Sua relação com a pessoa
           <Ajuda termo="avaliacao_horizontal" /></span>
-          <select value={f.relacao} onChange={(e) => setF({ ...f, relacao: e.target.value })}>
+          <SelectBusca valor={f.relacao} aoEscolher={(v) => setF({ ...f, relacao: v })}>
             {Object.entries(ROTULO_RELACAO).map(([v, r]) =>
               <option key={v} value={v}>{r}</option>)}
-          </select></label>
+          </SelectBusca></label>
       </div>
       <div className="linha2">
         <label className="campo"><span className="rotulo">Período avaliado — de</span>
@@ -193,10 +193,10 @@ function NovaAvaliacao({ colaboradores, ciclos, aoFechar, aoErro }) {
       </div>
       {ciclos.length > 0 && (
         <label className="campo"><span className="rotulo">Ciclo</span>
-          <select value={f.ciclo_id} onChange={(e) => setF({ ...f, ciclo_id: e.target.value })}>
+          <SelectBusca valor={f.ciclo_id} aoEscolher={(v) => setF({ ...f, ciclo_id: v })}>
             <option value="">— avulsa —</option>
             {ciclos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select></label>
+          </SelectBusca></label>
       )}
       <div className="rh-conferencia-acoes">
         <button className="btn-principal btn-mini"

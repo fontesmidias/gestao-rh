@@ -419,8 +419,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (dimensão) continua só no servidor. O front lê `.palavra`; a pontuação
   compara a palavra enviada. Definições em `SIGNIFICADOS_DISC` (disc.py),
   escritas à mão.
-- **Select com busca**: `frontend/src/SelectBusca.jsx` para filtros suspensos
-  grandes (postos, cargos) — dados carregados 1x e filtrados em memória.
+- **NUNCA escreva `<select>` nativo — o padrão é `SelectBusca`** (v2.50, pedido
+  do Bruno: *"toda vez que tiver um select, já imponha esse padrão"*). Vale para
+  filtro E preenchimento, em qualquer tela. Ele tem 111 cargos, 269 jornadas e
+  dezenas de postos: rolar até achar era a queixa nº 1 do dia a dia. O
+  componente aceita **duas formas** — `opcoes={[{valor, rotulo, extra}]}` (a
+  original) ou **`<option>` como filhos**, igual a um `<select>` nativo (foi o
+  que permitiu converter os 64 de uma vez, sem reescrever cada bloco). A opção
+  de `value=""` vira automaticamente o "— nenhum —" do topo. **O campo de busca
+  só aparece a partir de `MIN_BUSCA` (7) opções**: em lista de 2 itens
+  (Sim/Não) o campo seria um passo a mais, e no celular a roda nativa é melhor
+  de operar com o polegar — o padrão de USO é único, muda só a densidade.
+  Dados carregados 1x pelo pai e filtrados em memória. O
+  `test_design_system.py` reprova `<select>` no CI.
 - **Multi-signatário** (`solicitacao_assinatura`/`etapa_assinatura`): documento
   assinado por vários em ordem de papéis. A via do candidato dentro de um roteiro
   é uma `Assinatura` DEDICADA marcada com `solicitacao_etapa_id` — o

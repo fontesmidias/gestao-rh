@@ -5,6 +5,7 @@ import { fmtDataHora } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import Ajuda from '../Ajuda.jsx'
 import AlertasTelemetria from './AlertasTelemetria.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Telemetria de uso (v2.24, Configurações → 📈 Telemetria).
 //
@@ -122,12 +123,12 @@ export default function TelemetriaRH() {
         <div className="rh-topo">
           <h3>📈 Telemetria de uso</h3>
           <label className="campo campo-sem-margem">
-            <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+            <SelectBusca valor={dias} aoEscolher={(v) => setDias(Number(v))}>
               <option value={1}>Últimas 24 horas</option>
               <option value={7}>Últimos 7 dias</option>
               <option value={30}>Últimos 30 dias</option>
               <option value={90}>Últimos 90 dias</option>
-            </select>
+            </SelectBusca>
           </label>
         </div>
 
@@ -250,17 +251,15 @@ export default function TelemetriaRH() {
         <div className="rh-grid-2">
           <label className="campo">
             <span className="rotulo">Tipo</span>
-            <select value={filtros.tipo}
-                    onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}>
+            <SelectBusca valor={filtros.tipo} aoEscolher={(v) => setFiltros({ ...filtros, tipo: v })}>
               {TIPOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
+            </SelectBusca>
           </label>
           <label className="campo">
             <span className="rotulo">Origem</span>
-            <select value={filtros.origem}
-                    onChange={(e) => setFiltros({ ...filtros, origem: e.target.value })}>
+            <SelectBusca valor={filtros.origem} aoEscolher={(v) => setFiltros({ ...filtros, origem: v })}>
               {ORIGENS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
+            </SelectBusca>
           </label>
         </div>
         {eventos === null ? <p className="explica">Carregando…</p> : (

@@ -6,6 +6,7 @@ import { fmtCpf, cpfValido, fmtTelefone } from '../fmt.js'
 import { anotarFriccao } from '../telemetria.js'
 import Espera from '../Espera.jsx'
 import InputData from '../InputData.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 import CapturaDocumento from './Camera.jsx'
 
 // cpfValido é reexportado por compatibilidade (Entrar.jsx importava daqui).
@@ -250,12 +251,15 @@ const PENDENCIAS = {
   contatos_emergencia: [5, 'Pelo menos 1 contato de emergência'],
 }
 
+// Todo select do wizard passa por aqui — por isso a busca por digitação
+// (v2.50) chegou aos 12 de uma vez. O `SelectBusca` só mostra o campo de busca
+// quando a lista justifica, então "Sim/Não" continua direto.
 function Select({ valor, onChange, opcoes, vazio = 'Selecione…' }) {
   return (
-    <select value={valor ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+    <SelectBusca valor={valor ?? ''} aoEscolher={(v) => onChange(v || null)}>
       <option value="">{vazio}</option>
       {opcoes.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-    </select>
+    </SelectBusca>
   )
 }
 
@@ -594,13 +598,12 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
         </>}
         <Campo rotulo="Situação militar — documento (se tiver)"
                ajuda="Obrigatório para homens de 18 a 45 anos: Certificado de Reservista, de Alistamento Militar (CAM) ou de Dispensa de Incorporação (CDI).">
-          <select value={doc.militar_tipo || ''}
-                  onChange={(e) => setSec('documentos', 'militar_tipo', e.target.value || null)}>
+          <SelectBusca valor={doc.militar_tipo || ''} aoEscolher={(v) => setSec('documentos', 'militar_tipo', v || null)}>
             <option value="">Não se aplica</option>
             <option value="reservista">Certificado de Reservista</option>
             <option value="alistamento">Certificado de Alistamento Militar (CAM)</option>
             <option value="dispensa">Certificado de Dispensa de Incorporação (CDI)</option>
-          </select></Campo>
+          </SelectBusca></Campo>
         {doc.militar_tipo && <>
           <div className="linha2">
             <Campo rotulo="Nº do certificado (RA)"><input value={doc.militar_numero || ''}
@@ -863,11 +866,11 @@ function BlocoCreche({ token }) {
           <InputData valor={nova.data_nascimento}
                      onChange={(iso) => setNova({ ...nova, data_nascimento: iso || '' })} /></label>
         <label className="campo"><span className="rotulo">Vínculo</span>
-          <select value={nova.parentesco} onChange={(e) => setNova({ ...nova, parentesco: e.target.value })}>
+          <SelectBusca valor={nova.parentesco} aoEscolher={(v) => setNova({ ...nova, parentesco: v })}>
             <option value="filho">Filho(a)</option>
             <option value="enteado">Enteado(a)</option>
             <option value="guarda">Guarda judicial</option>
-          </select></label>
+          </SelectBusca></label>
       </div>
       {erro && <div className="alerta">{erro}</div>}
       <button className="btn-secundario" onClick={add}>+ Adicionar criança</button>

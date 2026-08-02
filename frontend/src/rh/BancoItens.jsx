@@ -144,9 +144,9 @@ function FormItem({ item, senioridades, aoFechar, aoErro }) {
   return (
     <div className="prova-questao editando">
       <label className="campo"><span className="rotulo">Tipo</span>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+        <SelectBusca valor={tipo} aoEscolher={(v) => setTipo(v)}>
           <option value="objetiva">Objetiva</option>
-          <option value="discursiva">Discursiva</option></select></label>
+          <option value="discursiva">Discursiva</option></SelectBusca></label>
       <label className="campo"><span className="rotulo">Enunciado</span>
         <textarea rows={2} value={enunciado} onChange={(e) => setEnunciado(e.target.value)} autoFocus /></label>
       {tipo === 'objetiva' && (
@@ -174,9 +174,9 @@ function FormItem({ item, senioridades, aoFechar, aoErro }) {
           <input value={cargo} placeholder="Genérico se em branco"
                  onChange={(e) => setCargo(e.target.value)} /></label>
         <label className="campo"><span className="rotulo">Senioridade</span>
-          <select value={senioridade} onChange={(e) => setSenioridade(e.target.value)}>
+          <SelectBusca valor={senioridade} aoEscolher={(v) => setSenioridade(v)}>
             {(senioridades || ['qualquer']).map((s) => (
-              <option key={s} value={s}>{SEN_ROTULO[s] || s}</option>))}</select></label>
+              <option key={s} value={s}>{SEN_ROTULO[s] || s}</option>))}</SelectBusca></label>
         <label className="campo" style={{ maxWidth: 100 }}><span className="rotulo">Peso</span>
           <input type="number" min={1} value={peso} onChange={(e) => setPeso(e.target.value)} /></label>
       </div>

@@ -3,6 +3,7 @@ import { portal as api } from './api.js'
 import { VerificarIdentidade } from './CrecheLink.jsx'
 import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
+import SelectBusca from './SelectBusca.jsx'
 
 // Portal do colaborador (/meu) — UMA porta para tudo que é da pessoa.
 //
@@ -524,10 +525,9 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
         {editando ? 'Corrigir envio' : 'Enviar curso ou certificado'}</h2>
 
       <label className="campo"><span className="rotulo">O que você fez?</span>
-        <select value={tipoId} disabled={!!id}
-                onChange={(e) => setTipoId(e.target.value)}>
+        <SelectBusca disabled={!!id} valor={tipoId} aoEscolher={(v) => setTipoId(v)}>
           {tipos.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-        </select></label>
+        </SelectBusca></label>
       {tipo && tipo.descricao && <p className="explica">{tipo.descricao}</p>}
 
       <div className="portal-docs">

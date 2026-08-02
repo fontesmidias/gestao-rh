@@ -3,6 +3,7 @@ import { rh as api } from '../api.js'
 import { fmtDataHora } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import Modal from '../Modal.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Match de Vagas × Banco de Talentos (v2.00 — reescrito após o incidente de
 // 2026-07-28, em que 131 talentos viraram 18 analisados e depois 2).
@@ -240,11 +241,10 @@ function Resultados({ vagas, vagaSelecionada, aoSelecionar, aoReanalisar }) {
   return (
     <>
       <label className="campo"><span className="rotulo">Vaga</span>
-        <select value={vagaId || ''}
-                onChange={(e) => aoSelecionar(vagas.find((v) => v.id === e.target.value) || null)}>
+        <SelectBusca valor={vagaId || ''} aoEscolher={(v) => aoSelecionar(vagas.find((v) => v.id === v) || null)}>
           <option value="">— escolha uma vaga —</option>
           {vagas.map((v) => <option key={v.id} value={v.id}>{v.titulo}</option>)}
-        </select></label>
+        </SelectBusca></label>
 
       {erro && <div className="alerta">{erro}</div>}
       {!vagaId && <p className="explica">Escolha uma vaga para ver o resultado.</p>}
@@ -354,12 +354,12 @@ function FormVaga({ vaga, aoSalvo, aoCancelar }) {
       </div>
       <div className="linha3">
         <label className="campo"><span className="rotulo">Regime</span>
-          <select value={regime} onChange={(e) => setRegime(e.target.value)}>
+          <SelectBusca valor={regime} aoEscolher={(v) => setRegime(v)}>
             <option value="">— não informar —</option>
             <option value="efetivo">Efetivo</option>
             <option value="intermitente">Intermitente</option>
             <option value="tanto_faz">Tanto faz</option>
-          </select></label>
+          </SelectBusca></label>
         <label className="campo"><span className="rotulo">Salário mín.</span>
           <input value={salarioMin} onChange={(e) => setSalarioMin(e.target.value)} /></label>
         <label className="campo"><span className="rotulo">Salário máx.</span>

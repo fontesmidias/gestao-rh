@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
+import SelectBusca from '../SelectBusca.jsx'
 
 // O formulário da cartilha (docs/Cartilha do Avaliador, 17-06-2026), 11 seções.
 // As escalas, os 7 indicadores, as 8 competências e as 5 recomendações vêm do
@@ -327,10 +328,9 @@ function RegistrarFeedback({ avaliacaoId, posturas, aoFechar, aoErro }) {
           <input type="date" value={f.feedback_em} max={hoje()}
                  onChange={(e) => setF({ ...f, feedback_em: e.target.value })} /></label>
         <label className="campo"><span className="rotulo">Como a pessoa reagiu</span>
-          <select value={f.postura}
-                  onChange={(e) => setF({ ...f, postura: e.target.value })}>
+          <SelectBusca valor={f.postura} aoEscolher={(v) => setF({ ...f, postura: v })}>
             {posturas.map((p) => <option key={p.valor} value={p.valor}>{p.rotulo}</option>)}
-          </select></label>
+          </SelectBusca></label>
       </div>
       <label className="campo"><span className="rotulo">Observações</span>
         <textarea rows={2} value={f.postura_observacao}

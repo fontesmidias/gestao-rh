@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Multi-signatário: o RH monta um roteiro de assinatura (quem assina, em que
 // papel e ordem) para um documento de modelo, dispara, e acompanha a timeline.
@@ -119,30 +120,29 @@ function MontarRoteiro({ montando, setMontando, modelos, papeis, usuarios, id, s
   return (
     <div className="form-inline-conteudo" style={{ border: '1px solid var(--borda)', borderRadius: 10, padding: '.7rem', margin: '.5rem 0' }}>
       <label className="campo"><span className="rotulo">Documento (modelo)</span>
-        <select value={montando.modelo_id}
-                onChange={(e) => escolherModelo(e.target.value)}>
+        <SelectBusca valor={montando.modelo_id} aoEscolher={(v) => escolherModelo(v)}>
           <option value="">— escolha o modelo —</option>
           {modelos.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
-        </select></label>
+        </SelectBusca></label>
       <p className="explica" style={{ margin: '.4rem 0 0' }}>Signatários (na ordem em que assinam):</p>
       {montando.etapas.map((e, i) => (
         <div key={i} className="rh-lote" style={{ padding: '.3rem 0', borderBottom: '1px solid var(--borda)' }}>
           <input style={{ maxWidth: 60 }} inputMode="numeric" value={e.ordem}
                  title="Ordem" onChange={(ev) => setEtapa(i, 'ordem', parseInt(ev.target.value, 10) || 1)} />
-          <select value={e.papel} onChange={(ev) => setEtapa(i, 'papel', ev.target.value)}>
+          <SelectBusca valor={e.papel} aoEscolher={(v) => setEtapa(i, 'papel', v)}>
             <option value="">— papel —</option>
             {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
-          </select>
-          <select value={e.tipo} onChange={(ev) => setEtapa(i, 'tipo', ev.target.value)}>
+          </SelectBusca>
+          <SelectBusca valor={e.tipo} aoEscolher={(v) => setEtapa(i, 'tipo', v)}>
             <option value="candidato">O colaborador</option>
             <option value="usuario_rh">Alguém do RH</option>
             <option value="externo">Externo (por e-mail)</option>
-          </select>
+          </SelectBusca>
           {e.tipo === 'usuario_rh' && (
-            <select value={e.usuario_rh_id || ''} onChange={(ev) => setEtapa(i, 'usuario_rh_id', ev.target.value)}>
+            <SelectBusca valor={e.usuario_rh_id || ''} aoEscolher={(v) => setEtapa(i, 'usuario_rh_id', v)}>
               <option value="">— quem do RH —</option>
               {usuarios.filter((u) => u.ativo).map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-            </select>
+            </SelectBusca>
           )}
           {e.tipo === 'externo' && (<>
             <input placeholder="Nome" value={e.externo_nome || ''} style={{ maxWidth: 140 }}

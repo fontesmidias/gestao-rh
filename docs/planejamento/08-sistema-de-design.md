@@ -359,6 +359,43 @@ Grade de 2 colunas com um filho condicional deixa **meia linha vazia** quando
 ele devolve `null`. Use `.rh-grid-auto` (auto-fit), que adapta a quantidade de
 colunas ao que existe de fato.
 
+## 6c-bis. Lista suspensa: SEMPRE `SelectBusca`, nunca `<select>`
+
+Regra cravada pelo Bruno em 2026-08-02, olhando o formulário de convite:
+
+> *"para todos os campos onde tem lista suspensa em todas as páginas, seja para
+> inserir informações, seja para filtrar... o cargo já filtra ao digitar, mas o
+> mesmo não acontece com a jornada e o posto, pois o RH tem que ficar rolando
+> até encontrar... daqui em diante, toda vez que tiver um select, já imponha
+> esse padrão."*
+
+Ele tem **111 cargos, 269 jornadas** e dezenas de postos. Rolar até achar era a
+queixa nº 1 do dia a dia. Na v2.50 os **64 `<select>` nativos** viraram
+[`SelectBusca`](../../frontend/src/SelectBusca.jsx) — não sobrou nenhum, e o
+`test_design_system.py` reprova no CI se alguém escrever um.
+
+Duas formas, ambas válidas:
+
+```jsx
+// 1. `<option>` como filhos — igual a um <select>, ideal para converter código
+<SelectBusca valor={postoId} aoEscolher={setPostoId} placeholder="Buscar posto…">
+  <option value="">— posto de serviço (obrigatório) —</option>
+  {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+</SelectBusca>
+
+// 2. `opcoes` — quando há texto auxiliar (`extra`, exibido em cinza)
+<SelectBusca opcoes={cargos} valor={cargo} aoEscolher={setCargo} vazioRotulo="— todos —" />
+```
+
+A opção de `value=""` vira automaticamente o "— nenhum —" do topo.
+
+**O campo de busca aparece a partir de 7 opções** (`MIN_BUSCA`). O padrão de uso
+é único — a pessoa clica e escolhe do mesmo jeito em toda tela —, mas num select
+de 2 itens (*Sim/Não*, *Efetivo/Intermitente*) um campo de texto seria um passo
+a mais, não a menos; e no celular a roda nativa do sistema é mais fácil de
+operar com o polegar. Se um caso pedir comportamento diferente, ajuste a
+constante — não volte ao `<select>`.
+
 ## 6d. Falha de carga é ERRO na tela, nunca "Carregando…" eterno
 
 `api.x().then(setDados).catch(() => setDados(null))` é armadilha: `null` é o
@@ -508,6 +545,7 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Falha de carga mostra **erro + "tentar de novo"**, não "Carregando…" eterno.
 - [ ] Bloco condicional distingue **carregando** (reserva o lugar) de **vazio**
       (pode sumir) — não `if (!x) return null` para os dois.
+- [ ] Toda lista suspensa é **`SelectBusca`** — zero `<select>` nativo.
 - [ ] A mensagem de cada ação sai **onde a pessoa está olhando** (critério:
       distância do botão, não "sempre local").
 - [ ] **Abri a tela renderizada** e conferi a hierarquia — qual botão domina, o

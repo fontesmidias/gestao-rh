@@ -3,6 +3,7 @@ import { fmtData } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { Papeis, Assinantes } from './Config.jsx'
 import InputSenha from '../InputSenha.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Central de assinaturas (menu próprio): aguardando minha assinatura, o que já
 // assinei, e gerenciar todos os roteiros. Antes espalhado em "Minhas
@@ -55,12 +56,12 @@ function DocsCandidatos({ aoAbrirPessoa }) {
       <div className="rh-card rh-lote">
         <input placeholder="🔎 Nome ou e-mail" value={filtros.busca} style={{ maxWidth: 220 }}
                onChange={(e) => { const f = { ...filtros, busca: e.target.value }; setFiltros(f); recarregar(f) }} />
-        <select value={filtros.situacao} onChange={(e) => { const f = { ...filtros, situacao: e.target.value }; setFiltros(f); recarregar(f) }}>
+        <SelectBusca valor={filtros.situacao} aoEscolher={(v) => { const f = { ...filtros, situacao: v }; setFiltros(f); recarregar(f) }}>
           <option value="">Todas as situações</option>
           <option value="em_admissao">Em admissão</option>
           <option value="ativo">Ativos</option>
           <option value="desligado">Desligados</option>
-        </select>
+        </SelectBusca>
         <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
           <input type="checkbox" style={{ width: 'auto', minHeight: 0 }} checked={filtros.pendentes}
                  onChange={(e) => { const f = { ...filtros, pendentes: e.target.checked }; setFiltros(f); recarregar(f) }} />

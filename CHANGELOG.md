@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.50.0] — 2026-08-02 — Toda lista suspensa filtra ao digitar
+
+Pedido do Bruno, com um exemplo bom e dois ruins na mesma tela:
+
+> *"para todos os campos onde tem lista suspensa em todas as páginas, seja para
+> inserir informações, seja para filtrar... como exemplo positivo destaco o
+> [cargo], que tanto pode rolar para baixo quanto digitar que já vai aparecendo,
+> mas o mesmo não acontece com a jornada e o posto de serviço, pois o RH tem que
+> ficar rolando até encontrar... principalmente os que têm muitas opções, para
+> agilizar a vida do RH."*
+
+Ele tem **111 cargos, 269 jornadas** e dezenas de postos. O componente certo
+(`SelectBusca`) já existia desde a v1.41 — mas só tinha sido aplicado em ~20
+lugares, e os outros **64 continuavam `<select>` nativo**.
+
+### Mudado
+
+- **Os 64 `<select>` nativos viraram `SelectBusca`.** Não sobrou nenhum.
+- **O `SelectBusca` passou a aceitar `<option>` como filhos**, igual a um
+  `<select>`. Foi o que tornou a conversão viável: em vez de reescrever 64
+  blocos à mão (64 chances de errar), a maior parte virou troca de tag. A forma
+  antiga (`opcoes={[...]}`) continua valendo — os ~20 usos anteriores não foram
+  tocados.
+- **O campo de busca só aparece a partir de 7 opções.** O pedido foi "todos,
+  independente se grande ou não", e o padrão de USO é mesmo único — mas num
+  select de 2 itens (*Efetivo/Intermitente*, *Sim/Não*) um campo de texto
+  adicionaria um passo em vez de remover. O limiar é uma constante no
+  componente (`MIN_BUSCA`), fácil de ajustar.
+- **12 selects do wizard do candidato saíram numa edição só**: o `Wizard.jsx`
+  já tinha um componente `Select` interno centralizando todos.
+- `aria-haspopup`, `aria-expanded`, `role="listbox"` e `role="option"` — o
+  componente vai de ~20 para 84 usos, então a acessibilidade dele passou a
+  valer muito mais.
+
+### Corrigido
+
+- **`SelectBusca` dentro de `<label className="campo">` encolhia** para os
+  180px do mínimo, em vez de ocupar a linha como o `<select>` que substituiu.
+  Regra nova no `styles.css` para `.campo`, `.linha2` e `.linha3`.
+
+### Guarda-corpo
+
+`test_design_system.py` agora **reprova `<select>` nativo no JSX** — pedido
+explícito do Bruno: *"daqui em diante, toda vez que tiver um select, já imponha
+esse padrão"*. Comentário que menciona `<select>` não conta (falso positivo em
+guarda-corpo ensina a ignorá-lo).
+
+### Verificação
+
+Build ok · `test_design_system` OK · `deploy-tela-branca` 8/8 · **17 telas
+varridas com captura de erro de JS: 32 `SelectBusca` renderizados, zero erros**
+· interação testada de ponta a ponta com **13 postos cadastrados**: campo de
+busca aparece, digitar "PT1" filtra de 15 para 5 itens, escolher grava, página
+não estoura.
+
 ## [2.49.0] — 2026-08-02 — O sistema explica a si mesmo
 
 Quarta e última leva da reforma. As três anteriores corrigiram e protegeram;

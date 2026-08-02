@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
+import SelectBusca from '../SelectBusca.jsx'
 
 // 📝 Modelos de documento — página exclusiva (Configurações → Modelos).
 // CRUD completo + prévia + duplicar + opções de envio (e-mail / assinatura
@@ -379,9 +380,9 @@ function AssinaturasDoModelo({ modelo, papeis, setMsg, aoFechar }) {
                  onChange={(e) => setNova({ ...nova, cargo: e.target.value })} />
           <input placeholder="E-mail" value={nova.email} style={{ maxWidth: 180 }}
                  onChange={(e) => setNova({ ...nova, email: e.target.value })} />
-          <select value={nova.papel} onChange={(e) => setNova({ ...nova, papel: e.target.value })}>
+          <SelectBusca valor={nova.papel} aoEscolher={(v) => setNova({ ...nova, papel: v })}>
             {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
-          </select>
+          </SelectBusca>
           <button className="btn-principal btn-mini" disabled={!nova.nome.trim() || !nova.email.trim()}
                   onClick={async () => {
                     setMsg(null)
@@ -414,15 +415,15 @@ function RoteiroPadraoEditor({ modelo, papeis, etapas, setMsg, recarregar }) {
         <div key={i} className="rh-lote" style={{ padding: '.25rem 0' }}>
           <input style={{ maxWidth: 55 }} inputMode="numeric" value={e.ordem}
                  onChange={(ev) => set(i, 'ordem', parseInt(ev.target.value, 10) || 1)} />
-          <select value={e.papel} onChange={(ev) => set(i, 'papel', ev.target.value)}>
+          <SelectBusca valor={e.papel} aoEscolher={(v) => set(i, 'papel', v)}>
             <option value="">— papel —</option>
             {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
-          </select>
-          <select value={e.tipo_sugerido} onChange={(ev) => set(i, 'tipo_sugerido', ev.target.value)}>
+          </SelectBusca>
+          <SelectBusca valor={e.tipo_sugerido} aoEscolher={(v) => set(i, 'tipo_sugerido', v)}>
             <option value="candidato">O colaborador</option>
             <option value="usuario_rh">Alguém do RH</option>
             <option value="externo">Externo</option>
-          </select>
+          </SelectBusca>
           <button className="btn-link" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}
                   aria-label={`Remover o signatário ${i + 1}`} title="Remover signatário">✕</button>
         </div>
@@ -549,10 +550,9 @@ function CamposModelo({ edit, setEdit, postos, papeis, pessoas, salvar, salvando
                   onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
       <div className="linha2">
         <label className="campo"><span className="rotulo">Aplica-se a</span>
-          <select value={edit.escopo}
-                  onChange={(e) => setEdit({ ...edit, escopo: e.target.value })}>
+          <SelectBusca valor={edit.escopo} aoEscolher={(v) => setEdit({ ...edit, escopo: v })}>
             {ESCOPOS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-          </select></label>
+          </SelectBusca></label>
         {edit.escopo === 'cargo' && (
           <label className="campo"><span className="rotulo">Cargo</span>
             <input value={edit.cargo_alvo} placeholder="Ex.: Recepcionista"
@@ -560,19 +560,17 @@ function CamposModelo({ edit, setEdit, postos, papeis, pessoas, salvar, salvando
         )}
         {edit.escopo === 'posto' && (
           <label className="campo"><span className="rotulo">Posto</span>
-            <select value={edit.posto_alvo_id}
-                    onChange={(e) => setEdit({ ...edit, posto_alvo_id: e.target.value })}>
+            <SelectBusca valor={edit.posto_alvo_id} aoEscolher={(v) => setEdit({ ...edit, posto_alvo_id: v })}>
               <option value="">— escolha —</option>
               {postos.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select></label>
+            </SelectBusca></label>
         )}
         {edit.escopo === 'colaborador' && (
           <label className="campo"><span className="rotulo">Pessoa</span>
-            <select value={edit.candidato_alvo_id}
-                    onChange={(e) => setEdit({ ...edit, candidato_alvo_id: e.target.value })}>
+            <SelectBusca valor={edit.candidato_alvo_id} aoEscolher={(v) => setEdit({ ...edit, candidato_alvo_id: v })}>
               <option value="">— escolha —</option>
               {pessoas.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select></label>
+            </SelectBusca></label>
         )}
       </div>
       <div className="rh-lote" style={{ margin: '.4rem 0' }}>
@@ -593,11 +591,10 @@ function CamposModelo({ edit, setEdit, postos, papeis, pessoas, salvar, salvando
         {edit.exige_assinatura && (
           <label className="campo" style={{ margin: 0 }}>
             <span className="rotulo">Assina na qualidade de</span>
-            <select value={edit.papel_assinatura}
-                    onChange={(e) => setEdit({ ...edit, papel_assinatura: e.target.value })}>
+            <SelectBusca valor={edit.papel_assinatura} aoEscolher={(v) => setEdit({ ...edit, papel_assinatura: v })}>
               <option value="">Contratado(a) (padrão)</option>
               {papeis.map((p) => <option key={p.id} value={p.nome}>{p.nome}</option>)}
-            </select></label>
+            </SelectBusca></label>
         )}
       </div>
       <div className="navegacao">
