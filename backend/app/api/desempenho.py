@@ -250,14 +250,28 @@ def baixar_anexo(fato_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
 
 def _casar_matricula(db: Session, matricula_norm: str) -> Candidato | None:
     """Casa a matrícula do ponto com o cadastro, normalizando zeros à esquerda
-    dos dois lados (a planilha do Tirvu é inconsistente nisso)."""
+    dos dois lados (a planilha do Tirvu é inconsistente nisso).
+
+    Considera também as matrículas ANTERIORES (v2.45): quem teve a matrícula
+    trocada aqui continua aparecendo numa planilha de período passado com o
+    número velho. Sem isso, o histórico de frequência da pessoa se partiria em
+    dois no dia da troca — e ninguém veria acontecer.
+
+    A matrícula ATUAL tem precedência: se dois cadastros disputam o mesmo
+    número (um o usa hoje, outro o usou no passado), quem o usa hoje ganha.
+    """
     from app.services.import_ponto import matricula_norm as norm
     if not matricula_norm:
         return None
+    por_antiga = None
     for c in db.scalars(select(Candidato).where(Candidato.matricula.isnot(None))):
         if norm(c.matricula) == matricula_norm:
             return c
-    return None
+    for c in db.scalars(select(Candidato).where(
+            Candidato.matriculas_anteriores.isnot(None))):
+        if any(norm(m) == matricula_norm for m in (c.matriculas_anteriores or [])):
+            por_antiga = por_antiga or c
+    return por_antiga
 
 
 @router.post("/rh/desempenho/ponto/importar")

@@ -545,6 +545,11 @@ export const rh = {
   reverterLote: (ids, destino, motivo) =>
     req('/rh/colaboradores/lote/reverter', { method: 'POST', headers: authRH(),
         body: JSON.stringify({ ids, destino, motivo }) }),
+  // Trocar matrícula (v2.45): motivo obrigatório — mexe na chave que liga a
+  // pessoa ao histórico de ponto dela.
+  trocarMatricula: (id, matricula, motivo) =>
+    req(`/rh/colaboradores/${id}/matricula`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ matricula, motivo }) }),
   transferirColaborador: (id, posto_id, data_transferencia) =>
     req(`/rh/colaboradores/${id}/transferir`, { method: 'POST', headers: authRH(),
         body: JSON.stringify({ posto_id, data_transferencia }) }),

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -94,6 +94,9 @@ def listar(status: str | None = None, busca: str | None = None,
             "celular_whatsapp": c.celular_whatsapp, "status": c.status,
             "situacao": c.situacao, "origem": c.origem,
             "cpf": cpf, "nascimento": nasc, "matricula": c.matricula,
+            # A tela mostra o que a pessoa já teve: é o que explica por que o
+            # ponto de um período antigo continua sendo dela (v2.45).
+            "matriculas_anteriores": c.matriculas_anteriores or [],
             "posto_id": c.posto_servico_id,
             "posto_nome": postos.get(c.posto_servico_id),
             "data_admissao": c.data_admissao,
@@ -972,3 +975,74 @@ def confirmar_de_para_lotacao(payload: DeParaLotacaoIn, db: Session = Depends(ge
               detalhe={"criados": criados, "atualizados": atualizados})
     db.commit()
     return {"criados": criados, "atualizados": atualizados}
+
+
+# ======================================================================
+# Trocar a matrícula (v2.45)
+# ======================================================================
+
+
+class MatriculaIn(BaseModel):
+    matricula: str
+    motivo: str
+
+
+@router.put("/rh/colaboradores/{cid}/matricula")
+def trocar_matricula(cid: uuid.UUID, payload: MatriculaIn,
+                     db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Troca o número da matrícula, guardando o anterior.
+
+    Pedido do Bruno em 2026-08-01. O cuidado não é burocracia: a matrícula é a
+    chave com que o import de ponto do Tirvu encontra a pessoa. Trocar sem
+    guardar o número velho partiria o histórico de frequência dela em dois — e
+    uma planilha de período anterior deixaria de casar, sem erro nenhum na tela.
+
+    Por isso: o antigo entra em `matriculas_anteriores` (e `_casar_matricula`
+    passa a olhar essa lista), o motivo é obrigatório e tudo vai para a
+    auditoria.
+    """
+    from app.services.import_ponto import matricula_norm
+
+    c = _get_colab(db, cid)
+    nova = (payload.matricula or "").strip()
+    if not nova:
+        raise HTTPException(status_code=422, detail="matricula_obrigatoria")
+    if len(nova) > 30:
+        raise HTTPException(status_code=422, detail="matricula_muito_longa")
+    if not payload.motivo.strip():
+        # Mesma regra da edição de ficha: ação manual do RH sai com motivo.
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+    anterior = (c.matricula or "").strip()
+    if matricula_norm(nova) == matricula_norm(anterior) and nova == anterior:
+        raise HTTPException(status_code=422, detail="matricula_igual")
+
+    # Unicidade: duas pessoas com a mesma matrícula é indistinguível de uma
+    # pessoa com duas — e o ponto passaria a cair na errada. Compara
+    # NORMALIZADO porque "003035" e "3035" são a mesma matrícula para o Tirvu.
+    alvo = matricula_norm(nova)
+    for outro in db.scalars(select(Candidato).where(
+            Candidato.matricula.isnot(None), Candidato.id != c.id)):
+        if matricula_norm(outro.matricula) == alvo:
+            raise HTTPException(status_code=409, detail="matricula_em_uso")
+
+    historico = list(c.matriculas_anteriores or [])
+    if anterior and anterior not in historico:
+        historico.append(anterior)
+    c.matriculas_anteriores = historico
+    c.matricula = nova
+
+    # Quanto histórico de ponto está pendurado na matrícula antiga — o RH
+    # precisa saber o tamanho do que acabou de mexer, não só que mexeu.
+    from app.models.desempenho import ResumoPonto
+    pontos = db.scalar(select(func.count()).select_from(ResumoPonto)
+                       .where(ResumoPonto.candidato_id == c.id)) or 0
+
+    registrar(db, "matricula_alterada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=c.id,
+              detalhe={"nome": c.nome_completo, "de": anterior or None, "para": nova,
+                       "motivo": payload.motivo.strip(), "periodos_de_ponto": pontos})
+    db.commit()
+    return {"id": c.id, "matricula": c.matricula,
+            "matriculas_anteriores": c.matriculas_anteriores,
+            "periodos_de_ponto": pontos}

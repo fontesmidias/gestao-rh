@@ -11,6 +11,48 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.45.0] — 2026-08-02 — Trocar a matrícula sem partir o histórico
+
+Fecha o item 5 — e a leva inteira de 2026-08-01:
+
+> *"Ter a opção de trocar o número da matrícula de um admitido/colaborador."*
+
+O cuidado aqui não é burocracia. A matrícula é a **chave** com que o import de
+ponto do Tirvu encontra a pessoa. Trocar o número sem guardar o antigo partiria
+o histórico de frequência dela em dois — e uma planilha de período anterior,
+que ainda traz a matrícula velha, deixaria de casar. **Sem erro nenhum na
+tela**: o registro simplesmente vira órfão.
+
+Perguntado, o Bruno escolheu levar o histórico junto.
+
+### Adicionado
+
+- **Troca na própria linha** da tela de Colaboradores (a matrícula passou a ser
+  uma coluna), com **motivo obrigatório** — ação manual do RH sai com motivo.
+- **`matriculas_anteriores`**: a lista do que a pessoa já teve (migration
+  `b4c5d6e7f8a9`). Lista, e não campo único — ninguém troca de matrícula uma
+  vez só na vida (recontratação, correção, fusão de cadastro).
+- **`_casar_matricula` passa a olhar as antigas**, então o ponto importado com
+  o número velho continua caindo na pessoa certa. Quando o RH troca, a tela
+  avisa quantos períodos de ponto estão pendurados.
+
+### Notas
+
+**Unicidade normalizada**: `003035` e `3035` são a mesma matrícula para o
+Tirvu, e duas pessoas com o mesmo número é indistinguível de uma pessoa com
+duas — o ponto passaria a cair na errada. 409 `matricula_em_uso`.
+
+**A matrícula ATUAL tem precedência sobre a antiga de outra pessoa.** Números
+são reciclados: se alguém recebe hoje um número que outra pessoa usou no
+passado, o ponto vai para quem o usa agora.
+
+Auditoria com o de → para, o motivo e quantos períodos de ponto existiam.
+
+Coberto por `tests/test_trocar_matricula.py`, **validado por mutação** (trocar
+sem guardar o histórico; unicidade sem normalizar zeros). O teste também foi
+endurecido para **falhar dizendo qual garantia caiu** em vez de morrer com
+`TypeError` — mensagem de falha é o que serve a quem lê daqui a meses.
+
 ## [2.44.0] — 2026-08-02 — Ponto e empresa já no convite
 
 Fecha o item 4 da leva de 2026-08-01:
