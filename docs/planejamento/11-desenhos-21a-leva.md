@@ -10,7 +10,18 @@
 
 ---
 
-## 1. Decisão por filho no reembolso-creche
+## 1. Decisão por filho no reembolso-creche — ✅ IMPLEMENTADO na v2.55
+
+> O Bruno pediu a implementação em 2026-08-02, ao ver o caso real na tela. O
+> desenho abaixo foi seguido, com três respostas que ele deu na hora:
+>
+> * **o valor é POR CRIANÇA deferida** — indeferir uma reduz o total sozinho
+>   (e benefício anterior à v2.55 NÃO é multiplicado: lá o gravado já era o
+>   total, e multiplicar dobraria a folha em silêncio);
+> * **todas negadas ⇒ indeferido automático**, em vez de exigir mais um clique;
+> * **o colaborador vê o motivo por criança** — regra da casa desde o `/meu`.
+>
+> Ver `CHANGELOG.md` [2.55.0] e `tests/test_decisao_por_crianca.py`.
 
 ### O problema, nas palavras do Bruno
 

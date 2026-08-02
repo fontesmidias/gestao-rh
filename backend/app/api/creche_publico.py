@@ -528,7 +528,17 @@ def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db)) -> dict:
 def _dump_crianca(c: CriancaCreche) -> dict:
     return {"id": c.id, "nome": c.nome, "data_nascimento": c.data_nascimento,
             "parentesco": c.parentesco, "tipo_comprovante": c.tipo_comprovante,
-            "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key)}
+            "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key),
+            # Resultado POR CRIANÇA, com o motivo (v2.55, decisão do Bruno).
+            # Segue a regra da casa desde o portal `/meu`: o motivo da recusa é
+            # visível ao colaborador. Sem isso, quem tem dois filhos e vê o
+            # benefício aprovado não descobre que um deles ficou de fora — e
+            # liga para o RH perguntar, ou pior, não liga e descobre na folha.
+            # `decidido_por`/`decidido_em` NÃO vão: quem decidiu é assunto
+            # interno, e nomear o analista transformaria a decisão em disputa
+            # pessoal (mesmo raciocínio dos fatos observados no desempenho).
+            "decisao": c.decisao,
+            "motivo_decisao": c.motivo_decisao}
 
 
 @router.get("/creche/sessao/{token}")

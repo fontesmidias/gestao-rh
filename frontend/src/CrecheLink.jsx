@@ -428,6 +428,7 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
   if (!dados) return <div className="rh-card creche-card"><p>Carregando…</p></div>
   if (dados.status !== 'levantamento') {
     return <AposEnvio token={token} status={dados.status}
+                      criancas={dados.criancas}
                       motivoIndeferimento={dados.motivo_indeferimento} />
   }
 
@@ -582,7 +583,41 @@ const ESTADO_MSG = {
     texto: 'Você declarou não ter dependentes que dão direito ao Reembolso-Creche. Se isso mudou (novo filho, guarda, adoção), procure o RH para refazer o levantamento.' },
 }
 
-function AposEnvio({ token, status, motivoIndeferimento }) {
+// Resultado POR CRIANÇA, quando o RH decidiu individualmente (v2.55).
+//
+// Só aparece se ALGUMA criança tiver decisão: benefício aprovado antes desta
+// versão tem todas em `null`, e inventar um "deferida" ali seria afirmar uma
+// decisão que ninguém registrou.
+//
+// O motivo da recusa é VISÍVEL (decisão do Bruno) — é a mesma regra do portal
+// `/meu`. Sem isso, quem tem dois filhos vê "aprovado" e não descobre que um
+// ficou de fora; descobriria no valor do reembolso, que é o pior lugar.
+function ResultadoPorCrianca({ criancas }) {
+  const decididas = (criancas || []).filter((c) => c.decisao)
+  if (!decididas.length) return null
+  return (
+    <div className="rh-card" style={{ textAlign: 'left', marginTop: '1rem' }}>
+      <strong>Resultado por criança</strong>
+      <ul className="explica" style={{ margin: '.4rem 0 0', paddingLeft: '1.1rem' }}>
+        {decididas.map((c) => (
+          <li key={c.id}>
+            <strong>{c.nome}</strong>{' — '}
+            {c.decisao === 'deferida'
+              ? '✅ incluída no benefício'
+              : <>❌ não incluída{c.motivo_decisao ? `: ${c.motivo_decisao}` : ''}</>}
+          </li>
+        ))}
+      </ul>
+      {decididas.some((c) => c.decisao === 'indeferida') && (
+        <p className="explica" style={{ marginBottom: 0 }}>
+          Se você tiver documento que mude essa análise, procure o RH — a decisão
+          pode ser revista.</p>
+      )}
+    </div>
+  )
+}
+
+function AposEnvio({ token, status, criancas, motivoIndeferimento }) {
   const [req, setReq] = useState(undefined) // undefined=carregando, null=indisponível
   const [erro, setErro] = useState(null)
   const [assinando, setAssinando] = useState(false)
@@ -612,6 +647,10 @@ function AposEnvio({ token, status, motivoIndeferimento }) {
         {erro && <div className="alerta">{erro}</div>}
         <button className="btn-principal" disabled={assinando} onClick={assinar}>
           {assinando ? 'Assinando…' : 'Assinar requerimento'}</button>
+        {/* ANTES de assinar: o requerimento que ele vai assinar lista só as
+            crianças deferidas, então ele precisa ver quais são — assinar sem
+            saber que um filho ficou de fora é o pior momento para descobrir. */}
+        <ResultadoPorCrianca criancas={criancas} />
       </div>
     )
   }
@@ -623,6 +662,7 @@ function AposEnvio({ token, status, motivoIndeferimento }) {
         <p className="explica">{req.concluido
           ? 'O documento foi assinado por todas as partes. Obrigado!'
           : 'Recebemos sua assinatura. O RH vai finalizar a assinatura institucional.'}</p>
+        <ResultadoPorCrianca criancas={criancas} />
       </div>
     )
   }

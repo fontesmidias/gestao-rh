@@ -88,6 +88,40 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Mudar a UNIDADE de um campo de dinheiro exige olhar o histórico** (v2.55,
+  `creche.py::_valor_total`): o `valor_reembolso` do creche passou a ser POR
+  CRIANÇA deferida. Só que, para quem foi aprovado ANTES, o valor gravado já
+  era o total do benefício — multiplicá-lo pela contagem dobraria o reembolso
+  de quem tem dois filhos, **em silêncio, no contracheque**. Por isso o total
+  só multiplica quando há `decisao` registrada; sem nenhuma (o modelo antigo),
+  o gravado vale como está. Regra geral: ao mudar o significado de um campo
+  monetário, o registro antigo continua com o significado ANTIGO — a migração
+  é de leitura, nunca de valor. Valor ilegível volta cru, jamais `R$ 0,00`
+  (zero entraria calado na folha).
+- **Decisão por item precisa impedir a decisão pela METADE** (v2.55, creche):
+  aprovar um benefício com uma criança ainda sem decisão deixaria um dependente
+  sem análise no requerimento e o valor errado. O `ativar_beneficio` recusa com
+  409 **dizendo o NOME de quem falta** — erro que só diz "faltou decidir" faz o
+  RH procurar na tabela. E "todas indeferidas" vira `indeferido` automático:
+  benefício `ativo` que paga zero seria mentira no relatório. O documento que a
+  pessoa ASSINA lista só as deferidas; as negadas vão em seção própria com o
+  motivo — somem do benefício, não do registro da análise (antes, negar uma
+  criança exigia REMOVÊ-LA, e a prova de que fora analisada ia junto).
+- **`detail` estruturado do backend morre no `api.js` se ninguém o preservar**
+  (v2.55): `lancarErro` converte `detail` que não é string na mensagem genérica
+  do `statusText`. Um 409 que manda `{erro, criancas: [...]}` perdia a lista
+  logo na porta de entrada, e a tela só conseguia dizer "não deu". Agora fica
+  em `e.dados` (irmão do `e.campos`, criado pela mesma lição em 2026-07-27).
+  Ao devolver erro estruturado do backend, confira que o front o preserva —
+  senão o trabalho de montá-lo é jogado fora.
+- **PDF se confere RENDERIZADO, não por extração de texto** (v2.55): o
+  requerimento do creche imprimia a data de nascimento CRUA, então quem
+  preencheu pelo wizard (que grava ISO) tinha `2022-10-19` num documento
+  oficial em português, assinado. A extração de texto passou; só apareceu ao
+  transformar o PDF em imagem e olhar. Use `data_br` (lê os dois formatos) em
+  qualquer data impressa em documento — a regra da v2.27 vale para o PDF
+  também, não só para a tela.
+
 - **Marcador que se atualiza à mão CONGELA — o guarda-corpo é o teste** (v2.54,
   `app/versao.py` + `tests/test_versao.py`): o `VERSAO_DEPLOY` do
   `api/health.py` era string chumbada e congelou **duas vezes** — na `v1.50`

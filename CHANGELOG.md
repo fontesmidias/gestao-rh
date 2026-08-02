@@ -11,6 +11,86 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.55.0] — 2026-08-02 — Um filho de cada vez
+
+> *"se a pessoa tem mais de um filho e um eu defiro e outro eu indefiro, não tem
+> opção individual por filho, somente indeferir tudo ou aprovar tudo, não tá
+> legal isso. Tem que ser individual isso de modo que eu marco os que defiro e os
+> que indefiro, para gerar apenas um requerimento."*
+
+Estava desenhado na v2.54 e o Bruno pediu para implementar ao ver o caso real na
+tela (dois filhos, os dois elegíveis — mas a pergunta era o que fazer quando só
+um fosse).
+
+### O workaround anterior apagava a prova
+
+Não havia decisão por criança em lugar nenhum: `CriancaCreche` não tinha campo
+de decisão, e `ativar`/`indeferir` agiam sobre o benefício inteiro. Para negar
+um filho, o único caminho era **devolver** o levantamento e pedir que o
+colaborador **removesse** a criança — o que apagava o registro de que ela havia
+sido analisada e negada. Justamente o registro que prova que o RH avaliou o
+pedido todo.
+
+Agora cada criança tem `decisao`, `motivo_decisao`, `decidido_por` (snapshot) e
+`decidido_em`, com rota própria. Migração **aditiva**, sem backfill: benefício
+aprovado antes desta versão fica com `decisao = NULL` e é tratado como
+"deferido pelo modelo anterior" — marcar tudo como deferido gravaria uma
+decisão que ninguém tomou, com data e autor inventados, num campo que é prova
+de ato administrativo.
+
+### O valor passou a ser POR CRIANÇA — e o cuidado que isso exigiu
+
+Decisão do Bruno: o reembolso é por criança deferida. Indeferir uma reduz o
+total sozinho, sem o RH recalcular à mão — que é onde o erro de folha
+aconteceria. A tela mostra o unitário e o total (`2 crianças = R$ 1.053,28`).
+
+**A armadilha estava no histórico**: para quem foi aprovado antes desta versão,
+o `valor_reembolso` gravado JÁ era o total do benefício. Multiplicá-lo agora
+dobraria o reembolso de quem tem dois filhos — em silêncio, no contracheque, sem
+nada acusar. Por isso o total só multiplica quando há decisão registrada; sem
+nenhuma, o valor gravado vale como está. É a garantia que mais mutações do teste
+tentaram quebrar.
+
+Valor ilegível (`a combinar`) volta cru, nunca `R$ 0,00`: zero entraria calado na
+folha.
+
+### Duas guardas que evitam decisão pela metade
+
+- **Não se aprova com criança pendente** (409), e o erro **diz o nome** de quem
+  falta — sem isso o RH procuraria na tabela qual esqueceu. Para isso, o
+  `api.js` passou a preservar `detail` estruturado em `e.dados`: antes ele
+  virava a string genérica do `statusText` e a lista de nomes se perdia na porta
+  de entrada (mesma lição do `e.campos`).
+- **Todas negadas ⇒ indeferido automaticamente**, com os motivos agregados por
+  criança, em vez de um benefício "ativo" que paga zero — que seria mentira no
+  relatório e no requerimento.
+
+Motivo é **obrigatório para indeferir** (é o que o colaborador lê) e dispensado
+para deferir.
+
+### Um requerimento só, com as duas seções
+
+O corpo que a pessoa **assina** lista apenas as deferidas — declarar como
+beneficiada uma criança que o RH negou seria pedir que ela subscrevesse algo que
+não vale. As negadas aparecem em seção própria, com o motivo: somem do
+benefício, não do registro da análise.
+
+O colaborador vê o resultado por criança no link do creche, **com o motivo**
+(regra da casa desde o portal `/meu`) — antes de assinar, inclusive, que é
+quando ainda dá para questionar. Quem decidiu não vai: nomear o analista
+transformaria a decisão em disputa pessoal.
+
+### Achado na conferência visual do PDF
+
+O requerimento imprimia a data de nascimento **crua** — então quem preencheu
+pelo wizard (que grava ISO) tinha `2022-10-19` num documento oficial em
+português, assinado. Passou a usar `data_br`, que já existia e lê os dois
+formatos. Só apareceu porque o PDF foi renderizado e olhado; a extração de texto
+tinha passado.
+
+Validação: **smoke 15/15**, build limpo, design system OK, e as cinco mutações
+do teste novo detectadas — inclusive a que dobraria a folha.
+
 ## [2.54.0] — 2026-08-02 — A versão que mentia, o clique que não fazia nada, e o Dexion
 
 Nove feedbacks de uso numa leva só, mais o exportador do Dexion. O Bruno cortou
