@@ -90,6 +90,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Export de jornada** em CSV cronológico (`user_id,event,timestamp`), para analisar por onde as pessoas passam antes de concluir — ou de desistir — em qualquer ferramenta de análise de caminho, sem nada instalado no servidor
 - **Retenção configurável** (padrão 1 ano), expurgo diário automático e limpeza por intervalo de datas
 - **Minimizada por desenho**: nada do que a pessoa digita, IP truncado (`191.180.x.x`) e token do link mágico mascarado — ele é credencial de acesso
+- **Logs que permitem investigar**: cada linha traz o identificador da requisição e quem estava agindo, então dá para pegar um erro e ver a sequência inteira — inclusive o que veio antes dele; e-mails registram se saíram ou não, o storage acusa o que está lento, e a hora é sempre a de Brasília
 
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**

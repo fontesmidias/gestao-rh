@@ -18,6 +18,18 @@ const NIVEIS = [
   ['ERROR', 'Só erros'],
 ]
 
+// Atalhos para o que se procura de verdade num incidente (v2.41). Cada um é só
+// um filtro de texto sobre o que os serviços passaram a registrar — o valor
+// está em não precisar decorar o nome do canal para achar.
+const ASSUNTOS = [
+  ['', 'Tudo'],
+  ['email.envio', '✉️ E-mails (saíram ou não)'],
+  ['evento=', '👣 Ações registradas (quem fez o quê)'],
+  ['storage', '📦 Arquivos (falhas e lentidão)'],
+  ['LENTO', '🐢 Só o que está lento'],
+  ['ator=candidato', '🙋 Só candidatos'],
+]
+
 // Colore a linha pelo nível, que é o que o olho procura primeiro.
 function corDaLinha(linha) {
   if (linha.includes(' ERROR ') || linha.includes(' CRITICAL ')) return 'var(--perigo)'
@@ -31,9 +43,14 @@ export default function LogsRH() {
   const [dia, setDia] = useState('')
   const [busca, setBusca] = useState('')
   const [nivel, setNivel] = useState('')
+  const [assunto, setAssunto] = useState('')
   const [dados, setDados] = useState(null)
   const [carregando, setCarregando] = useState(false)
   const [msg, setMsg] = useState(null)
+  // Hora da leitura: sem isso não dá para saber se a tela está mostrando o
+  // agora ou o que foi carregado há dez minutos — e essa dúvida é justamente o
+  // que fazia o log "não parecer em tempo real".
+  const [lidoEm, setLidoEm] = useState(null)
 
   useEffect(() => {
     api.logServicos().then((r) => {
@@ -47,11 +64,15 @@ export default function LogsRH() {
     if (!servico) return
     setCarregando(true); setMsg(null)
     try {
-      setDados(await api.logLer({ servico, dia, busca, nivel, limite: 500 }))
+      // O atalho de assunto e a busca livre se somam: procurar "creche" dentro
+      // de "só e-mails" é uma pergunta legítima e frequente.
+      const termo = [assunto, busca].filter(Boolean).join(' ')
+      setDados(await api.logLer({ servico, dia, busca: termo, nivel, limite: 500 }))
+      setLidoEm(new Date())
     } catch {
       setMsg({ tipo: 'erro', texto: 'Não foi possível ler este log.' })
     } finally { setCarregando(false) }
-  }, [servico, dia, busca, nivel])
+  }, [servico, dia, busca, nivel, assunto])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -110,18 +131,47 @@ export default function LogsRH() {
             </div>
             <div className="rh-grid-2">
               <label className="campo"><span className="rotulo">Procurar no texto</span>
-                <input value={busca} placeholder="ex.: creche, 9738, ERROR"
-                       onChange={(e) => setBusca(e.target.value)} /></label>
+                <input value={busca} placeholder="ex.: creche, 9738, maria"
+                       onChange={(e) => setBusca(e.target.value)} />
+                <small className="explica">Vários termos: a linha precisa ter
+                  todos. Ex.: <code>creche ERROR</code>.</small></label>
               <label className="campo"><span className="rotulo">Nível</span>
                 <select value={nivel} onChange={(e) => setNivel(e.target.value)}>
                   {NIVEIS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
                 </select></label>
+            </div>
+            <div className="rh-grid-2">
+              <label className="campo"><span className="rotulo">Assunto</span>
+                <select value={assunto} onChange={(e) => setAssunto(e.target.value)}>
+                  {ASSUNTOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+                </select>
+                <small className="explica">Atalhos para o que se procura num
+                  aperto. Some com a busca acima.</small></label>
+              <label className="campo"><span className="rotulo">&nbsp;</span>
+                <span className="explica">Cada linha traz <code>req=</code> (a mesma
+                  requisição, do início ao fim) e <code>ator=</code> (quem estava
+                  agindo) <Ajuda texto="Copie o valor de req= e cole na busca: aparece tudo o que aconteceu naquela requisição, na ordem — inclusive o que veio antes do erro." />
+                </span></label>
             </div>
             <button className="btn-secundario btn-mini" onClick={baixar}>
               ⬇ Baixar este log em .txt</button>
           </div>
 
           <div className="rh-card">
+            <div className="rh-topo">
+              <span className="explica">
+                {lidoEm
+                  ? <>Lido às <strong>{lidoEm.toLocaleTimeString('pt-BR')}</strong>
+                    {dados?.total != null && ` · ${dados.total} linha(s)`}</>
+                  : 'Carregando…'}
+              </span>
+              {/* O mesmo botão do topo, aqui embaixo: quem está acompanhando um
+                  problema fica com os olhos nas LINHAS, e subir a página a cada
+                  atualização é o que fazia a tela parecer parada. */}
+              <button className="btn-secundario btn-mini" onClick={carregar}
+                      disabled={carregando}>
+                {carregando ? 'Lendo…' : '🔄 Atualizar agora'}</button>
+            </div>
             {dados?.truncado && (
               <p className="explica">Mostrando as <strong>{dados.total}</strong> linhas mais
                 recentes de {dados.lidas}. Use a busca para achar o resto, ou baixe o arquivo

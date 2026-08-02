@@ -115,9 +115,18 @@ async def log_erro_interno(request: Request, exc: Exception):
 async def log_requisicoes(request: Request, call_next):
     """Telemetria de uso: método, rota, status e duração de cada requisição.
     Tokens de link mágico são mascarados para não vazarem em log."""
+    from app.services.contexto_log import definir
+
+    # Um identificador por requisição, ANTES de qualquer coisa acontecer: todo
+    # log emitido daqui para baixo — storage, e-mail, serviço no fundo da pilha
+    # — sai com ele. É o que permite pegar um erro e ver o que veio antes.
+    req_id = definir()
     inicio = time.perf_counter()
     resposta = await call_next(request)
     duracao_ms = round((time.perf_counter() - inicio) * 1000, 1)
+    # Devolve o id ao cliente: quando alguém relata um problema com print da
+    # tela, o cabeçalho dá o fio exato para puxar no log.
+    resposta.headers["X-Request-Id"] = req_id
     caminho = request.url.path
     if "/c/" in caminho:  # mascara o token do candidato
         partes = caminho.split("/")

@@ -43,6 +43,7 @@ services:
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
       LOG_DIR: /var/log/gestao-rh
       LOG_SERVICO: api
+      TZ: America/Sao_Paulo
     depends_on:
       - db
       - redis
@@ -67,6 +68,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
       LOG_DIR: /var/log/gestao-rh
       LOG_SERVICO: worker
+      TZ: America/Sao_Paulo
     depends_on:
       - redis
       - minio
@@ -89,6 +91,7 @@ services:
       RETENTION_DAYS: ${RETENTION_DAYS:-90}
       LOG_DIR: /var/log/gestao-rh
       LOG_SERVICO: expurgo
+      TZ: America/Sao_Paulo
     depends_on:
       - db
       - minio
@@ -122,6 +125,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
       LOG_DIR: /var/log/gestao-rh
       LOG_SERVICO: alertas
+      TZ: America/Sao_Paulo
     depends_on:
       - db
     volumes:
