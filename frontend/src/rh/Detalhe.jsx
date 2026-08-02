@@ -72,7 +72,11 @@ function ContatoEditavel({ dados, setMsg, recarregar }) {
 // O que faltava no incidente real: as fichas ficavam invisíveis para o RH.
 // Cada documento exigido aparece com o estado, a ficha incompleta grita, e o
 // botão de notificação manda o retrato exato das pendências por e-mail.
-function FichasStatus({ dados, setMsg }) {
+function FichasStatus({ dados }) {
+  // Mensagem LOCAL (v2.47): com a reordenação da tela este card passou a viver
+  // DENTRO da faixa de consulta, no fim da página — a mensagem global do topo
+  // ficaria fora da vista de quem acabou de clicar em "Notificar".
+  const [msg, setMsg] = useState(null)
   const [notificando, setNotificando] = useState(false)
   const pend = dados.pendencias_ficha || []
   const fichas = dados.fichas || []
@@ -96,8 +100,7 @@ function FichasStatus({ dados, setMsg }) {
 
   return (
     <div className="rh-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    flexWrap: 'wrap', gap: '.5rem' }}>
+      <div className="rh-topo">
         <strong>📝 Fichas e assinaturas</strong>
         {temPendencia && (
           <button className="btn-secundario btn-mini" disabled={notificando}
@@ -136,11 +139,17 @@ function FichasStatus({ dados, setMsg }) {
           </li>
         ))}
       </ul>
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
     </div>
   )
 }
 
-function PostoServico({ dados, setMsg, recarregar }) {
+function PostoServico({ dados, recarregar }) {
+  // Mensagem LOCAL (v2.47): este card fica no MEIO da tela e tem ~14 controles.
+  // Mandar o resultado do "Salvar posto" para a mensagem global do topo é o
+  // mesmo defeito que a v1.96 corrigiu na ficha — a pessoa salva olhando para
+  // cá e a confirmação aparece fora do campo de visão dela.
+  const [msg, setMsg] = useState(null)
   const [postos, setPostos] = useState(null)
   const [postoId, setPostoId] = useState(dados.posto_servico_id || '')
   const [cargo, setCargo] = useState(dados.cargo_funcao || '')
@@ -178,7 +187,12 @@ function PostoServico({ dados, setMsg, recarregar }) {
       { valor: '__novo', rotulo: '＋ Cargo novo…' },
     ]
   }, [cargos, cargo])
-  if (!postos) return null
+  // Enquanto os postos não chegam, o card RESERVA o lugar em vez de sumir: é
+  // uma das duas áreas de trabalho da tela, e some-la fazia o conteúdo abaixo
+  // pular na cara de quem já estava lendo.
+  if (!postos) return (
+    <div className="rh-card"><p className="explica">Carregando posto de serviço…</p></div>
+  )
   const extras = (dados.assinaturas || []).filter((a) =>
     !['ficha_cadastro', 'ficha_emergencia', 'termo_vt',
       'acordo_confidencialidade'].includes(a.documento))
@@ -399,7 +413,7 @@ function PostoServico({ dados, setMsg, recarregar }) {
                 }
               }}>⬆ Planilha p/ Tirvu</button>
       {extras.length > 0 && (
-        <span className="explica" style={{ margin: 0, width: '100%' }}>
+        <span className="explica campo-sem-margem" style={{ width: '100%' }}>
           {extras.map((a) => (
             <span key={a.documento} className="chip-doc"
                   title={a.assinado_em ? `${a.titulo} — assinado` : `${a.titulo} — aguardando assinatura do candidato`}>
@@ -408,26 +422,36 @@ function PostoServico({ dados, setMsg, recarregar }) {
           ))}
         </span>
       )}
+      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
     </div>
   )
 }
 
 // Documentos-modelo (criados em Configurações) que se aplicam a este colaborador,
 // com o botão de gerar o PDF já preenchido no papel timbrado.
-function ModelosDoColaborador({ id, setMsg }) {
+function ModelosDoColaborador({ id }) {
   const [modelos, setModelos] = useState(null)
   const [gerando, setGerando] = useState(null)
+  // Mensagem LOCAL: este card fica no meio da tela, e mandar o erro para a
+  // mensagem global do topo é o mesmo defeito corrigido na ficha na v1.96 —
+  // quem clica aqui não vê o resultado lá em cima.
+  const [msgLocal, setMsgLocal] = useState(null)
   useEffect(() => { api.modelosAplicaveis(id).then(setModelos).catch(() => setModelos([])) }, [id])
-  if (!modelos || modelos.length === 0) return null
   const gerar = async (m) => {
-    setGerando(m.id); setMsg(null)
+    setGerando(m.id); setMsgLocal(null)
     try {
       const blob = await api.gerarModelo(id, m.id)
       window.open(URL.createObjectURL(blob), '_blank')
     } catch (e) {
-      setMsg({ tipo: 'erro', texto: `Não foi possível gerar (${e.detail || e.message}).` })
+      setMsgLocal({ tipo: 'erro', texto: `Não foi possível gerar (${e.detail || e.message}).` })
     } finally { setGerando(null) }
   }
+  // `null` (ainda carregando) e `[]` (não há modelo para este cargo/posto) são
+  // estados DIFERENTES: o primeiro reserva o lugar, o segundo pode sumir.
+  if (modelos === null) return (
+    <div className="rh-card"><p className="explica">Carregando documentos…</p></div>
+  )
+  if (modelos.length === 0) return null
   return (
     <div className="rh-card rh-lote">
       <strong>📝 Documentos do colaborador:</strong>
@@ -436,8 +460,9 @@ function ModelosDoColaborador({ id, setMsg }) {
                 onClick={() => gerar(m)}>
           {gerando === m.id ? 'Gerando…' : `⬇ ${m.titulo}`}</button>
       ))}
-      <span className="explica" style={{ margin: 0, width: '100%' }}>Gerados no papel timbrado,
+      <span className="explica campo-sem-margem" style={{ width: '100%' }}>Gerados no papel timbrado,
         com os dados deste colaborador preenchidos. Crie/edite modelos em Configurações.</span>
+      {msgLocal && <div className={msgLocal.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msgLocal.texto}</div>}
     </div>
   )
 }
@@ -904,7 +929,7 @@ export default function Detalhe({ id, aoVoltar }) {
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>{dados.nome_completo}</h1>
         <div>
-          <button className="btn-secundario" title="Posta no canal do Teams (se configurado em Configurações)"
+          <button className="btn-secundario btn-mini" title="Posta no canal do Teams (se configurado em Configurações)"
                   onClick={async () => {
                     if (!window.confirm(`Enviar uma mensagem ao canal do Teams sobre ${dados.nome_completo}?`)) return
                     setMsg(null)
@@ -917,18 +942,22 @@ export default function Detalhe({ id, aoVoltar }) {
                         : `Não foi possível enviar ao Teams (${e.detail || e.message}).` })
                     }
                   }}>💬 Enviar ao Teams</button>
-          <button className="btn-secundario" onClick={() => gerarDossie(false)}>Gerar dossiê</button>
+          <button className="btn-secundario btn-mini" onClick={() => gerarDossie(false)}>Gerar dossiê</button>
           <Ajuda termo="dossie" />
           {dados.dossie_gerado_em && (
-            <button className="btn-principal" onClick={baixarDossie}>⬇ Baixar dossiê</button>
+            <button className="btn-secundario btn-mini" onClick={baixarDossie}>⬇ Baixar dossiê</button>
           )}
+          {/* Efetivar é a ação PRIMÁRIA da tela (e irreversível) — as demais do
+              cabeçalho são secundárias. Antes "⬇ Baixar dossiê" levava o
+              btn-principal e dominava o topo, deixando o efetivar com menos
+              peso visual que um download. Tokens no lugar dos hex de sempre. */}
           {dados.situacao === 'ativo'
-            ? <span className="chip" style={{ '--chip-cor': '#0fb257', marginLeft: '.4rem' }}
+            ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}
                     title={dados.data_admissao ? `Admissão: ${dados.data_admissao}` : undefined}>
                 ✅ Colaborador ativo</span>
             : dados.situacao === 'desligado'
-            ? <span className="chip" style={{ '--chip-cor': '#889', marginLeft: '.4rem' }}>⚪ Desligado</span>
-            : <><button className="btn-secundario" onClick={efetivar}
+            ? <span className="chip" style={{ '--chip-cor': 'var(--cinza-txt)' }}>⚪ Desligado</span>
+            : <><button className="btn-principal btn-mini" onClick={efetivar}
                       title="Transforma este candidato em colaborador ativo (aparece em Colaboradores)">
                 ✅ Efetivar como colaborador</button><Ajuda termo="efetivar" /></>}
         </div>
@@ -941,29 +970,19 @@ export default function Detalhe({ id, aoVoltar }) {
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
-      {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
-          Talentos. Recolhível para não poluir a ficha. */}
-      <MemoriaColaborador id={id} nome={dados.nome_completo} />
-      <TestesVinculados candidatoId={id} nome={dados.nome_completo} />
-      {/* Diagnóstico: o que aconteceu na TELA desta pessoa (v2.24) */}
-      <TelemetriaPessoa candidatoId={id} />
+      {/* ===== ORDEM DA TELA (v2.47) =====
+          O Bruno usa esta tela para DUAS coisas com o mesmo peso: conferir
+          documentos e corrigir cadastro. Antes havia SEIS blocos de consulta
+          (CRM, testes vinculados, telemetria, fichas, roteiro, diagnóstico)
+          enfiados ENTRE as duas — ele aprovava lá embaixo, rolava pra cima para
+          acertar o posto e voltava. A causa do "muito rolar" não era a fila
+          estar por último: era a consulta estar no meio.
+          Agora: [1] documentos  [2] cadastro  — coladas, no topo.
+                 [3] consulta — no fim, colapsada. */}
 
-      {/* Informativo de integração: só vai ao candidato assinar após o RH liberar. */}
+      {/* Informativo de integração: ação (liberar), não consulta — fica junto
+          do trabalho. Some quando o candidato não tem informativo. */}
       <PainelInformativo id={id} setMsg={setMsg} />
-
-      {/* No desktop, os cards de informação dividem a largura em 2 colunas
-          (menos rolagem); no celular continuam empilhados. */}
-      <div className="rh-grid-2">
-        <FichasStatus dados={dados} setMsg={setMsg} />
-        <TestesDoCandidato id={id} />
-      </div>
-      <PostoServico dados={dados} setMsg={setMsg} recarregar={recarregar} />
-      <RoteiroAssinatura id={id} />
-      <div className="rh-grid-2">
-        <ModelosDoColaborador id={id} setMsg={setMsg} />
-        <FichaRH id={id} />
-      </div>
-      <DiagnosticoColaborador id={id} />
 
       {pendDossie && (
         <div className="alerta">
@@ -1098,6 +1117,33 @@ export default function Detalhe({ id, aoVoltar }) {
           ) : <p className="explica centro">Selecione "Ver" em um documento para visualizar aqui.</p>}
         </div>
       </div>
+
+      {/* ===== 2. CADASTRO — a outra metade do trabalho, colada na primeira ===== */}
+      <PostoServico dados={dados} recarregar={recarregar} />
+      {/* auto-ajuste: quando não há modelo aplicável, `ModelosDoColaborador`
+          devolve null e a grade de 2 colunas deixaria metade da linha vazia. */}
+      <div className="rh-grid-auto">
+        <ModelosDoColaborador id={id} />
+        <FichaRH id={id} />
+      </div>
+
+      {/* ===== 3. CONSULTA — não é trabalho do dia a dia: fica no fim e fechada.
+           Antes estes seis blocos ficavam ENTRE as duas áreas acima. ===== */}
+      <details className="rh-card">
+        <summary>🔎 Histórico e consulta desta pessoa</summary>
+        <div className="rh-grid-2">
+          <FichasStatus dados={dados} />
+          <TestesDoCandidato id={id} />
+        </div>
+        <RoteiroAssinatura id={id} />
+        {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
+            Talentos. */}
+        <MemoriaColaborador id={id} nome={dados.nome_completo} />
+        <TestesVinculados candidatoId={id} nome={dados.nome_completo} />
+        {/* O que aconteceu na TELA desta pessoa (v2.24) */}
+        <TelemetriaPessoa candidatoId={id} />
+        <DiagnosticoColaborador id={id} />
+      </details>
     </main>
   )
 }

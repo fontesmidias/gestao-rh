@@ -283,6 +283,50 @@ cards clicáveis continuam funcionando, porque a filtragem em memória roda sobr
 todas as colunas, não só as que declaram `filtro`). Dois controles para o mesmo
 campo é pior do que dois cards.
 
+## 5b. Ordem da tela: agrupe por NATUREZA, não por ordem histórica
+
+Tela que cresce por acréscimo vira pilha: cada leva põe um bloco no fim, e a
+ordem final não é decisão de ninguém — é a cronologia do desenvolvimento. Foi o
+que aconteceu no `Detalhe.jsx` (v2.47): **15 blocos, e seis deles de consulta
+enfiados entre as duas coisas que o RH mais usa** (conferir documento e
+corrigir cadastro). Ele aprovava embaixo, rolava para cima para acertar o posto
+e voltava.
+
+O diagnóstico ingênuo era "a fila está por último, suba ela". Errado: subir a
+fila só inverteria quem fica longe de quem. **O custo estava na distância entre
+as duas atividades, não na posição de uma delas.**
+
+Regra: separe **trabalho** de **consulta**, mantenha juntas as coisas que a
+pessoa alterna numa mesma visita, e mande o que não é diário para um
+`<details>` fechado no fim (`details.rh-card`, que já tem estilo de resumo
+clicável). No `Detalhe` ficaram três faixas: **documentos · cadastro ·
+consulta (fechada)**.
+
+Antes de reordenar uma tela, **pergunte ao usuário o que ele foi fazer ali** —
+com peso, não com "depende". A resposta muda o desenho: uma atividade dominante
+pede hierarquia; duas de peso igual pedem proximidade.
+
+## 5c. Bloco condicional: "carregando" e "vazio" são estados DIFERENTES
+
+`if (!dados) return null` esconde os dois casos na mesma linha — e o bloco some
+enquanto a API responde, fazendo o conteúdo abaixo **pular na cara** de quem já
+estava lendo. É uma das causas do "hora segue o padrão, hora não": a mesma
+pessoa aberta duas vezes mostra quantidades diferentes de blocos.
+
+- **Some porque não se aplica** àquela pessoa → pode sumir. Mantém a densidade
+  baixa, e é o comportamento escolhido pelo Bruno.
+- **Some porque está carregando** → tem que **reservar o lugar** (card com
+  "Carregando…"), sobretudo se for uma das áreas principais da tela.
+
+```jsx
+if (itens === null) return <div className="rh-card"><p className="explica">Carregando…</p></div>
+if (itens.length === 0) return null   // não se aplica: pode sumir
+```
+
+Grade de 2 colunas com um filho condicional deixa **meia linha vazia** quando
+ele devolve `null`. Use `.rh-grid-auto` (auto-fit), que adapta a quantidade de
+colunas ao que existe de fato.
+
 ## 6d. Falha de carga é ERRO na tela, nunca "Carregando…" eterno
 
 `api.x().then(setDados).catch(() => setDados(null))` é armadilha: `null` é o
@@ -303,6 +347,25 @@ sutilezas que vieram do conserto:
   erro de ação substitui a tela inteira por uma mensagem e apaga o trabalho em
   curso — o erro de ação já tem o seu próprio canal (`msg` perto do botão, §
   "mensagem perto do botão que a gerou").
+
+### O critério é DISTÂNCIA, não "sempre local"
+
+A v1.96 cravou "mensagem perto do botão que a gerou". A v2.47 mostrou que a
+regra vazou para outros componentes da mesma tela: o **"Salvar posto"**, no
+card do meio do `Detalhe`, mandava a confirmação para a mensagem global do
+topo — a pessoa salva olhando para o meio e o resultado aparece onde ela não
+está. Mesmo defeito, quatro anos-luz do lugar certo.
+
+Mas **não converta tudo em mensagem local**. O critério é a distância entre o
+botão e o lugar onde a mensagem sai:
+
+- Componente **colado no topo** (linha de contato, informativo logo abaixo do
+  cabeçalho) → a global serve, e evita espalhar estado.
+- Componente **longe do topo**, dentro de `<details>`, ou numa tela que rola →
+  mensagem **local**, renderizada dentro do próprio card.
+
+Ao **mover** um bloco de lugar, reavalie: um card que estava no topo e foi para
+o rodapé passa a precisar de mensagem local (aconteceu com `FichasStatus`).
 
 ## 7. Tooltips e ajuda: um padrão só
 
@@ -355,6 +418,12 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Todo token de cor que usei tem par no `:root[data-tema='escuro']` — e
       **nenhum `var()` meu tem fallback de cor**.
 - [ ] Falha de carga mostra **erro + "tentar de novo"**, não "Carregando…" eterno.
+- [ ] Bloco condicional distingue **carregando** (reserva o lugar) de **vazio**
+      (pode sumir) — não `if (!x) return null` para os dois.
+- [ ] A mensagem de cada ação sai **onde a pessoa está olhando** (critério:
+      distância do botão, não "sempre local").
+- [ ] **Abri a tela renderizada** e conferi a hierarquia — qual botão domina, o
+      que quebra em duas linhas, o que ficou vazio. O código não mostra isso.
 - [ ] Botão só com ícone/símbolo tem `aria-label` dizendo **qual item** ele afeta.
 - [ ] Se removi `outline`, repus indicação de foco.
 - [ ] Termos de negócio têm `<Ajuda>`.
