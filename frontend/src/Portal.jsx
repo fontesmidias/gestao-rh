@@ -4,6 +4,7 @@ import { VerificarIdentidade } from './CrecheLink.jsx'
 import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
 import SelectBusca from './SelectBusca.jsx'
+import CapturaDocumento from './candidato/Camera.jsx'
 
 // Portal do colaborador (/meu) — UMA porta para tudo que é da pessoa.
 //
@@ -464,6 +465,10 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
   })
   const [docs, setDocs] = useState(registro.documentos || [])
   const [lidos, setLidos] = useState({})     // papel -> aviso da leitura
+  // {papel, titulo} — câmera guiada aberta (v2.61). Quem usa esta tela é o
+  // bombeiro civil no plantão, no celular: a moldura e o aviso de foto tremida
+  // valem mais aqui do que em qualquer outro lugar do sistema.
+  const [camera, setCamera] = useState(null)
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
@@ -479,9 +484,13 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
     return r.id
   }
 
-  const subir = async (papel, arquivo) => {
+  // Aceita um `File` OU a lista que a câmera devolve (v2.61). Um papel guarda
+  // um documento, então manda o PRIMEIRO — o backend inclusive apaga o
+  // anterior do mesmo papel.
+  const subir = async (papel, entrada) => {
+    const arquivo = Array.isArray(entrada) ? entrada[0] : entrada
     if (!arquivo) return
-    setErro(null); setSalvando(true)
+    setErro(null); setSalvando(true); setCamera(null)
     try {
       const rid = await garantirRegistro()
       const r = await api.subirDocumento(token, rid, papel, arquivo)
@@ -538,16 +547,29 @@ function EnvioRegistro({ token, tipos, registro, aoFechar }) {
               <strong>{ROTULO_PAPEL[papel] || papel}</strong>
               {lidos[papel] && <div className="explica" style={{ margin: 0 }}>{lidos[papel]}</div>}
             </div>
-            <label className="btn-secundario btn-mini" style={{ cursor: 'pointer' }}>
-              {enviadoDe(papel) ? '✔ trocar' : 'Escolher'}
-              <input type="file" hidden accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx"
-                     onChange={(e) => subir(papel, e.target.files[0])} />
-            </label>
+            {/* Câmera guiada (v2.61): a legenda abaixo já dizia "pode
+                fotografar com o celular — só confira se está legível", e era
+                exatamente disso que a câmera cuida: ela AVISA quando a foto
+                está tremida ou escura, antes de enviar. */}
+            <button type="button" className="btn-secundario btn-mini"
+                    onClick={() => setCamera({ papel, titulo: ROTULO_PAPEL[papel] || papel })}>
+              {enviadoDe(papel) ? '✔ trocar' : '📷 Enviar'}
+            </button>
           </div>
         ))}
       </div>
 
-      <p className="explica">📷 Pode fotografar com o celular — só confira se está legível.</p>
+      <p className="explica">📷 Pode fotografar com o celular — a câmera avisa se a
+        foto ficar tremida ou escura. Quem preferir escolher um arquivo do aparelho
+        também consegue, por dentro dela.</p>
+
+      {/* `formato="a4"`: certificado e diploma são FOLHA em pé. */}
+      {camera && (
+        <CapturaDocumento formato="a4" titulo={camera.titulo}
+                          aoCapturar={(arqs) => subir(camera.papel, arqs)}
+                          aoArquivo={(arqs) => subir(camera.papel, arqs)}
+                          aoFechar={() => setCamera(null)} />
+      )}
 
       <label className="campo"><span className="rotulo">Nome do curso</span>
         <input value={campos.titulo} placeholder={tipo ? tipo.nome : ''}

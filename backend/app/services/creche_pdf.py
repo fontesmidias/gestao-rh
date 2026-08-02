@@ -218,8 +218,16 @@ def gerar_declaracao_modelo(db: Session, beneficio: BeneficioCreche) -> bytes:
     return bytes(pdf.output())
 
 
-def _anexo_como_pdf(key: str) -> bytes | None:
-    """Baixa um anexo do storage e devolve-o como PDF (converte se for imagem)."""
+def _anexo_como_pdf(key: str, rotulo: str | None = None) -> bytes | None:
+    """Baixa um anexo do storage e devolve-o como PDF (converte se for imagem).
+
+    O `rotulo` vira o TÍTULO impresso no papel timbrado. Sem ele o cabeçalho
+    saía como "DOCUMENTO" genérico, e num dossiê com certidão de dois filhos e
+    a guarda judicial nada distinguia uma folha da outra (v2.61).
+
+    Documento enviado a partir da v2.61 já chega aqui como PDF timbrado — este
+    caminho continua servindo os antigos, gravados crus.
+    """
     from pypdf import PdfReader  # validação
     from app.services.normalizacao import _imagem_para_pdf
     try:
@@ -235,9 +243,9 @@ def _anexo_como_pdf(key: str) -> bytes | None:
             return dados
         except Exception:
             return None
-    # imagem -> PDF
+    # imagem -> PDF timbrado, com o título do documento no cabeçalho
     try:
-        return _imagem_para_pdf(dados)
+        return _imagem_para_pdf(dados, rotulo)
     except Exception:
         return None
 
@@ -250,9 +258,12 @@ def gerar_dossie_creche(db: Session, beneficio: BeneficioCreche) -> bytes:
     writer = PdfWriter()
     _adicionar_em_a4(writer, gerar_requerimento_creche(db, beneficio))
     for c in beneficio.criancas:
-        for key in (c.certidao_key, c.guarda_key):
+        # Rótulo com o NOME da criança: num dossiê com dois filhos, "CERTIDÃO
+        # DE NASCIMENTO" repetido duas vezes não diz de quem é cada folha.
+        for key, rotulo in ((c.certidao_key, f"certidão de nascimento — {c.nome}"),
+                            (c.guarda_key, f"guarda judicial — {c.nome}")):
             if key:
-                pdf = _anexo_como_pdf(key)
+                pdf = _anexo_como_pdf(key, rotulo)
                 if pdf:
                     _adicionar_em_a4(writer, pdf)
     _adicionar_em_a4(writer, gerar_declaracao_modelo(db, beneficio))

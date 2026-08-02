@@ -642,18 +642,40 @@ async def subir_documento(token: str, registro_id: uuid.UUID, papel: str,
         await arquivo.close()
 
     sensibilidade = SENSIBILIDADE_PAPEL.get(papel, SensibilidadeDoc.comum)
-    key = f"desenvolvimento/{r.id}/{papel}.{ext}"
-    storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
+    # Guarda como PDF TIMBRADO, como o wizard da admissão (v2.61, pedido do
+    # Bruno: *"quando gerar o dossiê, já vir no padrão conforme documentos
+    # anteriores, no timbrado da empresa"*). Antes o certificado ficava como o
+    # `.jpg` que a pessoa fotografou.
+    #
+    # O `conteudo` ORIGINAL segue para o OCR mais abaixo — a leitura assistida
+    # funciona melhor sobre a foto do que sobre a foto reduzida dentro de uma
+    # A4. O que muda é só o que se GUARDA.
+    guardado, key_ext, ct = conteudo, ext, arquivo.content_type
+    try:
+        from app.services.normalizacao import normalizar_para_pdf
+        guardado, _pgs = normalizar_para_pdf(arquivo.filename or f"{papel}.{ext}",
+                                             conteudo, rotulo=papel.replace("_", " "))
+        key_ext, ct = "pdf", "application/pdf"
+    except Exception:
+        # Falha de conversão não pode impedir o envio: o colaborador ficaria
+        # sem conseguir comprovar um curso por causa da qualidade da foto.
+        pass
+    key = f"desenvolvimento/{r.id}/{papel}.{key_ext}"
+    storage.salvar(key, guardado, ct or "application/octet-stream")
 
     # substitui o documento do mesmo papel, se já havia
     for antigo in list(r.arquivos):
         if antigo.papel == papel:
             db.delete(antigo)
+    # Hash, tamanho e content-type descrevem o que foi REALMENTE gravado, não o
+    # que chegou: o hash serve para conferir a integridade do objeto no storage,
+    # e apontar para o arquivo pré-conversão o tornaria inútil. O nome original
+    # continua sendo o que a pessoa enviou — é o que a identifica na conversa.
     db.add(ArquivoDesenvolvimento(
         registro_id=r.id, papel=papel, sensibilidade=sensibilidade, key=key,
         nome_original=(arquivo.filename or "")[:200],
-        content_type=arquivo.content_type, tamanho=len(conteudo),
-        sha256=hashlib.sha256(conteudo).hexdigest()))
+        content_type=ct, tamanho=len(guardado),
+        sha256=hashlib.sha256(guardado).hexdigest()))
 
     # Leitura assistida: propõe campos para a pessoa conferir. Documento de
     # saúde só passa se o ZDR estiver ligado (trava do `ocr_roteador`).

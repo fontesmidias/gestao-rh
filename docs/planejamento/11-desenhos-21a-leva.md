@@ -184,7 +184,14 @@ descreve o ato real, nunca o simula.
 
 ---
 
-## 3. Câmera e papel timbrado em TODOS os fluxos de upload
+## 3. Câmera e papel timbrado em TODOS os fluxos de upload — ✅ IMPLEMENTADO na v2.61
+
+> Entregue em 2026-08-02. Creche e portal ganharam a câmera guiada e passaram a
+> gravar PDF timbrado; **falha de conversão degrada para o original**, nunca
+> recusa o envio. O currículo do Banco de Talentos segue com o seletor de
+> arquivo e guardado original — decisão do Bruno, coerente com a v2.33.
+>
+> Ver `CHANGELOG.md` [2.61.0] e `tests/test_documento_timbrado.py`.
 
 ### O pedido
 

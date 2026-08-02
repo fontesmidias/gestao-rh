@@ -4,6 +4,7 @@ import { fmtTelefone } from './fmt.js'
 import InputData from './InputData.jsx'
 import logo from './assets/logo.png'
 import SelectBusca from './SelectBusca.jsx'
+import CapturaDocumento from './candidato/Camera.jsx'
 
 // Link público único do levantamento do Reembolso-Creche (IN SEGES/MGI 147/2026).
 // Etapas: CPF -> código 2FA (e-mail) -> conferir dados -> crianças + certidão -> enviar.
@@ -356,6 +357,11 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
   const [enviando, setEnviando] = useState(false)
   // form de nova criança
   const [nova, setNova] = useState({ nome: '', data_nascimento: '', parentesco: 'filho', tipo_comprovante: 'declaracao' })
+  // {criancaId, tipo, titulo} — câmera guiada aberta (v2.61). A mesma do
+  // wizard da admissão: moldura, aviso de foto tremida/escura e recorte antes
+  // de enviar. Antes aqui era um `<input type="file">` solto, e a certidão
+  // chegava como a pessoa conseguisse fotografar.
+  const [camera, setCamera] = useState(null)
   // 'tenho' | 'nao_tenho' | null — a manifestação do colaborador (v2.34).
   // Começa NULA de propósito: a pessoa tem que escolher, e não encontrar um
   // formulário já aberto que ela ignora se não lhe disser respeito.
@@ -394,9 +400,14 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
       setErro(M[e.detail] || 'Não foi possível adicionar. Tente de novo.')
     }
   }
-  const subir = async (criancaId, tipo, arquivo) => {
+  // Aceita um `File` OU a lista que a câmera devolve (v2.61). O backend guarda
+  // um documento por tipo, então manda o PRIMEIRO — a câmera do creche é de
+  // passo único (certidão é uma folha), diferente do RG, que tem frente e verso.
+  const subir = async (criancaId, tipo, entrada) => {
+    const arquivo = Array.isArray(entrada) ? entrada[0] : entrada
     if (!arquivo) return
     setErro(null)
+    setCamera(null)
     try { await api.subirDocumento(token, criancaId, tipo, arquivo); recarregar() }
     catch (e) { setErro(`Falha ao enviar o arquivo (${e.detail || e.message}).`) }
   }
@@ -518,17 +529,22 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
               <span className="explica" style={{ margin: 0 }}>{c.parentesco} · nasc. {c.data_nascimento}</span>
               <button className="btn-link" onClick={() => api.delCrianca(token, c.id).then(recarregar)}>remover</button>
             </div>
+            {/* Câmera guiada, a mesma do wizard da admissão (v2.61, pedido do
+                Bruno: *"quero que utilize o que montamos e validamos de câmera,
+                ficou legal"*). Ela avisa quando a foto está tremida ou escura
+                ANTES de enviar, e quem prefere escolher do aparelho tem o
+                botão de arquivo dentro dela — nada se perde. */}
             <div className="creche-docs">
-              <label className={`creche-doc ${c.tem_certidao ? 'ok' : ''}`}>
-                {c.tem_certidao ? '✅ Certidão enviada' : '📎 Enviar certidão de nascimento'}
-                <input type="file" hidden accept="image/*,.pdf"
-                       onChange={(e) => subir(c.id, 'certidao', e.target.files?.[0])} />
-              </label>
-              <label className={`creche-doc ${c.tem_guarda ? 'ok' : ''}`}>
-                {c.tem_guarda ? '✅ Guarda enviada' : '📎 Guarda judicial (se aplicável)'}
-                <input type="file" hidden accept="image/*,.pdf"
-                       onChange={(e) => subir(c.id, 'guarda', e.target.files?.[0])} />
-              </label>
+              <button type="button" className={`creche-doc ${c.tem_certidao ? 'ok' : ''}`}
+                      onClick={() => setCamera({ criancaId: c.id, tipo: 'certidao',
+                                                 titulo: `Certidão de ${c.nome}` })}>
+                {c.tem_certidao ? '✅ Certidão enviada — trocar' : '📷 Enviar certidão de nascimento'}
+              </button>
+              <button type="button" className={`creche-doc ${c.tem_guarda ? 'ok' : ''}`}
+                      onClick={() => setCamera({ criancaId: c.id, tipo: 'guarda',
+                                                 titulo: `Guarda judicial de ${c.nome}` })}>
+                {c.tem_guarda ? '✅ Guarda enviada — trocar' : '📷 Guarda judicial (se aplicável)'}
+              </button>
             </div>
           </div>
         ))}
@@ -550,6 +566,16 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
           <button className="btn-secundario" onClick={addCrianca}>+ Adicionar criança</button>
         </div>
       </div>
+
+      {/* `formato="a4"`: certidão e guarda são FOLHA em pé, não cartão. As duas
+          callbacks vão para a mesma função — a câmera devolve lista nos dois
+          casos (foto capturada ou arquivo escolhido do aparelho). */}
+      {camera && (
+        <CapturaDocumento formato="a4" titulo={camera.titulo}
+                          aoCapturar={(arqs) => subir(camera.criancaId, camera.tipo, arqs)}
+                          aoArquivo={(arqs) => subir(camera.criancaId, camera.tipo, arqs)}
+                          aoFechar={() => setCamera(null)} />
+      )}
 
       {erro && <div className="alerta">{erro}</div>}
       <button className="btn-principal creche-enviar" disabled={enviando || !(dados.criancas || []).length}
