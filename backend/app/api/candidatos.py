@@ -34,6 +34,16 @@ class NovoCandidato(BaseModel):
     jornada_id: uuid.UUID | None = None
     regime: str = "efetivo"
     cargo_funcao: str | None = None
+    # Empresa e ponto no convite (feedback 2026-08-01): "é uma das coisas
+    # fundamentais para o Tirvu". `registra_ponto` é obrigatório de verdade —
+    # decisão do Bruno, ciente do risco de o RH marcar qualquer coisa para o
+    # formulário deixar passar. A EMPRESA continua opcional aqui porque o grupo
+    # opera com uma empregadora só (o export usa EMPRESA_TIRVU_ID fixo desde
+    # 2026-07-24): o campo serve ao cadastro interno, e a tela já vem com ela
+    # escolhida quando só existe uma — obrigar um clique numa lista de um item
+    # é teatro, não conferência.
+    empresa_id: uuid.UUID | None = None
+    registra_ponto: bool | None = None
     # Testes marcados pelo RH ao gerar o link: o candidato responde ANTES de
     # seguir para o cadastro; o resultado é restrito ao RH.
     fazer_disc: bool = False
@@ -87,10 +97,16 @@ def criar_candidato(
     jornada_id = dados.pop("jornada_id", None)
     regime = (dados.pop("regime", None) or "efetivo").strip().lower()
     cargo = dados.pop("cargo_funcao", None)
+    empresa_id = dados.pop("empresa_id", None)
+    registra_ponto = dados.pop("registra_ponto", None)
     fazer_disc = bool(dados.pop("fazer_disc", False))
     fazer_situacional = bool(dados.pop("fazer_situacional", False))
     if posto_id is not None and db.get(PostoServico, posto_id) is None:
         raise HTTPException(status_code=404, detail="posto_nao_encontrado")
+    if empresa_id is not None:
+        from app.models.candidato import Empresa
+        if db.get(Empresa, empresa_id) is None:
+            raise HTTPException(status_code=404, detail="empresa_nao_encontrada")
     # Jornada é obrigatória no convite (feedback 2026-07-21) e precisa existir.
     if jornada_id is None:
         raise HTTPException(status_code=422, detail="jornada_obrigatoria")
@@ -98,11 +114,23 @@ def criar_candidato(
     # com modelos/provas/arquivo, então precisa ser definido ao gerar o link.
     if not cargo:
         raise HTTPException(status_code=422, detail="cargo_obrigatorio")
+    # Registra ponto obrigatório no convite (feedback 2026-08-01). Era pendência
+    # só na hora do export, e o Tirvu ACEITA a célula vazia calado — o
+    # colaborador nascia lá sem a marcação. Exigir aqui não briga com a regra da
+    # v1.82 (não travar a edição dos importados, que nasceram sem o campo): no
+    # convite não existe importado, a admissão começa agora.
+    #
+    # Vem DEPOIS de jornada e cargo de propósito: quem esquece o formulário
+    # inteiro precisa ouvir primeiro sobre os campos que já eram exigidos, na
+    # ordem em que aparecem na tela.
+    if registra_ponto is None:
+        raise HTTPException(status_code=422, detail="registra_ponto_obrigatorio")
     if db.get(Jornada, jornada_id) is None:
         raise HTTPException(status_code=404, detail="jornada_nao_encontrada")
     candidato = Candidato(**dados, posto_servico_id=posto_id, jornada_id=jornada_id,
                           regime=regime if regime in ("efetivo", "intermitente") else "efetivo",
-                          cargo_funcao=cargo)
+                          cargo_funcao=cargo, empresa_id=empresa_id,
+                          registra_ponto=registra_ponto)
     db.add(candidato)
     db.flush()
     docs_novos = gerar_docs_do_posto_e_regime(db, candidato)

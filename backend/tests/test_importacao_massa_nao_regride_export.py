@@ -71,6 +71,8 @@ conv = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "Colaborador Teste Nao Regressao",
     "jornada_id": jornada_id,
     "cargo_funcao": CARGO_ALVO,
+    # registra_ponto passou a ser obrigatório no convite (v2.44)
+    "registra_ponto": True,
 })
 assert conv.status_code == 201, conv.text
 candidato_id = conv.json()["candidato"]["id"]

@@ -77,7 +77,7 @@ jid = c.post("/api/rh/jornadas", headers=rh,
              json={"descricao": f"VINC {_ID} - 2A A 6A - 08H AS 17H"}).json()["id"]
 r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": f"Candidato Vinculo {_ID}", "email": f"vinc{_ID}@example.com",
-    "jornada_id": jid, "cargo_funcao": "Auxiliar de Serviços Gerais"})
+    "jornada_id": jid, "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
 assert r.status_code == 201, r.text
 cid = r.json()["candidato"]["id"]
 

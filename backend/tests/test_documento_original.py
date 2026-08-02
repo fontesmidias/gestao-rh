@@ -79,7 +79,7 @@ def _candidato() -> str:
         "nome_completo": "Ana Original Teste",
         "email": f"ana.original.{uuid.uuid4().hex[:8]}@example.com",
         "celular_whatsapp": "+5561999995555", "jornada_id": jid,
-        "cargo_funcao": "Auxiliar de Serviços Gerais"})
+        "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
     tok = r.json()["link_magico"].rsplit("/c/", 1)[1]
     c.post(f"/api/c/{tok}/aceite", json={"aceite_lgpd": True})
     return tok

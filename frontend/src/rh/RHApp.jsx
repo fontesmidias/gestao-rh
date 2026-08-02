@@ -407,6 +407,20 @@ function PainelConteudo({ aoSair }) {
     api.jornadas(novo.posto_id || null).then(setJornadasConvite).catch(() => setJornadasConvite([]))
   }, [novo?.posto_id, novo === null])
 
+  // Empresas para o convite (v2.44). Com UMA só — que é o caso do grupo — ela
+  // já vem escolhida e o seletor nem aparece: obrigar um clique numa lista de
+  // um item é teatro, não conferência. Com duas ou mais, o RH decide.
+  const [empresasConvite, setEmpresasConvite] = useState([])
+  useEffect(() => {
+    if (!novo) return
+    api.empresas().then((lista) => {
+      setEmpresasConvite(lista || [])
+      if ((lista || []).length === 1) {
+        setNovo((x) => (x && !x.empresa_id ? { ...x, empresa_id: lista[0].id } : x))
+      }
+    }).catch(() => setEmpresasConvite([]))
+  }, [novo === null])
+
   // aoAbrir/aoAbrirPessoa das telas filhas navegam para a URL da pessoa —
   // Ctrl+clique não se aplica aqui (é callback, não <a>), mas o histórico e o
   // F5 passam a funcionar, e a URL fica compartilhável.
@@ -507,6 +521,29 @@ function PainelConteudo({ aoSair }) {
                   setNovo({ ...novo, cargo_funcao: v })
                 }} />
             )}
+            {/* Registra ponto: obrigatório no convite (feedback 2026-08-01,
+                "é uma das coisas fundamentais para o Tirvu"). Antes só virava
+                pendência na hora do export — e o Tirvu aceita a célula vazia
+                calado, então o colaborador nascia lá sem a marcação. */}
+            <select value={novo.registra_ponto === undefined || novo.registra_ponto === null
+              ? '' : String(novo.registra_ponto)}
+                    onChange={(e) => setNovo({ ...novo,
+                      registra_ponto: e.target.value === '' ? null : e.target.value === 'true' })}>
+              <option value="">— registra ponto? (obrigatório) —</option>
+              <option value="true">Registra ponto: Sim</option>
+              <option value="false">Registra ponto: Não</option>
+            </select>
+            {/* Empresa: o grupo opera com UMA empregadora, então o campo vem
+                escolhido e serve ao cadastro. Obrigar um clique numa lista de
+                um item seria teatro; com duas ou mais, o RH decide. */}
+            {empresasConvite.length > 1 && (
+              <select value={novo.empresa_id || ''}
+                      onChange={(e) => setNovo({ ...novo, empresa_id: e.target.value || null })}>
+                <option value="">— empresa (empregadora) —</option>
+                {empresasConvite.map((e2) => (
+                  <option key={e2.id} value={e2.id}>{e2.nome_fantasia || e2.razao_social}</option>))}
+              </select>
+            )}
             {jornadasConvite.length === 0 && (
               <span className="explica" style={{ margin: 0, alignSelf: 'center' }}>
                 Nenhuma jornada cadastrada ainda — cadastre em <strong>Config → Empresas e jornadas</strong>.</span>)}
@@ -564,6 +601,10 @@ function PainelConteudo({ aoSair }) {
               if (!(novo.cargo_funcao || '').trim()) {
                 setErroConvite('Informe o cargo/função — é obrigatório para gerar o link.'); return
               }
+              if (novo.registra_ponto === undefined || novo.registra_ponto === null) {
+                setErroConvite('Informe se a pessoa registra ponto. O Tirvu aceita esse campo '
+                  + 'em branco sem reclamar, e o colaborador nasce lá sem a marcação.'); return
+              }
               setEnviandoConvite(true)
               try {
                 const r = await api.novoCandidato({
@@ -574,6 +615,8 @@ function PainelConteudo({ aoSair }) {
                   jornada_id: novo.jornada_id,
                   regime: novo.regime || 'efetivo',
                   cargo_funcao: (novo.cargo_funcao || '').trim() || null,
+                  registra_ponto: novo.registra_ponto,
+                  empresa_id: novo.empresa_id || null,
                   fazer_disc: !!novo.fazer_disc,
                   fazer_situacional: !!novo.fazer_situacional,
                 })

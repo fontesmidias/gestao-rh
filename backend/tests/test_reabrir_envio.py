@@ -58,7 +58,7 @@ def _candidato_pronto_para_concluir() -> str:
     r = c.post("/api/rh/candidatos", headers=rh, json={
         "nome_completo": "Ana Reabertura Teste", "email": "ana.reabrir@example.com",
         "celular_whatsapp": "+5561999996666", "jornada_id": jid,
-        "cargo_funcao": "Auxiliar de Serviços Gerais"})
+        "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
     tok = r.json()["link_magico"].rsplit("/c/", 1)[1]
     c.post(f"/api/c/{tok}/aceite", json={"aceite_lgpd": True})
     for s in c.get(f"/api/c/{tok}/documentos").json()["slots"]:

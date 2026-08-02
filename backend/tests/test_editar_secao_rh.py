@@ -42,6 +42,8 @@ r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "Maria Teste Editar Secao",
     "jornada_id": jornada_id,
     "cargo_funcao": "Auxiliar de Serviços Gerais",
+    # registra_ponto passou a ser obrigatório no convite (v2.44)
+    "registra_ponto": True,
 })
 assert r.status_code == 201, r.text
 candidato_id = r.json()["candidato"]["id"]
