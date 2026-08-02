@@ -105,6 +105,22 @@ class CriancaCreche(Base):
     guarda_key: Mapped[str | None] = mapped_column(String(300))
     # tipo de comprovante de despesa que a família usará (declaração PF ou NF PJ)
     tipo_comprovante: Mapped[str | None] = mapped_column(String(20))  # declaracao | nota_fiscal
+    # ---- decisão do RH POR CRIANÇA (v2.55) --------------------------------
+    # Feedback 2026-08-02: *"se a pessoa tem mais de um filho e um eu defiro e
+    # outro eu indefiro, não tem opção individual por filho, somente indeferir
+    # tudo ou aprovar tudo"*. Antes, o único jeito de negar uma criança era
+    # DEVOLVER o levantamento e pedir que o colaborador a removesse — o que
+    # apagava a prova de que ela tinha sido analisada e negada.
+    #
+    # `NULL` = ainda não decidida. Benefícios aprovados antes desta versão
+    # ficam com NULL e são tratados como "deferidos pelo modelo anterior":
+    # migrar em lote gravaria uma decisão que ninguém tomou.
+    decisao: Mapped[str | None] = mapped_column(String(12))  # deferida | indeferida
+    motivo_decisao: Mapped[str | None] = mapped_column(String(400))
+    # SNAPSHOT do e-mail de quem decidiu, não FK — mesma regra do mini-CRM: a
+    # decisão continua auditável se o usuário for removido depois.
+    decidido_por: Mapped[str | None] = mapped_column(String(200))
+    decidido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     beneficio: Mapped[BeneficioCreche] = relationship(back_populates="criancas")

@@ -27,6 +27,18 @@ def _parentesco_txt(p: str) -> str:
             "guarda": "Criança sob guarda judicial"}.get(p, p)
 
 
+def _data_br(v: str | None) -> str:
+    """Data sempre em dd/mm/aaaa no documento, venha do banco como vier.
+
+    Import TARDIO porque `app.api.creche` importa este módulo — no topo,
+    fecharia um ciclo. A função de lá é a canônica (lê ISO e BR); duplicá-la
+    aqui criaria duas regras de leitura de data para o mesmo campo, que é
+    exatamente o defeito que a v2.27 levou um incidente para consertar.
+    """
+    from app.api.creche import data_br
+    return data_br(v)
+
+
 def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche,
                               vistos: list | None = None, sol=None,
                               base_url: str | None = None) -> bytes:
@@ -66,11 +78,41 @@ def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche,
     pdf.paragrafo("Declaro possuir sob minha responsabilidade o(a)(s) seguinte(s) "
                   "dependente(s):")
 
-    for c in beneficio.criancas:
+    # UM requerimento, mesmo com decisão por criança (v2.55). O corpo lista só
+    # as DEFERIDAS: este é o documento que o colaborador ASSINA, e declarar
+    # como beneficiada uma criança que o RH negou seria pedir que ele
+    # subscrevesse algo que não vale.
+    #
+    # Criança sem decisão (`None`) entra: ou o benefício é anterior à v2.55 —
+    # quando a decisão era do conjunto —, ou o RH aprovou sem usar a decisão
+    # individual. Nos dois casos ela está deferida pelo ato de aprovação.
+    deferidas = [c for c in beneficio.criancas if c.decisao != "indeferida"]
+    indeferidas = [c for c in beneficio.criancas if c.decisao == "indeferida"]
+
+    for c in deferidas:
         pdf.campo("Nome da Criança", c.nome)
-        pdf.campo("Data de nascimento", c.data_nascimento)
+        # `data_br`, nunca o valor cru: o banco guarda os DOIS formatos (o
+        # wizard grava ISO, o formulário antigo gravava BR — ver
+        # `creche.partes_da_data`), e o requerimento é documento OFICIAL que a
+        # pessoa assina. Imprimir "2022-10-19" num requerimento em português é
+        # erro de face; achado na conferência visual do PDF, 2026-08-02.
+        pdf.campo("Data de nascimento", _data_br(c.data_nascimento))
         pdf.campo("Grau de parentesco", _parentesco_txt(c.parentesco))
         pdf.ln(1)
+
+    # As negadas aparecem em seção PRÓPRIA, com o motivo — não somem do
+    # documento. O registro de que aquele dependente foi analisado e indeferido
+    # é justamente o que prova que o RH avaliou o pedido inteiro; antes desta
+    # versão, negar uma criança exigia removê-la, e essa prova se perdia.
+    if indeferidas:
+        pdf.ln(1)
+        pdf.paragrafo("Dependente(s) analisado(s) e NÃO contemplado(s) nesta "
+                      "concessão:")
+        for c in indeferidas:
+            pdf.campo("Nome da Criança", c.nome)
+            pdf.campo("Data de nascimento", _data_br(c.data_nascimento))
+            pdf.campo("Motivo", c.motivo_decisao or "-")
+            pdf.ln(1)
 
     pdf.ln(1)
     pdf.paragrafo(

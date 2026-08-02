@@ -325,7 +325,19 @@ function Levantamentos() {
       setMsg(aguardar ? 'Aprovado — aguardando repactuação do contrato.'
         : 'Benefício ativado. O colaborador recebeu as orientações da entrega mensal por e-mail.')
       setAberto(null); carregar()
-    } catch (e) { setErro(`Falha ao aprovar (${e.detail || e.message}).`) }
+    } catch (e) {
+      // 409 com a lista de quem falta: a mensagem tem que DIZER QUEM, senão o
+      // RH fica procurando na tabela qual criança ele esqueceu. Quando todas
+      // são indeferidas, o backend converte em indeferimento e não cai aqui.
+      const d = e.dados
+      if (d && d.erro === 'criancas_sem_decisao') {
+        setErro(`Falta decidir sobre: ${(d.criancas || []).join(', ')}. `
+                + 'Defira ou indefira cada criança antes de aprovar — o valor do '
+                + 'reembolso depende de quantas foram deferidas.')
+        return
+      }
+      setErro(`Falha ao aprovar (${e.detail || e.message}).`)
+    }
   }
   const indeferir = async (ben) => {
     const motivo = window.prompt(`Indeferir o pedido de ${ben.nome}. Qual o motivo?`)
@@ -664,7 +676,13 @@ function CondicoesBeneficio({ b, aoSalvar }) {
       {!editando ? (
         <p className="explica" style={{ margin: '.35rem 0 0' }}>
           Entrega da documentação até o dia <strong>{b.dia_entrega_mensal || 5}</strong> de cada
-          mês · valor do reembolso: <strong>{b.valor_reembolso || 'a repactuar'}</strong>
+          mês · valor <strong>por criança</strong>: {b.valor_unitario || 'a repactuar'}
+          {/* O TOTAL só aparece quando difere do unitário — com uma criança
+              deferida os dois são iguais, e repetir o mesmo número duas vezes
+              faria parecer que há duas informações diferentes. */}
+          {b.deferidas > 1 && b.valor_total && (
+            <> · total ({b.deferidas} crianças): <strong>{b.valor_total}</strong></>)}
+          {b.deferidas === 1 && <> · total: <strong>{b.valor_total}</strong></>}
           {' '}<button className="btn-link" onClick={() => setEditando(true)}>✏️ editar</button>
         </p>
       ) : (
@@ -691,6 +709,78 @@ function CondicoesBeneficio({ b, aoSalvar }) {
       )}
       {msg && <p className={msg.tipo === 'ok' ? 'sucesso' : 'alerta'}
                  style={{ marginTop: '.5rem' }}>{msg.texto}</p>}
+    </div>
+  )
+}
+
+// Deferir/indeferir UMA criança, na própria linha dela.
+//
+// Feedback 2026-08-02: *"tem que ser individual isso de modo que eu marco os
+// que defiro e os que indefiro, para gerar apenas um requerimento"*. O
+// requerimento continua sendo UM — a decisão por criança alimenta o mesmo PDF,
+// que lista as deferidas e, em seção própria, as negadas com o motivo.
+//
+// O motivo é OBRIGATÓRIO para indeferir, e por isso o campo abre inline em vez
+// de um `window.prompt`: o texto é visível ao colaborador no link do creche, e
+// escrever uma justificativa que outra pessoa vai ler merece mais que uma
+// caixinha do navegador.
+function DecisaoCrianca({ b, c, aoDecidir }) {
+  const [negando, setNegando] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [erro, setErro] = useState(null)
+
+  // Depois de encerrado não se redecide (o backend recusa com 409); mostrar o
+  // botão levaria a um erro que a pessoa não tem como resolver ali.
+  const travado = ['encerrado', 'suspenso'].includes(b.status)
+
+  const decidir = async (decisao, texto) => {
+    setErro(null)
+    try {
+      await api.crecheDecidirCrianca(b.id, c.id, decisao, texto || null)
+      setNegando(false); setMotivo('')
+      await aoDecidir()
+    } catch (e) {
+      setErro(e.detail === 'motivo_obrigatorio'
+        ? 'Diga o motivo — ele aparece para o colaborador.'
+        : `Não foi possível registrar (${e.detail || e.message}).`)
+    }
+  }
+
+  if (negando) {
+    return (
+      <div>
+        <input value={motivo} autoFocus placeholder="Motivo (o colaborador vê)"
+               onChange={(e) => setMotivo(e.target.value)}
+               onKeyDown={(e) => { if (e.key === 'Enter' && motivo.trim()) decidir('indeferida', motivo.trim()) }} />
+        <div className="linha-atalhos">
+          <button className="btn-link" disabled={!motivo.trim()}
+                  onClick={() => decidir('indeferida', motivo.trim())}>confirmar</button>
+          <button className="btn-link" onClick={() => { setNegando(false); setMotivo(''); setErro(null) }}>
+            cancelar</button>
+        </div>
+        {erro && <span className="alerta">{erro}</span>}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {c.decisao === 'deferida' && (
+        <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ deferida</span>)}
+      {c.decisao === 'indeferida' && (
+        <span className="chip" style={{ '--chip-cor': '#d9534f' }}
+              title={c.motivo_decisao || ''}>❌ indeferida</span>)}
+      {!travado && (
+        <div className="linha-atalhos">
+          {c.decisao !== 'deferida' && (
+            <button className="btn-link" onClick={() => decidir('deferida')}>deferir</button>)}
+          {c.decisao !== 'indeferida' && (
+            <button className="btn-link" onClick={() => setNegando(true)}>indeferir</button>)}
+        </div>
+      )}
+      {c.decisao === 'indeferida' && c.motivo_decisao && (
+        <span className="explica">{c.motivo_decisao}</span>)}
+      {erro && <span className="alerta">{erro}</span>}
     </div>
   )
 }
@@ -749,7 +839,7 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
           <div className="dash-scroll">
             <table className="rh-tabela">
               <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
-                <th>Na idade?</th><th>Docs</th></tr></thead>
+                <th>Na idade?</th><th>Docs</th><th>Decisão</th></tr></thead>
               <tbody>
                 {(b.criancas || []).map((c) => (
                   <tr key={c.id}>
@@ -775,6 +865,13 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
                       {c.tem_guarda &&
                         <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
                     </td>
+                    {/* Decisão POR CRIANÇA (feedback 2026-08-02: *"se a pessoa
+                        tem mais de um filho e um eu defiro e outro eu indefiro,
+                        não tem opção individual por filho"*). Antes, negar uma
+                        criança exigia DEVOLVER o levantamento e pedir que o
+                        colaborador a removesse — o que apagava a prova de que
+                        ela tinha sido analisada. */}
+                    <td><DecisaoCrianca b={b} c={c} aoDecidir={recarregar} /></td>
                   </tr>
                 ))}
               </tbody>

@@ -73,6 +73,14 @@ async function lancarErro(r) {
   // isso era descartado e trocado pela string genérica 'dados_invalidos',
   // deixando o RH sem saber qual campo corrigir (feedback de campo 2026-07-27).
   erro.campos = Array.isArray(detailBruto) ? detailBruto : null
+  // Detail ESTRUTURADO como objeto (ex.: o 409 `criancas_sem_decisao`, que
+  // manda junto QUAIS crianças faltam) também é preservado — sem isto ele
+  // virava a string genérica do statusText e a tela só conseguiria dizer "não
+  // deu", perdendo justamente a informação que resolve. Mesma lição do
+  // `e.campos`: erro estruturado que o backend se deu ao trabalho de montar
+  // não pode ser descartado na porta de entrada.
+  erro.dados = (detailBruto && typeof detailBruto === 'object'
+                && !Array.isArray(detailBruto)) ? detailBruto : null
   // Mensagem amigável para códigos globais conhecidos (o call-site pode usar
   // e.amigavel quando quiser, ou continua com e.detail). A trava de duplo-clique
   // devolve 409 ja_em_processamento — o RH clicou de novo enquanto processava.
@@ -887,6 +895,12 @@ export const rh = {
   // Quem faz jus hoje, quem já não faz, e até quando cada criança faz —
   // tudo derivado da data de nascimento, para o fechamento mensal do DP.
   crecheVigencia: () => req('/rh/creche/vigencia', { headers: authRH() }),
+  // Defere/indefere UMA criança. O requerimento continua sendo um só: as
+  // deferidas vão no corpo, as negadas em seção própria com o motivo.
+  crecheDecidirCrianca: (beneficioId, criancaId, decisao, motivo) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/criancas/${criancaId}/decidir`,
+        { method: 'POST', headers: authRH(),
+          body: JSON.stringify({ decisao, motivo }) }),
   // Prazo E valor de UM benefício já aprovado. Campo ausente não é alterado —
   // dá para corrigir só o valor sem ter que reenviar o prazo.
   crecheCondicoes: (id, dados) =>

@@ -352,7 +352,61 @@ def _dump_crianca_rh(c: CriancaCreche) -> dict:
         # caso aparece como um ❌ comum e o RH decide sobre dado errado.
         "idade_implausivel": _idade_implausivel(c.data_nascimento),
         "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key),
+        # Decisão POR CRIANÇA (v2.55). `None` = ainda não decidida OU benefício
+        # aprovado antes desta versão, quando a decisão era do conjunto — os
+        # dois casos são legítimos e a tela os distingue pelo status.
+        "decisao": c.decisao,
+        "motivo_decisao": c.motivo_decisao,
+        "decidido_por": c.decidido_por,
+        "decidido_em": c.decidido_em,
     }
+
+
+def _valor_unitario(v: str | None) -> float | None:
+    """`R$ 526,64` → 526.64. `None` quando não dá para interpretar.
+
+    Nunca devolve 0: valor ilegível tratado como zero entraria calado na conta
+    do reembolso, e o total sairia menor sem nada acusar.
+    """
+    if not v:
+        return None
+    texto = str(v).strip().replace("R$", "").replace(" ", "")
+    if not texto:
+        return None
+    try:
+        return float(texto.replace(".", "").replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _reais(v: float) -> str:
+    """526.64 → `R$ 526,64` (pt-BR, com separador de milhar)."""
+    inteiro, _, dec = f"{v:,.2f}".partition(".")
+    return f"R$ {inteiro.replace(',', '.')},{dec}"
+
+
+def _valor_total(ben: BeneficioCreche, criancas: list[dict]) -> str | None:
+    """O que a pessoa recebe: valor unitário × crianças DEFERIDAS.
+
+    O valor é por criança (decisão do Bruno, 2026-08-02), então indeferir uma
+    reduz o total sozinho — sem o RH ter que recalcular à mão, que é onde o
+    erro de folha aconteceria.
+
+    Dois casos que NÃO se multiplicam, e os dois importam:
+
+    * **Benefício anterior à v2.55** (todas as crianças com `decisao=None`): ali
+      o valor gravado JÁ era o total do benefício. Multiplicá-lo agora dobraria
+      o reembolso de quem tem dois filhos, calado, no contracheque.
+    * **Valor ilegível**: devolve o texto cru, para o RH ver o que está gravado,
+      em vez de um total inventado.
+    """
+    unit = _valor_unitario(ben.valor_reembolso)
+    if unit is None:
+        return ben.valor_reembolso
+    decididas = [c for c in criancas if c["decisao"] is not None]
+    if not decididas:
+        return ben.valor_reembolso     # modelo antigo: o gravado é o total
+    return _reais(unit * sum(1 for c in decididas if c["decisao"] == "deferida"))
 
 
 def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
@@ -382,6 +436,18 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         "sem_direito_em": ben.sem_direito_em,
         "sem_direito_por": ben.sem_direito_por,
         "criancas": criancas,
+        # ---- decisão por criança e o VALOR que ela determina (v2.55) -------
+        # O `valor_reembolso` passou a ser UNITÁRIO, por criança deferida
+        # (decisão do Bruno, 2026-08-02) — antes era o valor do benefício.
+        # Quem já estava aprovado tem `decisao=None` em todas as crianças e é
+        # tratado como "deferido pelo modelo anterior": aí o total é o próprio
+        # valor gravado, sem multiplicar. Multiplicar retroativamente dobraria
+        # o reembolso de quem tem dois filhos, em silêncio, no contracheque.
+        "deferidas": sum(1 for c in criancas if c["decisao"] == "deferida"),
+        "indeferidas": sum(1 for c in criancas if c["decisao"] == "indeferida"),
+        "sem_decisao": sum(1 for c in criancas if c["decisao"] is None),
+        "valor_unitario": ben.valor_reembolso,
+        "valor_total": _valor_total(ben, criancas),
         "algum_elegivel": any(c["elegivel_idade"] for c in criancas),
         # alerta de idade (auditoria 2026-07-22): benefício ATIVO em que NENHUMA
         # criança ainda está na idade → o RH deve suspender (risco de glosa).
@@ -652,6 +718,44 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
     col = db.get(Candidato, ben.candidato_id)
     posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
+
+    # ---- decisão por criança (v2.55) --------------------------------------
+    # Se o RH decidiu ALGUMA criança, ele tem que ter decidido TODAS: aprovar
+    # com uma pendente deixaria no requerimento um dependente sem análise, e o
+    # valor sairia errado (o reembolso é por criança deferida).
+    #
+    # Quem não usou a decisão individual segue pelo caminho antigo — aprovar o
+    # conjunto —, que é o que mantém compatível o benefício aberto antes desta
+    # versão.
+    criancas = list(ben.criancas)
+    decididas = [c for c in criancas if c.decisao is not None]
+    if decididas and len(decididas) != len(criancas):
+        pendentes = [c.nome for c in criancas if c.decisao is None]
+        raise HTTPException(status_code=409,
+                            detail={"erro": "criancas_sem_decisao",
+                                    "criancas": pendentes})
+    # Todas negadas: não há o que reembolsar. Vira indeferimento, com os
+    # motivos agregados — em vez de um benefício "ativo" que paga zero, que
+    # seria mentira no relatório e no requerimento.
+    if decididas and all(c.decisao == "indeferida" for c in criancas):
+        ben.status = StatusBeneficio.indeferido
+        ben.motivo_indeferimento = "; ".join(
+            f"{c.nome}: {c.motivo_decisao or 'sem motivo registrado'}" for c in criancas)
+        ben.revisado_por, ben.revisado_em = rh.email, datetime.now(timezone.utc)
+        registrar(db, "creche_beneficio_indeferido", ator="rh", ator_detalhe=rh.email,
+                  candidato_id=col.id,
+                  detalhe={"motivo": ben.motivo_indeferimento,
+                           "por_crianca": True})
+        db.commit()
+        try:
+            # Lê o motivo do próprio benefício (já gravado acima), como o
+            # indeferimento normal faz — o e-mail sai igual, seja a negativa do
+            # conjunto ou a soma das negativas por criança.
+            _email_indeferimento(db, ben, col)
+        except Exception:
+            pass
+        return _dump_beneficio(db, ben)
+
     if payload.dia_entrega_mensal is not None:
         ben.dia_entrega_mensal = max(1, min(28, payload.dia_entrega_mensal))
     ben.valor_reembolso = (payload.valor_reembolso
@@ -690,6 +794,62 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
             _email_aguardando_repactuacao(db, ben, col)
     except Exception:
         pass
+    return _dump_beneficio(db, ben)
+
+
+class DecisaoCriancaIn(BaseModel):
+    decisao: str                  # deferida | indeferida
+    motivo: str | None = None
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/criancas/{crianca_id}/decidir")
+def decidir_crianca(beneficio_id: uuid.UUID, crianca_id: uuid.UUID,
+                    payload: DecisaoCriancaIn, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Defere ou indefere UMA criança, sem decidir o benefício inteiro.
+
+    Feedback 2026-08-02: *"se a pessoa tem mais de um filho e um eu defiro e
+    outro eu indefiro, não tem opção individual por filho, somente indeferir
+    tudo ou aprovar tudo, não tá legal isso"*.
+
+    Antes desta rota, o único caminho para negar uma criança era DEVOLVER o
+    levantamento e pedir que o colaborador a removesse — o que apagava a prova
+    de que ela havia sido analisada e negada. O registro do indeferimento é
+    justamente o que demonstra que o RH avaliou aquele dependente.
+
+    Continua sendo **um único requerimento**: a decisão por criança alimenta o
+    mesmo PDF, que lista as deferidas e, em seção própria, as negadas com o
+    motivo.
+    """
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    crianca = db.get(CriancaCreche, crianca_id)
+    # A criança TEM que pertencer a este benefício: sem esta checagem, o id de
+    # uma criança de outra família seria aceito (mesma guarda do
+    # `baixar_doc_crianca`).
+    if crianca is None or crianca.beneficio_id != ben.id:
+        raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
+    if payload.decisao not in ("deferida", "indeferida"):
+        raise HTTPException(status_code=422, detail="decisao_invalida")
+    # Motivo obrigatório para negar: é o que o colaborador vê e o que sustenta
+    # a decisão numa eventual contestação. Deferir não precisa de justificativa.
+    motivo = (payload.motivo or "").strip()
+    if payload.decisao == "indeferida" and not motivo:
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+    # Depois de encerrado não se redecide: reabra o levantamento antes.
+    if ben.status in (StatusBeneficio.encerrado, StatusBeneficio.suspenso):
+        raise HTTPException(status_code=409, detail="beneficio_encerrado")
+
+    crianca.decisao = payload.decisao
+    crianca.motivo_decisao = motivo or None
+    crianca.decidido_por = rh.email
+    crianca.decidido_em = datetime.now(timezone.utc)
+    registrar(db, "creche_crianca_decidida", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id,
+              detalhe={"crianca": crianca.nome, "decisao": payload.decisao,
+                       "motivo": motivo or None})
+    db.commit()
     return _dump_beneficio(db, ben)
 
 
