@@ -354,7 +354,7 @@ function Levantamentos() {
     { chave: 'nome', rotulo: 'Colaborador', ordenavel: true, filtro: 'texto', sempreVisivel: true,
       valor: (b) => b.nome,
       render: (b) => (<><strong>{b.nome}</strong><br /><small>{fmtCpf(b.cpf)}</small></>) },
-    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true,
+    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'lista', quebra: true,
       valor: (b) => b.posto || '',
       render: (b) => (<>{b.posto || '—'}{!b.posto_da_direito &&
         <span title="Posto não marcado como elegível"> ⚠️</span>}</>) },

@@ -434,6 +434,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   zero. A métrica antiga continua na API (responde "quanto o processo demora")
   e vive no tooltip do card. Duração na tela sempre por `fmt.js::fmtDuracao` —
   a unidade acompanha o número (`45s`/`25min`/`1h30`/`1d19h`).
+- **Filtro de coluna: `'lista'` para valor de conjunto, `'texto'` só para
+  trecho** (v2.52). `filtro: 'lista'` no `DashPlanilha` monta as opções a
+  partir dos PRÓPRIOS dados e usa o `SelectBusca` — é o certo para posto,
+  cargo, tags, cidade, tipo, autor: valores que se repetem e que ninguém
+  deveria ter que escrever exatamente igual (era texto livre em 24 filtros).
+  Coluna cujo `valor` devolve ARRAY (tags, cargos) entra **item a item**, senão
+  a opção seria a string concatenada e não filtraria nada. Continua `'texto'`
+  o que se busca por TRECHO: nome de pessoa ("mari" acha Maria e Mariana),
+  descrição livre, telefone, matrícula, ID. `'select'` só quando a lista é
+  fixa e conhecida (Sim/Não, status). O critério é a natureza do campo.
 - **Filtro server-side entra na barra do dash, NUNCA num card à parte** (regra
   da v2.30, aplicada a Admissões e Colaboradores só na v2.51): as duas telas
   tinham DUAS caixas de filtro empilhadas, com o mesmo campo nas duas (status

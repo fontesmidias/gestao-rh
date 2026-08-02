@@ -8,7 +8,13 @@ import SelectBusca from '../SelectBusca.jsx'
 // PILOTO no Banco de Talentos; a mesma config serve os demais módulos depois.
 //
 // Config de coluna: { chave, rotulo, valor?(linha)->texto, ordenavel?, filtro?:
-//   'texto'|'select', opcoes?:[...], render?(linha)->JSX, sempreVisivel?, quebra? }
+//   'texto'|'select'|'lista', opcoes?:[...], render?(linha)->JSX, sempreVisivel?, quebra? }
+//
+// `filtro: 'lista'` monta as opções a partir dos PRÓPRIOS dados e usa o
+// SelectBusca — é o certo para posto, cargo, tags, cidade: valores que mudam e
+// que ninguém deveria precisar digitar exatamente igual. Use `'texto'` só onde
+// a busca é por trecho livre (nome, matrícula) e `'select'` onde a lista é
+// fixa e conhecida (Sim/Não, status).
 // Card de métrica (opcional): { rotulo, valor, cor?, filtro?: {chave, valor} } —
 //   clicar num card COM `filtro` ativa aquele filtro (toggle); clicar de novo
 //   limpa. Cards sem `filtro` são só indicadores. (feedback 2026-07-22, item 3)
@@ -50,6 +56,29 @@ export default function DashPlanilha({
     const v = valorDe(linha, col)
     return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v))
   }
+
+  // Opções derivadas dos PRÓPRIOS dados, para `filtro: 'lista'` (v2.52).
+  // Posto, cargo, tags e cidade eram campo de texto livre — o RH tinha que
+  // saber escrever o nome exato do posto para filtrar. Agora a lista se monta
+  // sozinha com os valores que existem na tela, e o SelectBusca deixa digitar
+  // para achar. Coluna cujo `valor` devolve ARRAY (tags, cargos) entra item a
+  // item: quem tem 3 tags aparece nas 3, não numa opção "a, b, c".
+  const opcoesDerivadas = useMemo(() => {
+    const mapa = {}
+    for (const col of colunas) {
+      if (col.filtro !== 'lista') continue
+      const vistos = new Set()
+      for (const linha of dados) {
+        const v = valorDe(linha, col)
+        for (const item of (Array.isArray(v) ? v : [v])) {
+          const t = item == null ? '' : String(item).trim()
+          if (t) vistos.add(t)
+        }
+      }
+      mapa[col.chave] = [...vistos].sort((a, b) => a.localeCompare(b, 'pt'))
+    }
+    return mapa
+  }, [dados, colunas])
 
   // aplica filtros + ordenação em memória
   const linhas = useMemo(() => {
@@ -163,9 +192,11 @@ export default function DashPlanilha({
         {colunas.filter((c) => c.filtro).map((c) => (
           <label key={c.chave} className="dash-filtro">
             <span className="dash-filtro-rot">{c.rotulo}</span>
-            {c.filtro === 'select' ? (
+            {c.filtro === 'select' || c.filtro === 'lista' ? (
               <SelectBusca
-                opcoes={(c.opcoes || []).map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) }))}
+                opcoes={(c.filtro === 'lista'
+                  ? (opcoesDerivadas[c.chave] || []).map((v) => ({ valor: v, rotulo: v }))
+                  : (c.opcoes || []).map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) })))}
                 valor={filtros[c.chave] || ''}
                 aoEscolher={(v) => setFiltros({ ...filtros, [c.chave]: v })}
                 placeholder={`${c.rotulo}…`} vazioRotulo={`${c.rotulo}: todos`}

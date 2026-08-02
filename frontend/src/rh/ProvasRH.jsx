@@ -450,8 +450,8 @@ function Aplicacoes() {
   const colunas = [
     { chave: 'nome', rotulo: 'Participante', ordenavel: true, filtro: 'texto', sempreVisivel: true,
       render: (a) => <strong>{a.nome}</strong> },
-    { chave: 'prova_titulo', rotulo: 'Prova', ordenavel: true, filtro: 'texto' },
-    { chave: 'cargo', rotulo: 'Cargo', filtro: 'texto' },
+    { chave: 'prova_titulo', rotulo: 'Prova', ordenavel: true, filtro: 'lista' },
+    { chave: 'cargo', rotulo: 'Cargo', filtro: 'lista' },
     { chave: 'status', rotulo: 'Status', filtro: 'select',
       opcoes: [{ v: 'concluido', r: 'Concluído' }, { v: 'em_andamento', r: 'Em andamento' },
                { v: 'expirado', r: 'Tempo esgotado' }, { v: 'pendente', r: 'Não começou' }],

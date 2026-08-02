@@ -142,16 +142,16 @@ export default function TalentosRH({ aoAbrir }) {
     // tinha e-mail). O dump já traz `telefone`.
     { chave: 'telefone', rotulo: 'Telefone', filtro: 'texto',
       render: (t) => t.telefone || '—' },
-    { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'texto', quebra: true,
+    { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'lista', quebra: true,
       valor: (t) => (t.cargos_interesse?.length ? t.cargos_interesse : (t.cargo_interesse ? [t.cargo_interesse] : [])) },
-    { chave: 'tags', rotulo: 'Tags', filtro: 'texto', quebra: true,
+    { chave: 'tags', rotulo: 'Tags', filtro: 'lista', quebra: true,
       // valor = nomes das tags (o DashPlanilha filtra por esse texto)
       valor: (t) => (t.tags || []).map((g) => g.nome),
       render: (t) => (t.tags || []).length
         ? (t.tags || []).map((g) => (
             <span key={g.id} className="chip" style={{ '--chip-cor': g.cor || undefined }}>{g.nome}</span>))
         : '—' },
-    { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'texto' },
+    { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'lista' },
     { chave: 'regioes', rotulo: 'Regiões', oculta: true, quebra: true, valor: (t) => t.regioes || [] },
     { chave: 'tipo_contratacao', rotulo: 'Contratação', filtro: 'select', oculta: true,
       opcoes: [{ v: 'efetivo', r: 'Efetivo' }, { v: 'intermitente', r: 'Intermitente' }, { v: 'tanto_faz', r: 'Tanto faz' }],
