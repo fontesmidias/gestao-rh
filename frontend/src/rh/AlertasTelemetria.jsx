@@ -268,16 +268,19 @@ function descrever(r) {
 function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
   const tipo = TIPOS[rascunho.tipo] || {}
   const set = (k) => (e) => setRascunho({ ...rascunho, [k]: e.target.value })
+  // O `set` acima serve aos <input> (recebem o evento); o SelectBusca entrega
+  // o VALOR direto, então precisa do irmão.
+  const setValor = (k) => (v) => setRascunho({ ...rascunho, [k]: v })
 
   return (
     <div className="rh-card">
       <div className="rh-grid-2">
         <label className="campo"><span className="rotulo">Tipo de alerta</span>
-          <select value={rascunho.tipo} onChange={set('tipo')}>
+          <SelectBusca valor={rascunho.tipo} aoEscolher={setValor('tipo')}>
             {Object.entries(TIPOS).map(([v, t]) => (
               <option key={v} value={v}>{t.rotulo}</option>
             ))}
-          </select>
+          </SelectBusca>
           <small className="explica">{tipo.ajuda}</small>
         </label>
 
@@ -316,9 +319,9 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
         <summary>Restringir a regra (opcional)</summary>
         <div className="rh-grid-2">
           <label className="campo"><span className="rotulo">Só desta origem</span>
-            <select value={rascunho.origem} onChange={set('origem')}>
+            <SelectBusca valor={rascunho.origem} aoEscolher={setValor('origem')}>
               {ORIGENS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-            </select>
+            </SelectBusca>
           </label>
           <label className="campo"><span className="rotulo">Só nesta página (contém)</span>
             <input value={rascunho.pagina} onChange={set('pagina')}

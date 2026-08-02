@@ -201,16 +201,15 @@ function PostoServico({ dados, recarregar }) {
   return (
     <div className="rh-card rh-lote">
       <strong>Posto de serviço:</strong>
-      <select value={postoId} style={{ maxWidth: 220 }}
-              onChange={(e) => {
-                if (e.target.value === '__novo') { setNovoPosto({ nome: '', sigla: '', contrato_ref: '' }); return }
-                setPostoId(e.target.value)
+      <SelectBusca style={{ maxWidth: 220 }} valor={postoId} aoEscolher={(v) => {
+                if (v === '__novo') { setNovoPosto({ nome: '', sigla: '', contrato_ref: '' }); return }
+                setPostoId(v)
               }}>
         <option value="">— sem posto —</option>
         {postos.map((p) => <option key={p.id} value={p.id}>
           {p.sigla || p.nome}{p.contrato_ref ? ` — ${p.contrato_ref}` : ''}</option>)}
         <option value="__novo">➕ Cadastrar novo posto…</option>
-      </select>
+      </SelectBusca>
       {novoPosto && (
         <div className="rh-adicional" style={{ width: '100%' }}>
           <input placeholder="Nome do posto" value={novoPosto.nome}
@@ -270,16 +269,15 @@ function PostoServico({ dados, recarregar }) {
             ⚠️ Intermitente: informe o <strong>valor por dia</strong> — salário do cargo
             ÷ 30 (ex.: cargo R$ 1.500 → R$ 50,00/dia).</small>)}
       </label>
-      <select value={empresaId} style={{ maxWidth: 220 }}
-              title="Empregadora que assina a carteira — sai na planilha do Tirvu"
-              onChange={(e) => {
-                if (e.target.value === '__nova') { setNovaEmpresa({ razao_social: '', cnpj: '' }); return }
-                setEmpresaId(e.target.value)
+      <SelectBusca style={{ maxWidth: 220 }}
+              title="Empregadora que assina a carteira — sai na planilha do Tirvu" valor={empresaId} aoEscolher={(v) => {
+                if (v === '__nova') { setNovaEmpresa({ razao_social: '', cnpj: '' }); return }
+                setEmpresaId(v)
               }}>
         <option value="">— empresa —</option>
         {empresas.map((em) => <option key={em.id} value={em.id}>{em.razao_social}</option>)}
         <option value="__nova">➕ Cadastrar empresa…</option>
-      </select>
+      </SelectBusca>
       {novaEmpresa && (
         <div className="rh-adicional" style={{ width: '100%' }}>
           <input placeholder="Razão social" value={novaEmpresa.razao_social}
@@ -321,14 +319,13 @@ function PostoServico({ dados, recarregar }) {
           colaborador nasce lá sem a marcação e ninguém percebe. Marca-se o
           campo em âmbar em vez de travar o salvamento — os importados do Tirvu
           nasceram sem o campo e não dá para prender a edição deles. */}
-      <select value={ponto} style={{ maxWidth: 190 }}
+      <SelectBusca style={{ maxWidth: 190 }}
               className={ponto === '' ? 'campo-pendente' : undefined}
-              title="Se o colaborador registra ponto — obrigatório na planilha do Tirvu"
-              onChange={(e) => setPonto(e.target.value)}>
+              title="Se o colaborador registra ponto — obrigatório na planilha do Tirvu" valor={ponto} aoEscolher={(v) => setPonto(v)}>
         <option value="">— registra ponto? —</option>
         <option value="true">Registra ponto: sim</option>
         <option value="false">Registra ponto: não</option>
-      </select>
+      </SelectBusca>
       {ponto === '' && (
         <span className="aviso-pendente">
           ⚠️ Obrigatório para exportar ao Tirvu
@@ -343,11 +340,10 @@ function PostoServico({ dados, recarregar }) {
                    onChange={(e) => setAdic(i, 'nome', e.target.value)} />
             <input placeholder="Valor" value={a.valor || ''} style={{ maxWidth: 110 }}
                    onChange={(e) => setAdic(i, 'valor', e.target.value)} />
-            <select value={a.tipo || 'reais'} style={{ maxWidth: 130 }}
-                    onChange={(e) => setAdic(i, 'tipo', e.target.value)}>
+            <SelectBusca style={{ maxWidth: 130 }} valor={a.tipo || 'reais'} aoEscolher={(v) => setAdic(i, 'tipo', v)}>
               <option value="reais">R$ (reais)</option>
               <option value="percentual">% (percentual)</option>
-            </select>
+            </SelectBusca>
             <button className="btn-link" title="Remover adicional"
                     onClick={() => setAdicionais(adicionais.filter((_, j) => j !== i))}>✕</button>
           </div>
@@ -657,27 +653,25 @@ function FichaRH({ id }) {
                 <span className="rotulo">{campo.replaceAll('_', ' ')}
                   {atual == null || atual === '' ? <em> — vazio</em> : null}</span>
                 {ehBool ? (
-                  <select value={valorEdit === '' ? '' : String(valorEdit)}
-                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                  <SelectBusca valor={valorEdit === '' ? '' : String(valorEdit)}
+                               aoEscolher={(v) => setEdicao({ ...edicao, [chave]: v })}>
                     <option value="">— não informado —</option>
                     <option value="true">Sim</option>
                     <option value="false">Não</option>
-                  </select>
+                  </SelectBusca>
                 ) : ehData ? (
                   <InputData valor={valorEdit || ''}
                              onChange={(iso) => setEdicao({ ...edicao, [chave]: iso ?? '' })} />
                 ) : opcoesEnum ? (
-                  <select value={valorEdit}
-                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                  <SelectBusca valor={valorEdit} aoEscolher={(v) => setEdicao({ ...edicao, [chave]: v })}>
                     <option value="">— não informado —</option>
                     {opcoesEnum.map(([v, rotulo]) => <option key={v} value={v}>{rotulo}</option>)}
-                  </select>
+                  </SelectBusca>
                 ) : ehUf ? (
-                  <select value={valorEdit}
-                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })}>
+                  <SelectBusca valor={valorEdit} aoEscolher={(v) => setEdicao({ ...edicao, [chave]: v })}>
                     <option value="">— não informado —</option>
                     {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  </SelectBusca>
                 ) : (
                   <input value={valorEdit}
                          onChange={(e) => setEdicao({ ...edicao, [chave]: e.target.value })} />
@@ -1020,9 +1014,9 @@ export default function Detalhe({ id, aoVoltar }) {
                   onClick={() => setLoteRejeitar(!loteRejeitar)}>Rejeitar selecionados</button>
           {loteRejeitar && (
             <div className="rejeicao" style={{ width: '100%' }}>
-              <select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+              <SelectBusca valor={motivo} aoEscolher={(v) => setMotivo(v)}>
                 {MOTIVOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-              </select>
+              </SelectBusca>
               <input placeholder="Observação (opcional)" value={obs}
                      onChange={(e) => setObs(e.target.value)} />
               <button className="btn-rejeitar btn-mini" onClick={async () => {
@@ -1095,9 +1089,9 @@ export default function Detalhe({ id, aoVoltar }) {
                 </div>
                 {rejeitando === s.id && (
                   <div className="rejeicao">
-                    <select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+                    <SelectBusca valor={motivo} aoEscolher={(v) => setMotivo(v)}>
                       {MOTIVOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-                    </select>
+                    </SelectBusca>
                     <input placeholder="Observação (opcional)" value={obs}
                            onChange={(e) => setObs(e.target.value)} />
                     <button className="btn-rejeitar btn-mini" onClick={() => rejeitar(s)}>

@@ -555,6 +555,13 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
    significado. O portal do candidato mantém o estilo acolhedor. */
 /* Select com busca: digitar filtra a lista (feedback 2026-07-19). */
 .select-busca { position: relative; display: inline-block; min-width: 180px; }
+/* Dentro de um campo de formulário o dropdown ocupa a linha inteira, como o
+   `<select>` nativo que ele substituiu (v2.50) — senão o controle encolheria
+   para os 180px do mínimo e o formulário ficaria desalinhado. */
+.campo > .select-busca, .linha2 > .select-busca, .linha3 > .select-busca {
+  display: block; width: 100%; min-width: 0;
+}
+.campo > .select-busca .select-busca-campo { min-height: var(--toque); }
 .select-busca-campo {
   width: 100%; display: flex; justify-content: space-between; align-items: center;
   gap: .4rem; padding: .5rem .7rem; border: 1px solid var(--borda);

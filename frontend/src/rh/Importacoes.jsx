@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Central de Importações (feedback 2026-07-27: "quero uma aba dentro de
 // configurações, em cards, para que tenha as instruções... movimentando as
@@ -262,9 +263,8 @@ function CardDeParaLotacoes() {
                     <td className="dash-quebra">{p.lotacao}</td>
                     <td><strong>{p.pessoas}</strong></td>
                     <td>
-                      <select value={escolhas[p.lotacao] || ''}
-                              onChange={(e) => setEscolhas(
-                                (x) => ({ ...x, [p.lotacao]: e.target.value }))}>
+                      <SelectBusca valor={escolhas[p.lotacao] || ''} aoEscolher={(v) => setEscolhas(
+                                (x) => ({ ...x, [p.lotacao]: v }))}>
                         <option value="">— deixar para depois —</option>
                         {p.sugestoes.map((s) => (
                           <option key={s.posto_id} value={s.posto_id}>
@@ -278,7 +278,7 @@ function CardDeParaLotacoes() {
                             <option key={s.id} value={s.id}>{s.nome}</option>
                           ))}
                         </optgroup>
-                      </select>
+                      </SelectBusca>
                     </td>
                   </tr>
                 ))}

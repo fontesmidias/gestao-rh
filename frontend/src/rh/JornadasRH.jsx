@@ -223,10 +223,10 @@ function Confirmar({ jornadas, postos, onConfirmou, setMsg }) {
               <td>
                 {edit?.id === j.id && prop ? (
                   <div className="rh-lote" style={{ flexWrap: 'wrap', gap: '.4rem' }}>
-                    <select value={prop.escala || ''} onChange={(e) => setProp({ ...prop, escala: e.target.value || null })}>
+                    <SelectBusca valor={prop.escala || ''} aoEscolher={(v) => setProp({ ...prop, escala: v || null })}>
                       <option value="">— escala —</option>
                       {ESCALAS.map((es) => <option key={es.v} value={es.v}>{es.r}</option>)}
-                    </select>
+                    </SelectBusca>
                     {['hora_entrada', 'saida_almoco', 'volta_almoco', 'hora_saida'].map((k) => (
                       <input key={k} style={{ width: 70 }} placeholder={k.split('_')[0]} value={prop[k] || ''}
                              onChange={(e) => setProp({ ...prop, [k]: e.target.value || null })} />))}

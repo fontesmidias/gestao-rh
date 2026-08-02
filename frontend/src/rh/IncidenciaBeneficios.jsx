@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Importação ASSISTIDA da planilha de Incidência de Benefícios: normaliza os
 // postos no padrão CLIENTE - Nº CONTRATO - OBJETO e define a elegibilidade ao
@@ -103,15 +104,14 @@ export default function IncidenciaBeneficios({ aoVoltar, aoAplicar }) {
                         {l.composto && <span title="Valor composto (dois sindicatos) — confira o valor"> ⚠️</span>}
                         <br /><small>{l.aba}</small></td>
                       <td>
-                        <select value={d.posto_id || 'ignorar'}
-                                onChange={(e) => setDec(l.idx, 'posto_id', e.target.value)}>
+                        <SelectBusca valor={d.posto_id || 'ignorar'} aoEscolher={(v) => setDec(l.idx, 'posto_id', v)}>
                           {(l.sugestoes || []).map((s) => (
                             <option key={s.posto_id} value={s.posto_id}>
                               {s.posto_nome} ({Math.round(s.score * 100)}%)</option>
                           ))}
                           <option value="novo">➕ Criar novo posto</option>
                           <option value="ignorar">— Ignorar esta linha</option>
-                        </select>
+                        </SelectBusca>
                       </td>
                       <td>
                         <input type="checkbox" checked={!!d.da_direito_creche}

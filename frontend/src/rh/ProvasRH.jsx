@@ -160,8 +160,8 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
             <input type="number" min={1} value={Math.round(p.tempo_segundos / 60)}
                    onChange={(e) => setP({ ...p, tempo_segundos: (parseInt(e.target.value, 10) || 30) * 60 })} /></label>
           <label className="campo"><span className="rotulo">Ativa</span>
-            <select value={p.ativa ? '1' : '0'} onChange={(e) => setP({ ...p, ativa: e.target.value === '1' })}>
-              <option value="1">Sim</option><option value="0">Não</option></select></label>
+            <SelectBusca valor={p.ativa ? '1' : '0'} aoEscolher={(v) => setP({ ...p, ativa: v === '1' })}>
+              <option value="1">Sim</option><option value="0">Não</option></SelectBusca></label>
         </div>
         <label className="campo"><span className="rotulo">Descrição / instruções (opcional)</span>
           <textarea rows={2} value={p.descricao || ''} onChange={(e) => setP({ ...p, descricao: e.target.value })} /></label>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import Modal from '../Modal.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 
 const MEIOS = [['whatsapp', '💬 WhatsApp'], ['email', '✉️ E-mail'], ['outro', '📋 Outro']]
 
@@ -126,9 +127,9 @@ function FormModelo({ modelo, tags, aoSalvo, aoCancelar }) {
       <label className="campo"><span className="rotulo">Título</span>
         <input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></label>
       <label className="campo"><span className="rotulo">Meio</span>
-        <select value={meio} onChange={(e) => setMeio(e.target.value)}>
+        <SelectBusca valor={meio} aoEscolher={(v) => setMeio(v)}>
           {MEIOS.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
-        </select></label>
+        </SelectBusca></label>
       <label className="campo"><span className="rotulo">Texto do modelo</span>
         <textarea rows={6} value={corpo} onChange={(e) => setCorpo(e.target.value)} /></label>
       {tags.length > 0 && (
@@ -222,10 +223,10 @@ function ComporMensagem({ tags, modelos, aoSalvarModelo }) {
     <div>
       {modelos.length > 0 && (
         <label className="campo"><span className="rotulo">Usar modelo como referência (opcional)</span>
-          <select value={modeloBaseId} onChange={(e) => setModeloBaseId(e.target.value)}>
+          <SelectBusca valor={modeloBaseId} aoEscolher={(v) => setModeloBaseId(v)}>
             <option value="">— nenhum, começar do zero —</option>
             {modelos.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
-          </select></label>
+          </SelectBusca></label>
       )}
       <label className="campo"><span className="rotulo">Tom da mensagem</span>
         <input value={campos.tom} placeholder="ex.: cordial e direto, descontraído, formal"
@@ -233,11 +234,11 @@ function ComporMensagem({ tags, modelos, aoSalvarModelo }) {
       <div className="linha2">
         {campo('cargo', 'Cargo/função', 'ex.: Auxiliar de Serviços Gerais')}
         <label className="campo"><span className="rotulo">Regime</span>
-          <select value={campos.regime} onChange={(e) => setCampo('regime', e.target.value)}>
+          <SelectBusca valor={campos.regime} aoEscolher={(v) => setCampo('regime', v)}>
             <option value="">— não informar —</option>
             <option value="efetivo">Efetivo</option>
             <option value="intermitente">Intermitente</option>
-          </select></label>
+          </SelectBusca></label>
       </div>
       <div className="linha2">
         {campo('salario', 'Salário', 'ex.: R$ 1.600,00')}

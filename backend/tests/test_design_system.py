@@ -149,7 +149,29 @@ checar(not soltas,
        + ("" if not soltas else f" — {len(soltas)}: {', '.join(soltas[:8])}"))
 
 
-print("\n5. <details>/<summary> sem remendo inline?")
+print("\n5. Nenhum <select> nativo? (toda lista suspensa é SelectBusca)")
+# Pedido do Bruno em 2026-08-02, valendo daqui em diante: "toda vez que tiver
+# um select, já imponha esse padrão". Ele tem 111 cargos, 269 jornadas e
+# dezenas de postos — rolar até achar era a queixa nº 1 do dia a dia.
+# O `SelectBusca` mostra o campo de busca só quando a lista justifica, então
+# lista de 2 itens continua direta: o padrão de USO é único, muda a densidade.
+nativos = []
+for arq in jsx():
+    if arq.name == "SelectBusca.jsx":
+        continue
+    for i, linha in enumerate(arq.read_text(encoding="utf-8").split("\n")):
+        # Comentário que MENCIONA <select> não é uso — e falso positivo em
+        # guarda-corpo ensina a ignorá-lo.
+        if re.match(r"\s*(//|/?\*)", linha):
+            continue
+        if re.search(r"<select[\s>]", linha):
+            nativos.append(f"{arq.name}:{i + 1}")
+checar(not nativos,
+       "nenhum <select> nativo no JSX"
+       + ("" if not nativos else f" — {len(nativos)}: {', '.join(nativos[:8])}"))
+
+
+print("\n6. <details>/<summary> sem remendo inline?")
 # A regra base (summary { cursor; list-style-position: inside }) vive no
 # styles.css desde a v2.47.1 — repetir no JSX é dívida que se multiplica.
 remendos = []

@@ -119,12 +119,12 @@ export default function Arquivo() {
         <SelectBusca style={{ minWidth: 160 }} vazioRotulo="Cargo: todos" placeholder="Buscar cargo…"
           valor={filtros.cargo} aoEscolher={(v) => setFiltros({ ...filtros, cargo: v })}
           opcoes={(dados?.cargos || []).map((c) => ({ valor: c, rotulo: c }))} />
-        <select value={filtros.situacao} onChange={(e) => setFiltros({ ...filtros, situacao: e.target.value })}>
+        <SelectBusca valor={filtros.situacao} aoEscolher={(v) => setFiltros({ ...filtros, situacao: v })}>
           <option value="">Situação: todas</option>
           <option value="em_admissao">Em admissão</option>
           <option value="ativo">Ativo</option>
           <option value="desligado">Desligado</option>
-        </select>
+        </SelectBusca>
         <label className="explica" style={{ margin: 0 }}>De
           <input type="date" value={filtros.desde} style={{ marginLeft: 4 }}
                  onChange={(e) => setFiltros({ ...filtros, desde: e.target.value })} /></label>
