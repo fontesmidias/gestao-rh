@@ -233,6 +233,38 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
 
 ## 6. Conteúdo que abre TEM que fechar (toggle)
 
+### `<details>`: a regra base é do `styles.css`, não do JSX
+
+Antes da v2.47.1 não havia regra para `<summary>`, e cada tela remendava por
+conta própria: **três telas repetiam `style={{ cursor: 'pointer' }}`** e outras
+três, `style={{ marginTop: '.6rem' }}` — dívida que se multiplicava a cada
+`<details>` novo. Agora o `styles.css` define:
+
+- `summary { cursor: pointer; list-style-position: inside }` — **`inside` é
+  obrigatório**: com o `outside` do navegador o marcador ▸ é desenhado FORA da
+  caixa de conteúdo, encosta na borda do card e fura o alinhamento da página
+  (defeito real, pego pelo Bruno num print da v2.47).
+- `summary:focus-visible` com anel — navegação por teclado.
+- `details:not([class])` ganha `margin-top` — o dobrável **solto**, sem classe.
+  O `:not([class])` é essencial: `.ficha-rh-secao` e `.rh-card` já definem o
+  próprio espaçamento, e uma regra global sobrescrevia o deles (as seções da
+  ficha foram de 8px para 12px numa versão intermediária — regressão em tela
+  que estava certa).
+- `details.rh-card > summary` — variante "seção dobrável", o card inteiro é o
+  `<details>`.
+
+Ao criar um `<details>`: **não escreva `cursor`, `list-style` nem margem no
+JSX.** Se precisar de comportamento diferente, dê uma classe a ele e estilize
+a classe.
+
+### Bloco de topo deve respiro ao seguinte
+
+Todo `.rh-card` traz `margin-bottom: var(--esp-3)`. Blocos de topo que **não**
+são cards precisam declarar o seu: a `.rh-revisao` (a lista de documentos do
+`Detalhe`) não tinha, e o defeito só apareceu quando ela deixou de ser o último
+elemento da tela — o card do posto ficou colado nela. Ao mover um bloco de
+lugar, confira o respiro dos dois lados.
+
 Todo "ver histórico / ver detalhe / ver mais" que **abre** ao clicar precisa
 **fechar** ao clicar de novo. Botão que só abre e nunca recolhe deixa a tela
 entulhada e foi reclamação explícita do Bruno no histórico de decisões. Padrão:

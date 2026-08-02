@@ -176,6 +176,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **`<details>`: cursor, marcador e margem vêm do `styles.css`** (v2.47.1):
+  `summary` tem `cursor: pointer` + `list-style-position: inside` + anel de
+  foco na folha; `details:not([class])` traz o respiro do dobrável solto. NÃO
+  escreva `style={{ cursor:'pointer' }}` nem `marginTop` no JSX — seis
+  remendos assim existiam antes da regra base. Duas armadilhas pagas: (1)
+  `list-style-position: outside` (o padrão do navegador) desenha o ▸ FORA da
+  caixa de conteúdo, encostando na borda do card e furando o alinhamento; (2)
+  a regra global TEM que ser `:not([class])` — sem isso ela sobrescreve
+  `.ficha-rh-secao`/`.rh-card`, que já definem o próprio espaçamento (as
+  seções da ficha foram de 8px para 12px numa versão intermediária).
+  **Bloco de topo que não é `.rh-card` precisa declarar `margin-bottom`**: a
+  `.rh-revisao` não tinha, e só apareceu quando ela deixou de ser o último
+  elemento da tela.
 - **A ORDEM da tela é o custo real, não a posição de um bloco** (v2.47,
   `rh/Detalhe.jsx`): o Bruno usa a tela de uma pessoa para DUAS coisas de peso
   igual — conferir documento e corrigir cadastro. O defeito não era "a fila

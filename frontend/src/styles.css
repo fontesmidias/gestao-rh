@@ -612,9 +612,24 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 /* Card que é uma seção dobrável (`<details className="rh-card">`): o resumo
    precisa parecer clicável — sem isto o cabeçalho fica igual a um título comum
    e ninguém descobre que abre. Fechado, o card encolhe para só o resumo. */
+/* ===== <details>/<summary>: padrão único da casa =====
+   TODO resumo é clicável e o marcador ▸ fica DENTRO da caixa de conteúdo
+   (`inside`), respeitando o padding do card. Com o `outside` do navegador ele
+   é desenhado para fora e encosta na borda, furando o alinhamento da página.
+   Esta regra base existe para que nenhuma tela precise repetir
+   `style={{ cursor:'pointer' }}` nem remendar espaçamento no JSX. */
+summary { cursor: pointer; list-style-position: inside; }
+summary:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+/* Respiro do bloco dobrável SOLTO (sem classe própria) em relação ao que vem
+   antes — evita o `style={{ marginTop }}` que três telas repetiam. Fica
+   restrito a `details` sem classe: quem já tem a sua (`.rh-card`,
+   `.ficha-rh-secao`) define o próprio espaçamento, e sobrescrevê-lo aqui
+   mudaria telas que já estavam certas. */
+details:not([class]) { margin-top: var(--esp-3); }
+
+/* Variante "seção dobrável": o card inteiro é um <details>. */
 details.rh-card > summary {
-  cursor: pointer; font-weight: 700; color: var(--tinta);
-  font-size: var(--fs-secao); list-style-position: outside;
+  font-weight: 700; color: var(--tinta); font-size: var(--fs-secao);
 }
 details.rh-card > summary:hover { color: var(--verde-escuro); }
 details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
@@ -693,7 +708,12 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
                margin-top: .4rem; font-size: .82rem; word-break: break-all;
                border: 1px solid var(--borda); }
 
-.rh-revisao { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; }
+/* margin-bottom igual à do .rh-card: a lista de documentos é um grid, não um
+   card, e por isso não herdava o respiro. Não aparecia enquanto ela era o
+   último bloco da tela; com o cadastro logo abaixo (v2.47), os dois ficavam
+   colados. Todo bloco de topo da página deve o mesmo respiro ao seguinte. */
+.rh-revisao { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem;
+              margin-bottom: var(--esp-3); }
 .rh-lista-slots { max-height: 75vh; overflow-y: auto; }
 .rh-visualizador { background: var(--cartao); border-radius: var(--raio); min-height: 75vh;
                    box-shadow: var(--sombra-cartao); display: flex; flex-direction: column; }

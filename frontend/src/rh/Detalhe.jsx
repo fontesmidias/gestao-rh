@@ -1217,7 +1217,7 @@ function TestesDoCandidato({ id }) {
                   <p><strong>Pontos de atenção:</strong> {disc.perfis[disc.resultado.principal].atencao}</p>
                   <p><strong>Ambiente em que rende mais:</strong> {disc.perfis[disc.resultado.principal].ambiente}</p>
                   <details>
-                    <summary className="btn-link" style={{ cursor: 'pointer' }}>Ver os 4 perfis (D · I · S · C)</summary>
+                    <summary className="btn-link">Ver os 4 perfis (D · I · S · C)</summary>
                     {['D', 'I', 'S', 'C'].map((d) => (
                       <p key={d} style={{ marginTop: '.5rem' }}>
                         <strong style={{ color: CORES_DISC[d] }}>{d} — {disc.perfis[d].nome}:</strong>{' '}
@@ -1368,7 +1368,7 @@ export function ComportamentoTeste({ teste }) {
         copiar/colar: <strong>{c.copiar_colar}</strong> ·
         quedas de conexão: <strong>{c.quedas_de_conexao}</strong></p>
       <details>
-        <summary className="btn-link" style={{ cursor: 'pointer' }}>
+        <summary className="btn-link">
           Linha do tempo ({c.total_eventos} eventos)</summary>
         <ul style={{ margin: '.4rem 0 0', paddingLeft: '1.2rem', fontSize: '.85rem' }}>
           {(teste.eventos || []).map((e, i) => (
