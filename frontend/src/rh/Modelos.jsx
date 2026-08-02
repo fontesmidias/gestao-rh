@@ -419,7 +419,8 @@ function RoteiroPadraoEditor({ modelo, papeis, etapas, setMsg, recarregar }) {
             <option value="usuario_rh">Alguém do RH</option>
             <option value="externo">Externo</option>
           </select>
-          <button className="btn-link" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}>✕</button>
+          <button className="btn-link" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}
+                  aria-label={`Remover o signatário ${i + 1}`} title="Remover signatário">✕</button>
         </div>
       ))}
       <div className="rh-lote">

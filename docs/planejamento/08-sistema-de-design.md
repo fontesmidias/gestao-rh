@@ -139,6 +139,31 @@ Ao criar tela nova: teste no claro **e** no escuro antes de dar por pronta.
 Abrir um `<select>` nativo E um dropdown customizado (`.select-busca`) no escuro
 é o teste mínimo.
 
+**O token fantasma não é hipótese — aconteceu, e ficou meses na base** (v2.46).
+`var(--texto-suave, #47554d)` estava em 4 regras e o token **nunca existiu**:
+o fallback escuro valia nos dois temas e dava **2,09:1** de contraste no escuro
+(mínimo AA: 4,5:1), nas opções de questão das Provas. Junto com ele,
+`--tinta-suave` (12 usos) não tinha par escuro: 3,61:1. Três regras que ficam:
+
+1. **Nunca escreva fallback de cor em `var()`.** Se o token não existe, defina-o.
+   O fallback existe para dar sobrevida a valor ausente — em cor, ele apenas
+   esconde o defeito e o congela no tema claro.
+2. **Todo token de cor precisa de par em `:root[data-tema='escuro']`.** Definir
+   só no `:root` é meio-caminho: o token existe, o `grep` acha, e mesmo assim
+   quebra no escuro.
+3. **Meça, não olhe.** Contraste se confere com `getComputedStyle` + fórmula
+   WCAG num navegador de verdade (o Playwright já está no projeto). O tema
+   escuro engana o olho: texto cinza sobre fundo escuro *parece* legível.
+
+### Foco visível: `outline: none` exige substituto
+
+Remover o outline sem repor indicação nenhuma deixa quem navega por teclado sem
+saber onde está. Aconteceu em dois pontos centrais (v2.46): no
+`.select-busca-input` (o campo de busca de **todos** os filtros do painel) e no
+`.ajuda-q` (o ⓘ do glossário, cujo realce era um hex fixo, invisível no escuro).
+O substituto não precisa ser o anel de 4px da regra global — uma borda inferior
+reforçada ou um `:focus-visible` próprio bastam. O que não pode é não haver nada.
+
 ---
 
 ## 4. Editar/criar SEMPRE perto do item
@@ -187,6 +212,13 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
   `.dash-scroll` + `container-type: inline-size`. Tabela `.rh-tabela` solta (sem
   esse wrapper) é candidata a estourar — prefira o DashPlanilha ou envolva a
   tabela num `.dash-scroll`.
+  **⚠️ Não tente resolver pondo `overflow-x` na própria `<table>`** (medido com
+  Playwright em v2.46): `display: table` **ignora** `overflow`, e a página
+  estoura exatamente igual. O wrapper não é preferência de estilo — é o único
+  jeito que funciona. Situação atual da base: ~35 das 40 tabelas são escritas à
+  mão e estão sem wrapper; acima de 800px elas estão desprotegidas (entre
+  480–800px a media query as põe em `display:block`, e aí sim o overflow vale;
+  abaixo de 480px viram card).
 - **Coluna de texto longo** (cargos, descrição de jornada, motivos): marque
   `quebra: true` na config do DashPlanilha (`white-space: normal; max-width`),
   senão a célula estica a tabela toda.
@@ -251,6 +283,27 @@ cards clicáveis continuam funcionando, porque a filtragem em memória roda sobr
 todas as colunas, não só as que declaram `filtro`). Dois controles para o mesmo
 campo é pior do que dois cards.
 
+## 6d. Falha de carga é ERRO na tela, nunca "Carregando…" eterno
+
+`api.x().then(setDados).catch(() => setDados(null))` é armadilha: `null` é o
+mesmo valor de "ainda carregando", então a tela fica em **"Carregando…" para
+sempre** — indistinguível de rede lenta, sem retry, sem uma palavra. Estava em
+`Detalhe.jsx` (a tela mais usada do painel), no `Diagnostico.jsx` (a ferramenta
+que existe *para* investigar falhas) e na Telemetria (v2.46).
+
+O padrão certo já existia em `Detalhe.jsx::FichaRH`: **estado de erro separado**
+do estado de dados, mensagem em `.alerta` e botão **"tentar de novo"**. Duas
+sutilezas que vieram do conserto:
+
+- **Tela de monitoramento ANUNCIA a falha** (telemetria, logs, diagnóstico). Se
+  o resumo não carregou e a tela fica muda, o RH lê "nenhum erro" onde na
+  verdade é "não consegui saber" — o oposto do que a tela existe para dizer.
+- **Se a mesma função de recarregar também roda depois de AÇÕES** (aprovar,
+  salvar, rejeitar), o `catch` de carga vai só no `useEffect` inicial. Senão um
+  erro de ação substitui a tela inteira por uma mensagem e apaga o trabalho em
+  curso — o erro de ação já tem o seu próprio canal (`msg` perto do botão, §
+  "mensagem perto do botão que a gerou").
+
 ## 7. Tooltips e ajuda: um padrão só
 
 Dois níveis, ambos por CSS (nunca por estado/onClick), sempre no hover e some ao
@@ -299,6 +352,11 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Nada estoura a tela na horizontal (testei numa largura de celular).
 - [ ] Tudo que abre, fecha (toggle).
 - [ ] Testei no **tema escuro**, inclusive abrindo um `<select>`.
+- [ ] Todo token de cor que usei tem par no `:root[data-tema='escuro']` — e
+      **nenhum `var()` meu tem fallback de cor**.
+- [ ] Falha de carga mostra **erro + "tentar de novo"**, não "Carregando…" eterno.
+- [ ] Botão só com ícone/símbolo tem `aria-label` dizendo **qual item** ele afeta.
+- [ ] Se removi `outline`, repus indicação de foco.
 - [ ] Termos de negócio têm `<Ajuda>`.
 - [ ] Abas usam a classe `ativa`.
 - [ ] Vira card no mobile de forma legível.

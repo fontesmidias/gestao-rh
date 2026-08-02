@@ -176,6 +176,36 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **Token que não existe é PIOR que classe que não existe** (v2.46): a classe
+  fantasma deixa a tela crua e alguém vê; o **token** fantasma cai no fallback e
+  a tela fica plausível — só que com a cor CLARA valendo nos DOIS temas.
+  `var(--texto-suave, #47554d)` esteve 4× no `styles.css` com o token nunca
+  definido: **2,09:1 de contraste no escuro** (mínimo WCAG AA é 4,5:1), nas
+  opções de questão das Provas. Duas regras que ficam: (1) **nunca escreva
+  fallback de cor** em `var()` — se o token não existe, defina-o; (2) todo token
+  de cor precisa de **par no `:root[data-tema='escuro']`** — `--tinta-suave`
+  tinha 12 usos e nenhum par (3,61:1). Conferir com `grep -c 'nome-do-token'` nos
+  DOIS blocos, e medir contraste no navegador de verdade (`getComputedStyle` +
+  fórmula WCAG), não no olho: o tema escuro engana.
+- **`overflow-x` numa `<table>` NÃO FUNCIONA — só o wrapper contém** (v2.46,
+  medido com Playwright): `display: table` ignora `overflow`, então
+  `.rh-tabela { overflow-x: auto }` não impede a tabela de empurrar a página.
+  O que funciona é `<div className="dash-scroll">` em volta (é o que o
+  `DashPlanilha` faz). Como ~35 tabelas do painel são escritas à mão, **não há
+  conserto de uma linha no CSS** — ou envolve cada uma, ou migra para o
+  `DashPlanilha`. Faixas: acima de 800px está DESPROTEGIDO; entre 480–800px a
+  media query `.rh-tabela { display:block; overflow-x:auto }` resolve (aí o
+  `display:block` faz o overflow valer); abaixo de 480px vira card.
+- **Falha de carga tem que virar ERRO na tela, nunca `null` de volta** (v2.46):
+  `api.x().then(setDados).catch(() => setDados(null))` deixa a tela em
+  "Carregando…" para sempre — indistinguível de rede lenta, sem retry. Use
+  estado de erro SEPARADO + botão "tentar de novo" (o padrão certo já existia em
+  `Detalhe.jsx::FichaRH`). Duas sutilezas: (1) em tela de MONITORAMENTO
+  (telemetria, logs) a falha tem que ser ANUNCIADA — silêncio se confunde com
+  "nenhum problema", que é o oposto do que a tela existe para dizer; (2) se a
+  mesma função de recarregar é chamada DEPOIS de ações (aprovar, salvar), o
+  `catch` de carga vai só no `useEffect` inicial — senão um erro de ação troca a
+  tela inteira por uma mensagem e apaga o trabalho em curso.
 - **Classe de CSS que não existe não estiliza NADA — confira antes de usar**
   (v2.25, feedback do Bruno: "achei tão feia essa página, por que não seguiu o
   padrão?"). A 1ª tela de Telemetria inventou ONZE classes (`rh-secao`,

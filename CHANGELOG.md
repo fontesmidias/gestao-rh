@@ -11,6 +11,80 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.46.0] — 2026-08-02 — Contraste, foco e telas que travavam
+
+Primeira leva da reforma de frontend. O pedido do Bruno foi de **design e
+experiência de uso** — mas a auditoria mostrou que a base já tem um bom sistema
+de design (`08-sistema-de-design.md`), com o vocabulário de botões 100%
+consistente, wrapper de página em todas as telas, zero classes inventadas e só
+2 classes mortas em 362. **O problema não era falta de padrão: eram defeitos
+concretos que o padrão já proibia, e que ninguém tinha medido.**
+
+Por isso esta leva não mexe em layout. Ela corrige o que impedia alguém de ler
+ou de usar a tela — e deixa a reforma visual para as próximas, sobre uma base
+sem bug.
+
+### Corrigido
+
+- **`--texto-suave` era um token FANTASMA.** Quatro regras do `styles.css` o
+  usavam com fallback de cor fixa (`var(--texto-suave, #47554d)`) e ele **nunca
+  foi definido** — então o cinza-escuro valia nos DOIS temas. Medido no
+  navegador: **2,09:1 de contraste no tema escuro**, contra o mínimo de 4,5:1
+  da WCAG AA. Afetava a leitura das opções de questão nas Provas e no Banco de
+  Itens. Agora tem par claro/escuro: **12,29:1**. É exatamente a armadilha que
+  o §3 do sistema de design descreve ("nunca dependa de fallback de cor fixa") —
+  estava documentada e ativa.
+- **`--tinta-suave` não tinha par escuro** (3,61:1). Usado em 12 lugares. Passou
+  a inverter com o tema.
+- **O motivo do indeferimento do creche era ilegível no tema escuro.** As caixas
+  de *devolução* e de *indeferimento* do `CrecheLink` usavam `.alerta` com
+  `background: '#fff8ec'` inline por cima — fundo claro chumbado, que no escuro
+  vira uma caixa branca isolada. É o **portal público**, e é a caixa que carrega
+  a informação de que a colaboradora precisa para corrigir o pedido. Agora usam
+  `.aviso-inline`, que também foi tokenizada (ela tinha o mesmo defeito, e no
+  tema claro dava 4,48:1 — abaixo do mínimo). Agora: **5,39:1** no claro e
+  **9,06:1** no escuro.
+- **Telas que travavam em "Carregando…" para sempre.** Se a API falhasse,
+  `dados` ficava `null` e não havia erro nem retry — indistinguível de rede
+  lenta. Corrigido em: `Detalhe.jsx` (a tela de um candidato — a mais usada do
+  painel), `Diagnostico.jsx` (a ferramenta que existe *para* investigar quando
+  algo falha) e `TelemetriaRH.jsx`. Todos seguem o padrão que já existia e
+  funcionava em `Detalhe.jsx::FichaRH`: mensagem + "tentar de novo".
+  Na Telemetria a falha é **anunciada** em vez de silenciosa: numa tela de
+  monitoramento, silêncio se confunde com "nenhum problema".
+- **Foco invisível no `SelectBusca`** — `outline: none` sem substituto no campo
+  de busca. Como o `SelectBusca` é o componente de todos os filtros do painel
+  (§6c), quem navega por teclado perdia o foco justamente ali. O anel global de
+  4px ficaria pesado num campo que já é `autoFocus`, então o foco virou a
+  própria borda inferior, reforçada.
+- **Foco quebrado no tema escuro no `.ajuda-q`** (o ⓘ do glossário): o realce
+  era `#dfe8e0` fixo. Passou a `--verde-suave`, que inverte, mais um
+  `:focus-visible` explícito.
+- **Cinco botões só-símbolo sem nome acessível** (`↑` `↓` `×` `×` `✕` em
+  Assinaturas, Banco de Itens, Provas e Modelos) — um leitor de tela anunciava
+  "seta pra cima, botão". Ganharam `aria-label` com o item a que se referem
+  ("Subir *Termo de VT*", "Remover a opção B"), não só a ação.
+- **Dois painéis abriam e não fechavam** (§6 do design: "tudo que abre, fecha"):
+  o Diagnóstico do colaborador e o "Revisar endereços" das Configurações.
+
+### Medido e adiado, de propósito
+
+- **As ~35 tabelas sem `.dash-scroll`** (risco de estouro horizontal acima de
+  800px) **não foram corrigidas nesta leva**. A tentativa óbvia — pôr
+  `overflow-x: auto` na própria `.rh-tabela` — foi testada no navegador e
+  **não funciona**: `display: table` ignora `overflow`, e a página estourava
+  igual. A correção real exige envolver cada tabela num wrapper (35 edições de
+  JSX) ou migrá-las para o `DashPlanilha`. Fica para a leva de dívida
+  estrutural, com o guarda-corpo automatizado junto. Registrado no `CLAUDE.md`
+  para não se tentar o atalho de novo.
+
+### Verificação
+
+`npm run build` ok · `deploy-tela-branca.spec.js` **8/8** · contraste medido no
+Chromium real, nos dois temas, com a folha de estilo de verdade. As 4 falhas do
+`portal.spec.js` são de credencial do banco local (senha já trocada, o teste usa
+a inicial) — **preexistentes**, confirmadas com as alterações revertidas.
+
 ## [2.45.0] — 2026-08-02 — Trocar a matrícula sem partir o histórico
 
 Fecha o item 5 — e a leva inteira de 2026-08-01:

@@ -9,7 +9,12 @@ import { statusInfo } from '../status.js'
 export function DiagnosticoColaborador({ id }) {
   const [d, setD] = useState(null)
   const [aberto, setAberto] = useState(false)
-  useEffect(() => { if (aberto) api.diagnostico(id).then(setD).catch(() => setD(null)) }, [aberto, id])
+  // `erro` separado de `d`: voltar `d` para null deixaria "Investigando…" na
+  // tela para sempre — justamente na ferramenta que existe para investigar.
+  const [erro, setErro] = useState(null)
+  const carregar = () => api.diagnostico(id).then((r) => { setD(r); setErro(null) })
+    .catch(() => setErro('Não foi possível carregar o diagnóstico.'))
+  useEffect(() => { if (aberto) carregar() }, [aberto, id])
 
   if (!aberto) return (
     <div className="rh-card">
@@ -18,12 +23,22 @@ export function DiagnosticoColaborador({ id }) {
         🔍 Diagnóstico deste colaborador</button>
     </div>
   )
+  if (erro) return (
+    <div className="rh-card">
+      <div className="alerta">{erro}</div>
+      <button className="btn-secundario btn-mini" onClick={carregar}>tentar de novo</button>
+      <button className="btn-link" onClick={() => setAberto(false)}>fechar</button>
+    </div>
+  )
   if (!d) return <div className="rh-card"><p>Investigando…</p></div>
 
   const si = statusInfo(d.candidato.status)
   return (
     <div className="rh-card">
-      <h3>🔍 Diagnóstico — {d.candidato.nome}</h3>
+      <div className="rh-topo">
+        <h3>🔍 Diagnóstico — {d.candidato.nome}</h3>
+        <button className="btn-link" onClick={() => setAberto(false)}>ocultar</button>
+      </div>
       <div className={`diag-veredito ${d.dossie.pode_gerar ? 'ok' : 'bloq'}`}>
         {d.dossie.pode_gerar
           ? '✅ O dossiê PODE ser gerado — nada está bloqueando.'
