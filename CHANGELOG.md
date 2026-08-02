@@ -11,6 +11,62 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.61.0] — 2026-08-02 — A câmera guiada e o timbrado em todo lugar
+
+> *"ainda sobre o reembolso creche ou qualquer outra área que a pessoa tem que
+> subir fotos, documentos ou arquivos, quero que utilize o que montamos e
+> validamos de câmera, ficou legal, bem como, para o RH e/ou quando gerar o
+> dossiê, já vir no padrão conforme documentos anteriores no timbrado da
+> empresa."*
+
+Último item da leva de feedbacks de 2026-08-02.
+
+### O documento agora sai no papel timbrado
+
+Creche e portal do colaborador gravavam o arquivo **cru**: a certidão
+fotografada ficava como um `.jpg` no MinIO, enquanto a mesma foto enviada pelo
+wizard da admissão virava uma A4 timbrada. Agora os dois passam pela **mesma**
+`normalizar_para_pdf` — que, além do timbre, converte HEIC (foto de iPhone),
+recusa imagem borrada ou pequena demais e valida que o PDF abre.
+
+**Falha de conversão NÃO perde o documento.** Formato exótico, foto ilegível ou
+PDF protegido caem no original. Recusar deixaria a pessoa sem conseguir enviar a
+certidão do filho — e o benefício travaria pela qualidade de uma foto, não pelo
+direito dela. O RH ainda vê o arquivo; só não sai timbrado.
+
+No dossiê, cada folha passa a dizer **de quem é**: o rótulo leva o nome da
+criança (`certidão de nascimento — Mikael`). Antes o cabeçalho saía genérico, e
+num dossiê com dois filhos nada distinguia uma página da outra.
+
+### A câmera guiada chegou ao creche e ao portal
+
+A mesma do wizard — moldura, aviso de foto tremida ou escura em tempo real,
+recorte antes de enviar, e o botão "já tenho o arquivo" por dentro, para quem
+prefere escolher do aparelho. No portal isso resolve um caso concreto: quem usa
+aquela tela é o bombeiro civil no plantão, no celular.
+
+A legenda do portal já dizia *"pode fotografar com o celular — só confira se
+está legível"*. Agora a câmera é quem confere.
+
+**O currículo do Banco de Talentos continua com o seletor de arquivo** (decisão
+do Bruno): é PDF ou Word que a pessoa já tem no celular, e a câmera
+acrescentaria um passo para quem só quer anexar. Coerente com o backend, que
+guarda o currículo **original** desde a v2.33 — é documento de terceiro, e o RH
+precisa dele como veio.
+
+### Dois detalhes que teriam mordido
+
+- O `ler_upload` do creche (v2.56) **não aceitava Word**, mas a câmera oferece
+  `.doc/.docx` no seletor: um envio que a própria tela ofereceu seria recusado
+  com "formato não suportado". Passou a usar `EXTENSOES_COM_WORD`.
+- No portal, o **OCR lê o original** e o **hash descreve o gravado**. Trocar a
+  ordem faria a leitura assistida trabalhar sobre a foto reduzida dentro de uma
+  A4 (pior) ou o hash apontar para um arquivo que não está no storage (inútil
+  para conferir integridade).
+
+Validação: smoke 15/15, 23 testes E2E, PDF conferido renderizado em imagem, e as
+mutações do teste novo detectadas — inclusive a que volta a gravar cru.
+
 ## [2.60.0] — 2026-08-02 — Texto longo tem reticências, e nada mais vaza
 
 Três prints depois da v2.59 mostraram que eu tinha resolvido o problema pela

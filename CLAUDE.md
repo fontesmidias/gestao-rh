@@ -88,6 +88,33 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Upload fora do wizard também normaliza — mas NUNCA recusa por isso** (v2.61,
+  `creche_publico::_guardar_doc_crianca` e `portal::subir_documento`): creche e
+  portal gravavam o arquivo CRU enquanto o wizard timbrava a mesma foto. Hoje
+  passam pela mesma `normalizar_para_pdf`, com uma diferença deliberada em
+  relação ao `documentos.py`: **falha de conversão cai no ORIGINAL**, não vira
+  422. No wizard o candidato pode refazer a foto; no creche, recusar deixaria a
+  pessoa sem enviar a certidão do filho, e o benefício travaria pela qualidade
+  da foto, não pelo direito dela. O currículo do Banco de Talentos segue
+  original DE PROPÓSITO (decisão da v2.33) — é documento de terceiro; há teste
+  estrutural cobrando que ninguém "padronize" isso.
+- **No portal, o OCR lê o ORIGINAL e o hash descreve o GRAVADO** (v2.61):
+  `ler_documento(conteudo)` recebe o arquivo como veio (ler a foto reduzida
+  dentro de uma A4 piora a extração — mesma regra do comentário em
+  `normalizacao.py`), e `sha256`/`tamanho`/`content_type` descrevem o PDF que
+  foi para o storage. Trocar um pelo outro dá leitura pior ou hash que não
+  confere com o objeto guardado.
+- **Ao reusar a câmera, confira a lista de extensões do backend** (v2.61): o
+  `CapturaDocumento` oferece `.doc/.docx` no seletor de arquivo, mas o
+  `ler_upload` usa `EXTENSOES_DOCUMENTO` por padrão, que NÃO inclui Word — um
+  envio que a própria tela ofereceu voltaria como "formato não suportado". Use
+  `EXTENSOES_COM_WORD` onde a câmera estiver ligada.
+- **`aoCapturar`/`aoArquivo` da câmera recebem LISTA, sempre** (v2.61): mesmo
+  uma foto vem como lista de um. Telas que guardam um documento por vez
+  (creche, portal) precisam aceitar as duas formas —
+  `Array.isArray(e) ? e[0] : e` — senão o upload manda um array para o
+  `FormData` e o backend recebe `[object File]`.
+
 - **Tirar a rolagem LATERAL sem limitar a ALTURA cria rolagem VERTICAL** (v2.60):
   um posto de 86 caracteres quebrava em seis linhas e a tabela mostrava DUAS
   pessoas por tela. Texto longo é **cortado na 3ª linha com reticências**, com o

@@ -35,7 +35,8 @@ from app.models.ficha import DadosPessoais, Endereco
 from app.services import kba, storage
 from app.services.auditoria import registrar
 from app.services.email_templates import enviar_modelo
-from app.services.upload_seguro import extensao_de, ler_upload
+from app.services.upload_seguro import (EXTENSOES_COM_WORD, extensao_de,
+                                        ler_upload)
 from app.services.validacao import cpf_valido
 
 router = APIRouter(tags=["creche-publico"])
@@ -601,6 +602,50 @@ class CriancaIn(BaseModel):
     tipo_comprovante: str | None = None  # declaracao | nota_fiscal
 
 
+_ROTULO_DOC_CRIANCA = {"certidao": "certidão de nascimento",
+                       "guarda": "guarda judicial"}
+
+
+def _guardar_doc_crianca(beneficio_id, crianca_id: str, tipo: str,
+                         arquivo, conteudo: bytes) -> str:
+    """Grava o documento da criança como PDF TIMBRADO, e devolve a key.
+
+    Pedido do Bruno (2026-08-02): *"para o RH e/ou quando gerar o dossiê, já vir
+    no padrão conforme documentos anteriores, no timbrado da empresa"*.
+
+    Até aqui o creche gravava o arquivo CRU: a certidão fotografada ficava como
+    um `.jpg` no MinIO, enquanto no wizard da admissão a mesma foto vira uma
+    A4 timbrada. Passa pela MESMA `normalizar_para_pdf` do wizard — que, além do
+    timbre, converte HEIC (foto de iPhone), recusa imagem borrada ou pequena
+    demais e valida que o PDF abre.
+
+    **Falha de normalização NÃO perde o documento**: se a conversão não der
+    conta (formato exótico, PDF protegido), grava o original. Recusar aqui
+    deixaria a pessoa sem conseguir enviar a certidão do filho — e o benefício
+    trava por causa da qualidade de uma foto, não do direito dela. O RH ainda
+    vê o arquivo; só não sai timbrado.
+    """
+    from app.services.normalizacao import normalizar_para_pdf
+
+    nome = arquivo.filename or f"{tipo}.bin"
+    rotulo = _ROTULO_DOC_CRIANCA.get(tipo, tipo)
+    try:
+        pdf, _paginas = normalizar_para_pdf(nome, conteudo, rotulo=rotulo)
+    except Exception:
+        # Qualquer falha (formato recusado, imagem borrada, PDF protegido) cai
+        # no original — ver o porquê no docstring. `Exception` abrange tanto o
+        # `ArquivoInvalido` quanto um erro inesperado da conversão: o desfecho
+        # desejado é o mesmo nos dois casos.
+        ext = extensao_de(arquivo) or "bin"
+        key = f"creche/{beneficio_id}/{crianca_id}/{tipo}.{ext}"
+        storage.salvar(key, conteudo,
+                       arquivo.content_type or "application/octet-stream")
+        return key
+    key = f"creche/{beneficio_id}/{crianca_id}/{tipo}.pdf"
+    storage.salvar(key, pdf, "application/pdf")
+    return key
+
+
 def _conferir_data_da_crianca(valor: str) -> None:
     """Barra data que não é de criança ANTES de gravar.
 
@@ -669,10 +714,11 @@ async def subir_documento(token: str, crianca_id: str, tipo: str, arquivo: Uploa
     # spool. Esta rota é PÚBLICA e gravava qualquer coisa, de qualquer tamanho,
     # deixando o arquivo temporário no container: o que sobrava ali era
     # certidão de nascimento de criança (v2.56).
-    conteudo = await ler_upload(db, arquivo)
-    ext = extensao_de(arquivo)
-    key = f"creche/{ben.id}/{crianca_id}/{tipo}.{ext}"
-    storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
+    # `EXTENSOES_COM_WORD`: a câmera guiada oferece o seletor de arquivo com
+    # `.doc/.docx` (v2.61), e recusar aqui devolveria "formato não suportado"
+    # para um envio que a própria tela ofereceu.
+    conteudo = await ler_upload(db, arquivo, EXTENSOES_COM_WORD)
+    key = _guardar_doc_crianca(ben.id, crianca_id, tipo, arquivo, conteudo)
     if tipo == "certidao":
         c.certidao_key = key
     else:
@@ -911,10 +957,11 @@ async def creche_admissao_doc(token: str, crianca_id: str, tipo: str, arquivo: U
     # spool. Esta rota é PÚBLICA e gravava qualquer coisa, de qualquer tamanho,
     # deixando o arquivo temporário no container: o que sobrava ali era
     # certidão de nascimento de criança (v2.56).
-    conteudo = await ler_upload(db, arquivo)
-    ext = extensao_de(arquivo)
-    key = f"creche/{ben.id}/{crianca_id}/{tipo}.{ext}"
-    storage.salvar(key, conteudo, arquivo.content_type or "application/octet-stream")
+    # `EXTENSOES_COM_WORD`: a câmera guiada oferece o seletor de arquivo com
+    # `.doc/.docx` (v2.61), e recusar aqui devolveria "formato não suportado"
+    # para um envio que a própria tela ofereceu.
+    conteudo = await ler_upload(db, arquivo, EXTENSOES_COM_WORD)
+    key = _guardar_doc_crianca(ben.id, crianca_id, tipo, arquivo, conteudo)
     if tipo == "certidao":
         c.certidao_key = key
     else:
