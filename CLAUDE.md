@@ -88,6 +88,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Tirar a rolagem LATERAL sem limitar a ALTURA cria rolagem VERTICAL** (v2.60):
+  um posto de 86 caracteres quebrava em seis linhas e a tabela mostrava DUAS
+  pessoas por tela. Texto longo é **cortado na 3ª linha com reticências**, com o
+  texto inteiro no `title` (pedido do Bruno). **`-webkit-line-clamp` NÃO
+  funciona na `<td>`** — o navegador força `display: flow-root` em célula de
+  tabela e engole o `-webkit-box`; o `clamp: 3` aparece no computed style e a
+  altura não muda. O corte precisa de um DIV interno (`.dash-corta`), que o
+  `DashPlanilha` injeta sozinho em toda coluna `quebra: true`.
+- **`display: flex` sem `flex-wrap` VAZA — regra global, não conserto por tela**
+  (v2.60): o flex prefere estourar o container a quebrar a linha, então o último
+  botão fica fora da vista e nada avisa. Mordeu na coluna de ações (v2.59) e de
+  novo no checklist de documentos (`.slot-linha`, onde a quebra só valia abaixo
+  de 480px). Hoje há **uma regra só** ligando `flex-wrap` em todos os
+  agrupamentos de ação (`.navegacao`, `.rh-lote`, `.rh-topo`, `.slot-linha`,
+  `.ficha-item`, `.rh-abas`…) — tela nova que use qualquer um deles já nasce
+  certa. Acompanha `min-width: 0` no texto ao lado dos botões: sem isso o item
+  de flex usa o tamanho do CONTEÚDO como piso e empurra os vizinhos para fora
+  **mesmo com `flex-wrap` ligado** (a pegadinha clássica do flexbox).
+- **Teste E2E que faz login a cada caso bate no RATE LIMIT** (v2.60): a suíte de
+  tabelas logava cinco vezes e caía em "Muitas tentativas" — falha que PARECE
+  defeito de layout (timeout esperando a tabela) e não é. Faça login uma vez e
+  injete o token (`localStorage['rh_token']`) nos demais. O rate limit é em
+  memória: reiniciar o container da API o zera durante a depuração.
+
 - **Botão novo na coluna de ações EMPURRA a tabela para fora da tela** (v2.59,
   feedback com print: *"tive que segurar ctrl e rolar o scroll do mouse [...] o
   botão estava ali, mas eu não vi"*). O "Atender presencial" da v2.56 foi o

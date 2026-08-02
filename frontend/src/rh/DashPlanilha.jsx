@@ -279,12 +279,22 @@ export default function DashPlanilha({
                       contagem, matrícula). O padrão é quebrar — a inversão da
                       v2.59: antes tudo era nowrap e a tabela empurrava os
                       botões para fora da tela sem avisar. */}
-                  {visiveis.map((c) => (
-                    <td key={c.chave}
-                        className={[c.quebra && 'dash-quebra', c.nowrap && 'dash-nowrap']
-                          .filter(Boolean).join(' ') || undefined}>
-                      {c.render ? c.render(l) : (textoDe(l, c) || '—')}</td>
-                  ))}
+                  {/* Coluna `quebra` é CORTADA na 3ª linha pelo CSS (v2.60) —
+                      então o texto inteiro vai no `title`, senão o corte
+                      esconderia informação sem dar como recuperá-la. */}
+                  {visiveis.map((c) => {
+                    const conteudo = c.render ? c.render(l) : (textoDe(l, c) || '—')
+                    return (
+                      <td key={c.chave}
+                          title={c.quebra ? (textoDe(l, c) || undefined) : undefined}
+                          className={[c.quebra && 'dash-quebra', c.nowrap && 'dash-nowrap']
+                            .filter(Boolean).join(' ') || undefined}>
+                        {/* O corte em 3 linhas precisa de um elemento INTERNO:
+                            a `<td>` é forçada a `display: flow-root` pelo
+                            navegador e engole o `-webkit-box`. */}
+                        {c.quebra ? <div className="dash-corta">{conteudo}</div> : conteudo}</td>
+                    )
+                  })}
                   {acoesLinha && <td className="acoes-candidato">{acoesLinha(l)}</td>}
                 </tr>,
                 expandido && (

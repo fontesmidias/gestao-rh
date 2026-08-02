@@ -225,6 +225,18 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
 >   notebook pequeno por mais CSS que se escreva.
 > - Coluna que não é usada todo dia nasce `oculta: true` — o RH liga no
 >   **⚙ Colunas** quando precisar.
+> - **Altura também é limite** (v2.60): texto longo é cortado na 3ª linha com
+>   reticências e o texto inteiro vai no `title`. Tirar a rolagem lateral sem
+>   isso só troca por rolagem vertical — um posto de 86 caracteres fazia a
+>   tabela mostrar duas pessoas por tela.
+> - **Fila de botões SEMPRE tem `flex-wrap`** — vale para qualquer agrupamento
+>   de ação, não só na tabela. Já está numa regra global no `styles.css`
+>   (`.navegacao`, `.rh-lote`, `.rh-topo`, `.slot-linha`, `.ficha-item`,
+>   `.rh-abas`…): use uma dessas classes e a tela nasce certa. Acompanha
+>   `min-width: 0` no texto ao lado, senão ele empurra os botões para fora
+>   mesmo com a quebra ligada.
+> - **Medidas em `rem`/`ch`/`%`, não em `px`** — acompanham o zoom e a fonte do
+>   sistema. `px` só para borda, sombra e raio.
 >
 > Régua: `frontend/tests/e2e/tabelas-cabem-na-tela.spec.js` mede 6 telas em 3
 > larguras. **Rode ao acrescentar botão de ação ou coluna** — o defeito é

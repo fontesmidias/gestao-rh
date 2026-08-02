@@ -349,6 +349,29 @@ a { color: var(--verde-escuro); }
 .dash-tabela .chip, .dash-tabela .acoes-candidato .btn-mini { white-space: nowrap; }
 /* colunas marcadas com `quebra: true`: texto flui em várias linhas, largura
    limitada — acaba com a rolagem lateral de listas longas (feedback 2026-07-22). */
+/* ===== ALTURA DA LINHA TAMBÉM É LIMITE (v2.60) =====
+ *
+ * Tirar a rolagem lateral sem limitar a altura só troca um problema por outro:
+ * um posto como "SESI-DF - 22/2026 - BRIGADISTA, RECEPÇÃO, GARÇONARIA,
+ * PORTARIA E LIMPEZA E CONSERVAÇÃO" quebrava em SEIS linhas, e a tabela passava
+ * a mostrar duas pessoas por tela. O RH deixou de rolar para o lado e começou a
+ * rolar para baixo — não é melhor, é outro tipo de ruim (feedback 2026-08-02,
+ * com print).
+ *
+ * `line-clamp` corta na 3ª linha com reticências; o texto INTEIRO continua no
+ * `title` da célula e na ficha da pessoa. Nada se perde: o que se perde é a
+ * obrigação de ler um contrato inteiro dentro de uma célula de tabela.
+ *
+ * Vale para QUALQUER coluna `quebra: true`, em qualquer tela — atual ou futura.
+ */
+/* O clamp vai num DIV interno, não na própria `<td>`: o navegador força
+   `display: flow-root` em célula de tabela e engole o `-webkit-box`, então a
+   regra na `td` não corta nada (medido — o `clamp: 3` aparecia no
+   computed style e a altura continuava em 96px). */
+.dash-tabela td.dash-quebra > .dash-corta, .rh-tabela td.dash-quebra > .dash-corta {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+}
 .dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra,
 .rh-tabela th.dash-quebra, .rh-tabela td.dash-quebra {
   /* `min-width` em 6rem, não 10rem: era um PISO, e com 3-4 colunas assim numa
@@ -569,9 +592,18 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
                   background: color-mix(in srgb, var(--perigo) 5%, transparent); }
 .slot.enviado { border-left-color: var(--atencao); }
 .slot.ativo { outline: 2px solid color-mix(in srgb, var(--ok) 40%, transparent); }
-.slot-linha { display: flex; align-items: center; gap: .6rem; }
+/* `flex-wrap` em QUALQUER largura, não só no celular (v2.60, feedback com
+ * print): a fila era `display: flex` sem quebra, então "Ver / Aprovar /
+ * Rejeitar / Inserir" vazava para fora do card e o último botão ficava
+ * inalcançável no desktop — o mesmo defeito da coluna de ações da tabela, em
+ * outro lugar. A quebra só valia abaixo de 480px.
+ *
+ * `min-width: 0` no nome é o que permite ao flex encolher o texto: sem isso o
+ * item de flex usa o tamanho do CONTEÚDO como piso e empurra os botões para
+ * fora mesmo com `flex-wrap` ligado — a pegadinha clássica do flexbox. */
+.slot-linha { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .slot-icone { font-size: 1.2rem; }
-.slot-nome { flex: 1; font-size: .95rem; }
+.slot-nome { flex: 1 1 12rem; min-width: 0; font-size: .95rem; overflow-wrap: break-word; }
 .slot-status { font-size: .82rem; color: #7b8b81; font-weight: 600; }
 .slot-motivo { font-size: .85rem; color: var(--erro); margin-top: .2rem; }
 .slot-dica { background: var(--verde-suave); border-radius: 10px; padding: .65rem .85rem;
@@ -607,6 +639,39 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .email-confirma code { background: var(--cartao); border-radius: 8px; padding: .4rem .65rem;
                        font-size: .95rem; border: 1px solid var(--borda); }
 .email-confirma input { max-width: 280px; }
+
+/* ===========================================================================
+ * REGRA GLOBAL: FILA DE BOTÕES SEMPRE QUEBRA (v2.60)
+ * ===========================================================================
+ *
+ * Feedback 2026-08-02, com três prints: botões cortados na borda do card, na
+ * tabela de Colaboradores e no Banco de Talentos. *"quero que não seja
+ * necessário rolar nada [...] esses ajustes, se derem certo, ponha como padrão
+ * global e para serem adotados daqui em diante também para as criações
+ * futuras."*
+ *
+ * A causa era sempre a mesma: `display: flex` SEM `flex-wrap`. O flex prefere
+ * estourar o container a quebrar a linha, então o último botão fica fora da
+ * vista — e nada avisa. Cada tela nova repetia o erro porque não havia um
+ * padrão a herdar.
+ *
+ * Isto vale para TODO agrupamento de ações do painel, inclusive os que ainda
+ * não existem: uma tela nova que use qualquer um destes contêineres já nasce
+ * certa, sem precisar lembrar da regra.
+ *
+ * `min-width: 0` acompanha porque é a pegadinha clássica do flexbox: um item
+ * usa o tamanho do CONTEÚDO como piso e empurra os vizinhos para fora mesmo
+ * com `flex-wrap` ligado.
+ */
+.navegacao, .rh-lote, .rh-topo, .linha-atalhos,
+.ficha-item, .crm-item-topo, .talento-nav,
+.prova-questao-topo, .prova-questao-acoes,
+.slot-arquivo-acoes, .portal-pendencia, .rh-abas {
+  flex-wrap: wrap;
+}
+/* Texto ao lado de botões encolhe em vez de empurrar (mesma pegadinha). */
+.ficha-item > :first-child, .crm-item-topo > :first-child,
+.portal-pendencia > :first-child { min-width: 0; overflow-wrap: break-word; }
 
 /* ---------- RH (desktop) ---------- */
 .rh-login { max-width: 420px; margin: 12vh auto; }
@@ -1107,7 +1172,7 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
 .rh-sidebar {
   position: sticky; top: 0; align-self: flex-start;
   display: flex; flex-direction: column;
-  width: 236px; min-width: 236px; height: 100vh;
+  width: 14.75rem; min-width: 14.75rem; height: 100vh;
   background: var(--cartao); border-right: 1px solid var(--borda);
 }
 /* Logo no topo — altura fixa, nunca cortada. */
@@ -1415,7 +1480,7 @@ body[data-rh-ocupado] { cursor: progress; }
     border: none !important; padding: .22rem 0; white-space: normal;
   }
   .rh-tabela tbody td[data-rotulo]::before {
-    content: attr(data-rotulo); flex-shrink: 0; min-width: 96px;
+    content: attr(data-rotulo); flex-shrink: 0; min-width: 6rem;
     font-weight: 700; font-size: .72rem; text-transform: uppercase;
     letter-spacing: .03em; color: var(--tinta-suave);
   }
