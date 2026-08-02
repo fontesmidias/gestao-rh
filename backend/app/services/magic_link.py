@@ -38,4 +38,12 @@ def resolver_token(db: Session, token: str) -> Candidato | None:
         return None
     if acesso.usado_em is None:
         acesso.usado_em = datetime.now(timezone.utc)
-    return db.get(Candidato, acesso.candidato_id)
+    candidato = db.get(Candidato, acesso.candidato_id)
+    # Identifica a pessoa no log desta requisição (v2.41). PRIMEIRO NOME, nunca
+    # o token (é credencial) nem o CPF: é o menor dado que responde "quem
+    # travou aqui?" quando alguém liga dizendo que não consegue.
+    if candidato is not None:
+        from app.services.contexto_log import definir_ator
+        primeiro = (candidato.nome_completo or "").split()
+        definir_ator(f"candidato:{primeiro[0] if primeiro else candidato.id}")
+    return candidato

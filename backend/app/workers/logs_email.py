@@ -38,6 +38,28 @@ def _fmt_janela(janela: str) -> str:
         return janela
 
 
+def _secao_markdown(servico: str, resumo: dict, linhas: list[str]) -> list[str]:
+    """Um bloco por serviço: os números primeiro, depois os erros de verdade.
+
+    Só ERROS entram na amostra, e no máximo cinco. O anexo cru continua indo
+    junto para quem quiser o resto — o resumo existe para responder "preciso
+    olhar isso agora?" sem abrir arquivo nenhum.
+    """
+    erros = [l for l in linhas if " ERROR " in l or " CRITICAL " in l]
+    bloco = [f"## {servico}", "",
+             f"- **{resumo['total']}** linha(s)",
+             f"- **{resumo['erros']}** erro(s)",
+             f"- **{resumo['avisos']}** aviso(s)", ""]
+    if erros:
+        bloco.append("### Últimos erros")
+        bloco.append("")
+        bloco.append("```")
+        bloco.extend(l[:300] for l in erros[-5:])
+        bloco.append("```")
+        bloco.append("")
+    return bloco
+
+
 def rodar(forcar: bool = False) -> int:
     """Envia o pacote da janela corrente. Devolve 1 se enviou, 0 se não havia
     o que fazer. `forcar=True` ignora a janela (é o botão "enviar agora")."""
@@ -58,12 +80,14 @@ def rodar(forcar: bool = False) -> int:
                 return 0
 
             resumo, anexos = [], []
+            markdown = [f"# Logs — {_fmt_janela(janela)}", ""]
             for nome in servicos:
                 dados = svc.ler(nome, limite=svc.MAX_LINHAS_LEITURA)
                 linhas = dados.get("linhas", [])
                 r = svc._resumo(linhas)
                 resumo.append(f"{nome}: {r['total']} linha(s) · "
                               f"{r['erros']} erro(s) · {r['avisos']} aviso(s)")
+                markdown.extend(_secao_markdown(nome, r, linhas))
                 try:
                     bruto = svc.texto_para_download(nome)
                 except Exception:
@@ -74,6 +98,11 @@ def rodar(forcar: bool = False) -> int:
                              b"Configuracoes -> Logs dos servicos ...]\n"
                              + bruto[-MAX_ANEXO_BYTES:])
                 anexos.append((f"{nome}.txt", bruto))
+
+            # Resumo legível ANTES do log cru (pedido do Bruno, 2026-08-01).
+            # Vai como .md porque abre em qualquer lugar como texto e mantém a
+            # estrutura — e porque o .txt bruto sozinho obrigava a garimpar.
+            anexos.insert(0, ("resumo.md", "\n".join(markdown).encode("utf-8")))
 
             enviados = avisar_modelo(
                 db, "logs_periodico", "aviso_logs_periodico",

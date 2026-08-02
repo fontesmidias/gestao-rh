@@ -112,4 +112,8 @@ def requer_rh(
     usuario = db.get(UsuarioRH, uuid.UUID(usuario_id))
     if usuario is None or not usuario.ativo:
         raise HTTPException(status_code=401, detail="usuario_inativo")
+    # A partir daqui, toda linha de log desta requisição sai com o e-mail de
+    # quem está agindo (v2.41): "alguém reprovou o documento" precisa ter dono.
+    from app.services.contexto_log import definir_ator
+    definir_ator(usuario.email)
     return usuario

@@ -8,11 +8,70 @@ from email.message import EmailMessage
 from app.core.db import SessionLocal
 
 log = logging.getLogger(__name__)
+# Canal próprio para o que se pergunta com mais frequência num incidente: "o
+# e-mail saiu?". Fica no MESMO arquivo dos demais logs — o nome do logger é o
+# que permite filtrar por "email" na tela (v2.41).
+log_email = logging.getLogger("email.envio")
+
+
+def _tipo_do_anexo(nome: str) -> tuple[str, str]:
+    """MIME do anexo pela EXTENSÃO.
+
+    Antes todo anexo saía como `application/pdf`, chumbado — inclusive o `.txt`
+    do log enviado 4x por dia, que chegava ao Bruno como um PDF corrompido e
+    não abria de jeito nenhum (relato de 2026-08-01). O arquivo estava
+    perfeito; o envelope é que mentia sobre ele.
+    """
+    import mimetypes
+
+    tipo, _ = mimetypes.guess_type(nome or "")
+    if not tipo:
+        # `.md` não está no mapa de todo sistema, e é o formato do resumo de
+        # log — sem esta linha ele voltaria a ser octet-stream.
+        if (nome or "").lower().endswith(".md"):
+            return "text", "markdown"
+        return "application", "octet-stream"
+    principal, _, secundario = tipo.partition("/")
+    return principal, secundario or "octet-stream"
 
 
 def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
                  levantar_erro: bool = False,
                  anexos: list[tuple[str, bytes]] | None = None) -> bool:
+    """Envia e REGISTRA o resultado — saiu, por onde, e por que não saiu.
+
+    O registro existe porque "o e-mail não chegou" é a pergunta mais frequente
+    em qualquer incidente daqui, e a resposta estava espalhada: cada provedor
+    logava à sua maneira e o retorno era descartado em vários call-sites (foi
+    o que escondeu o caso dos códigos do creche). Agora há **uma linha por
+    envio**, no canal `email.envio`, com destinatário, assunto e desfecho.
+
+    Nunca levanta por causa do log: o envelope não pode derrubar a carta.
+    """
+    import time as _t
+
+    inicio = _t.perf_counter()
+    ok = False
+    try:
+        ok = _enviar_email(destinatario, assunto, corpo_texto, corpo_html,
+                           levantar_erro, anexos)
+        return ok
+    finally:
+        try:
+            ms = round((_t.perf_counter() - inicio) * 1000)
+            log_email.log(
+                logging.INFO if ok else logging.WARNING,
+                "envio=%s destino=%s assunto=%r anexos=%d ms=%s",
+                "ok" if ok else "FALHOU", destinatario or "(sem destinatário)",
+                (assunto or "")[:80], len(anexos or []), ms,
+            )
+        except Exception:  # log nunca atrapalha o envio
+            pass
+
+
+def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
+                  levantar_erro: bool = False,
+                  anexos: list[tuple[str, bytes]] | None = None) -> bool:
     """anexos: lista de (nome_do_arquivo.pdf, bytes)."""
     if not destinatario:
         # Candidato cadastrado sem e-mail (convite copiado para o WhatsApp):
@@ -63,7 +122,8 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
     if corpo_html:
         msg.add_alternative(corpo_html, subtype="html")
     for nome, dados in (anexos or []):
-        msg.add_attachment(dados, maintype="application", subtype="pdf", filename=nome)
+        maintype, subtype = _tipo_do_anexo(nome)
+        msg.add_attachment(dados, maintype=maintype, subtype=subtype, filename=nome)
 
     try:
         with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as smtp:

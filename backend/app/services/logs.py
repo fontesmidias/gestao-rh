@@ -38,6 +38,7 @@ import logging
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -67,6 +68,26 @@ def _arquivo_do(servico: str, dia: date | None = None) -> Path:
     return base if dia is None else Path(f"{base}.{dia.isoformat()}")
 
 
+# Fuso de Brasília, sempre — a mesma decisão que o front já seguia desde
+# 2026-07-16 (`fmt.js`). O container roda em UTC, então o log saía três horas
+# adiantado: quem lê a tela às 14h procurava "14:" no arquivo e encontrava as
+# 11h. Numa investigação isso não é detalhe — é a diferença entre achar e não
+# achar a linha, e pior, entre achá-la e concluir que foi outro momento.
+TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+class _FormatadorBrasilia(logging.Formatter):
+    """Carimba a hora local de Brasília, com o deslocamento explícito.
+
+    O `-03` no fim não é enfeite: o arquivo é baixado e enviado por e-mail, e
+    sem ele ninguém sabe se aquela hora já foi convertida ou não.
+    """
+
+    def formatTime(self, record, datefmt=None):  # noqa: N802 (assinatura da stdlib)
+        quando = datetime.fromtimestamp(record.created, tz=TZ_BRASILIA)
+        return quando.strftime(datefmt or "%Y-%m-%d %H:%M:%S %z")
+
+
 def configurar(servico: str | None = None) -> None:
     """Liga a escrita em arquivo, ao lado do stdout (que continua existindo —
     `docker logs` segue funcionando e é a rede de segurança se o volume falhar).
@@ -84,8 +105,14 @@ def configurar(servico: str | None = None) -> None:
         # configurada no painel (inclusive "indeterminado"). Deixar o handler
         # apagar sozinho ignoraria a escolha do RH.
         handler.suffix = "%Y-%m-%d"
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s %(message)s"))
+        # `req` e `ator` em TODA linha (v2.41): é o que liga um erro solto à
+        # requisição e à pessoa que o provocou. Sem eles, o log tinha volume e
+        # não tinha rastro — dez pessoas usando ao mesmo tempo viravam um
+        # emaranhado só. O filtro os injeta sozinho; nenhum call-site muda.
+        from app.services.contexto_log import FiltroContexto
+        handler.addFilter(FiltroContexto())
+        handler.setFormatter(_FormatadorBrasilia(
+            "%(asctime)s %(levelname)s %(name)s req=%(req)s ator=%(ator)s %(message)s"))
         raiz = logging.getLogger()
         # Idempotente: reconfigurar não duplica linha (o entrypoint pode chamar
         # mais de uma vez, e log duplicado atrapalha justamente na hora do aperto)
@@ -93,6 +120,14 @@ def configurar(servico: str | None = None) -> None:
             if isinstance(h, TimedRotatingFileHandler):
                 raiz.removeHandler(h)
         raiz.addHandler(handler)
+        # Sem isto, o arquivo só recebe WARNING para cima: o nível vinha do
+        # `basicConfig` do `main.py`, que os WORKERS não importam — então tudo
+        # que expurgo, alertas e vencimentos registram com `log.info` ("X
+        # arquivos expurgados", "alerta disparado") nunca chegava ao arquivo.
+        # Justamente o que o Bruno queria poder investigar. `NOTSET` significa
+        # "herda", e o padrão herdado é WARNING.
+        if raiz.level in (logging.NOTSET, logging.WARNING):
+            raiz.setLevel(logging.INFO)
         log.info("Logs em arquivo: %s", _arquivo_do(nome))
     except Exception:
         log.exception("Não foi possível abrir o log em arquivo — seguindo só no stdout")
@@ -153,7 +188,11 @@ def ler(servico: str, *, dia: str | None = None, busca: str | None = None,
         return {"servico": servico, "dia": dia, "linhas": [], "total": 0,
                 "truncado": False}
     limite = max(1, min(limite, MAX_LINHAS_LEITURA))
-    alvo = (busca or "").lower().strip()
+    # Vários termos separados por espaço: a linha precisa conter TODOS (v2.41).
+    # É o que permite cruzar perguntas — "email.envio creche" acha os e-mails do
+    # creche, "ERROR ator=candidato" acha os erros que atingiram candidatos.
+    # Um termo só se comporta exatamente como antes.
+    termos = [t for t in (busca or "").lower().split() if t]
     niveis = {"ERROR": ("ERROR", "CRITICAL"), "WARNING": ("WARNING", "ERROR", "CRITICAL")}
     prefixos = niveis.get((nivel or "").upper())
 
@@ -165,8 +204,10 @@ def ler(servico: str, *, dia: str | None = None, busca: str | None = None,
                 lidas += 1
                 if prefixos and not any(f" {p} " in linha for p in prefixos):
                     continue
-                if alvo and alvo not in linha.lower():
-                    continue
+                if termos:
+                    minuscula = linha.lower()
+                    if not all(t in minuscula for t in termos):
+                        continue
                 linhas.append(linha.rstrip("\n"))
                 # Janela deslizante: segura só o que vai devolver, em vez de
                 # carregar o arquivo inteiro para depois cortar.

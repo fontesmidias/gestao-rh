@@ -404,6 +404,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Log: `req=`/`ator=` em toda linha, hora de BRASÍLIA, nível INFO garantido**
+  (v2.41, `services/contexto_log.py` + `logs.py::configurar`): o contexto é
+  injetado por `FiltroContexto` (contextvars) — nenhum call-site passa nada, e
+  é isso que evita buraco justamente onde o defeito aparece. `definir()` no
+  middleware; `definir_ator()` no `requer_rh` e no `resolver_token` (candidato
+  entra como PRIMEIRO NOME — nunca o token, que é credencial, nem o CPF).
+  Três armadilhas já pagas: (1) o formatador tem que ser `_FormatadorBrasilia`
+  — o container roda em UTC e o log saía 3h adiantado em relação à tela
+  (`fmt.js` já usava America/Sao_Paulo desde 2026-07-16); `TZ` também está nos
+  4 serviços do compose E do `portainer-stack.yml`, o que alinha a virada
+  diária do arquivo. (2) `configurar()` força `INFO`: o nível vinha do
+  `basicConfig` do `main.py`, que os WORKERS não importam — tudo que eles
+  registram com `log.info` se perdia. (3) A busca aceita VÁRIOS termos (E, não
+  OU): `creche ERROR` cruza as duas perguntas.
+- **Anexo de e-mail: o tipo vem da EXTENSÃO** (v2.41, `email._tipo_do_anexo`):
+  todo anexo saía chumbado como `application/pdf`, então o `.txt` do log
+  chegava "corrompido" e não abria — o arquivo estava perfeito, o envelope é
+  que mentia. `.md` precisa de caso próprio (não está no `mimetypes` de todo
+  sistema). Ao acrescentar formato novo de anexo, conferir aqui.
 - **Sugestão por similaridade: PALAVRA inteira vence semelhança de letras**
   (v2.40, `colaboradores.py::_sugerir_postos`): o `SequenceMatcher` sozinho
   colocou **`IPAM` na frente de `INEP - 37/2025 - APOIO ADM`** para a lotação

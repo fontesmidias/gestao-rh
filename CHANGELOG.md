@@ -11,6 +11,69 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.41.0] — 2026-08-01 — Logs que permitem investigar de verdade
+
+Feedback do Bruno:
+
+> *"achei muito bom o layout, apenas pobre de tipos de informações que são
+> registradas nos logs… poderiam ser muito mais informações, para possibilitar
+> investigações verdadeiras mesmo"* — e, sobre o anexo, *"o txt que vai para o
+> e-mail não abre de jeito nenhum, acho que é um arquivo corrompido"*.
+
+O que faltava não era volume: era **poder ligar uma linha à outra**. O arquivo
+registrava `POST /api/c/ab12*** status=200` e, três linhas abaixo, um erro de
+storage — nada dizia que eram a mesma pessoa, na mesma ação. Com dez pessoas
+usando ao mesmo tempo, investigar virava adivinhação com carimbo de hora.
+
+### Adicionado
+
+- **`req=` e `ator=` em TODA linha.** `req` é o mesmo identificador para tudo
+  que acontece dentro de uma requisição — copie-o na busca e veja a sequência
+  inteira, inclusive o que veio **antes** do erro. `ator` é o e-mail do usuário
+  do RH ou `candidato:<primeiro nome>`. Injetados por filtro: nenhum ponto do
+  código precisa lembrar de passá-los, e por isso não há buraco justamente onde
+  o defeito aparece. A resposta HTTP também devolve `X-Request-Id`.
+- **Uma linha por e-mail enviado** (canal `email.envio`), com destino, assunto,
+  anexos, tempo e **desfecho** — "o e-mail saiu?" é a pergunta mais frequente
+  de qualquer incidente daqui, e a resposta estava espalhada entre quatro
+  provedores.
+- **Storage cronometrado**: falha ao gravar vira erro no log (é o arquivo que a
+  pessoa acabou de enviar) e operação acima de 2s vira aviso, com a chave e o
+  tamanho. Quando alguém diz "o sistema está lento", a resposta passa a ser um
+  número.
+- **Atalhos de assunto na tela** (e-mails, ações, arquivos, só o que está
+  lento, só candidatos) e **busca com vários termos** — a linha precisa conter
+  todos, então `creche ERROR` cruza as duas perguntas.
+- Botão **"Atualizar agora" ao lado das linhas** e a **hora da leitura**: a
+  dúvida sobre estar vendo o agora era o que fazia a tela parecer parada.
+
+### Corrigido
+
+- **Hora de Brasília no log** (com o deslocamento escrito, `-0300`). O
+  container roda em UTC: quem lia a tela às 14h procurava "14:" no arquivo e
+  encontrava as 11h. `TZ: America/Sao_Paulo` foi para os quatro serviços no
+  compose **e** no `portainer-stack.yml`, o que também alinha a virada diária
+  do arquivo.
+- **O anexo do e-mail declarava-se PDF, sempre.** Todo anexo saía como
+  `application/pdf` — inclusive o `.txt` do log, que chegava "corrompido". O
+  arquivo estava perfeito; o envelope é que mentia. Agora o tipo vem da
+  extensão.
+- **Os workers não escreviam nada de `INFO` no arquivo**, achado durante o
+  teste: o nível vinha do `basicConfig` do `main.py`, que worker nenhum
+  importa. Tudo que expurgo, alertas e vencimentos registram ("X arquivos
+  expurgados", "alerta disparado") se perdia — justamente o que o Bruno queria
+  poder investigar.
+
+### Notas
+
+O e-mail periódico ganhou um **`resumo.md`** como primeiro anexo: números por
+serviço e os últimos erros de cada um, para responder "preciso olhar isso
+agora?" sem abrir o log cru — que continua indo junto, agora abrindo.
+
+Coberto por `tests/test_logs_investigacao.py`, **validado por mutação** em três
+garantias (formatador voltando a UTC, nível em WARNING, `req` fixo). Smoke
+15/15, `npm run build` limpo.
+
 ## [2.40.0] — 2026-08-01 — De-para de lotações: os 11% viram o resto
 
 Fecha a lacuna medida na v2.39. Cargo casa em 100% e jornada em 99%, mas

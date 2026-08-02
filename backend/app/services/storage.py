@@ -1,11 +1,34 @@
-"""Acesso ao MinIO. Bucket criado na primeira utilização."""
+"""Acesso ao MinIO. Bucket criado na primeira utilização.
+
+Toda operação é CRONOMETRADA e a que demora demais vira aviso no log (v2.41,
+pedido do Bruno por "investigações verdadeiras"): quando alguém diz que "o
+sistema está lento", a resposta precisa ser um número e um nome de arquivo, e
+não uma impressão. O limiar é alto de propósito — registrar o que é normal
+encheria o log e esconderia o que não é.
+"""
 
 import io
+import logging
+import time
 from functools import lru_cache
 
 from minio import Minio
 
 from app.core.config import get_settings
+
+log = logging.getLogger("storage")
+
+# Acima disto, a operação vira linha no log. 2s é muito para um objeto que
+# quase sempre responde em dezenas de milissegundos — e é o tempo a partir do
+# qual a pessoa do outro lado já percebeu a demora.
+LENTO_MS = 2000
+
+
+def _cronometrar(operacao: str, key: str, inicio: float, tamanho: int | None = None) -> None:
+    ms = round((time.perf_counter() - inicio) * 1000)
+    if ms >= LENTO_MS:
+        log.warning("storage LENTO op=%s key=%s ms=%s bytes=%s",
+                    operacao, key, ms, tamanho if tamanho is not None else "-")
 
 
 @lru_cache
@@ -23,15 +46,27 @@ def _cliente() -> Minio:
 
 
 def salvar(key: str, dados: bytes, content_type: str = "application/octet-stream") -> None:
-    _cliente().put_object(
-        get_settings().minio_bucket, key, io.BytesIO(dados), len(dados), content_type=content_type
-    )
+    inicio = time.perf_counter()
+    try:
+        _cliente().put_object(
+            get_settings().minio_bucket, key, io.BytesIO(dados), len(dados),
+            content_type=content_type)
+    except Exception:
+        # O que falha ao GRAVAR é o que a pessoa acabou de enviar: sem esta
+        # linha, o arquivo some e o log não sabe de nada.
+        log.exception("storage FALHOU op=salvar key=%s bytes=%s", key, len(dados))
+        raise
+    finally:
+        _cronometrar("salvar", key, inicio, len(dados))
 
 
 def ler(key: str) -> bytes:
+    inicio = time.perf_counter()
     resp = _cliente().get_object(get_settings().minio_bucket, key)
     try:
-        return resp.read()
+        dados = resp.read()
+        _cronometrar("ler", key, inicio, len(dados))
+        return dados
     finally:
         resp.close()
         resp.release_conn()
