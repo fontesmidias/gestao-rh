@@ -370,11 +370,30 @@ function PostoServico({ dados, setMsg, recarregar }) {
               title="Baixa a planilha de importação de admissões do Tirvu com esta pessoa"
               onClick={async () => {
                 try {
+                  // Confere ANTES de baixar (feedback 2026-08-01): o export em
+                  // massa sempre avisou o que falta, este aqui baixava a
+                  // planilha furada calado — e o Tirvu aceita a célula vazia
+                  // sem reclamar, então o erro só aparece semanas depois.
+                  let faltas = []
+                  try {
+                    const p = await api.pendenciasTirvu({ ids: dados.id })
+                    faltas = p.com_pendencia?.[0]?.faltam || []
+                  } catch { /* a checagem falhar não pode impedir o download */ }
+                  if (faltas.length && !window.confirm(
+                    `Esta planilha vai sair com ${faltas.length} campo(s) em branco:\n\n`
+                    + `• ${faltas.join('\n• ')}\n\n`
+                    + 'O Tirvu ACEITA a célula vazia sem avisar, e o cadastro nasce '
+                    + 'incompleto lá.\n\nBaixar assim mesmo?')) return
+
                   const blob = await api.exportarTirvuIndividual(dados.id)
                   const a = document.createElement('a')
                   a.href = URL.createObjectURL(blob)
                   a.download = `importacao-tirvu-${(dados.nome_completo || 'admissao').replace(/[^\wÀ-ú -]/g, '').trim().replace(/\s+/g, '-')}.xlsx`
                   a.click()
+                  if (faltas.length) {
+                    setMsg({ tipo: 'erro', texto: `Planilha baixada COM pendências: ${faltas.join(', ')}. `
+                      + 'Cadastre os IDs do Tirvu (Config → Cargos, Jornadas, Postos) e exporte de novo.' })
+                  }
                 } catch (e) {
                   setMsg({ tipo: 'erro', texto: `Não foi possível exportar (${e.detail || e.message}).` })
                 }

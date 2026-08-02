@@ -11,6 +11,40 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.42.0] — 2026-08-02 — O export da ficha avisa o que vai sair em branco
+
+Fecha o item 2 da leva de 2026-08-01. O Bruno relatou que a planilha do Tirvu
+saía sem posto, cargo e jornada — e o diagnóstico foi que **ele exportou pelo
+botão da ficha**, que não fazia pré-checagem nenhuma. A verificação existia
+desde a v1.82, só que no caminho em massa.
+
+O que torna isso grave é o comportamento do Tirvu: ele **aceita a célula vazia
+calado**. Ninguém descobre no upload — descobre semanas depois, com o
+colaborador lá dentro e o vínculo torto.
+
+### Corrigido
+
+- O export individual passa a rodar as **mesmas** `pendencias_linha` do export
+  em massa. O front pergunta antes de baixar, listando o que falta; a resposta
+  leva `X-Tirvu-Pendencias` (quem chama a rota direto também é avisado); e a
+  auditoria guarda a lista.
+- **Sem pendência o cabeçalho diz "nenhuma"** — silêncio seria ambíguo entre
+  "está tudo certo" e "ninguém conferiu".
+
+### Notas
+
+O download **não é bloqueado**: às vezes se quer a planilha incompleta mesmo, e
+travar trocaria um problema por outro. O que muda é que ela nunca mais sai em
+silêncio.
+
+O cabeçalho é forçado a ASCII de propósito: "Descrição da Jornada de Trabalho"
+com acento derrubaria a resposta HTTP inteira.
+
+Coberto por `tests/test_tirvu_individual_pendencias.py`, que exige inclusive
+que o individual acuse o **mesmo tanto** que o massa — duas contas diferentes
+para a mesma planilha seriam piores que nenhuma. **Validado por mutação.**
+Smoke 15/15.
+
 ## [2.41.0] — 2026-08-01 — Logs que permitem investigar de verdade
 
 Feedback do Bruno:
