@@ -560,3 +560,65 @@ def baixar_dossie(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> Res
         headers={"Content-Disposition":
                  f'attachment; filename="dossie-{_ascii(cand.nome_completo)}.pdf"'},
     )
+
+
+# ======================================================================
+# Pedir um documento DEPOIS que a pessoa já concluiu (v2.43)
+# ======================================================================
+
+
+class PedirDocumentoIn(BaseModel):
+    tipo: str                # valor de TipoDocumento (ex.: "laudo_pcd")
+    motivo: str = ""
+
+
+@router.post("/rh/candidatos/{candidato_id}/pedir-documento")
+def pedir_documento(candidato_id: uuid.UUID, payload: PedirDocumentoIn,
+                    db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Cria (ou libera) UM documento para a pessoa enviar, mesmo com o envio já
+    concluído ou aprovado.
+
+    Nasceu do caso do PCD (feedback 2026-08-01): a pessoa não declarou a
+    deficiência no formulário — é dado de saúde, e muita gente evita declarar —
+    e o RH soube por fora. Ao marcar `pcd` na ficha, o laudo passa a ser
+    exigido; se ela já tinha concluído, o checklist estava congelado e a
+    pendência não tinha como ser resolvida por ninguém.
+
+    Libera **este** documento e mais nada: o status do candidato fica intacto,
+    o dossiê não se desfaz e os demais slots continuam fechados. É a mesma
+    ideia da reabertura cirúrgica de 2026-07-24, para um documento que passou a
+    existir depois.
+    """
+    from app.models.documento import TipoDocumento
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if cand.status == StatusCandidato.expurgado:
+        raise HTTPException(status_code=409, detail="candidato_expurgado")
+    try:
+        tipo = TipoDocumento(payload.tipo)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="tipo_desconhecido") from None
+
+    slot = db.scalar(select(SlotDocumento).where(
+        SlotDocumento.candidato_id == cand.id, SlotDocumento.tipo == tipo,
+        SlotDocumento.dependente_id.is_(None)))
+    if slot is None:
+        slot = SlotDocumento(candidato_id=cand.id, tipo=tipo, obrigatorio=True)
+        db.add(slot)
+    elif slot.status in (StatusSlot.enviado, StatusSlot.aprovado):
+        # Já tem arquivo: pedir de novo aqui apagaria o que o RH talvez ainda
+        # não tenha olhado. Para trocar um documento já enviado existe o
+        # caminho de rejeitar, que diz à pessoa o QUE estava errado.
+        raise HTTPException(status_code=409, detail="documento_ja_enviado")
+
+    slot.liberado_em = datetime.now(timezone.utc)
+    slot.liberado_por = rh.email
+    registrar(db, "documento_pedido_ao_candidato", ator="rh", ator_detalhe=rh.email,
+              candidato_id=cand.id,
+              detalhe={"tipo": tipo.value, "motivo": payload.motivo.strip() or None,
+                       "status_candidato": cand.status.value})
+    db.commit()
+    return {"slot_id": slot.id, "tipo": tipo.value, "liberado_em": slot.liberado_em}

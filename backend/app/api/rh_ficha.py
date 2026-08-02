@@ -252,6 +252,15 @@ def editar_secao(
                        "depois": {k: _txt(v[1]) for k, v in mudancas.items()}})
 
     invalidados = invalidar_assinaturas_afetadas(db, candidato, secao, rh.email, campos)
+    # PCD marcado pelo RH (v2.43, feedback 2026-08-01): a pessoa não declarou —
+    # é dado de saúde, e muita gente evita — e o RH soube por fora. Marcar aqui
+    # faz o LAUDO virar documento obrigatório; se ela já concluiu o envio, o
+    # checklist está congelado e a pendência não teria como ser resolvida por
+    # ninguém. Então o laudo já nasce LIBERADO para ela enviar, sem reabrir o
+    # resto da admissão.
+    laudo_pedido = False
+    if "pcd" in mudancas and mudancas["pcd"][1] is True:
+        laudo_pedido = _liberar_laudo_pcd(db, candidato, rh.email)
     db.commit()
 
     email_enviado = False
@@ -267,7 +276,48 @@ def editar_secao(
         })
 
     return {"secao": secao, "campos_alterados": campos,
-            "assinaturas_invalidadas": invalidados, "email_enviado": email_enviado}
+            "assinaturas_invalidadas": invalidados, "email_enviado": email_enviado,
+            # O front avisa o RH de que o laudo foi pedido — senão ele marca
+            # PCD, some um documento novo na lista da pessoa e ninguém sabe por
+            # quê.
+            "laudo_pcd_pedido": laudo_pedido}
+
+
+def _liberar_laudo_pcd(db: Session, candidato: Candidato, autor: str) -> bool:
+    """Cria/libera o slot do laudo de PCD para a pessoa enviar. Devolve se
+    houve algo a fazer.
+
+    Não mexe em quem JÁ enviou o laudo (o documento está lá, foi a ficha que
+    demorou a refletir isso) nem em quem ainda está preenchendo — nesse caso o
+    checklist ainda está aberto e o slot aparece sozinho, pela sincronização
+    normal.
+    """
+    from datetime import datetime, timezone
+
+    from app.models.documento import SlotDocumento, StatusSlot, TipoDocumento
+
+    slot = db.scalar(select(SlotDocumento).where(
+        SlotDocumento.candidato_id == candidato.id,
+        SlotDocumento.tipo == TipoDocumento.laudo_pcd,
+        SlotDocumento.dependente_id.is_(None)))
+    if slot is not None and slot.status in (StatusSlot.enviado, StatusSlot.aprovado):
+        return False
+    congelado = candidato.status in (StatusCandidato.envio_concluido,
+                                     StatusCandidato.aprovado)
+    if not congelado:
+        return False        # o checklist está aberto: o slot aparece sozinho
+    if slot is None:
+        slot = SlotDocumento(candidato_id=candidato.id,
+                             tipo=TipoDocumento.laudo_pcd, obrigatorio=True)
+        db.add(slot)
+    slot.liberado_em = datetime.now(timezone.utc)
+    slot.liberado_por = autor
+    registrar(db, "documento_pedido_ao_candidato", ator="rh", ator_detalhe=autor,
+              candidato_id=candidato.id,
+              detalhe={"tipo": TipoDocumento.laudo_pcd.value,
+                       "motivo": "PCD registrado pelo RH",
+                       "status_candidato": candidato.status.value})
+    return True
 
 
 def _txt(v) -> str | None:

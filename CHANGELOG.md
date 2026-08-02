@@ -11,6 +11,49 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.43.0] — 2026-08-02 — PCD registrado pelo RH, e o laudo com como chegar
+
+Fecha o item 1 da leva de 2026-08-01. O Bruno relatou um colaborador PCD sem a
+informação nem a documentação na ficha — e, perguntado, esclareceu o essencial:
+**a pessoa passou pela admissão e não marcou**. PCD é dado de saúde (art. 11 da
+LGPD) e muita gente evita declarar; ela contou ao RH por fora.
+
+Então não havia bug: havia uma lacuna um passo adiante. O RH sempre pôde marcar
+`pcd` na ficha — só que, ao marcar, o **laudo** vira documento obrigatório. Se a
+pessoa já concluiu o envio ou foi aprovada, o checklist dela está congelado: o
+RH fazia a coisa certa e ganhava uma pendência que ninguém conseguia resolver.
+
+### Adicionado
+
+- **Marcar PCD depois da conclusão pede o laudo sozinho**, já liberado para
+  aquela pessoa enviar pelo link dela. A resposta avisa o RH que isso
+  aconteceu — senão um documento novo aparece na lista de alguém e ninguém
+  sabe de onde saiu.
+- **`POST /rh/candidatos/{id}/pedir-documento`**: o mesmo mecanismo para
+  qualquer documento que passe a ser exigido depois. Recusa pedir o que já foi
+  enviado (apagaria o que o RH talvez nem tenha olhado).
+- O checklist do candidato marca o item como **pedido pelo RH**, com uma frase
+  explicando que o resto do envio continua registrado.
+
+### Notas
+
+**A liberação vale para AQUELE slot e mais nada.** O status do candidato fica
+intacto, o dossiê não se desfaz, os demais documentos continuam congelados — a
+mesma disciplina da reabertura cirúrgica de 2026-07-24.
+
+**Com o checklist ainda aberto, nada é liberado**: o slot aparece sozinho pela
+sincronização normal, e marcar como "pedido pelo RH" o que é fluxo comum só
+confundiria.
+
+Fica na auditoria com o e-mail de quem pediu, e o próprio slot guarda quem
+abriu a porta (`liberado_por`) — é dado de saúde registrado por terceiro sobre
+alguém.
+
+Coberto por `tests/test_pcd_pelo_rh.py`, **validado por mutação** nas duas
+garantias centrais (a liberação vazando para os outros slots; liberar com o
+checklist aberto). `test_reabrir_envio` e o smoke 15/15 seguem verdes — as
+guardas de envio mudaram e não podiam regredir.
+
 ## [2.42.0] — 2026-08-02 — O export da ficha avisa o que vai sair em branco
 
 Fecha o item 2 da leva de 2026-08-01. O Bruno relatou que a planilha do Tirvu

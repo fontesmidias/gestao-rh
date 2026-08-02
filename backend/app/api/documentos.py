@@ -42,6 +42,10 @@ def _slot_out(slot: SlotDocumento) -> dict:
         "motivo_rejeicao_obs": slot.motivo_rejeicao_obs,
         "paginas": slot.paginas,
         "enviado_em": slot.enviado_em,
+        # Documento que o RH pediu DEPOIS (v2.43): a tela precisa dizer que ele
+        # foi solicitado agora, senão a pessoa vê um item novo aparecer num
+        # checklist que ela já tinha concluído e conclui que perdeu algo.
+        "pedido_pelo_rh": slot.liberado_em is not None,
     }
 
 
@@ -72,19 +76,24 @@ def enviar_arquivo(
     verso, páginas de certidão…) — tudo vira um único PDF no slot, e o OCR lê
     o texto combinado (o verso do RG é onde mora a filiação)."""
     candidato = _candidato_do_token(token, db)
-    if candidato.status == StatusCandidato.envio_concluido:
-        raise HTTPException(status_code=409, detail="envio_ja_concluido")
     if candidato.status == StatusCandidato.expurgado:
         raise HTTPException(status_code=409, detail="admissao_encerrada")
     slot = db.get(SlotDocumento, slot_id)
     if slot is None or slot.candidato_id != candidato.id:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
+    # Slot LIBERADO pelo RH (v2.43): documento que passou a ser exigido depois
+    # que a pessoa concluiu — o laudo de PCD que ela não declarou e o RH soube
+    # por fora. Sem esta exceção, o RH registra a verdade e cria uma pendência
+    # que ninguém consegue resolver.
+    liberado = slot.liberado_em is not None and slot.status == StatusSlot.pendente
+    if candidato.status == StatusCandidato.envio_concluido and not liberado:
+        raise HTTPException(status_code=409, detail="envio_ja_concluido")
     # Reabertura CIRÚRGICA pós-aprovação (feedback 2026-07-24): um candidato já
     # APROVADO só pode reenviar um slot que o RH REJEITOU — nunca mexer num slot
     # já aprovado nem reabrir a ficha inteira. O status `aprovado` fica intacto
     # (não desfaz dossiê/efetivação); o RH reavalia só aquele documento.
     if (candidato.status == StatusCandidato.aprovado
-            and slot.status != StatusSlot.rejeitado):
+            and slot.status != StatusSlot.rejeitado and not liberado):
         raise HTTPException(status_code=409, detail="apenas_documento_rejeitado")
 
     lista = ([arquivo] if arquivo is not None else []) + (arquivos or [])
