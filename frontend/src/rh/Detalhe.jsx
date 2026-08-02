@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmtData } from '../fmt.js'
+import { fmtData, fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
@@ -26,6 +26,41 @@ const MOTIVOS = [
 // E-mail e celular editáveis pelo RH (caso real: candidato sem e-mail não
 // recebia as fichas nem o código de assinatura). Toda alteração vai para a
 // auditoria com o antes e o depois.
+// Atendimento presencial desta pessoa — o que está em curso e o que já houve.
+//
+// Feedback 2026-08-02: *"onde e como eu marco que o atendimento foi assistido?
+// eu consigo marcar isso após um candidato iniciar seu cadastro?"*. Sim, e a
+// marca vale do clique em diante — o que é correto (não se carimba como
+// presencial um documento assinado em casa), mas precisava estar VISÍVEL.
+function AtendimentoAssistido({ lista }) {
+  if (!lista || lista.length === 0) return null
+  const emCurso = lista.find((a) => a.em_curso)
+  const anteriores = lista.filter((a) => !a.em_curso)
+
+  return (
+    <div className="aviso-assistido">
+      {emCurso ? (<>
+        <strong>🧑‍💼 Em atendimento presencial</strong> — aberto por{' '}
+        <strong>{emCurso.por}</strong> em {fmtDataHora(emCurso.quando)}. O link se
+        encerra sozinho em {fmtDataHora(emCurso.expira_em)}.
+      </>) : (<>
+        <strong>🧑‍💼 Houve atendimento presencial</strong> — o último por{' '}
+        <strong>{anteriores[0].por}</strong> em {fmtDataHora(anteriores[0].quando)}.
+      </>)}
+      {/* O que a pessoa assinou ANTES do atendimento continua registrado como
+          feito por ela. Dizer isso aqui evita a leitura errada de que a
+          admissão inteira foi presencial. */}
+      <p className="explica" style={{ margin: '.35rem 0 0' }}>
+        Vale para o que foi assinado a partir daí — cada documento registra, no
+        próprio manifesto, se foi colhido presencialmente ou pela pessoa
+        sozinha.
+        {anteriores.length > (emCurso ? 0 : 1) && (
+          <> Ao todo: {lista.length} atendimento(s).</>)}
+      </p>
+    </div>
+  )
+}
+
 function ContatoEditavel({ dados, setMsg, recarregar }) {
   const [editando, setEditando] = useState(false)
   const [email, setEmail] = useState(dados.email || '')
@@ -963,6 +998,13 @@ export default function Detalhe({ id, aoVoltar }) {
         {enviados.length > 0 && <> · <strong>{enviados.length} documento(s) aguardando revisão</strong></>}
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+
+      {/* Atendimento presencial (v2.58): fica no TOPO, não num histórico lá
+          embaixo — quem abre a ficha precisa saber, antes de qualquer coisa,
+          que aquela admissão foi (ou está sendo) preenchida pelo RH com a
+          pessoa presente. Antes isso existia só na auditoria geral, que
+          ninguém abre no dia a dia. */}
+      <AtendimentoAssistido lista={dados.atendimentos_assistidos} />
 
       {/* ===== ORDEM DA TELA (v2.47) =====
           O Bruno usa esta tela para DUAS coisas com o mesmo peso: conferir

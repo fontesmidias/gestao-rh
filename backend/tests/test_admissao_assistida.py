@@ -198,6 +198,64 @@ def test_documento_comum_nao_muda():
            "mas mantém tudo o que já tinha")
 
 
+def test_o_rh_enxerga_o_atendimento_na_lista_e_na_ficha():
+    """Feedback 2026-08-02: *"onde e como eu marco que o atendimento foi
+    assistido?"*.
+
+    O botão existia, mas nada na tela mostrava o resultado — o RH clicava e não
+    tinha como saber, olhando a lista, que aquela pessoa estava em atendimento
+    (nem por quem). E o registro vivia só na auditoria geral, que ninguém abre
+    no dia a dia.
+
+    Duas visões, com propósitos diferentes:
+
+    * **lista**: só o atendimento EM CURSO (é operacional — "quem estou
+      atendendo agora"), e some quando o link expira;
+    * **ficha**: o HISTÓRICO inteiro, inclusive o encerrado — é registro, e
+      registro não some.
+    """
+    print("\n[o RH enxerga o atendimento]")
+    from datetime import timedelta
+
+    from app.models.candidato import AcessoMagico
+
+    c = _candidato("Jose Visivel", "jose.visivel@example.com")
+
+    # antes de abrir: nada em lugar nenhum
+    def _da_lista():
+        lst = cli.get("/api/rh/candidatos").json()
+        alvo = [x for x in lst if x["id"] == str(c.id)]
+        return alvo[0]["atendimento_assistido"] if alvo else None
+
+    def _da_ficha():
+        return cli.get(f"/api/rh/candidatos/{c.id}").json()["atendimentos_assistidos"]
+
+    checar(_da_lista() is None, "sem atendimento, a lista não marca nada")
+    checar(_da_ficha() == [], "e a ficha não inventa histórico")
+
+    cli.post(f"/api/rh/candidatos/{c.id}/sessao-assistida")
+    na_lista = _da_lista()
+    checar(na_lista is not None and na_lista["por"] == OPERADOR,
+           "aberto o atendimento, a lista mostra QUEM está atendendo")
+    ficha = _da_ficha()
+    checar(len(ficha) == 1 and ficha[0]["em_curso"] is True,
+           "e a ficha registra como em curso")
+
+    # depois de expirar (as 8h do link): sai da lista, FICA na ficha.
+    db.expire_all()
+    acesso = db.query(AcessoMagico).filter(
+        AcessoMagico.candidato_id == c.id,
+        AcessoMagico.assistido_por.is_not(None)).first()
+    acesso.expira_em = datetime.now(timezone.utc) - timedelta(hours=1)
+    db.commit()
+
+    checar(_da_lista() is None,
+           "link expirado sai da lista — não é mais 'atendendo agora'")
+    ficha = _da_ficha()
+    checar(len(ficha) == 1 and ficha[0]["em_curso"] is False,
+           "mas PERMANECE na ficha como histórico, marcado encerrado")
+
+
 def test_o_ator_continua_sendo_o_candidato():
     """Quem quis assinar foi ELE. O que se acrescenta é COMO, não QUEM.
 
@@ -221,6 +279,7 @@ if __name__ == "__main__":
     test_manifesto_declara_o_atendimento_assistido()
     test_bloco_no_corpo_do_documento_tambem_registra()
     test_documento_comum_nao_muda()
+    test_o_rh_enxerga_o_atendimento_na_lista_e_na_ficha()
     test_o_ator_continua_sendo_o_candidato()
 
     print()

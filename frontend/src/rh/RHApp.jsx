@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import { fmtData, fmtDuracao, fmtTelefone } from '../fmt.js'
+import { fmtData, fmtDataHora, fmtDuracao, fmtTelefone } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import SelectBusca from '../SelectBusca.jsx'
@@ -165,7 +165,16 @@ const COLUNAS_ADMISSAO = () => [
   { chave: 'nome', rotulo: 'Candidato', ordenavel: true, sempreVisivel: true,
     valor: (c) => c.nome_completo,
     render: (c) => (<><strong>{c.nome_completo}</strong><br />
-      <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></>) },
+      <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small>
+      {/* Atendimento presencial EM CURSO (v2.58): sem este sinal, o RH clicava
+          em "Atender presencial" e não tinha como saber, olhando a lista, que
+          aquela pessoa já estava sendo atendida — nem por quem. */}
+      {c.atendimento_assistido && (<>
+        <br /><span className="chip" style={{ '--chip-cor': '#c8a415' }}
+                    title={`Atendimento presencial aberto por ${c.atendimento_assistido.por}`
+                      + ` em ${fmtDataHora(c.atendimento_assistido.desde)}.`
+                      + ' O link expira sozinho — não é preciso encerrar.'}>
+          🧑‍💼 em atendimento</span></>)}</>) },
   { chave: 'status', rotulo: 'Status', ordenavel: true,
     valor: (c) => statusInfo(c.status).label,
     render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
@@ -259,11 +268,25 @@ const acoesAdmissao = (c, abrir) => (<>
   <button className="btn-secundario btn-mini"
           title="Abre o formulário aqui, para preencher COM a pessoa presente. A assinatura continua sendo dela, com o código no e-mail dela."
           onClick={async (e) => {
+            // O aviso do "daqui para frente" é essencial (feedback 2026-08-02:
+            // *"eu consigo marcar isso após um candidato iniciar seu
+            // cadastro?"*). A marca vale a partir do clique — e tem que ser
+            // assim: carimbar como presencial um documento que a pessoa
+            // assinou em casa seria a mentira que o manifesto existe para
+            // evitar. Mas isso precisa estar ESCRITO, senão quem clica supõe
+            // que marcou a admissão inteira.
+            const jaAssinou = c.status === 'aguardando_assinatura'
+              || c.progresso_docs?.ok > 0 || c.dossie_gerado_em
             if (!window.confirm(
               `Atender ${c.nome_completo} presencialmente?\n\n`
               + 'Abre o formulário numa aba nova para você preencher com a pessoa ao lado.\n'
               + 'No fim, ela assina com o código que chega no e-mail DELA — e o documento '
-              + 'registra que o atendimento foi assistido por você.')) return
+              + 'registra que o atendimento foi assistido por você.\n\n'
+              + (jaAssinou
+                ? '⚠️ Esta pessoa já avançou no cadastro sozinha. A marca de atendimento '
+                  + 'presencial vale só do que for assinado DAQUI PARA FRENTE — o que ela '
+                  + 'já assinou continua registrado como feito por ela, que é o correto.'
+                : 'Vale para tudo que for assinado a partir de agora.'))) return
             const btn = e.currentTarget
             try {
               const r = await api.sessaoAssistida(c.id)
