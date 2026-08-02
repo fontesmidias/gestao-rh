@@ -601,6 +601,24 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .rh-grid-2 > .rh-card, .rh-grid-2 > section.rh-card { margin-bottom: 0; }
 @media (max-width: 1000px) { .rh-grid-2 { grid-template-columns: 1fr; } }
 
+/* Como a .rh-grid-2, mas ADAPTA a quantidade de colunas ao que existe de fato:
+   card que devolve null (nada a mostrar) não deixa meia linha vazia — a coluna
+   restante ocupa a largura. Use quando um dos filhos é condicional. */
+.rh-grid-auto { display: grid; gap: var(--esp-3); align-items: start;
+                margin-bottom: var(--esp-3);
+                grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); }
+.rh-grid-auto > .rh-card, .rh-grid-auto > section.rh-card { margin-bottom: 0; }
+
+/* Card que é uma seção dobrável (`<details className="rh-card">`): o resumo
+   precisa parecer clicável — sem isto o cabeçalho fica igual a um título comum
+   e ninguém descobre que abre. Fechado, o card encolhe para só o resumo. */
+details.rh-card > summary {
+  cursor: pointer; font-weight: 700; color: var(--tinta);
+  font-size: var(--fs-secao); list-style-position: outside;
+}
+details.rh-card > summary:hover { color: var(--verde-escuro); }
+details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
+
 .rh-card {
   background: var(--cartao);
   border: 1px solid var(--borda);

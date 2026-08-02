@@ -176,6 +176,36 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **A ORDEM da tela é o custo real, não a posição de um bloco** (v2.47,
+  `rh/Detalhe.jsx`): o Bruno usa a tela de uma pessoa para DUAS coisas de peso
+  igual — conferir documento e corrigir cadastro. O defeito não era "a fila
+  está por último": eram **seis blocos de consulta ENTRE as duas**, então ele
+  aprovava embaixo, rolava pra cima pra acertar o posto e voltava. Subir a fila
+  sozinho só inverteria quem fica longe de quem. Regra: **agrupe por NATUREZA
+  (trabalho × consulta) e mantenha juntas as coisas que a pessoa alterna**; o
+  que não é trabalho diário vai para um `<details>` no fim. Três faixas hoje:
+  documentos · cadastro · consulta (fechada). Sem abas — decisão do Bruno.
+- **`if (!x) return null` esconde DOIS estados diferentes** (v2.47): `null`
+  (ainda carregando) e `[]` (não há nada) na mesma condição fazem o bloco sumir
+  enquanto a API responde — e o conteúdo abaixo PULA na cara de quem já estava
+  lendo. Mordeu em `PostoServico` e `ModelosDoColaborador`. Regra: bloco que
+  some porque **não se aplica** àquela pessoa pode sumir (mantém a densidade
+  baixa); bloco que some porque **está carregando** tem que RESERVAR o lugar.
+  Teste os dois separadamente: `if (x === null) return <carregando/>` e só
+  depois `if (x.length === 0) return null`.
+- **Mensagem vai onde a PESSOA está olhando — o critério é DISTÂNCIA** (v2.47,
+  a v1.96 de novo): componente longe do topo que chama o `setMsg` do pai põe a
+  confirmação fora do campo de visão de quem clicou. Aconteceu no "Salvar
+  posto" (card do meio da tela). Corrigido em `PostoServico`,
+  `ModelosDoColaborador` e `FichasStatus`. **Não converta tudo em mensagem
+  local**: componente colado no topo (contato, informativo) pode usar a global
+  — o que decide é a distância entre o botão e a mensagem, não a contagem.
+- **Confira a tela RENDERIZADA, não só o código** (v2.47): o cabeçalho do
+  `Detalhe` tinha "⬇ Baixar dossiê" com `btn-principal`, virando um botão verde
+  gigante, enquanto **"Efetivar como colaborador" — irreversível — parecia
+  secundário**. No código as duas linhas parecem igualmente inocentes; na tela
+  a hierarquia está invertida. Screenshot com Playwright + medir altura do
+  cabeçalho e estouro horizontal pega o que a leitura não pega.
 - **Token que não existe é PIOR que classe que não existe** (v2.46): a classe
   fantasma deixa a tela crua e alguém vê; o **token** fantasma cai no fallback e
   a tela fica plausível — só que com a cor CLARA valendo nos DOIS temas.

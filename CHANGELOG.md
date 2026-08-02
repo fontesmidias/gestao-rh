@@ -11,6 +11,70 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.47.0] — 2026-08-02 — A tela do candidato para de fazer você rolar
+
+Segunda leva da reforma de frontend, e a que ataca a queixa original do Bruno:
+
+> *"em especial quando entro em algum candidato para ser admitido, nada
+> alinhado, sem padrões... hora são seguidos, hora não"*
+
+**O diagnóstico do briefing estava incompleto, e a discussão em party mode o
+corrigiu.** A leitura inicial era "a fila de trabalho está por último — suba
+ela". Mas quando o Bruno respondeu que usa a tela para **duas** coisas de peso
+igual (conferir documentos E corrigir cadastro), o problema real apareceu:
+havia **seis blocos de consulta enfiados ENTRE as duas coisas que ele mais
+usa**. Ele aprovava um documento lá embaixo, rolava para cima para acertar o
+posto, e voltava. Só subir a fila não resolveria — inverteria quem fica longe
+de quem. **O ganho não vem de reordenar: vem de tirar a consulta do meio.**
+
+### Mudado
+
+- **Três faixas, nesta ordem:** (1) documentos — a fila de revisão; (2)
+  cadastro — posto, modelos e ficha, **colado** na primeira; (3) consulta —
+  fichas, testes, roteiro, mini-CRM, telemetria e diagnóstico, agora dentro de
+  um `<details>` fechado no fim ("🔎 Histórico e consulta desta pessoa").
+  Nada foi removido da tela; o que não é trabalho diário deixou de ficar no
+  caminho. Sem abas: decisão explícita do Bruno.
+- **O cabeçalho parou de mentir sobre a importância das ações** (achado ao
+  olhar a tela renderizada, não no código): "⬇ Baixar dossiê" levava o
+  `btn-principal` e virava um botão verde gigante, enquanto **"Efetivar como
+  colaborador" — que é irreversível — parecia secundário ao lado dele**. Os
+  textos ainda quebravam em duas linhas dentro dos botões. Agora efetivar é a
+  única ação primária e as demais são `btn-mini` uniformes: o cabeçalho caiu
+  para **50px numa linha só**, e a página de 1426px para 1371px.
+
+### Corrigido
+
+- **Mensagem que aparecia fora do campo de visão.** `PostoServico` (o card do
+  meio da tela, ~14 controles) mandava o resultado do "Salvar posto" para a
+  mensagem global **do topo** — a pessoa salva olhando para o meio e a
+  confirmação aparece onde ela não está vendo. É o mesmo defeito que a v1.96
+  corrigiu na ficha, sobrevivendo em outros componentes. Ganharam mensagem
+  local: `PostoServico`, `ModelosDoColaborador` e `FichasStatus` (este porque a
+  reordenação o levou para dentro da faixa de consulta, no fim da página).
+  **Não foram os 20 pontos de `setMsg`** — o critério que ficou é *distância*:
+  componente colado no topo (contato, informativo) pode continuar usando a
+  global.
+- **Dois blocos sumiam ENQUANTO CARREGAVAM**, fazendo a tela pular na cara de
+  quem já estava lendo. `PostoServico` (`if (!postos) return null`) e
+  `ModelosDoColaborador`, que era pior: usava `if (!modelos || modelos.length
+  === 0)` — a **mesma linha** para "ainda não chegou" e "não existe nenhum",
+  dois estados indistinguíveis. Agora reservam o lugar enquanto carregam.
+  Sumir quando **não se aplica** continua valendo (escolha do Bruno: mantém a
+  densidade baixa) — o que não pode é sumir por estar carregando.
+- Grade de 2 colunas deixava **meia linha vazia** quando o card de modelos não
+  tinha nada a mostrar. Nova `.rh-grid-auto` (auto-fit) adapta a quantidade de
+  colunas ao que existe de fato.
+- Mais dois hex chumbados a menos (`#0fb257`, `#889` nos chips do cabeçalho) e
+  dois `style` inline de layout trocados por primitiva existente.
+
+### Verificação
+
+`npm run build` ok · `deploy-tela-branca.spec.js` **8/8** · tela conferida
+**renderizada** nos dois temas e em dois estados de candidato (docs pendentes e
+aprovado), com medição de altura e de estouro horizontal. Foi essa conferência
+visual — não a leitura do código — que revelou o problema do cabeçalho.
+
 ## [2.46.0] — 2026-08-02 — Contraste, foco e telas que travavam
 
 Primeira leva da reforma de frontend. O pedido do Bruno foi de **design e
