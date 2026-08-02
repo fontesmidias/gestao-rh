@@ -82,6 +82,29 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
     vinculados: dict[uuid.UUID, int] = {}
     for (cid,) in db.execute(select(TesteVinculado.candidato_id)).all():
         vinculados[cid] = vinculados.get(cid, 0) + 1
+    # Atendimento presencial EM CURSO (v2.58): quem está com sessão assistida
+    # aberta agora. Sem isto, o RH clicava em "Atender presencial" e não tinha
+    # como saber, olhando a lista, que aquela pessoa já estava em atendimento —
+    # nem quem estava atendendo.
+    #
+    # Uma consulta só, como o resto da listagem: a mesma lição do N+1 achado no
+    # dash de Talentos (v2.15).
+    from app.models.candidato import AcessoMagico
+    agora = datetime.now(timezone.utc)
+    assistidos: dict[uuid.UUID, dict] = {}
+    for acesso in db.scalars(
+        select(AcessoMagico).where(
+            AcessoMagico.assistido_por.is_not(None),
+            AcessoMagico.revogado == False,          # noqa: E712
+            AcessoMagico.expira_em > agora,
+        ).order_by(AcessoMagico.criado_em.desc())
+    ).all():
+        # `setdefault`: com a ordem desc, fica o acesso MAIS RECENTE de cada
+        # pessoa — que é o atendimento que está acontecendo agora.
+        assistidos.setdefault(acesso.candidato_id,
+                              {"por": acesso.assistido_por,
+                               "desde": acesso.criado_em,
+                               "ate": acesso.expira_em})
     saida = []
     for cand in candidatos:
         meus = [s for s in por_candidato.get(cand.id, []) if s.obrigatorio]
@@ -95,6 +118,7 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
             "criado_em": cand.criado_em,
             "dossie_gerado_em": cand.dossie_gerado_em,
             "testes_vinculados": vinculados.get(cand.id, 0),
+            "atendimento_assistido": assistidos.get(cand.id),
         })
     return saida
 
@@ -260,6 +284,33 @@ def metricas(db: Session = Depends(get_db)) -> dict:
     }
 
 
+def _atendimentos_assistidos(db: Session, candidato_id: uuid.UUID) -> list[dict]:
+    """Atendimentos presenciais desta pessoa — os em curso e os encerrados.
+
+    Lido dos próprios links (`acesso_magico.assistido_por`), que é onde a marca
+    vive: nada de tabela paralela para manter em dia.
+
+    `em_curso` distingue o atendimento que está acontecendo AGORA do que já
+    passou — é o que a tela usa para mostrar "em atendimento" em vez de um
+    histórico morto.
+    """
+    from app.models.candidato import AcessoMagico
+
+    agora = datetime.now(timezone.utc)
+    acessos = db.scalars(
+        select(AcessoMagico)
+        .where(AcessoMagico.candidato_id == candidato_id,
+               AcessoMagico.assistido_por.is_not(None))
+        .order_by(AcessoMagico.criado_em.desc())
+    ).all()
+    return [{
+        "por": a.assistido_por,
+        "quando": a.criado_em,
+        "expira_em": a.expira_em,
+        "em_curso": (not a.revogado) and a.expira_em > agora,
+    } for a in acessos]
+
+
 @router.get("/rh/candidatos/{candidato_id}")
 def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     cand = db.get(Candidato, candidato_id)
@@ -307,9 +358,17 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
         "registra_ponto": cand.registra_ponto,
         "assinaturas": [
             {"documento": chave_doc(a), "titulo": titulo_doc(a),
-             "assinado_em": a.assinado_em}
+             "assinado_em": a.assinado_em,
+             # Quem operou o preenchimento, quando foi atendimento presencial.
+             # Aparece na ficha porque a auditoria geral ninguém abre no dia a
+             # dia — e é aqui que se responde "como este documento foi colhido?"
+             "assistida_por": a.assistida_por}
             for a in assinaturas
         ],
+        # Atendimentos presenciais desta pessoa (v2.58): os EM CURSO e os já
+        # encerrados. Sem isto, saber que alguém foi atendido presencialmente
+        # exigia abrir a auditoria geral e garimpar.
+        "atendimentos_assistidos": _atendimentos_assistidos(db, cand.id),
         # Visão que faltava no incidente real: fichas sem dados/sem assinatura
         # eram invisíveis para o RH — agora cada documento exigido aparece com
         # o seu estado, e a ficha incompleta grita.

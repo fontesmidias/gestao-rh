@@ -11,6 +11,33 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.58.0] — 2026-08-02 — O atendimento presencial aparece na tela
+
+Pergunta do Bruno depois da v2.56: *"onde e como eu marco que o atendimento foi
+assistido? eu consigo marcar isso após um candidato iniciar seu cadastro?"* — e
+ela expôs uma lacuna real: o botão existia, mas **nada na tela mostrava o
+resultado**.
+
+- **Indicador na lista de Admissões**: chip `🧑‍💼 em atendimento` na linha de
+  quem tem sessão aberta agora, com quem abriu e quando (no `title`). O RH
+  clicava e não tinha como saber, olhando a lista, que aquela pessoa já estava
+  sendo atendida — nem por quem.
+- **Registro na ficha da pessoa**, no topo: os atendimentos em curso e os
+  encerrados. Antes isso existia só na auditoria geral, que ninguém abre no dia
+  a dia. Cada assinatura também passa a expor quem a colheu.
+- **A confirmação agora AVISA** que a marca vale do clique em diante. Respondendo
+  à pergunta: sim, dá para marcar depois que a pessoa já começou — e o que ela
+  já assinou continua registrado como feito por ela, **que é o correto**.
+  Carimbar como presencial um documento assinado em casa seria a mentira que o
+  manifesto existe para evitar. O que faltava era isso estar escrito.
+
+Duas visões com propósitos diferentes, e o teste trava a distinção: a **lista**
+mostra só o atendimento em curso (é operacional — "quem estou atendendo agora")
+e some quando o link expira; a **ficha** guarda o histórico inteiro, porque
+registro não some.
+
+Validação: smoke 15/15, build limpo, design system OK, mutações detectadas.
+
 ## [2.57.0] — 2026-08-02 — O nome como se escreve, sem o espaço sobrando
 
 > *"as vezes fica tudo minúsculo, as vezes digita tudo maiúsculo [...] e tem
