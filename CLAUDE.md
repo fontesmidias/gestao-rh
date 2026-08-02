@@ -88,6 +88,38 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Botão novo na coluna de ações EMPURRA a tabela para fora da tela** (v2.59,
+  feedback com print: *"tive que segurar ctrl e rolar o scroll do mouse [...] o
+  botão estava ali, mas eu não vi"*). O "Atender presencial" da v2.56 foi o
+  QUARTO botão e estourou o limite. Medido no navegador: a coluna de ações
+  ocupava **560px de 1058px — 53% da tabela**, e em 1366px sobravam DOIS
+  pixels; qualquer janela menor cortava a ação **em silêncio**, porque o
+  `border-radius` da tabela faz o corte parecer o fim dela. O defeito é
+  invisível no código — cada botão parece inofensivo na linha em que é escrito,
+  e ninguém soma larguras. Por isso existe
+  `frontend/tests/e2e/tabelas-cabem-na-tela.spec.js`: mede 6 telas em 3
+  larguras e reprova se alguma exigir rolagem, ou se as ações passarem de 35%
+  da tabela. **Rode ao acrescentar botão de ação ou coluna.**
+- **Em tabela, o padrão é QUEBRAR; `nowrap` é a exceção declarada** (v2.59): era
+  o contrário — `white-space: nowrap` em toda célula, e só as marcadas
+  `quebra: true` fluíam. Um e-mail longo esticava a tabela inteira. Hoje:
+  `nowrap: true` na config da coluna para o que não pode partir (data,
+  contagem, matrícula); chips e botões já são automáticos. Use
+  `overflow-wrap: break-word`, **nunca `anywhere`** — este parte no meio da
+  palavra assim que aperta e transforma "Recepcionista" em "Recepcionist/a",
+  pior de ler do que a rolagem que veio consertar.
+- **Célula que ENUMERA lista vira a coluna mais larga da tela** (v2.59): o chip
+  "⚠️ falta X, Y, Z" de Colaboradores chegava a 241px, e chip não quebra linha.
+  Mostre a CONTAGEM e deixe a lista no `title`. Mesma regra para data: exibir
+  data+hora na célula E repetir a mesma string no `title` custava 172px em
+  Talentos por uma informação que quase nunca se usa ao minuto.
+- **Abaixo de 1100px a tabela vira CARD — não tente resolver tudo no CSS**
+  (v2.59): telas com 8-9 colunas (Talentos, Desenvolvimento) não cabem em
+  1024px por mais que se quebre texto e comprima ações. O modo card já existia
+  (era só para celular, em 760px) e resolve por completo: cada valor ao lado do
+  seu rótulo, nada fora da vista. O limiar subiu para 1100px porque notebook
+  pequeno e janela dividida ao meio são os dois casos em que o botão sumia.
+
 - **Espaço sobrando não é inofensivo — apare TODO campo de texto, não só o
   nome** (v2.57, `ficha.py::_AparaEspacos`): *"tem gente que quando termina de
   digitar o nome ainda dá um espaço depois da última palavra"*. No nome o

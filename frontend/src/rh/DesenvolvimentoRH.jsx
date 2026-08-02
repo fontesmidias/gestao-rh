@@ -57,14 +57,16 @@ function Fila() {
   const colunas = [
     { chave: 'colaborador', rotulo: 'Colaborador', ordenavel: true, filtro: 'texto',
       sempreVisivel: true },
-    { chave: 'cargo', rotulo: 'Cargo', ordenavel: true, filtro: 'lista', quebra: true },
+    // Oculta por padrão (v2.59): o POSTO já dá o contexto de onde a pessoa
+    // está, e a tabela tinha 10 colunas — estourava a tela. Fica no "⚙ Colunas".
+    { chave: 'cargo', rotulo: 'Cargo', ordenavel: true, filtro: 'lista', quebra: true, oculta: true },
     { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'lista', quebra: true,
       oculta: true },
     { chave: 'tipo', rotulo: 'Tipo', ordenavel: true, filtro: 'lista' },
     { chave: 'titulo', rotulo: 'Curso', ordenavel: true, filtro: 'lista', quebra: true },
-    { chave: 'concluido_em', rotulo: 'Concluído', ordenavel: true,
+    { chave: 'concluido_em', rotulo: 'Concluído', ordenavel: true, nowrap: true,
       render: (l) => fmt(l.concluido_em) },
-    { chave: 'validade_ate', rotulo: 'Validade', ordenavel: true,
+    { chave: 'validade_ate', rotulo: 'Validade', ordenavel: true, nowrap: true,
       render: (l) => fmt(l.validade_ate) },
     { chave: 'critico', rotulo: 'Criticidade', filtro: 'select',
       opcoes: ['Crítico', 'Comum'],

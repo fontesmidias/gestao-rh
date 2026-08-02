@@ -161,7 +161,10 @@ export default function TalentosRH({ aoAbrir }) {
     // Telefone em coluna própria — sem ele o RH não tem como contatar o talento
     // (antes só aparecia como fallback do e-mail no Nome, então sumia p/ quem
     // tinha e-mail). O dump já traz `telefone`.
-    { chave: 'telefone', rotulo: 'Telefone', filtro: 'texto',
+    // Oculta por padrão (v2.59): o contato principal já aparece embaixo do
+    // nome, e a tabela precisava caber na tela sem rolagem lateral. Continua
+    // a um clique em "⚙ Colunas".
+    { chave: 'telefone', rotulo: 'Telefone', filtro: 'texto', oculta: true,
       render: (t) => t.telefone || '—' },
     { chave: 'cargos', rotulo: 'Cargos', ordenavel: true, filtro: 'lista', quebra: true,
       valor: (t) => (t.cargos_interesse?.length ? t.cargos_interesse : (t.cargo_interesse ? [t.cargo_interesse] : [])) },
@@ -172,7 +175,9 @@ export default function TalentosRH({ aoAbrir }) {
         ? (t.tags || []).map((g) => (
             <span key={g.id} className="chip" style={{ '--chip-cor': g.cor || undefined }}>{g.nome}</span>))
         : '—' },
-    { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'lista' },
+    // Oculta por padrão (v2.59): o filtro de cidade continua na barra do dash,
+    // e a coluna era o que faltava para a tabela caber sem rolagem lateral.
+    { chave: 'cidade', rotulo: 'Cidade', ordenavel: true, filtro: 'lista', oculta: true },
     { chave: 'regioes', rotulo: 'Regiões', oculta: true, quebra: true, valor: (t) => t.regioes || [] },
     { chave: 'tipo_contratacao', rotulo: 'Contratação', filtro: 'select', oculta: true,
       opcoes: [{ v: 'efetivo', r: 'Efetivo' }, { v: 'intermitente', r: 'Intermitente' }, { v: 'tanto_faz', r: 'Tanto faz' }],
@@ -196,8 +201,12 @@ export default function TalentosRH({ aoAbrir }) {
                { v: 'convertido', r: 'Convertido' }, { v: 'arquivado', r: 'Arquivado' }],
       valor: (t) => (STATUS[t.status] || [t.status])[0],
       render: (t) => chip(...(STATUS[t.status] || [t.status, '#888'])) },
-    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, valor: (t) => t.criado_em,
-      render: (t) => <span title={fmtDataHora(t.criado_em)}>{fmtDataHora(t.criado_em)}</span> },
+    // Só a DATA na célula; a hora fica no `title` (v2.59). Antes mostrava
+    // data+hora e repetia a MESMA string no title — 172px, a coluna mais larga
+    // da tabela depois das ações, para uma informação que quase nunca se usa
+    // ao minuto.
+    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, nowrap: true, valor: (t) => t.criado_em,
+      render: (t) => <span title={fmtDataHora(t.criado_em)}>{fmtData(t.criado_em)}</span> },
   ]
 
   const acoesLinha = (t) => (<>

@@ -275,8 +275,14 @@ export default function DashPlanilha({
                              checked={selec.has(k)} onChange={() => alternar(k)} />
                     </td>
                   )}
+                  {/* `nowrap: true` para o que NÃO deve partir no meio (data,
+                      contagem, matrícula). O padrão é quebrar — a inversão da
+                      v2.59: antes tudo era nowrap e a tabela empurrava os
+                      botões para fora da tela sem avisar. */}
                   {visiveis.map((c) => (
-                    <td key={c.chave} className={c.quebra ? 'dash-quebra' : undefined}>
+                    <td key={c.chave}
+                        className={[c.quebra && 'dash-quebra', c.nowrap && 'dash-nowrap']
+                          .filter(Boolean).join(' ') || undefined}>
                       {c.render ? c.render(l) : (textoDe(l, c) || '—')}</td>
                   ))}
                   {acoesLinha && <td className="acoes-candidato">{acoesLinha(l)}</td>}
