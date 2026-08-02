@@ -212,6 +212,72 @@ def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
                  f'attachment; filename="importacao-tirvu-{agora}.xlsx"'})
 
 
+# ---------------------------------------------------------------------------
+# DEXION — mesmo desenho do Tirvu (pré-checagem + export, filtros idênticos),
+# layout completamente diferente: 97 colunas, cabeçalho de 4 linhas, datas em
+# serial do Excel. Ver `services/export_dexion.py`.
+#
+# Reusa `_colaboradores_para_tirvu` de propósito: a REGRA de quem entra é a
+# mesma ("só quem já foi efetivado; importados ficam de fora por padrão"), e
+# duplicá-la faria os dois exports divergirem na primeira correção feita num
+# lado só. É a seleção que se compartilha, não o formato.
+# ---------------------------------------------------------------------------
+@router.get("/rh/colaboradores/dexion-pendencias")
+def pendencias_dexion(status: str | None = None, busca: str | None = None,
+                      situacao: str | None = None, posto_id: uuid.UUID | None = None,
+                      ids: str | None = None, incluir_importados: bool = False,
+                      db: Session = Depends(get_db)) -> dict:
+    """O que falta para o Dexion aceitar cada linha, ANTES de baixar.
+
+    O Dexion é rígido, e uma coluna faltando pode ser aceita CALADA (entrando
+    errada na declaração) em vez de recusada — foi o que aconteceu com o
+    "Registra Ponto" do Tirvu na v1.82. Por isso a pré-checagem é anunciada na
+    tela, e não um aviso escondido no fim do processo.
+    """
+    from app.services.export_dexion import linha_dexion, pendencias_linha
+
+    candidatos = _colaboradores_para_tirvu(db, status, busca, situacao, posto_id,
+                                           ids, incluir_importados)
+    problemas = []
+    for c in candidatos:
+        faltas = pendencias_linha(linha_dexion(db, c))
+        if faltas:
+            problemas.append({"id": c.id, "nome": c.nome_completo, "faltam": faltas})
+    return {"total": len(candidatos), "com_pendencia": problemas}
+
+
+@router.get("/rh/colaboradores/exportar-dexion")
+def exportar_dexion_massa(status: str | None = None, busca: str | None = None,
+                          situacao: str | None = None, posto_id: uuid.UUID | None = None,
+                          ids: str | None = None, incluir_importados: bool = False,
+                          db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """Planilha no layout de conversão de trabalhadores do Dexion (97 colunas).
+
+    Como o do Tirvu, é artefato sensível — CPF, PIS, salário e endereço de
+    muita gente num arquivo só. Auditoria sempre, com quem baixou, quantas
+    linhas e quais postos.
+    """
+    from app.services.export_dexion import linha_dexion, montar_workbook_dexion
+
+    candidatos = _colaboradores_para_tirvu(db, status, busca, situacao, posto_id,
+                                           ids, incluir_importados)
+    if not candidatos:
+        raise HTTPException(status_code=404, detail="nenhum_colaborador")
+    linhas = [linha_dexion(db, c, gerar_matricula=True) for c in candidatos]
+    conteudo = montar_workbook_dexion(linhas)
+    registrar(db, "dexion_exportado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"linhas": len(linhas), "incluiu_importados": incluir_importados,
+                       "postos": sorted({l["BV"] for l in linhas if l["BV"]})})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="conversao-dexion-{agora}.xlsx"'})
+
+
 # ======================================================================
 # Importação em massa da base do Tirvu
 # ======================================================================

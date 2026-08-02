@@ -3,11 +3,15 @@ from sqlalchemy import text
 
 from app.core.config import base_url_publica
 from app.core.db import engine
+from app.versao import VERSAO, VERSAO_NOME, versao_completa
 
 router = APIRouter(tags=["health"])
 
-# Marcador de versão: muda a cada deploy que precisa ser confirmado no ar.
-VERSAO_DEPLOY = "v2.27-idade-creche"
+# Marcador de versão: vem de `app/versao.py`, que o `test_versao.py` mantém
+# igual ao topo do CHANGELOG. Já foi uma string chumbada aqui e congelou DUAS
+# vezes (v1.50 e v2.27) — a segunda mesmo depois de a função logo abaixo
+# registrar o problema por escrito. Documentar não basta; o teste é que segura.
+VERSAO_DEPLOY = versao_completa()
 
 
 def _revisao_esperada() -> str | None:
@@ -52,6 +56,10 @@ def health() -> dict:
     return {
         "status": "ok",
         "versao": VERSAO_DEPLOY,
+        # Separados também em partes: a tela de Configurações mostra o número e
+        # o nome em lugares diferentes, e não deve ter que fatiar string.
+        "versao_numero": VERSAO,
+        "versao_nome": VERSAO_NOME,
         "migracoes": {
             # `em_dia` é o que se olha primeiro. False = o banco ficou para
             # trás; rode `alembic upgrade head` no container da API.

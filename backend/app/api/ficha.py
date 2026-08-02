@@ -65,11 +65,36 @@ def _upsert(db: Session, model, candidato_id: uuid.UUID, dados: BaseModel):
 # ---------- Schemas (todos parciais: autosave) ----------
 
 
+def _padronizar_nome(v):
+    """Capitaliza nome de pessoa na ENTRADA — o único lugar que resolve.
+
+    Feedback 2026-08-02: o candidato digita tudo em caixa alta, tudo em caixa
+    baixa, ou "Maria De Fátima" — e isso sai assim na tela, na ficha em PDF e
+    no e-mail. Normalizar só na exibição não bastaria: o nome também vai para o
+    export da folha (Tirvu/Dexion), e lá quem lê é outro sistema.
+
+    Validador COMPARTILHADO, e não um por schema, porque há campos de nome em
+    três schemas diferentes; é o que impede o próximo campo de nome de nascer
+    fora do padrão.
+
+    NÃO acentua (`FATIMA` continua `Fatima`) — ver `services/nomes.py`.
+    """
+    from app.services.nomes import capitalizar_nome
+
+    if v is None or v == "":
+        return v
+    return capitalizar_nome(v)
+
+
 class SecaoPessoais(BaseModel):
     nome_completo: str | None = None
     nome_social: str | None = None
     nome_mae: str | None = None
     nome_pai: str | None = None
+    # Os quatro passam pelo MESMO padronizador — nome de mãe e de pai aparecem
+    # na ficha em PDF e no export da folha tanto quanto o do titular.
+    _nomes_ok = field_validator("nome_completo", "nome_social",
+                                "nome_mae", "nome_pai")(_padronizar_nome)
     email: EmailStr | None = None
     celular_whatsapp: str | None = None
     data_nascimento: date | None = None
@@ -161,6 +186,7 @@ class DependenteIn(BaseModel):
     deduz_irrf: bool = False
 
     _cpf_ok = field_validator("cpf")(_validar_cpf)
+    _nome_ok = field_validator("nome_completo")(_padronizar_nome)
 
 
 class ContatoEmergenciaIn(BaseModel):
@@ -168,6 +194,8 @@ class ContatoEmergenciaIn(BaseModel):
     parentesco: str
     telefone_celular: str
     telefone_fixo_endereco: str | None = None
+
+    _nome_ok = field_validator("nome_completo")(_padronizar_nome)
 
 
 class SecaoVtEmergencia(BaseModel):

@@ -380,7 +380,19 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
       setErro('Informe nome e data de nascimento da criança.'); return }
     setErro(null)
     try { await api.addCrianca(token, nova); setNova({ nome: '', data_nascimento: '', parentesco: 'filho', tipo_comprovante: 'declaracao' }); recarregar() }
-    catch { setErro('Não foi possível adicionar. Tente de novo.') }
+    catch (e) {
+      // A mensagem tem que dizer o que RESOLVE. O `catch` cego mandava "tente
+      // de novo" para uma data recusada — e tentar de novo com a mesma data
+      // falha de novo. O caso que originou isto (2026-08-02) foi o nascimento
+      // do próprio colaborador digitado no campo do filho, provavelmente
+      // oferecido pelo preenchimento automático do navegador.
+      const M = {
+        data_de_adulto: 'Essa data de nascimento dá idade de adulto — confira se não é a sua própria data. Use a data que está na certidão da criança.',
+        data_no_futuro: 'A data de nascimento não pode ser no futuro.',
+        data_invalida: 'Não consegui entender essa data de nascimento. Confira o dia, o mês e o ano.',
+      }
+      setErro(M[e.detail] || 'Não foi possível adicionar. Tente de novo.')
+    }
   }
   const subir = async (criancaId, tipo, arquivo) => {
     if (!arquivo) return

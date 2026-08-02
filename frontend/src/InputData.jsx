@@ -38,7 +38,15 @@ export default function InputData({ valor, onChange, modoTexto = false,
 
   return (
     <>
+      {/* `autoComplete="off"`: sem isso o navegador oferece a última data que a
+          pessoa digitou em QUALQUER campo parecido — e aceitar a sugestão de
+          um toque foi a causa provável do caso de 2026-08-02, em que o
+          nascimento do colaborador acabou gravado como o do filho. Data de
+          nascimento nunca se repete entre pessoas diferentes; sugerir a
+          anterior só pode errar. Fica ANTES do `{...resto}` para que uma tela
+          possa reativar explicitamente, se algum dia fizer sentido. */}
       <input inputMode="numeric" placeholder={placeholder} maxLength={10}
+             autoComplete="off"
              value={texto} onChange={aoDigitar} {...resto} />
       {erro && <div className="alerta" style={{ marginTop: '.35rem', padding: '.5rem .75rem' }}>{erro}</div>}
     </>

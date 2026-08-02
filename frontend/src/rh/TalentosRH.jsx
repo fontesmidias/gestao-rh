@@ -85,8 +85,23 @@ export default function TalentosRH({ aoAbrir }) {
   // Word chega aqui já convertido em PDF pelo backend (LibreOffice), então o
   // caso "abriu uma aba em branco" da v2.11 deixou de existir. O botão de
   // baixar continua dentro do visualizador.
+  //
+  // ABRE A FICHA JUNTO — e isso não é conveniência, é o conserto de um clique
+  // MORTO (feedback 2026-08-02: *"eu cliquei, disse que renderizou, mas eu tive
+  // que clicar em 'ver ficha' para abrir o card"*). O visualizador mora DENTRO
+  // da `FichaTalento`, que só é montada quando `aberto === t.id`; com a ficha
+  // fechada — o estado padrão de toda linha — o `setDoc` preenchia um estado
+  // que não tinha onde renderizar. Nada acontecia na tela: sem erro, sem
+  // espera, sem aba nova. E, pior, o currículo aparecia RETROATIVAMENTE se a
+  // pessoa clicasse em "Ver ficha" depois, como se o sistema tivesse guardado
+  // rancor do clique anterior.
+  //
+  // A regra que fica: quem abre um documento tem que abrir o lugar onde ele é
+  // exibido, na mesma ação. Estado de conteúdo e estado de visibilidade não
+  // podem ser independentes quando um só existe dentro do outro.
   const verCurriculo = async (t) => {
     setMsg(null)
+    setAberto(t.id)
     try {
       const blob = await api.baixarCurriculoTalento(t.id)
       setDoc({ blob, nome: t.curriculo_nome || 'curriculo', talento: t.id })
@@ -127,6 +142,12 @@ export default function TalentosRH({ aoAbrir }) {
       render: (t) => (<>
         <strong>{t.nome}</strong><br /><small>{t.email || '—'}</small>
         <div className="linha-atalhos">
+          {/* ÚNICO ponto clicável do currículo na linha (feedback 2026-08-02:
+              *"fica o clicável em dois lugares, é necessário apenas um"*). A
+              coluna "Currículo" virou só Sim/Não — serve para FILTRAR e para
+              responder de bate-pronto quem anexou; abrir é aqui, junto do nome
+              de quem se está lendo. Quem não anexou não mostra atalho nenhum:
+              botão que não faz nada é ruído. */}
           {t.tem_curriculo && (
             <button className="btn-link" onClick={() => verCurriculo(t)}
                     title={t.curriculo_nome || 'abrir currículo'}>📎 currículo</button>)}
@@ -158,11 +179,14 @@ export default function TalentosRH({ aoAbrir }) {
       valor: (t) => TIPO_ROT[t.tipo_contratacao] || '' },
     { chave: 'ja_trabalhou_funcao', rotulo: 'Já atuou', oculta: true, valor: (t) => simNao(t.ja_trabalhou_funcao) },
     { chave: 'recebe_seguro_desemprego', rotulo: 'Seg.-desemprego', oculta: true, valor: (t) => simNao(t.recebe_seguro_desemprego) },
+    // Só RESPONDE "anexou?" — quem abre é o atalho embaixo do nome. Antes esta
+    // célula tinha um segundo "📎 ver" idêntico, então o mesmo currículo era
+    // clicável duas vezes na MESMA linha; e quem não anexou virava um "—" que
+    // não diz se ninguém pediu ou se a pessoa não mandou. Sim/Não responde.
     { chave: 'tem_curriculo', rotulo: 'Currículo', filtro: 'select',
-      opcoes: [{ v: 'Sim', r: 'Tem' }, { v: 'Não', r: 'Não tem' }],
+      opcoes: [{ v: 'Sim', r: 'Sim' }, { v: 'Não', r: 'Não' }],
       valor: (t) => t.tem_curriculo ? 'Sim' : 'Não',
-      render: (t) => t.tem_curriculo
-        ? <button className="btn-link" onClick={() => verCurriculo(t)}>📎 ver</button> : '—' },
+      render: (t) => t.tem_curriculo ? 'Sim' : 'Não' },
     { chave: 'teste_status', rotulo: 'Teste', filtro: 'select',
       opcoes: [{ v: 'enviado', r: 'Enviado' }, { v: 'em_andamento', r: 'Fazendo' }, { v: 'concluido', r: 'Concluído' }],
       valor: (t) => t.teste_status || '',
@@ -304,10 +328,15 @@ function FichaTalento({ t, verCurriculo, doc, fecharDoc }) {
         <Campo rotulo="Experiência (o que a pessoa escreveu)" largo>
           {t.resumo ? <p className="ficha-texto">{t.resumo}</p> : null}</Campo>
         <Campo rotulo="Como conheceu a Green House" largo>{t.origem}</Campo>
+        {/* Aqui o botão FECHA quando o currículo já está aberto — sem isso ele
+            recarregaria o mesmo arquivo e nada mudaria na tela, que é a versão
+            silenciosa do clique morto que este feedback veio consertar. */}
         <Campo rotulo="Currículo">
           {t.tem_curriculo
-            ? <button className="btn-link" onClick={() => verCurriculo(t)}>
-                📎 {t.curriculo_nome || 'abrir currículo'}</button>
+            ? (doc
+                ? <button className="btn-link" onClick={fecharDoc}>▲ fechar currículo</button>
+                : <button className="btn-link" onClick={() => verCurriculo(t)}>
+                    📎 {t.curriculo_nome || 'abrir currículo'}</button>)
             : 'não enviou'}</Campo>
         <Campo rotulo="Consentimento LGPD">
           {t.consentimento_lgpd_em ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}` : null}</Campo>

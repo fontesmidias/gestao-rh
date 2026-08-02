@@ -134,6 +134,18 @@ class TalentoIn(BaseModel):
             v = v.strip()
         return v or None
 
+    @field_validator("nome")
+    @classmethod
+    def _padroniza_nome(cls, v):
+        """Capitaliza já no cadastro público do Banco de Talentos.
+
+        O `converter` copia `Talento.nome` para `Candidato.nome_completo` sem
+        passar por schema nenhum — se não padronizasse aqui, o nome torto
+        atravessaria para a admissão intacto.
+        """
+        from app.services.nomes import capitalizar_nome
+        return capitalizar_nome(v) if v else v
+
 
 @router.get("/talentos/opcoes")
 def opcoes_publicas() -> dict:

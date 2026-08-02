@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
-import { fmtCpf as fmtCpfBase, soDigitos, fmtDataHora } from '../fmt.js'
+import { fmtCpf as fmtCpfBase, soDigitos, fmtDataHora, isoParaBR } from '../fmt.js'
 import Ajuda from '../Ajuda.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
@@ -43,6 +43,8 @@ export default function Creche({ aoVoltar }) {
                 onClick={() => setAba('levantamentos')}>Levantamentos<Ajuda termo="levantamento" /></button>
         <button className={aba === 'postos' ? 'ativa' : ''}
                 onClick={() => setAba('postos')}>Elegibilidade por posto<Ajuda termo="elegibilidade" /></button>
+        <button className={aba === 'vigencia' ? 'ativa' : ''}
+                onClick={() => setAba('vigencia')}>Quem faz jus</button>
         <button className={aba === 'pendentes' ? 'ativa' : ''}
                 onClick={() => setAba('pendentes')}>Pendentes de resposta</button>
         <button className={aba === 'sem-acesso' ? 'ativa' : ''}
@@ -50,10 +52,105 @@ export default function Creche({ aoVoltar }) {
       </div>
 
       {aba === 'levantamentos' ? <Levantamentos />
+        : aba === 'vigencia' ? <Vigencia />
         : aba === 'pendentes' ? <Pendentes />
         : aba === 'sem-acesso' ? <SemAcesso />
         : <PorPosto />}
     </main>
+  )
+}
+
+// Quem faz jus AGORA, quem deixou de fazer, e até quando cada um faz.
+//
+// Pedido do Bruno (2026-08-02): *"o DP irá precisar saber mensalmente quem tem
+// direito e não tem direito"*. O que esta tela muda é o TEMPO DO VERBO — o
+// painel de levantamentos responde "está fora da idade" depois do fato; aqui a
+// pergunta é "quando sai", que dá ao DP tempo de se preparar.
+//
+// Uma linha por CRIANÇA, não por colaborador: é a criança que faz aniversário,
+// e um mesmo colaborador pode ter uma dentro e outra fora da idade — agrupar
+// por benefício esconderia justamente o caso que exige decisão.
+function Vigencia() {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
+
+  const carregar = () => { setErro(null); return api.crecheVigencia().then(setDados) }
+  // Erro de carga vira ERRO com "tentar de novo" (v2.46): numa tela que o DP
+  // usa para fechar folha, tabela vazia por falha de rede é indistinguível de
+  // "ninguém tem direito" — e as duas levam a decisões opostas.
+  useEffect(() => { carregar().catch((e) => setErro(e.amigavel || e.detail || 'falha ao carregar')) }, [])
+
+  if (erro) return (
+    <div className="rh-card">
+      <p className="alerta">Não foi possível carregar: {erro}</p>
+      <button className="btn-secundario btn-mini"
+              onClick={() => carregar().catch((e) => setErro(e.amigavel || e.detail || 'falha ao carregar'))}>
+        Tentar de novo</button>
+    </div>
+  )
+  if (!dados) return <p>Carregando…</p>
+
+  const SIT = {
+    com_direito: ['Com direito', '#0fb257'],
+    perdeu: ['Já não tem', '#889'],
+    conferir: ['Conferir data', '#c8a415'],
+  }
+  const cards = [
+    { rotulo: 'Com direito hoje', valor: dados.resumo.com_direito, cor: '#0fb257',
+      filtro: { chave: 'situacao', valor: 'Com direito' } },
+    { rotulo: 'Saem em até 90 dias', valor: dados.resumo.a_vencer_90d, cor: '#c8a415' },
+    { rotulo: 'Já não têm', valor: dados.resumo.perderam,
+      filtro: { chave: 'situacao', valor: 'Já não tem' } },
+    { rotulo: 'Conferir data', valor: dados.resumo.conferir, cor: '#d9534f',
+      filtro: { chave: 'situacao', valor: 'Conferir data' } },
+  ]
+
+  const colunas = [
+    { chave: 'colaborador', rotulo: 'Colaborador', ordenavel: true, filtro: 'texto',
+      sempreVisivel: true,
+      render: (l) => (<>
+        <strong>{l.colaborador}</strong><br />
+        <small>{l.matricula ? `mat. ${l.matricula}` : fmtCpf(l.cpf)}</small></>) },
+    { chave: 'crianca', rotulo: 'Criança', ordenavel: true, filtro: 'texto' },
+    { chave: 'data_nascimento', rotulo: 'Nascimento' },
+    { chave: 'idade', rotulo: 'Idade', valor: (l) => l.idade || '' },
+    { chave: 'situacao', rotulo: 'Situação', filtro: 'select',
+      opcoes: [{ v: 'Com direito', r: 'Com direito' }, { v: 'Já não tem', r: 'Já não tem' },
+               { v: 'Conferir data', r: 'Conferir data' }],
+      valor: (l) => (SIT[l.situacao] || [l.situacao])[0],
+      render: (l) => {
+        const [rot, cor] = SIT[l.situacao] || [l.situacao, '#888']
+        return <span className="chip" style={{ '--chip-cor': cor }}>{rot}</span>
+      } },
+    // A coluna que justifica a tela: a DATA, não o rótulo. "sai em 12/09/2026"
+    // é acionável; "está na idade" não é.
+    { chave: 'fim_do_direito', rotulo: 'Faz jus até', ordenavel: true,
+      valor: (l) => l.fim_do_direito || '',
+      render: (l) => {
+        if (!l.fim_do_direito) return <span title="Sem data de nascimento legível — confira o cadastro.">—</span>
+        const d = isoParaBR(l.fim_do_direito)
+        const dias = l.dias_para_o_fim
+        if (l.situacao === 'perdeu') return <span title={`Perdeu o direito há ${Math.abs(dias)} dia(s).`}>{d}</span>
+        if (dias != null && dias <= 90) return (
+          <strong title={`Faltam ${dias} dia(s).`}>{d} · em {dias}d</strong>)
+        return d
+      } },
+    { chave: 'posto', rotulo: 'Posto', filtro: 'lista', quebra: true, oculta: true },
+    { chave: 'valor_reembolso', rotulo: 'Valor', oculta: true,
+      valor: (l) => l.valor_reembolso || '' },
+    { chave: 'status_beneficio', rotulo: 'Benefício', filtro: 'lista', oculta: true,
+      valor: (l) => (STATUS_BEN[l.status_beneficio] || { rot: l.status_beneficio }).rot },
+  ]
+
+  return (
+    <>
+      <p className="explica">Apurado em <strong>{fmtDataHora(dados.gerado_em)}</strong> sobre os
+        benefícios aprovados. Uma linha por criança — o direito é dela, e o mesmo
+        colaborador pode ter uma dentro e outra fora da idade. Use{' '}
+        <strong>⬇ Exportar</strong> para levar a lista ao fechamento da folha.</p>
+      <DashPlanilha id="creche-vigencia" colunas={colunas} dados={dados.linhas} cards={cards}
+                    vazio="Nenhum benefício aprovado ainda — nada a apurar." />
+    </>
   )
 }
 
@@ -453,7 +550,7 @@ function Levantamentos() {
                             verDocCrianca={verDocCrianca} verDocumento={verDocumento}
                             baixarDossie={baixarDossie} ativar={ativar}
                             indeferir={indeferir} devolver={devolver}
-                            reenviarLink={reenviarLink}
+                            reenviarLink={reenviarLink} recarregar={carregar}
                             doc={doc} fecharDoc={() => setDoc(null)} />
                         : null)}
                       vazio="Nenhum levantamento com esse filtro." />
@@ -524,6 +621,80 @@ function PorPosto() {
   )
 }
 
+// Condições do benefício APROVADO: dia da entrega mensal e valor do reembolso,
+// editáveis na própria linha (feedback 2026-08-02).
+//
+// Antes só dava para definir os dois na hora de aprovar, por `window.prompt`.
+// Quando o contrato repactuava, o valor ficava congelado no que valia no dia da
+// ativação e o único jeito de mexer era RE-ATIVAR o benefício — o que regenera
+// o dossiê, recria o roteiro de assinatura e dispara e-mail para o colaborador.
+// Muito estrago para corrigir um número.
+//
+// Mensagem LOCAL, dentro do bloco: este componente fica no meio do painel de
+// detalhe, longe do topo da tela; um `setMsg` do pai renderizaria a
+// confirmação fora do campo de visão de quem clicou (a regra da v2.47).
+function CondicoesBeneficio({ b, aoSalvar }) {
+  const [editando, setEditando] = useState(false)
+  const [dia, setDia] = useState(String(b.dia_entrega_mensal || 5))
+  const [valor, setValor] = useState(b.valor_reembolso || '')
+  const [msg, setMsg] = useState(null)
+
+  const salvar = async () => {
+    setMsg(null)
+    try {
+      await api.crecheCondicoes(b.id, {
+        dia_entrega_mensal: parseInt(dia, 10) || undefined,
+        // String vazia é intencional: limpa o valor ("a repactuar"). Por isso
+        // não vira `undefined`, que o backend leria como "não mexer".
+        valor_reembolso: valor.trim(),
+      })
+      setMsg({ tipo: 'ok', texto: 'Condições atualizadas.' })
+      setEditando(false)
+      await aoSalvar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'beneficio_nao_aprovado'
+        ? 'Só dá para editar as condições de um benefício já aprovado.'
+        : `Não foi possível salvar (${e.detail || e.message}).` })
+    }
+  }
+
+  return (
+    <div className="rh-card" style={{ background: 'var(--hover)', marginBottom: '.6rem' }}>
+      <strong>Condições do benefício</strong>
+      {!editando ? (
+        <p className="explica" style={{ margin: '.35rem 0 0' }}>
+          Entrega da documentação até o dia <strong>{b.dia_entrega_mensal || 5}</strong> de cada
+          mês · valor do reembolso: <strong>{b.valor_reembolso || 'a repactuar'}</strong>
+          {' '}<button className="btn-link" onClick={() => setEditando(true)}>✏️ editar</button>
+        </p>
+      ) : (
+        <div className="rh-lote" style={{ marginTop: '.5rem' }}>
+          <label className="campo campo-sem-margem">
+            <span className="rotulo">Dia da entrega (1 a 28)</span>
+            <input inputMode="numeric" value={dia} maxLength={2}
+                   onChange={(e) => setDia(e.target.value.replace(/\D/g, ''))} /></label>
+          <label className="campo campo-sem-margem">
+            <span className="rotulo">Valor do reembolso</span>
+            <input value={valor} placeholder="R$ 526,64"
+                   onChange={(e) => setValor(e.target.value)} /></label>
+          <button className="btn-principal btn-mini" onClick={salvar}>Salvar</button>
+          <button className="btn-link" onClick={() => {
+            setEditando(false); setDia(String(b.dia_entrega_mensal || 5))
+            setValor(b.valor_reembolso || ''); setMsg(null)
+          }}>cancelar</button>
+        </div>
+      )}
+      {editando && (
+        <p className="explica" style={{ margin: '.4rem 0 0' }}>
+          O valor NÃO acompanha o contrato do posto sozinho — o campo existe
+          justamente para poder divergir. Alterar aqui vale só para esta pessoa.</p>
+      )}
+      {msg && <p className={msg.tipo === 'ok' ? 'sucesso' : 'alerta'}
+                 style={{ marginTop: '.5rem' }}>{msg.texto}</p>}
+    </div>
+  )
+}
+
 // Painel de detalhe do benefício — abre NA PRÓPRIA LINHA do colaborador
 // (feedback do Bruno, 2026-07-30: "quando clico em abrir, ele abre lá
 // embaixo; deveria abrir a linha abaixo do colaborador, senão tenho que
@@ -533,9 +704,19 @@ function PorPosto() {
 // Creche não seguia: o painel renderizava DEPOIS da tabela inteira.
 function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocumento,
                            baixarDossie, ativar, indeferir, devolver, reenviarLink,
-                           doc, fecharDoc }) {
+                           recarregar, doc, fecharDoc }) {
+  // UM wrapper com a classe do design system — não um Fragment (feedback
+  // 2026-08-02: *"quando abro os detalhes do colaborador, está sem padding
+  // algum"*). Dois defeitos num só: (1) o `.dash-detalhe > td` tem
+  // `padding: 0` DE PROPÓSITO, porque o respiro é responsabilidade de quem
+  // preenche a célula — sem wrapper, título, tabela e botões colam na borda;
+  // (2) a regra `.dash-detalhe > td > *` aplica `position: sticky` e
+  // `width: 100cqw` a cada FILHO DIRETO, e com Fragment eram dez filhos
+  // virando dez elementos sticky independentes, que se desmontam quando a
+  // tabela rola na horizontal. O `TalentosRH` sempre fez certo; aqui o wrapper
+  // se perdeu no refactor da v2.33 e ninguém repôs.
   return (
-    <>
+    <div className="ficha-talento">
           <h3>{b.nome} — {fmtCpf(b.cpf)}</h3>
           <p className="explica">Posto: <strong>{b.posto || '—'}</strong> ·
             e-mail: {b.email || '—'} · telefone: {b.telefone || '—'} ·
@@ -547,6 +728,8 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
             <p className="explica" style={{ margin: '0 0 .6rem', color: '#7a5b1a' }}>
               ↩️ <strong>Última devolução:</strong> {b.motivo_devolucao}
               {b.reenviado_apos_correcao && ' — colaborador já reenviou'}</p>)}
+          {['ativo', 'aguardando_repactuacao'].includes(b.status) && (
+            <CondicoesBeneficio b={b} aoSalvar={recarregar} />)}
           <div className="rh-lote" style={{ margin: '0 0 .6rem' }}>
             <button className="btn-link" onClick={() => verHistorico(b)}>
               🕘 {historico !== null ? 'Ocultar' : 'Ver'} histórico de decisões</button>
@@ -573,14 +756,18 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
                     <td>{c.nome}</td><td>{c.data_nascimento}</td>
                     <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
                     <td>{c.parentesco}</td>
-                    {/* TRÊS estados, não dois (incidente 2026-07-30): data que
-                        não dá para ler é dado a conferir, NÃO "passou da
-                        idade". Mostrar as duas coisas como ❌ levaria o RH a
-                        indeferir quem tem direito. */}
+                    {/* QUATRO estados, não dois (incidentes 2026-07-30 e
+                        2026-08-02): "não atende ao critério", "não consegui
+                        ler o dado" e "li um dado que não pode ser de criança"
+                        levam a decisões diferentes. Mostrar tudo como ❌ foi o
+                        que fez o RH quase indeferir quem tem direito. */}
                     <td>{c.idade_desconhecida
                       ? <span title="A data de nascimento não pôde ser lida — confira o cadastro.">
                           ⚠️ conferir data</span>
-                      : c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
+                      : c.idade_implausivel
+                        ? <span title="Esta data dá idade de adulto. Quase sempre é o nascimento do próprio colaborador digitado no lugar do filho — confira a certidão antes de decidir.">
+                            ⚠️ data suspeita — confira a certidão</span>
+                        : c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
                     <td>
                       {c.tem_certidao
                         ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
@@ -618,6 +805,6 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
               <button className="btn-principal" onClick={() => ativar(b, false)}>Ativar benefício</button>
             </div>
           )}
-    </>
+    </div>
   )
 }

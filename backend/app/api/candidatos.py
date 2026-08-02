@@ -59,6 +59,17 @@ class NovoCandidato(BaseModel):
             v = v.strip()
         return v or None
 
+    @field_validator("nome_completo")
+    @classmethod
+    def _padroniza_nome(cls, v):
+        """Também no CONVITE, não só no que o candidato digita.
+
+        O nome do convite é o que aparece no e-mail que a pessoa recebe — e o
+        RH costuma colar de uma planilha, onde tudo vem em CAIXA ALTA.
+        """
+        from app.services.nomes import capitalizar_nome
+        return capitalizar_nome(v) if v else v
+
 
 class CandidatoOut(BaseModel):
     id: uuid.UUID

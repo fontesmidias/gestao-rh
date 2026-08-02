@@ -11,6 +11,227 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.54.0] — 2026-08-02 — A versão que mentia, o clique que não fazia nada, e o Dexion
+
+Nove feedbacks de uso numa leva só, mais o exportador do Dexion. O Bruno cortou
+o escopo em quatro: conserto, dash do creche, Dexion e padronização de nomes —
+com decisão por filho, admissão assistida e câmera/timbrado **desenhados** para
+depois (`docs/planejamento/11-desenhos-21a-leva.md`).
+
+### A versão do sistema parou de mentir
+
+O Bruno abriu `/api/health` depois de conferir um deploy e leu
+`v2.27-idade-creche`. O código estava na 2.53.
+
+Não era bug novo — era **reincidência**. O `VERSAO_DEPLOY` era uma string
+chumbada à mão em `api/health.py`, e já tinha congelado antes, na `v1.50`, por
+vinte versões. Na v2.28 alguém percebeu, consertou o campo **vizinho**
+(`migracoes.no_codigo`, que passou a ser lido do diretório de migrations) e
+escreveu no docstring da função ao lado que a constante chumbada era o mau
+exemplo — deixando a constante. Ela congelou de novo, por mais 26 versões.
+
+A lição das duas vezes é a mesma: **documentar que algo precisa ser atualizado à
+mão não funciona**. Agora a versão vem de `app/versao.py` e o
+`tests/test_versao.py` compara com o topo do `CHANGELOG.md`, reprovando no CI
+quando divergem. Um segundo teste impede que a string literal volte para o
+`health.py`. Sem isso, congelaria uma terceira vez.
+
+E ela apareceu onde o Bruno pediu — *"algo que de fato seja funcional, mas não
+necessariamente exposto a todo momento"*: **Configurações → Sistema**, com o
+número, o nome da versão e se o banco acompanhou o código. Não no rodapé da
+sidebar, que é `space-between` com `nowrap` e já avisa em comentário próprio que
+um terceiro item comprime o nome de quem está logado.
+
+### O currículo do Banco de Talentos: um clique literalmente morto
+
+O relato foi *"eu cliquei, disse que renderizou, mas eu tive que clicar em 'ver
+ficha' para abrir o card"*. Investigando, era pior: com a ficha fechada — o
+estado padrão de toda linha — **nada acontecia**. Sem erro, sem espera, sem aba
+nova.
+
+`verCurriculo` só preenchia o estado `doc`, e o visualizador que renderiza esse
+estado mora **dentro** da `FichaTalento`, que só é montada quando
+`aberto === t.id`. O arquivo baixava e ficava invisível na memória. Pior: ao
+clicar em "Ver ficha" depois, o currículo aparecia retroativamente, como se o
+sistema guardasse rancor do clique anterior.
+
+Corrigido: `verCurriculo` abre a ficha junto. **A regra que fica** — quem abre um
+documento tem que abrir o lugar onde ele é exibido, na mesma ação; estado de
+conteúdo e de visibilidade não podem ser independentes quando um só existe
+dentro do outro.
+
+Eram **três** pontos clicáveis do mesmo currículo (o Bruno viu dois). Ficou um:
+o atalho embaixo do nome. A coluna "Currículo" virou **Sim/Não** — serve para
+filtrar e responder de bate-pronto quem anexou, como ele pediu.
+
+### Creche: a data que fazia o sistema recomendar a decisão errada
+
+O caso relatado foi um filho aparecendo como `12/10/1998 · 27a 9m · ❌ passou de
+5a11m`, quando a certidão dizia 19/04/2022.
+
+**O cálculo estava certo.** `partes_da_data` lê os dois formatos desde a v2.27, e
+o painel lê a data da criança, corretamente. O que estava no campo era o
+nascimento do **próprio colaborador** — e o `InputData` não tinha
+`autoComplete="off"`, então nem foi preciso erro humano: bastou o navegador
+oferecer a data digitada momentos antes.
+
+O estrago não parava no ❌ errado. Com 27 anos, `elegivel_idade` é `False` e
+`idade_desconhecida` é `False` — as duas condições que ligam `revisar_idade`. O
+sistema marcava o benefício como **risco de glosa** e empurrava o RH a suspender
+quem tinha direito. A defesa da v2.27 cobriu "data ilegível" e não previu "data
+legível e absurda".
+
+Quatro camadas, nenhuma cobrindo a outra:
+
+1. **Quarto estado** `idade_implausivel` (≥ 18 anos), fora do alarme de glosa
+   pela mesma razão que `idade_desconhecida`: não se sabe a idade real, e acusar
+   risco faria suspender benefício legítimo.
+2. **Trava na entrada** (422 `data_de_adulto` / `data_no_futuro`), nos DOIS
+   caminhos de cadastro — o link público e o wizard da admissão.
+3. **Mensagem que diz o que resolve**: o `catch` cego dizia "tente de novo", e
+   tentar de novo com a mesma data falha de novo. Agora explica que a data
+   parece ser a do próprio colaborador.
+4. **`autoComplete="off"`** no `InputData` — data de nascimento nunca se repete
+   entre pessoas, sugerir a anterior só pode errar.
+
+É **aviso, nunca bloqueio** no painel: filho com deficiência não tem limite de
+idade em várias normas, e uma trava dura indeferiria calado um caso legítimo.
+
+### Creche: o painel sem padding era um Fragment
+
+O `DetalheBeneficio` devolvia `<>…</>`. O `.dash-detalhe > td` tem `padding: 0`
+**de propósito** — o respiro é responsabilidade de quem preenche a célula. Sem
+wrapper, tudo colava na borda.
+
+E havia um segundo defeito invisível: a regra `.dash-detalhe > td > *` aplica
+`position: sticky` e `width: 100cqw` a cada **filho direto**. Com Fragment eram
+dez filhos virando dez elementos sticky independentes, que se desmontam quando a
+tabela rola na horizontal. Um `<div className="ficha-talento">` conserta os dois.
+
+### Creche: quem faz jus, e até quando (aba nova)
+
+> *"o DP irá precisar saber mensalmente quem tem direito e não tem direito"*
+
+O que a aba muda é o **tempo do verbo**: o painel de levantamentos constata
+"está fora da idade" depois do fato; a aba responde "sai em 12/09/2026", que dá
+ao DP tempo de se preparar. Tudo derivado da data de nascimento — zero coleta
+nova.
+
+Uma linha por **criança**, não por colaborador: é a criança que faz aniversário,
+e o mesmo colaborador pode ter uma dentro e outra fora da idade — agrupar por
+benefício esconderia justamente o caso que exige decisão.
+
+O `_fim_do_direito` é travado por teste contra a regra de elegibilidade: **no dia
+do fim ainda há direito; no dia seguinte, não**. Se as duas funções divergirem em
+um dia, o DP tira da folha alguém que ainda tem direito e ninguém desconfia. O
+29/02 cai em 28/02 no ano não bissexto — nunca 01/03, que daria um dia a mais.
+
+### Creche: prazo e valor editáveis depois da aprovação
+
+> *"para os reembolso creche que já obtiveram a aprovação e estão aguardando a
+> repactuação, quero que seja possível editar ali no painel, tanto a data limite
+> [...] quanto também o valor do reembolso"*
+
+Faltava mesmo: o `valor_reembolso` só era gravado dentro de `ativar_beneficio`.
+Repactuar um contrato deixava os benefícios ativos com o valor antigo congelado,
+e o único jeito de mexer era **re-ativar** — o que regenera o dossiê, recria o
+roteiro de assinatura e dispara e-mail. Muito estrago para trocar um número.
+
+Agora é edição inline no painel (`PUT .../condicoes`), com mensagem local — o
+bloco fica no meio da tela, e um `setMsg` do pai renderizaria a confirmação fora
+do campo de visão. O valor **não** acompanha o posto sozinho: o campo existe
+justamente para poder divergir.
+
+### Exportador do Dexion (97 colunas)
+
+> *"siga fielmente ao modelo da planilha, pois o dexion é mto enjoado"*
+
+Módulo próprio (`services/export_dexion.py`), **sem reusar** o gerador do Tirvu —
+os dois só se parecem de longe:
+
+| | Tirvu | Dexion |
+|---|---|---|
+| colunas | 28 | **97** (A→CS) |
+| aba | `Plan1` | `Sheet1` |
+| cabeçalho | 1 linha | **4 linhas**; dados na 5ª |
+| autoFilter | **recusa** | **tem**, em `A4:BV` |
+| datas | texto `dd/mm/aaaa` | **serial do Excel**… exceto `INÍCIO (ESCALA)`, que é texto |
+
+Copiar o gerador vizinho produziria um arquivo que **parece** certo — ou, pior,
+que é aceito com as datas erradas em mil e duzentos dias, porque serial e texto
+são as duas coisas que um parser lê sem reclamar.
+
+A chave da linha é a **letra da coluna**, não o rótulo: o layout repete nomes
+("CATEGORIA" três vezes, "UF" três, "TIPO DE JORNADA" duas), e com rótulo uma
+sobrescreveria a outra em silêncio.
+
+**A regra dos valores assumidos** (que vale para o próximo exportador):
+**chumba-se o que é da EMPRESA; nunca o que é da PESSOA.** País, regime da
+empregadora e tipo de declaração vão fixos, pelo mesmo raciocínio do
+`EMPRESA_TIRVU_ID = "1"`. Categoria do trabalhador, CBO, sindicato e conta
+bancária viram **pendência anunciada** — um código eSocial errado não dá erro na
+importação: entra limpo e sai errado na declaração ao governo, meses depois. É a
+assinatura de defeito do "Registra Ponto" da v1.82.
+
+**O que o sistema ainda não coleta**: agência, conta e tipo de conta (há só
+`banco` em texto livre e a chave PIX), município IBGE e CBO por pessoa. Decisão
+do Bruno: exportar vazio por ora e tratar como pendência, em vez de inventar
+dado que decide para onde vai o salário.
+
+O teste compara o cabeçalho gerado com o **arquivo oficial, célula a célula**
+(194 células) — não com uma cópia escrita à mão, que passaria a divergir do
+modelo na primeira revisão dele sem que o teste percebesse. Duas mutações
+escaparam da primeira versão do teste e foram fechadas: renomear a aba para
+`Plan1` (comparava a constante consigo mesma — tautologia) e trocar a coluna BZ
+para serial (o teste montava o valor sozinho em vez de usar a linha real).
+
+### Nomes: o sistema PRODUZIA o "Maria De Fátima"
+
+> *"o candidato hora digita tudo em caixa baixa, outros tudo em caixa alta [...]
+> menos como no exemplo Maria De Fátima, onde o 'De' deveria ser 'de'"*
+
+O achado que muda a leitura do feedback: **o defeito não era só tolerado, era
+gerado**. O `ocr_rg.py` sugeria o nome da mãe com `.title()` do Python — e
+`"maria de fátima".title()` devolve exatamente `"Maria De Fátima"`. O candidato
+aceitava a sugestão com um toque. Ou seja, aquele nome pode ter sido escrito
+pelo próprio portal.
+
+`services/nomes.py` é o ponto único, aplicado na **entrada** (wizard, convite do
+RH, Banco de Talentos, edição pelo painel e o OCR). Trata preposições, `d'Ávila`,
+`Mc`, hífen e sufixo romano, e é idempotente — o wizard salva a cada 900ms.
+
+**Não acentua**: `FATIMA` continua `Fatima`. É por isso que a base existente
+**não** é migrada em lote — o que está em caixa alta já perdeu o acento na
+origem, e uma migração cega gravaria "Fatima" como se fosse o nome correto de
+alguém. Mesma regra da data do creche.
+
+O `test_nomes.py` é estrutural: reprova qualquer `.title()` que volte a um ponto
+de escrita de nome. É a garantia que dura — as outras provam que a função de hoje
+está certa; esta impede que alguém reintroduza o defeito daqui a seis meses num
+arquivo que ninguém está olhando.
+
+### Testes no CI
+
+Os testes estruturais novos entraram no `ci.yml`: `test_versao` e `test_nomes` no
+passo de stdlib pura, e `test_export_dexion` num passo próprio (precisa de
+`openpyxl` + `sqlalchemy`, mas não de FastAPI nem de banco — ~15s por uma
+garantia que compara o arquivo com o modelo oficial).
+
+Validação: **smoke 15/15**, `npm run build` limpo, design system OK, e todos os
+testes novos verificados **por mutação**.
+
+### Desenhados, não implementados
+
+`docs/planejamento/11-desenhos-21a-leva.md` — decisão por filho no creche,
+admissão presencial assistida e câmera/timbrado em todos os uploads. Cada um com
+as decisões que só o Bruno toma.
+
+**Achado fora do pedido, registrado lá**: os uploads de creche e portal não
+fecham o arquivo (`await arquivo.close()`), não têm teto de tamanho e aceitam
+qualquer extensão — em rota **pública**. O Starlette faz spool em disco acima de
+~1MB, então sobra certidão de nascimento de criança em temp file no container.
+Isso é conserto de segurança, não experiência, e não deveria esperar a câmera.
+
 ## [2.53.0] — 2026-08-02 — Ver como se responde, antes de começar
 
 Ideia do Bruno, e melhor que os casos que eu tinha avaliado para animação:
