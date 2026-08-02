@@ -90,43 +90,45 @@ export default function IncidenciaBeneficios({ aoVoltar, aoAplicar }) {
             <span className="explica" style={{ margin: 0 }}>Revise cada linha antes de aplicar.</span>
           </div>
 
-          <table className="rh-tabela">
-            <thead><tr><th>Posto normalizado</th><th>Equivalência no Tirvu</th>
-              <th>Creche</th><th>Valor</th></tr></thead>
-            <tbody>
-              {preview.linhas.map((l) => {
-                const d = decisoes[l.idx] || {}
-                return (
-                  <tr key={l.idx}>
-                    <td><strong>{l.nome_normalizado}</strong>
-                      {l.composto && <span title="Valor composto (dois sindicatos) — confira o valor"> ⚠️</span>}
-                      <br /><small>{l.aba}</small></td>
-                    <td>
-                      <select value={d.posto_id || 'ignorar'}
-                              onChange={(e) => setDec(l.idx, 'posto_id', e.target.value)}>
-                        {(l.sugestoes || []).map((s) => (
-                          <option key={s.posto_id} value={s.posto_id}>
-                            {s.posto_nome} ({Math.round(s.score * 100)}%)</option>
-                        ))}
-                        <option value="novo">➕ Criar novo posto</option>
-                        <option value="ignorar">— Ignorar esta linha</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input type="checkbox" checked={!!d.da_direito_creche}
-                             onChange={(e) => setDec(l.idx, 'da_direito_creche', e.target.checked)} />
-                    </td>
-                    <td>
-                      {d.da_direito_creche
-                        ? <input value={d.valor_reembolso || ''} placeholder="R$ 0,00" style={{ width: 120 }}
-                                 onChange={(e) => setDec(l.idx, 'valor_reembolso', e.target.value)} />
-                        : <span className="explica" style={{ margin: 0 }}>—</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Posto normalizado</th><th>Equivalência no Tirvu</th>
+                <th>Creche</th><th>Valor</th></tr></thead>
+              <tbody>
+                {preview.linhas.map((l) => {
+                  const d = decisoes[l.idx] || {}
+                  return (
+                    <tr key={l.idx}>
+                      <td><strong>{l.nome_normalizado}</strong>
+                        {l.composto && <span title="Valor composto (dois sindicatos) — confira o valor"> ⚠️</span>}
+                        <br /><small>{l.aba}</small></td>
+                      <td>
+                        <select value={d.posto_id || 'ignorar'}
+                                onChange={(e) => setDec(l.idx, 'posto_id', e.target.value)}>
+                          {(l.sugestoes || []).map((s) => (
+                            <option key={s.posto_id} value={s.posto_id}>
+                              {s.posto_nome} ({Math.round(s.score * 100)}%)</option>
+                          ))}
+                          <option value="novo">➕ Criar novo posto</option>
+                          <option value="ignorar">— Ignorar esta linha</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input type="checkbox" checked={!!d.da_direito_creche}
+                               onChange={(e) => setDec(l.idx, 'da_direito_creche', e.target.checked)} />
+                      </td>
+                      <td>
+                        {d.da_direito_creche
+                          ? <input value={d.valor_reembolso || ''} placeholder="R$ 0,00" style={{ width: 120 }}
+                                   onChange={(e) => setDec(l.idx, 'valor_reembolso', e.target.value)} />
+                          : <span className="explica" style={{ margin: 0 }}>—</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </main>

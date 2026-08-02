@@ -53,20 +53,22 @@ export default function RoteiroAssinatura({ id }) {
               <span className="chip" style={{ '--chip-cor': CORES_STATUS[s.status] || '#889' }}>
                 {ROTULO_STATUS[s.status] || s.status}</span>
             </div>
-            <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
-              <thead><tr><th>Ordem</th><th>Papel</th><th>Quem</th><th>Situação</th></tr></thead>
-              <tbody>
-                {s.etapas.map((e) => (
-                  <tr key={e.id}>
-                    <td>{e.ordem}</td><td>{e.papel}</td>
-                    <td>{e.quem}</td>
-                    <td>{e.assinado_em ? `✅ ${fmtData(e.assinado_em)}`
-                      : e.recusada_em ? `❌ recusou (${e.recusada_motivo || ''})`
-                      : '⏳ aguardando'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="dash-scroll">
+              <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
+                <thead><tr><th>Ordem</th><th>Papel</th><th>Quem</th><th>Situação</th></tr></thead>
+                <tbody>
+                  {s.etapas.map((e) => (
+                    <tr key={e.id}>
+                      <td>{e.ordem}</td><td>{e.papel}</td>
+                      <td>{e.quem}</td>
+                      <td>{e.assinado_em ? `✅ ${fmtData(e.assinado_em)}`
+                        : e.recusada_em ? `❌ recusou (${e.recusada_motivo || ''})`
+                        : '⏳ aguardando'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="rh-lote" style={{ marginTop: '.4rem' }}>
               {s.status === 'rascunho' && (
                 <button className="btn-principal btn-mini" onClick={async () => {

@@ -216,7 +216,7 @@ function RevisaoProva({ token, aid }) {
   if (!itens) return <p className="explica centro" style={{ marginTop: '1rem' }}>Carregando…</p>
 
   return (
-    <div className="prova-revisao" style={{ marginTop: '1rem', textAlign: 'left' }}>
+    <div className="prova-revisao">
       {itens.map((it, i) => (
         <div className="prova-questao" key={i}>
           <strong>{i + 1}. {it.enunciado}</strong>

@@ -61,32 +61,36 @@ export function DiagnosticoColaborador({ id }) {
 
       <details>
         <summary>Documentos ({d.documentos.length})</summary>
-        <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
-          <thead><tr><th>Documento</th><th>Situação</th><th>Obrigatório</th></tr></thead>
-          <tbody>
-            {d.documentos.map((s, i) => (
-              <tr key={i}><td>{s.tipo.replace(/_/g, ' ')}</td>
-                <td>{s.status}</td><td>{s.obrigatorio ? 'sim' : 'não'}</td></tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
+            <thead><tr><th>Documento</th><th>Situação</th><th>Obrigatório</th></tr></thead>
+            <tbody>
+              {d.documentos.map((s, i) => (
+                <tr key={i}><td>{s.tipo.replace(/_/g, ' ')}</td>
+                  <td>{s.status}</td><td>{s.obrigatorio ? 'sim' : 'não'}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </details>
 
       <details open>
         <summary>Linha do tempo ({d.linha_do_tempo.length} eventos)</summary>
-        <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
-          <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Detalhe</th></tr></thead>
-          <tbody>
-            {d.linha_do_tempo.map((e, i) => (
-              <tr key={i} className={/falhou|falha/.test(e.acao) ? 'diag-erro-linha' : ''}>
-                <td style={{ whiteSpace: 'nowrap' }}>{fmtDataHora(e.quando)}</td>
-                <td>{e.acao}</td>
-                <td>{e.ator}{e.ator_detalhe ? ` (${e.ator_detalhe})` : ''}</td>
-                <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
+            <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Detalhe</th></tr></thead>
+            <tbody>
+              {d.linha_do_tempo.map((e, i) => (
+                <tr key={i} className={/falhou|falha/.test(e.acao) ? 'diag-erro-linha' : ''}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDataHora(e.quando)}</td>
+                  <td>{e.acao}</td>
+                  <td>{e.ator}{e.ator_detalhe ? ` (${e.ator_detalhe})` : ''}</td>
+                  <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </details>
     </div>
   )
@@ -109,19 +113,21 @@ export function ErrosRecentes() {
       ) : !erros ? <p>Carregando…</p> : erros.length === 0 ? (
         <p className="explica">Nenhum erro registrado. 🎉</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Quando</th><th>Erro</th><th>Colaborador</th><th>Detalhe</th></tr></thead>
-          <tbody>
-            {erros.map((e, i) => (
-              <tr key={i}>
-                <td style={{ whiteSpace: 'nowrap' }}>{fmtDataHora(e.quando)}</td>
-                <td>{e.acao}</td>
-                <td>{e.candidato_nome || '—'}</td>
-                <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Quando</th><th>Erro</th><th>Colaborador</th><th>Detalhe</th></tr></thead>
+            <tbody>
+              {erros.map((e, i) => (
+                <tr key={i}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDataHora(e.quando)}</td>
+                  <td>{e.acao}</td>
+                  <td>{e.candidato_nome || '—'}</td>
+                  <td><small>{e.detalhe ? JSON.stringify(e.detalhe) : ''}</small></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

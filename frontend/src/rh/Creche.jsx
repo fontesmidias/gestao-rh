@@ -69,7 +69,7 @@ function SemAcesso() {
       .then(setLista)
       .catch(() => setErro('Não foi possível carregar o relatório.'))
   }, [])
-  if (erro) return <div className="rh-card"><p className="erro">{erro}</p></div>
+  if (erro) return <div className="rh-card"><div className="alerta">{erro}</div></div>
   if (!lista) return <div className="rh-card"><p>Carregando…</p></div>
 
   return (
@@ -503,20 +503,22 @@ function PorPosto() {
           elegível ainda. Vá em <strong>Postos</strong> e marque "Este posto dá direito ao
           reembolso-creche".</p></div>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Posto (contrato)</th><th>Sigla</th><th>Nº do contrato</th>
-            <th>Valor do reembolso</th><th>Colaboradores ativos</th></tr></thead>
-          <tbody>
-            {resumo.por_posto.map((p) => (
-              <tr key={p.posto_id}>
-                <td><strong>{p.posto}</strong></td><td>{p.sigla || '—'}</td>
-                <td>{p.contrato_ref || '—'}</td>
-                <td>{p.valor_reembolso || <em style={{ opacity: .6 }}>a repactuar</em>}</td>
-                <td>{p.colaboradores_ativos}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Posto (contrato)</th><th>Sigla</th><th>Nº do contrato</th>
+              <th>Valor do reembolso</th><th>Colaboradores ativos</th></tr></thead>
+            <tbody>
+              {resumo.por_posto.map((p) => (
+                <tr key={p.posto_id}>
+                  <td><strong>{p.posto}</strong></td><td>{p.sigla || '—'}</td>
+                  <td>{p.contrato_ref || '—'}</td>
+                  <td>{p.valor_reembolso || <em style={{ opacity: .6 }}>a repactuar</em>}</td>
+                  <td>{p.colaboradores_ativos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -561,34 +563,36 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
                 </ul>)}
             </div>)}
           {historico === 'carregando' && <p className="explica">Carregando histórico…</p>}
-          <table className="rh-tabela">
-            <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
-              <th>Na idade?</th><th>Docs</th></tr></thead>
-            <tbody>
-              {(b.criancas || []).map((c) => (
-                <tr key={c.id}>
-                  <td>{c.nome}</td><td>{c.data_nascimento}</td>
-                  <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
-                  <td>{c.parentesco}</td>
-                  {/* TRÊS estados, não dois (incidente 2026-07-30): data que
-                      não dá para ler é dado a conferir, NÃO "passou da
-                      idade". Mostrar as duas coisas como ❌ levaria o RH a
-                      indeferir quem tem direito. */}
-                  <td>{c.idade_desconhecida
-                    ? <span title="A data de nascimento não pôde ser lida — confira o cadastro.">
-                        ⚠️ conferir data</span>
-                    : c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
-                  <td>
-                    {c.tem_certidao
-                      ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
-                      : <span>⚠️ sem certidão</span>}
-                    {c.tem_guarda &&
-                      <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Criança</th><th>Nascimento</th><th>Idade</th><th>Vínculo</th>
+                <th>Na idade?</th><th>Docs</th></tr></thead>
+              <tbody>
+                {(b.criancas || []).map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.nome}</td><td>{c.data_nascimento}</td>
+                    <td>{c.idade_anos != null ? `${c.idade_anos}a ${c.idade_meses}m` : '—'}</td>
+                    <td>{c.parentesco}</td>
+                    {/* TRÊS estados, não dois (incidente 2026-07-30): data que
+                        não dá para ler é dado a conferir, NÃO "passou da
+                        idade". Mostrar as duas coisas como ❌ levaria o RH a
+                        indeferir quem tem direito. */}
+                    <td>{c.idade_desconhecida
+                      ? <span title="A data de nascimento não pôde ser lida — confira o cadastro.">
+                          ⚠️ conferir data</span>
+                      : c.elegivel_idade ? '✅' : '❌ passou de 5a11m'}</td>
+                    <td>
+                      {c.tem_certidao
+                        ? <button className="btn-link" onClick={() => verDocCrianca(b, c, 'certidao')}>📄 certidão</button>
+                        : <span>⚠️ sem certidão</span>}
+                      {c.tem_guarda &&
+                        <> · <button className="btn-link" onClick={() => verDocCrianca(b, c, 'guarda')}>guarda</button></>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {/* O documento aparece AQUI, logo abaixo das crianças — perto do
               botão que o abriu. Antes ia para uma aba nova, e conferir a data
               de nascimento na certidão obrigava a trocar de aba a cada

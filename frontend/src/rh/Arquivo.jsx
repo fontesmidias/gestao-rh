@@ -161,37 +161,39 @@ export default function Arquivo() {
       {!dados ? <p>Carregando…</p> : pessoas.length === 0 ? (
         <p className="explica centro">Ninguém encontrado com esses filtros.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead>
-            <tr>
-              <th><input type="checkbox" className="check-slot" checked={todosMarcados}
-                         onChange={(e) => setSel(e.target.checked ? new Set(pessoas.map((p) => p.id)) : new Set())} /></th>
-              <th>Pessoa</th><th>Posto</th><th>Cargo</th><th>Situação</th>
-              <th>Dossiê</th><th>Assinados</th><th>Aprovados</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pessoas.map((p) => (
-              <tr key={p.id}>
-                <td><input type="checkbox" className="check-slot" checked={sel.has(p.id)}
-                           onChange={(e) => setSel((s) => {
-                             const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n
-                           })} /></td>
-                <td><strong>{p.nome_completo}</strong><br /><small>{p.cpf}</small></td>
-                <td>{p.posto_nome || '—'}</td>
-                <td>{p.cargo_funcao || '—'}</td>
-                <td>{p.situacao}</td>
-                <td>{p.tem_dossie
-                  ? <button className="btn-link" title={p.dossie_gerado_em ? `Gerado em ${fmtData(p.dossie_gerado_em)}` : ''}
-                            onClick={() => baixarUm(api.arquivoDossie(p.id), `dossie-${p.nome_completo}.pdf`)}>⬇ baixar</button>
-                  : '—'}</td>
-                <td>{p.assinados}</td>
-                <td>{p.aprovados}</td>
-                <td></td>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead>
+              <tr>
+                <th><input type="checkbox" className="check-slot" checked={todosMarcados}
+                           onChange={(e) => setSel(e.target.checked ? new Set(pessoas.map((p) => p.id)) : new Set())} /></th>
+                <th>Pessoa</th><th>Posto</th><th>Cargo</th><th>Situação</th>
+                <th>Dossiê</th><th>Assinados</th><th>Aprovados</th><th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pessoas.map((p) => (
+                <tr key={p.id}>
+                  <td><input type="checkbox" className="check-slot" checked={sel.has(p.id)}
+                             onChange={(e) => setSel((s) => {
+                               const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n
+                             })} /></td>
+                  <td><strong>{p.nome_completo}</strong><br /><small>{p.cpf}</small></td>
+                  <td>{p.posto_nome || '—'}</td>
+                  <td>{p.cargo_funcao || '—'}</td>
+                  <td>{p.situacao}</td>
+                  <td>{p.tem_dossie
+                    ? <button className="btn-link" title={p.dossie_gerado_em ? `Gerado em ${fmtData(p.dossie_gerado_em)}` : ''}
+                              onClick={() => baixarUm(api.arquivoDossie(p.id), `dossie-${p.nome_completo}.pdf`)}>⬇ baixar</button>
+                    : '—'}</td>
+                  <td>{p.assinados}</td>
+                  <td>{p.aprovados}</td>
+                  <td></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </main>
   )

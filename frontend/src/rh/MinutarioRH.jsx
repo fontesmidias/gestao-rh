@@ -55,24 +55,26 @@ export default function MinutarioRH() {
       {modelos.length === 0
         ? <p className="explica">Nenhum modelo salvo ainda. Componha uma mensagem e salve como modelo.</p>
         : (
-          <table className="rh-tabela">
-            <thead><tr><th>Título</th><th>Meio</th><th>Tags</th><th>Status</th><th></th></tr></thead>
-            <tbody>{modelos.map((m) => (
-              <tr key={m.id}>
-                <td><strong>{m.titulo}</strong></td>
-                <td>{(MEIOS.find(([v]) => v === m.meio) || [null, m.meio])[1]}</td>
-                <td>{m.tags.map((t) => (
-                  <span key={t.id} className="chip" style={{ '--chip-cor': t.cor || undefined }}>{t.nome}</span>
-                ))}</td>
-                <td>{m.ativo ? 'Ativo' : <em>Inativo</em>}</td>
-                <td>
-                  <button className="btn-link" onClick={() => setEditando(m)}>editar</button>
-                  {' · '}
-                  <button className="btn-link" onClick={() => excluir(m)}>excluir</button>
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Título</th><th>Meio</th><th>Tags</th><th>Status</th><th></th></tr></thead>
+              <tbody>{modelos.map((m) => (
+                <tr key={m.id}>
+                  <td><strong>{m.titulo}</strong></td>
+                  <td>{(MEIOS.find(([v]) => v === m.meio) || [null, m.meio])[1]}</td>
+                  <td>{m.tags.map((t) => (
+                    <span key={t.id} className="chip" style={{ '--chip-cor': t.cor || undefined }}>{t.nome}</span>
+                  ))}</td>
+                  <td>{m.ativo ? 'Ativo' : <em>Inativo</em>}</td>
+                  <td>
+                    <button className="btn-link" onClick={() => setEditando(m)}>editar</button>
+                    {' · '}
+                    <button className="btn-link" onClick={() => excluir(m)}>excluir</button>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         )}
 
       {compondo && (

@@ -69,25 +69,27 @@ function Editor() {
       {!provas ? <p>Carregando…</p> : provas.length === 0 ? (
         <p className="explica centro">Nenhuma prova ainda. Crie a primeira.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Título</th><th>Cargo</th><th>Questões</th><th>Tempo</th><th>Ativa</th><th></th></tr></thead>
-          <tbody>
-            {provas.map((p) => (
-              <tr key={p.id}>
-                <td><strong>{p.titulo}</strong></td>
-                <td>{p.cargo || '— genérica'}</td>
-                <td>{p.qtd_questoes} ({p.qtd_objetivas} obj · {p.qtd_discursivas} disc)</td>
-                <td>{Math.round(p.tempo_segundos / 60)} min</td>
-                <td>{p.ativa ? '✅' : '🚫'}</td>
-                <td className="acoes-candidato">
-                  <button className="btn-secundario btn-mini" onClick={() => abrir(p.id)}>Editar</button>
-                  <button className="btn-secundario btn-mini" onClick={() => duplicar(p)}>Duplicar</button>
-                  <button className="btn-link" style={{ color: '#d9534f' }} onClick={() => excluir(p)}>Excluir</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Título</th><th>Cargo</th><th>Questões</th><th>Tempo</th><th>Ativa</th><th></th></tr></thead>
+            <tbody>
+              {provas.map((p) => (
+                <tr key={p.id}>
+                  <td><strong>{p.titulo}</strong></td>
+                  <td>{p.cargo || '— genérica'}</td>
+                  <td>{p.qtd_questoes} ({p.qtd_objetivas} obj · {p.qtd_discursivas} disc)</td>
+                  <td>{Math.round(p.tempo_segundos / 60)} min</td>
+                  <td>{p.ativa ? '✅' : '🚫'}</td>
+                  <td className="acoes-candidato">
+                    <button className="btn-secundario btn-mini" onClick={() => abrir(p.id)}>Editar</button>
+                    <button className="btn-secundario btn-mini" onClick={() => duplicar(p)}>Duplicar</button>
+                    <button className="btn-link" style={{ color: '#d9534f' }} onClick={() => excluir(p)}>Excluir</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -140,7 +142,7 @@ function EditorProva({ prova, aoVoltar, aoSalvarMeta }) {
     <>
       <div className="rh-card rh-lote">
         <button className="btn-link" onClick={aoVoltar}>← Voltar às provas</button>
-        <span className="dash-espaco" style={{ flex: 1 }} />
+        <span className="dash-espaco" />
         <button className="btn-principal btn-mini" onClick={gerarLink}>🔗 Gerar link de aplicação</button>
       </div>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
@@ -296,7 +298,7 @@ function MontarDoBanco({ provaId, aoFechar, aoErro }) {
                 onClick={() => setModo('manual')}>Escolher itens</button>
         <button className={`btn-mini ${modo === 'sorteio' ? 'btn-principal' : 'btn-secundario'}`}
                 onClick={() => setModo('sorteio')}>Sortear</button>
-        <span className="dash-espaco" style={{ flex: 1 }} />
+        <span className="dash-espaco" />
         <button className="btn-link" onClick={aoFechar}>cancelar</button>
       </div>
 
@@ -523,16 +525,18 @@ function RelatorioComportamento({ c }) {
         : <span className="chip" style={{ '--chip-cor': '#d9534f' }}>⚠️ requer atenção</span>}</h3>
       <p className="explica">Registrado durante a prova — <strong>indício</strong>, não prova de
         fraude. {c.total_eventos} evento(s) capturado(s).</p>
-      <table className="rh-tabela">
-        <tbody>
-          {linhas.map(([rot, val, alerta]) => (
-            <tr key={rot}>
-              <td>{rot}</td>
-              <td style={{ fontWeight: 700, color: alerta ? '#d9534f' : 'inherit' }}>{val ?? 0}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="dash-scroll">
+        <table className="rh-tabela">
+          <tbody>
+            {linhas.map(([rot, val, alerta]) => (
+              <tr key={rot}>
+                <td>{rot}</td>
+                <td style={{ fontWeight: 700, color: alerta ? '#d9534f' : 'inherit' }}>{val ?? 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -568,7 +572,7 @@ function Correcao({ aplicacao, aoVoltar }) {
     <>
       <div className="rh-card rh-lote">
         <button className="btn-link" onClick={aoVoltar}>← Voltar às aplicações</button>
-        <span className="dash-espaco" style={{ flex: 1 }} />
+        <span className="dash-espaco" />
         <span className="explica" style={{ margin: 0 }}>Objetivas: <strong>{a.nota_objetivas ?? '—'}</strong>
           {' · '}Final: <strong>{salvo ?? '—'}</strong></span>
       </div>

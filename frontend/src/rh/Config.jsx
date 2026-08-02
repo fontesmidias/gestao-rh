@@ -402,54 +402,56 @@ export function Papeis() {
         assinatura e o manifesto do documento (ex.: <em>assina na qualidade de Testemunha</em>).
         Escolha o papel de cada modelo em Modelos de documento. A <strong>ordem</strong> define
         a sequência quando houver mais de um signatário.</p>
-      <table className="rh-tabela">
-        <thead><tr><th>Ordem</th><th>Papel</th><th>Descrição</th><th></th></tr></thead>
-        <tbody>
-          {papeis.map((p) => (
-            <tr key={p.id}>
-              {editando?.id === p.id ? (
-                <>
-                  <td><input style={{ maxWidth: 70 }} inputMode="numeric" value={editando.ordem}
-                             onChange={(e) => setEditando({ ...editando, ordem: e.target.value })} /></td>
-                  <td><input value={editando.nome}
-                             onChange={(e) => setEditando({ ...editando, nome: e.target.value })} /></td>
-                  <td><input value={editando.descricao}
-                             onChange={(e) => setEditando({ ...editando, descricao: e.target.value })} /></td>
-                  <td>
-                    <button className="btn-principal btn-mini" onClick={async () => {
-                      setMsg(null)
-                      try {
-                        await api.editarPapel(p.id, { nome: editando.nome.trim(),
-                          descricao: editando.descricao.trim() || null,
-                          ordem: parseInt(editando.ordem, 10) || 0 })
-                        setEditando(null); await recarregar()
-                      } catch (e) {
-                        setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
-                      }
-                    }}>Salvar</button>
-                    <button className="btn-link" onClick={() => setEditando(null)}>cancelar</button>
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td>{p.ordem}</td>
-                  <td><strong>{p.nome}</strong></td>
-                  <td><small>{p.descricao || '—'}</small></td>
-                  <td>
-                    <button className="btn-secundario btn-mini"
-                            onClick={() => setEditando({ id: p.id, nome: p.nome,
-                              descricao: p.descricao || '', ordem: String(p.ordem) })}>Editar</button>
-                    <button className="btn-link" onClick={async () => {
-                      if (!window.confirm(`Excluir o papel "${p.nome}"? Ele vai para a lixeira.`)) return
-                      await api.excluirPapel(p.id); await recarregar()
-                    }}>excluir</button>
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="dash-scroll">
+        <table className="rh-tabela">
+          <thead><tr><th>Ordem</th><th>Papel</th><th>Descrição</th><th></th></tr></thead>
+          <tbody>
+            {papeis.map((p) => (
+              <tr key={p.id}>
+                {editando?.id === p.id ? (
+                  <>
+                    <td><input style={{ maxWidth: 70 }} inputMode="numeric" value={editando.ordem}
+                               onChange={(e) => setEditando({ ...editando, ordem: e.target.value })} /></td>
+                    <td><input value={editando.nome}
+                               onChange={(e) => setEditando({ ...editando, nome: e.target.value })} /></td>
+                    <td><input value={editando.descricao}
+                               onChange={(e) => setEditando({ ...editando, descricao: e.target.value })} /></td>
+                    <td>
+                      <button className="btn-principal btn-mini" onClick={async () => {
+                        setMsg(null)
+                        try {
+                          await api.editarPapel(p.id, { nome: editando.nome.trim(),
+                            descricao: editando.descricao.trim() || null,
+                            ordem: parseInt(editando.ordem, 10) || 0 })
+                          setEditando(null); await recarregar()
+                        } catch (e) {
+                          setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+                        }
+                      }}>Salvar</button>
+                      <button className="btn-link" onClick={() => setEditando(null)}>cancelar</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>{p.ordem}</td>
+                    <td><strong>{p.nome}</strong></td>
+                    <td><small>{p.descricao || '—'}</small></td>
+                    <td>
+                      <button className="btn-secundario btn-mini"
+                              onClick={() => setEditando({ id: p.id, nome: p.nome,
+                                descricao: p.descricao || '', ordem: String(p.ordem) })}>Editar</button>
+                      <button className="btn-link" onClick={async () => {
+                        if (!window.confirm(`Excluir o papel "${p.nome}"? Ele vai para a lixeira.`)) return
+                        await api.excluirPapel(p.id); await recarregar()
+                      }}>excluir</button>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {!novo ? (
         <button className="btn-secundario" style={{ marginTop: '.75rem' }}
                 onClick={() => setNovo({ nome: '', descricao: '', ordem: String(papeis.length + 1) })}>
@@ -494,28 +496,30 @@ function Lixeira() {
       {dados.itens.length === 0
         ? <p className="explica">A lixeira está vazia.</p>
         : (
-          <table className="rh-tabela">
-            <thead><tr><th>Tipo</th><th>Registro</th><th>Excluído por</th><th>Quando</th><th>Ações</th></tr></thead>
-            <tbody>
-              {dados.itens.map((i) => (
-                <tr key={i.id}>
-                  <td>{ENTIDADES[i.entidade] || i.entidade}</td>
-                  <td><strong>{i.rotulo}</strong></td>
-                  <td>{i.ator || '—'}</td>
-                  <td>{new Date(i.apagado_em).toLocaleString('pt-BR')}</td>
-                  <td><button className="btn-secundario btn-mini" onClick={async () => {
-                    setMsg(null)
-                    try { await api.lixeiraRestaurar(i.id); setMsg({ tipo: 'ok', texto: `"${i.rotulo}" restaurado.` }); carregar() }
-                    catch (e) {
-                      setMsg({ tipo: 'erro', texto: e.detail === 'registro_ja_existe'
-                        ? 'Já existe um registro com esse identificador (talvez recriado à mão).'
-                        : 'Não foi possível restaurar.' })
-                    }
-                  }}>♻️ Restaurar</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Tipo</th><th>Registro</th><th>Excluído por</th><th>Quando</th><th>Ações</th></tr></thead>
+              <tbody>
+                {dados.itens.map((i) => (
+                  <tr key={i.id}>
+                    <td>{ENTIDADES[i.entidade] || i.entidade}</td>
+                    <td><strong>{i.rotulo}</strong></td>
+                    <td>{i.ator || '—'}</td>
+                    <td>{new Date(i.apagado_em).toLocaleString('pt-BR')}</td>
+                    <td><button className="btn-secundario btn-mini" onClick={async () => {
+                      setMsg(null)
+                      try { await api.lixeiraRestaurar(i.id); setMsg({ tipo: 'ok', texto: `"${i.rotulo}" restaurado.` }); carregar() }
+                      catch (e) {
+                        setMsg({ tipo: 'erro', texto: e.detail === 'registro_ja_existe'
+                          ? 'Já existe um registro com esse identificador (talvez recriado à mão).'
+                          : 'Não foi possível restaurar.' })
+                      }
+                    }}>♻️ Restaurar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       <div className="linha2" style={{ alignItems: 'end', marginTop: '.6rem' }}>
         <label className="campo"><span className="rotulo">Prazo de retenção (dias)</span>
@@ -669,83 +673,85 @@ function Equipe() {
       <h3>Equipe do RH</h3>
       <p className="explica">Quem pode entrar no painel. Em vez de excluir, desative o acesso —
         o histórico de auditoria do usuário é preservado.</p>
-      <table className="rh-tabela">
-        <thead><tr><th>Nome</th><th>E-mail (login)</th><th>Situação</th><th></th></tr></thead>
-        <tbody>
-          {usuarios.map((u) => (
-            <tr key={u.id} style={u.ativo ? {} : { opacity: .55 }}>
-              <td>
-                {editando?.id === u.id ? (
-                  <input value={editando.nome}
-                         onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
-                ) : <><strong>{u.nome}</strong>{u.sou_eu && <em> (você)</em>}</>}
-              </td>
-              <td>
-                {editando?.id === u.id ? (
-                  <input type="email" value={editando.email}
-                         onChange={(e) => setEditando({ ...editando, email: e.target.value })} />
-                ) : u.email}
-              </td>
-              <td>{u.ativo ? 'Ativo' : 'Desativado'}</td>
-              <td>
-                {editando?.id === u.id ? (
-                  <>
-                    <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
-                      setMsg(null); setSalvando(true)
-                      try {
-                        await api.editarUsuario(u.id, { nome: editando.nome.trim(),
-                                                        email: editando.email.trim() })
-                        setEditando(null)
-                        setMsg({ tipo: 'ok', texto: 'Usuário atualizado.' })
-                        await recarregar()
-                      } catch (e) { setMsg({ tipo: 'erro', texto: erroEquipe(e) }) }
-                      finally { setSalvando(false) }
-                    }}>{salvando ? 'Salvando…' : 'Salvar'}</button>
-                    <button className="btn-link" onClick={() => setEditando(null)}>cancelar</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="btn-secundario btn-mini"
-                            onClick={() => { setEditando({ id: u.id, nome: u.nome, email: u.email }); setSenhaDe(null) }}>
-                      Editar</button>
-                    <button className="btn-secundario btn-mini"
-                            onClick={() => { setSenhaDe(senhaDe === u.id ? null : u.id); setNovaSenha(''); setEditando(null) }}>
-                      Redefinir senha</button>
-                    {!u.sou_eu && (
-                      <button className={u.ativo ? 'btn-rejeitar btn-mini' : 'btn-principal btn-mini'}
+      <div className="dash-scroll">
+        <table className="rh-tabela">
+          <thead><tr><th>Nome</th><th>E-mail (login)</th><th>Situação</th><th></th></tr></thead>
+          <tbody>
+            {usuarios.map((u) => (
+              <tr key={u.id} style={u.ativo ? {} : { opacity: .55 }}>
+                <td>
+                  {editando?.id === u.id ? (
+                    <input value={editando.nome}
+                           onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
+                  ) : <><strong>{u.nome}</strong>{u.sou_eu && <em> (você)</em>}</>}
+                </td>
+                <td>
+                  {editando?.id === u.id ? (
+                    <input type="email" value={editando.email}
+                           onChange={(e) => setEditando({ ...editando, email: e.target.value })} />
+                  ) : u.email}
+                </td>
+                <td>{u.ativo ? 'Ativo' : 'Desativado'}</td>
+                <td>
+                  {editando?.id === u.id ? (
+                    <>
+                      <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+                        setMsg(null); setSalvando(true)
+                        try {
+                          await api.editarUsuario(u.id, { nome: editando.nome.trim(),
+                                                          email: editando.email.trim() })
+                          setEditando(null)
+                          setMsg({ tipo: 'ok', texto: 'Usuário atualizado.' })
+                          await recarregar()
+                        } catch (e) { setMsg({ tipo: 'erro', texto: erroEquipe(e) }) }
+                        finally { setSalvando(false) }
+                      }}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+                      <button className="btn-link" onClick={() => setEditando(null)}>cancelar</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="btn-secundario btn-mini"
+                              onClick={() => { setEditando({ id: u.id, nome: u.nome, email: u.email }); setSenhaDe(null) }}>
+                        Editar</button>
+                      <button className="btn-secundario btn-mini"
+                              onClick={() => { setSenhaDe(senhaDe === u.id ? null : u.id); setNovaSenha(''); setEditando(null) }}>
+                        Redefinir senha</button>
+                      {!u.sou_eu && (
+                        <button className={u.ativo ? 'btn-rejeitar btn-mini' : 'btn-principal btn-mini'}
+                                onClick={async () => {
+                                  setMsg(null)
+                                  try {
+                                    await api.editarUsuario(u.id, { ativo: !u.ativo })
+                                    setMsg({ tipo: 'ok', texto: u.ativo
+                                      ? `Acesso de ${u.nome} desativado.`
+                                      : `Acesso de ${u.nome} reativado.` })
+                                    await recarregar()
+                                  } catch (e) { setMsg({ tipo: 'erro', texto: erroEquipe(e) }) }
+                                }}>{u.ativo ? 'Desativar' : 'Reativar'}</button>
+                      )}
+                    </>
+                  )}
+                  {senhaDe === u.id && (
+                    <div className="rejeicao">
+                      <InputSenha placeholder="Nova senha (mín. 8 caracteres)"
+                             value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
+                      <button className="btn-principal btn-mini" disabled={novaSenha.length < 8}
                               onClick={async () => {
                                 setMsg(null)
                                 try {
-                                  await api.editarUsuario(u.id, { ativo: !u.ativo })
-                                  setMsg({ tipo: 'ok', texto: u.ativo
-                                    ? `Acesso de ${u.nome} desativado.`
-                                    : `Acesso de ${u.nome} reativado.` })
-                                  await recarregar()
+                                  await api.redefinirSenhaUsuario(u.id, novaSenha)
+                                  setSenhaDe(null); setNovaSenha('')
+                                  setMsg({ tipo: 'ok', texto: `Senha de ${u.nome} redefinida — informe a nova senha pessoalmente.` })
                                 } catch (e) { setMsg({ tipo: 'erro', texto: erroEquipe(e) }) }
-                              }}>{u.ativo ? 'Desativar' : 'Reativar'}</button>
-                    )}
-                  </>
-                )}
-                {senhaDe === u.id && (
-                  <div className="rejeicao">
-                    <InputSenha placeholder="Nova senha (mín. 8 caracteres)"
-                           value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} />
-                    <button className="btn-principal btn-mini" disabled={novaSenha.length < 8}
-                            onClick={async () => {
-                              setMsg(null)
-                              try {
-                                await api.redefinirSenhaUsuario(u.id, novaSenha)
-                                setSenhaDe(null); setNovaSenha('')
-                                setMsg({ tipo: 'ok', texto: `Senha de ${u.nome} redefinida — informe a nova senha pessoalmente.` })
-                              } catch (e) { setMsg({ tipo: 'erro', texto: erroEquipe(e) }) }
-                            }}>Confirmar</button>
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                              }}>Confirmar</button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {!novo ? (
         <button className="btn-secundario" style={{ marginTop: '.75rem' }}
@@ -1365,12 +1371,14 @@ function Empresas() {
       <p className="explica">Empregadoras que assinam a carteira. No export do Tirvu a
         empresa é sempre a Green House (ID 1) — não precisa cadastrar ID aqui.</p>
       {empresas.length > 0 && (
-        <table className="rh-tabela">
-          <thead><tr><th>Razão social</th><th>CNPJ</th></tr></thead>
-          <tbody>{empresas.map((e) => (
-            <tr key={e.id}><td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td></tr>
-          ))}</tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Razão social</th><th>CNPJ</th></tr></thead>
+            <tbody>{empresas.map((e) => (
+              <tr key={e.id}><td><strong>{e.razao_social}</strong></td><td>{e.cnpj || '—'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
       )}
       <div className="linha2" style={{ alignItems: 'end', marginTop: '.6rem' }}>
         <label className="campo"><span className="rotulo">Razão social</span>
@@ -1428,20 +1436,22 @@ function CargosTirvu() {
       {cargos.length === 0
         ? <p className="explica">Nenhum cargo cadastrado na base ainda.</p>
         : (
-          <table className="rh-tabela">
-            <thead><tr><th>Cargo</th><th>Pessoas</th><th>ID Tirvu</th></tr></thead>
-            <tbody>{cargos.map((c) => (
-              <tr key={c.cargo_normalizado}>
-                <td><strong>{c.cargo_rotulo}</strong></td>
-                <td>{c.qtd}</td>
-                <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 50"
-                           value={edicao[c.cargo_normalizado] ?? c.tirvu_id ?? ''}
-                           onChange={(ev) => setEdicao({ ...edicao, [c.cargo_normalizado]: ev.target.value })}
-                           onBlur={() => salvar(c)}
-                           className={c.tirvu_id ? '' : 'campo-pendente'} /></td>
-              </tr>
-            ))}</tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>Cargo</th><th>Pessoas</th><th>ID Tirvu</th></tr></thead>
+              <tbody>{cargos.map((c) => (
+                <tr key={c.cargo_normalizado}>
+                  <td><strong>{c.cargo_rotulo}</strong></td>
+                  <td>{c.qtd}</td>
+                  <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 50"
+                             value={edicao[c.cargo_normalizado] ?? c.tirvu_id ?? ''}
+                             onChange={(ev) => setEdicao({ ...edicao, [c.cargo_normalizado]: ev.target.value })}
+                             onBlur={() => salvar(c)}
+                             className={c.tirvu_id ? '' : 'campo-pendente'} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         )}
       <Msg msg={msg} />
     </div>
@@ -1681,25 +1691,27 @@ function BackfillEnderecos() {
                   onClick={() => aplicar(seguros)}>
             ✓ Aplicar as {seguros.length} propostas não editadas</button>
         )}
-        <table className="rh-tabela">
-          <thead><tr><th>Pessoa</th><th>Original</th><th>Logradouro</th><th>Nº</th><th>Compl.</th><th></th></tr></thead>
-          <tbody>
-            {dados.itens.map((i) => (
-              <tr key={i.candidato_id}>
-                <td><strong>{i.nome}</strong></td>
-                <td style={{ maxWidth: 220 }}>{i.original}</td>
-                <td><input value={valor(i, 'logradouro')} style={{ minWidth: 150 }}
-                           onChange={(e) => editar(i, 'logradouro', e.target.value)} /></td>
-                <td><input value={valor(i, 'numero')} style={{ width: 70 }}
-                           onChange={(e) => editar(i, 'numero', e.target.value)} /></td>
-                <td><input value={valor(i, 'complemento')} style={{ width: 100 }}
-                           onChange={(e) => editar(i, 'complemento', e.target.value)} /></td>
-                <td><button className="btn-secundario btn-mini"
-                            onClick={() => aplicar([i])}>✓ Aplicar</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Pessoa</th><th>Original</th><th>Logradouro</th><th>Nº</th><th>Compl.</th><th></th></tr></thead>
+            <tbody>
+              {dados.itens.map((i) => (
+                <tr key={i.candidato_id}>
+                  <td><strong>{i.nome}</strong></td>
+                  <td style={{ maxWidth: 220 }}>{i.original}</td>
+                  <td><input value={valor(i, 'logradouro')} style={{ minWidth: 150 }}
+                             onChange={(e) => editar(i, 'logradouro', e.target.value)} /></td>
+                  <td><input value={valor(i, 'numero')} style={{ width: 70 }}
+                             onChange={(e) => editar(i, 'numero', e.target.value)} /></td>
+                  <td><input value={valor(i, 'complemento')} style={{ width: 100 }}
+                             onChange={(e) => editar(i, 'complemento', e.target.value)} /></td>
+                  <td><button className="btn-secundario btn-mini"
+                              onClick={() => aplicar([i])}>✓ Aplicar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <button className="btn-link" onClick={() => setAberto(false)}>ocultar</button>
       </>)}
       <Msg msg={msg} />

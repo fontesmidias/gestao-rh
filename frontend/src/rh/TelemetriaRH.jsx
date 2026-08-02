@@ -167,23 +167,25 @@ export default function TelemetriaRH() {
       {resumo?.erros?.length > 0 && (
         <div className="rh-card">
           <h3>🔴 Erros de tela — o que está quebrando ({resumo.erros.length})</h3>
-          <table className="rh-tabela">
-            <thead><tr>
-              <th>Mensagem</th><th>Página</th><th>Vezes</th>
-              <th>Sessões</th><th>Última</th>
-            </tr></thead>
-            <tbody>
-              {resumo.erros.map((e, i) => (
-                <tr key={i}>
-                  <td className="dash-quebra"><code>{e.mensagem || e.evento}</code></td>
-                  <td>{e.pagina || '—'}</td>
-                  <td><strong>{e.ocorrencias}</strong></td>
-                  <td>{e.pessoas}</td>
-                  <td>{fmtDataHora(e.ultima)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr>
+                <th>Mensagem</th><th>Página</th><th>Vezes</th>
+                <th>Sessões</th><th>Última</th>
+              </tr></thead>
+              <tbody>
+                {resumo.erros.map((e, i) => (
+                  <tr key={i}>
+                    <td className="dash-quebra"><code>{e.mensagem || e.evento}</code></td>
+                    <td>{e.pagina || '—'}</td>
+                    <td><strong>{e.ocorrencias}</strong></td>
+                    <td>{e.pessoas}</td>
+                    <td>{fmtDataHora(e.ultima)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="explica">
             <strong>Sessões</strong> é quanta gente diferente bateu no mesmo erro.
             Um número alto significa que não é caso isolado.
@@ -195,17 +197,19 @@ export default function TelemetriaRH() {
       {resumo?.friccao?.length > 0 && (
         <div className="rh-card">
           <h3>🟠 Onde as pessoas travam ({resumo.friccao.length})</h3>
-          <table className="rh-tabela">
-            <thead><tr><th>O que aconteceu</th><th>Página</th><th>Vezes</th></tr></thead>
-            <tbody>
-              {resumo.friccao.map((f, i) => (
-                <tr key={i}>
-                  <td>{f.evento}</td><td>{f.pagina || '—'}</td>
-                  <td><strong>{f.ocorrencias}</strong></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr><th>O que aconteceu</th><th>Página</th><th>Vezes</th></tr></thead>
+              <tbody>
+                {resumo.friccao.map((f, i) => (
+                  <tr key={i}>
+                    <td>{f.evento}</td><td>{f.pagina || '—'}</td>
+                    <td><strong>{f.ocorrencias}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -214,21 +218,23 @@ export default function TelemetriaRH() {
       {resumo?.lentas?.length > 0 && (
         <div className="rh-card">
           <h3>🟣 O que está lento no aparelho das pessoas ({resumo.lentas.length})</h3>
-          <table className="rh-tabela">
-            <thead><tr>
-              <th>Página</th><th>Tempo típico</th><th>Pior caso</th><th>Amostras</th>
-            </tr></thead>
-            <tbody>
-              {resumo.lentas.map((l, i) => (
-                <tr key={i}>
-                  <td className="dash-quebra">{l.pagina || '—'}</td>
-                  <td><strong>{(l.mediana_ms / 1000).toFixed(1)}s</strong></td>
-                  <td>{(l.pior_ms / 1000).toFixed(1)}s</td>
-                  <td>{l.amostras}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr>
+                <th>Página</th><th>Tempo típico</th><th>Pior caso</th><th>Amostras</th>
+              </tr></thead>
+              <tbody>
+                {resumo.lentas.map((l, i) => (
+                  <tr key={i}>
+                    <td className="dash-quebra">{l.pagina || '—'}</td>
+                    <td><strong>{(l.mediana_ms / 1000).toFixed(1)}s</strong></td>
+                    <td>{(l.pior_ms / 1000).toFixed(1)}s</td>
+                    <td>{l.amostras}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="explica">
             <strong>Tempo típico</strong> é a mediana — o que a maioria das pessoas
             realmente espera. A média seria distorcida por um único caso lento.

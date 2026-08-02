@@ -69,25 +69,27 @@ export default function TelemetriaPessoa({ candidatoId, talentoId }) {
             &ldquo;não consigo enviar meus documentos&rdquo; com fato, e não com
             suposição.
           </p>
-          <table className="rh-tabela">
-            <thead><tr>
-              <th>Quando</th><th>O que aconteceu</th><th>Onde</th><th>Detalhe</th>
-            </tr></thead>
-            <tbody>
-              {eventos.map((e) => (
-                <tr key={e.id}>
-                  <td>{fmtDataHora(e.quando)}</td>
-                  <td>{ICONE[e.tipo] || ''} {EM_PORTUGUES[e.evento] || e.evento}</td>
-                  <td className="dash-quebra">{e.pagina || '—'}</td>
-                  <td className="dash-quebra">
-                    {e.detalhe?.mensagem && <code>{e.detalhe.mensagem}</code>}
-                    {e.detalhe?.tipo && <span>documento: {e.detalhe.tipo}</span>}
-                    {e.duracao_ms > 0 && <span> {(e.duracao_ms / 1000).toFixed(1)}s</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dash-scroll">
+            <table className="rh-tabela">
+              <thead><tr>
+                <th>Quando</th><th>O que aconteceu</th><th>Onde</th><th>Detalhe</th>
+              </tr></thead>
+              <tbody>
+                {eventos.map((e) => (
+                  <tr key={e.id}>
+                    <td>{fmtDataHora(e.quando)}</td>
+                    <td>{ICONE[e.tipo] || ''} {EM_PORTUGUES[e.evento] || e.evento}</td>
+                    <td className="dash-quebra">{e.pagina || '—'}</td>
+                    <td className="dash-quebra">
+                      {e.detalhe?.mensagem && <code>{e.detalhe.mensagem}</code>}
+                      {e.detalhe?.tipo && <span>documento: {e.detalhe.tipo}</span>}
+                      {e.duracao_ms > 0 && <span> {(e.duracao_ms / 1000).toFixed(1)}s</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </details>

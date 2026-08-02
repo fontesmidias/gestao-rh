@@ -223,64 +223,66 @@ export default function PostosRH() {
         </div>
       )}
 
-      <table className="rh-tabela">
-        <thead><tr>
-          <th style={{ width: 34 }}>
-            <CheckMestre marcado={todosSelecionados} parcial={algunsSelecionados && !todosSelecionados}
-                         onChange={() => marcarTodos(!todosSelecionados)}
-                         title="Selecionar todos os postos visíveis" />
-          </th>
-          <th>Sigla</th><th>Nome</th><th>CNPJ</th><th>ID Tirvu</th><th>Contrato</th>
-          {colunas.map((c) => <th key={c}>{c}</th>)}<th></th></tr></thead>
-        <tbody>
-          {postos.map((p) => {
-            const editando = edit?.id === p.id
-            return (
-              <Fragment key={p.id}>
-                <tr style={p.ativo ? {} : { opacity: .5 }}
-                    className={editando ? 'linha-editando' : ''}>
-                  <td><input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
-                             checked={selecionados.has(p.id)} onChange={() => alternarSel(p.id)}
-                             title="Selecionar para ação em massa" /></td>
-                  <td><strong>{p.sigla || '—'}</strong></td>
-                  <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}
-                    {p.da_direito_creche ? <span title={`Reembolso-creche${p.valor_reembolso_creche ? ': ' + p.valor_reembolso_creche : ''}`}> 🍼</span> : ''}</td>
-                  <td>{p.cnpj || '—'}</td>
-                  <td>{p.tirvu_id
-                    ? p.tirvu_id
-                    : <span style={{ color: 'var(--ambar)' }} title="Sem ID do Tirvu — o export sai vazio nesta coluna">— sem ID</span>}</td>
-                  <td>{p.contrato_ref || '—'}</td>
-                  {colunas.map((c) => <td key={c}>{(p.atributos || {})[c] || '—'}</td>)}
-                  <td className="acoes-candidato">
-                    <button className="btn-secundario btn-mini" onClick={() => editando ? setEdit(null) : setEdit({
-                      ...p, sigla: p.sigla || '', cnpj: p.cnpj || '', tirvu_id: p.tirvu_id || '',
-                      contrato_ref: p.contrato_ref || '',
-                      documentos_kit: p.documentos_kit || [], atributos: p.atributos || {},
-                      da_direito_creche: !!p.da_direito_creche,
-                      valor_reembolso_creche: p.valor_reembolso_creche || '',
-                    })}>{editando ? 'Fechar' : 'Editar'}</button>
-                    {p.ativo && (
-                      <button className="btn-link" onClick={async () => {
-                        if (!window.confirm(`Desativar o posto "${p.nome}"? Ele some das listas de escolha (colaboradores já vinculados seguem intactos).`)) return
-                        await api.excluirPosto(p.id); await recarregar()
-                      }}>desativar</button>
-                    )}
-                  </td>
-                </tr>
-                {editando && (
-                  <tr className="linha-form-inline">
-                    <td colSpan={6 + colunas.length}>
-                      <CamposPosto edit={edit} setEdit={setEdit} docsDisp={docsDisp}
-                                   colunas={colunas} salvar={salvar}
-                                   onCancelar={() => setEdit(null)} />
+      <div className="dash-scroll">
+        <table className="rh-tabela">
+          <thead><tr>
+            <th style={{ width: 34 }}>
+              <CheckMestre marcado={todosSelecionados} parcial={algunsSelecionados && !todosSelecionados}
+                           onChange={() => marcarTodos(!todosSelecionados)}
+                           title="Selecionar todos os postos visíveis" />
+            </th>
+            <th>Sigla</th><th>Nome</th><th>CNPJ</th><th>ID Tirvu</th><th>Contrato</th>
+            {colunas.map((c) => <th key={c}>{c}</th>)}<th></th></tr></thead>
+          <tbody>
+            {postos.map((p) => {
+              const editando = edit?.id === p.id
+              return (
+                <Fragment key={p.id}>
+                  <tr style={p.ativo ? {} : { opacity: .5 }}
+                      className={editando ? 'linha-editando' : ''}>
+                    <td><input type="checkbox" style={{ width: 'auto', minHeight: 0 }}
+                               checked={selecionados.has(p.id)} onChange={() => alternarSel(p.id)}
+                               title="Selecionar para ação em massa" /></td>
+                    <td><strong>{p.sigla || '—'}</strong></td>
+                    <td>{p.nome}{(p.exige_docs_infraero || (p.documentos_kit || []).length) ? ' 🗂️' : ''}
+                      {p.da_direito_creche ? <span title={`Reembolso-creche${p.valor_reembolso_creche ? ': ' + p.valor_reembolso_creche : ''}`}> 🍼</span> : ''}</td>
+                    <td>{p.cnpj || '—'}</td>
+                    <td>{p.tirvu_id
+                      ? p.tirvu_id
+                      : <span style={{ color: 'var(--ambar)' }} title="Sem ID do Tirvu — o export sai vazio nesta coluna">— sem ID</span>}</td>
+                    <td>{p.contrato_ref || '—'}</td>
+                    {colunas.map((c) => <td key={c}>{(p.atributos || {})[c] || '—'}</td>)}
+                    <td className="acoes-candidato">
+                      <button className="btn-secundario btn-mini" onClick={() => editando ? setEdit(null) : setEdit({
+                        ...p, sigla: p.sigla || '', cnpj: p.cnpj || '', tirvu_id: p.tirvu_id || '',
+                        contrato_ref: p.contrato_ref || '',
+                        documentos_kit: p.documentos_kit || [], atributos: p.atributos || {},
+                        da_direito_creche: !!p.da_direito_creche,
+                        valor_reembolso_creche: p.valor_reembolso_creche || '',
+                      })}>{editando ? 'Fechar' : 'Editar'}</button>
+                      {p.ativo && (
+                        <button className="btn-link" onClick={async () => {
+                          if (!window.confirm(`Desativar o posto "${p.nome}"? Ele some das listas de escolha (colaboradores já vinculados seguem intactos).`)) return
+                          await api.excluirPosto(p.id); await recarregar()
+                        }}>desativar</button>
+                      )}
                     </td>
                   </tr>
-                )}
-              </Fragment>
-            )
-          })}
-        </tbody>
-      </table>
+                  {editando && (
+                    <tr className="linha-form-inline">
+                      <td colSpan={6 + colunas.length}>
+                        <CamposPosto edit={edit} setEdit={setEdit} docsDisp={docsDisp}
+                                     colunas={colunas} salvar={salvar}
+                                     onCancelar={() => setEdit(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </main>
   )
 }

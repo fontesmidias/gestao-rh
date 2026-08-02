@@ -113,58 +113,60 @@ function Dash({ aoAbrirPessoa }) {
       </div>
 
       {itens.length === 0 ? <p className="explica centro">Nenhum teste com esses filtros.</p> : (
-        <table className="rh-tabela">
-          <thead><tr><th>Pessoa</th><th>Teste</th><th>Status</th><th>Duração</th>
-            <th>Resultado</th><th>Comportamento</th><th></th></tr></thead>
-          <tbody>
-            {itens.map((i) => {
-              const [rotulo, cor] = STATUS[i.status] || [i.status, '#889']
-              const c = i.comportamento
-              return (
-                <FragmentoLinha key={i.teste_id} aberto={aberto === i.teste_id}>
-                  <tr>
-                    <td>
-                      <strong>{i.nome}</strong><br />
-                      <small>{i.origem === 'admissao' ? `admissão · ${i.contexto}` : `testagem · ${i.contexto}`}</small>
-                    </td>
-                    <td>{NOMES[i.tipo]}</td>
-                    <td><span className="chip" style={{ '--chip-cor': cor }}>{rotulo}</span><br />
-                      <small>{i.concluido_em ? fmtData(i.concluido_em) : i.iniciado_em ? `início ${fmtData(i.iniciado_em)}` : ''}</small></td>
-                    <td>{mmss(i.duracao_s)}</td>
-                    <td>{!i.resumo ? '—' : i.tipo === 'disc'
-                      ? <strong>{i.resumo.perfil}</strong>
-                      : <><strong>{i.resumo.percentual}%</strong> ({i.resumo.faixa})</>}</td>
-                    <td>{!c ? '—' : c.saidas_da_tela > 0 || c.tentativas_print > 0
-                      ? <span title={`${c.saidas_da_tela} saída(s) de tela · ${c.tentativas_print} print(s) · ${c.copiar_colar} copiar/colar`}>
-                          ⚠️ {c.saidas_da_tela} saída(s)</span>
-                      : '✔ sem alertas'}</td>
-                    <td className="acoes-candidato">
-                      <button className="btn-secundario btn-mini"
-                              onClick={() => setAberto(aberto === i.teste_id ? null : i.teste_id)}>
-                        {aberto === i.teste_id ? 'Fechar' : '👁 Detalhes'}</button>
-                      {i.origem === 'admissao' && aoAbrirPessoa && (
-                        <button className="btn-secundario btn-mini" title="Abrir a página do candidato"
-                                onClick={() => aoAbrirPessoa(i.pessoa_id)}>Abrir pessoa</button>
-                      )}
-                      {i.status !== 'pendente' && (
-                        <button className="btn-rejeitar btn-mini"
-                                title="Zera respostas e resultado para a pessoa refazer (o anterior fica na auditoria)"
-                                onClick={() => resetar(i)}>🔁 Resetar</button>
-                      )}
-                    </td>
-                  </tr>
-                  {aberto === i.teste_id && (
-                    <tr className="linha-form-inline">
-                      <td colSpan={7}>
-                        <DetalheTeste item={i} perfis={dados.perfis} />
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Pessoa</th><th>Teste</th><th>Status</th><th>Duração</th>
+              <th>Resultado</th><th>Comportamento</th><th></th></tr></thead>
+            <tbody>
+              {itens.map((i) => {
+                const [rotulo, cor] = STATUS[i.status] || [i.status, '#889']
+                const c = i.comportamento
+                return (
+                  <FragmentoLinha key={i.teste_id} aberto={aberto === i.teste_id}>
+                    <tr>
+                      <td>
+                        <strong>{i.nome}</strong><br />
+                        <small>{i.origem === 'admissao' ? `admissão · ${i.contexto}` : `testagem · ${i.contexto}`}</small>
+                      </td>
+                      <td>{NOMES[i.tipo]}</td>
+                      <td><span className="chip" style={{ '--chip-cor': cor }}>{rotulo}</span><br />
+                        <small>{i.concluido_em ? fmtData(i.concluido_em) : i.iniciado_em ? `início ${fmtData(i.iniciado_em)}` : ''}</small></td>
+                      <td>{mmss(i.duracao_s)}</td>
+                      <td>{!i.resumo ? '—' : i.tipo === 'disc'
+                        ? <strong>{i.resumo.perfil}</strong>
+                        : <><strong>{i.resumo.percentual}%</strong> ({i.resumo.faixa})</>}</td>
+                      <td>{!c ? '—' : c.saidas_da_tela > 0 || c.tentativas_print > 0
+                        ? <span title={`${c.saidas_da_tela} saída(s) de tela · ${c.tentativas_print} print(s) · ${c.copiar_colar} copiar/colar`}>
+                            ⚠️ {c.saidas_da_tela} saída(s)</span>
+                        : '✔ sem alertas'}</td>
+                      <td className="acoes-candidato">
+                        <button className="btn-secundario btn-mini"
+                                onClick={() => setAberto(aberto === i.teste_id ? null : i.teste_id)}>
+                          {aberto === i.teste_id ? 'Fechar' : '👁 Detalhes'}</button>
+                        {i.origem === 'admissao' && aoAbrirPessoa && (
+                          <button className="btn-secundario btn-mini" title="Abrir a página do candidato"
+                                  onClick={() => aoAbrirPessoa(i.pessoa_id)}>Abrir pessoa</button>
+                        )}
+                        {i.status !== 'pendente' && (
+                          <button className="btn-rejeitar btn-mini"
+                                  title="Zera respostas e resultado para a pessoa refazer (o anterior fica na auditoria)"
+                                  onClick={() => resetar(i)}>🔁 Resetar</button>
+                        )}
                       </td>
                     </tr>
-                  )}
-                </FragmentoLinha>
-              )
-            })}
-          </tbody>
-        </table>
+                    {aberto === i.teste_id && (
+                      <tr className="linha-form-inline">
+                        <td colSpan={7}>
+                          <DetalheTeste item={i} perfis={dados.perfis} />
+                        </td>
+                      </tr>
+                    )}
+                  </FragmentoLinha>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -254,37 +256,39 @@ function Links() {
       {!links ? <p>Carregando…</p> : links.length === 0 ? (
         <p className="explica centro">Nenhum link de testagem ainda. Crie o primeiro acima.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead>
-            <tr><th>Link</th><th>Testes</th><th>Situação</th><th>Participantes</th><th>Criado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {links.map((l) => (
-              <tr key={l.id}>
-                <td><strong>{l.nome}</strong><br />
-                  <small style={{ wordBreak: 'break-all' }}>{l.url}</small></td>
-                <td>{[l.tem_disc && '🧭 DISC', l.tem_situacional && '🧩 Situacional']
-                  .filter(Boolean).join(' + ')}</td>
-                <td><span className="chip" style={{ '--chip-cor': l.ativo ? '#0fb257' : '#889' }}>
-                  {l.ativo ? '🟢 Ativo' : '⚪ Desativado'}</span></td>
-                <td>{l.participantes} ({l.concluidos} concluíram)</td>
-                <td>{fmtData(l.criado_em)}</td>
-                <td className="acoes-candidato">
-                  <button className="btn-secundario btn-mini"
-                          title="Copia a URL pública para enviar (WhatsApp/e-mail)"
-                          onClick={(e) => copiar(e, l.url)}>📋 Copiar link</button>
-                  <button className="btn-secundario btn-mini"
-                          title={l.ativo ? 'Ninguém mais consegue entrar por este link até reativar'
-                                         : 'Volta a aceitar participantes'}
-                          onClick={async () => {
-                            await api.testagemEditarLink(l.id, { ativo: !l.ativo })
-                            await recarregar()
-                          }}>{l.ativo ? '⏸ Desativar' : '▶ Ativar'}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead>
+              <tr><th>Link</th><th>Testes</th><th>Situação</th><th>Participantes</th><th>Criado</th><th></th></tr>
+            </thead>
+            <tbody>
+              {links.map((l) => (
+                <tr key={l.id}>
+                  <td><strong>{l.nome}</strong><br />
+                    <small style={{ wordBreak: 'break-all' }}>{l.url}</small></td>
+                  <td>{[l.tem_disc && '🧭 DISC', l.tem_situacional && '🧩 Situacional']
+                    .filter(Boolean).join(' + ')}</td>
+                  <td><span className="chip" style={{ '--chip-cor': l.ativo ? '#0fb257' : '#889' }}>
+                    {l.ativo ? '🟢 Ativo' : '⚪ Desativado'}</span></td>
+                  <td>{l.participantes} ({l.concluidos} concluíram)</td>
+                  <td>{fmtData(l.criado_em)}</td>
+                  <td className="acoes-candidato">
+                    <button className="btn-secundario btn-mini"
+                            title="Copia a URL pública para enviar (WhatsApp/e-mail)"
+                            onClick={(e) => copiar(e, l.url)}>📋 Copiar link</button>
+                    <button className="btn-secundario btn-mini"
+                            title={l.ativo ? 'Ninguém mais consegue entrar por este link até reativar'
+                                           : 'Volta a aceitar participantes'}
+                            onClick={async () => {
+                              await api.testagemEditarLink(l.id, { ativo: !l.ativo })
+                              await recarregar()
+                            }}>{l.ativo ? '⏸ Desativar' : '▶ Ativar'}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
