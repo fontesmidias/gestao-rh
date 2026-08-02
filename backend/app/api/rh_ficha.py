@@ -201,7 +201,14 @@ def editar_secao(
     if secao == "pessoais":
         for campo in ("nome_completo", "email", "celular_whatsapp"):
             if campo in dados:
-                _aplicar(candidato, campo, dados.pop(campo))
+                valor = dados.pop(campo)
+                # Mesma padronização da entrada do candidato: o RH corrige a
+                # ficha por aqui, e sem isto a correção reintroduziria o nome
+                # em caixa alta que o wizard tinha acabado de normalizar.
+                if campo == "nome_completo" and valor:
+                    from app.services.nomes import capitalizar_nome
+                    valor = capitalizar_nome(valor)
+                _aplicar(candidato, campo, valor)
     if secao == "vt-emergencia":
         from app.models.ficha import FichaEmergencia, ValeTransporte
         vt = {k.removeprefix("vt_"): v for k, v in dados.items() if k.startswith("vt_")}

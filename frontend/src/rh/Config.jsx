@@ -366,7 +366,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'emails' && <EmailsConfig />}
       {aba === 'telemetria' && <TelemetriaRH />}
       {aba === 'logs' && <LogsRH />}
-      {aba === 'sistema' && <><Lixeira /><ErrosRecentes /><Auditoria /></>}
+      {aba === 'sistema' && <><VersaoSistema /><Lixeira /><ErrosRecentes /><Auditoria /></>}
     </main>
   )
 }
@@ -470,6 +470,74 @@ export function Papeis() {
         </div>
       )}
       <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Versão do sistema no ar + se o banco acompanhou o código.
+//
+// O Bruno abriu `/api/health` depois de conferir um deploy e leu uma versão de
+// um mês atrás — o marcador estava chumbado à mão e congelado (duas vezes, a
+// segunda por 26 versões). Consertado na origem (`app/versao.py` + teste no
+// CI), faltava o que ele pediu: *"em algum lugar que seja coerente, deva ter a
+// versão do sistema... algo que de fato seja funcional, mas não
+// necessariamente exposto a todo momento"*. Daí ficar AQUI, em Configurações →
+// Sistema, e não no rodapé da sidebar: o rodapé é `space-between` com `nowrap`
+// e já avisa, em comentário próprio, que um terceiro item comprime o nome de
+// quem está logado.
+//
+// Mostra a migração junto porque é a pergunta seguinte de quem confere um
+// deploy: "subiu, mas o banco acompanhou?".
+function VersaoSistema() {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
+
+  const carregar = () => {
+    setErro(null)
+    return api.saude().then(setDados)
+  }
+  // Falha de carga vira ERRO com "tentar de novo", nunca `null` mudo (v2.46):
+  // numa tela cujo propósito é dizer "o sistema está em ordem", silêncio é
+  // indistinguível de "está tudo bem" — o oposto do que ela existe para dizer.
+  useEffect(() => { carregar().catch((e) => setErro(e.amigavel || e.detail || 'não foi possível consultar')) }, [])
+
+  return (
+    <div className="rh-card">
+      <h3>🏷️ Versão do sistema</h3>
+      {erro && (
+        <>
+          <p className="alerta">Não foi possível ler a versão: {erro}</p>
+          <button className="btn-secundario btn-mini" onClick={() => carregar().catch((e) => setErro(e.amigavel || e.detail || 'não foi possível consultar'))}>
+            Tentar de novo</button>
+        </>
+      )}
+      {/* Reserva o lugar enquanto carrega: bloco que some porque está
+          carregando faz o conteúdo abaixo pular na cara de quem já lia (v2.47). */}
+      {!dados && !erro && <p className="explica">Consultando…</p>}
+      {dados && (
+        <>
+          <div className="rh-metricas">
+            <div className="rh-metrica">
+              <strong>v{dados.versao_numero || '—'}</strong>
+              <span>{dados.versao_nome || 'versão no ar'}</span>
+            </div>
+            <div className="rh-metrica">
+              <strong>{dados.migracoes?.em_dia ? '✅ em dia' : '⚠️ atrasado'}</strong>
+              <span>banco de dados</span>
+            </div>
+          </div>
+          {dados.migracoes?.em_dia === false && (
+            <p className="alerta">O banco ficou para trás do código: a migração no
+              código é <code>{dados.migracoes?.no_codigo || '—'}</code> e a aplicada é{' '}
+              <code>{dados.migracoes?.no_banco || '—'}</code>. Rode
+              <strong> alembic upgrade head</strong> no container da API — enquanto
+              isso, telas do painel e o creche podem quebrar.</p>
+          )}
+          <p className="explica">Confira depois de todo deploy. A mesma informação
+            responde em <code>/api/health</code>, sem precisar de login — útil quando
+            o painel não abre.</p>
+        </>
+      )}
     </div>
   )
 }

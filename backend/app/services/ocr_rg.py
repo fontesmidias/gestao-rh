@@ -95,10 +95,19 @@ def sugestoes_do_rg(texto: str) -> dict:
     if idx is not None:
         nomes = [ln for ln in linhas[idx:idx + 5][1:] if _parece_nome(ln)][:2]
         # Padrão histórico do RG: pai na primeira linha, mãe na segunda.
+        #
+        # `capitalizar_nome`, NUNCA `.title()`: o RG vem em CAIXA ALTA, e o
+        # `.title()` do Python devolvia "Maria De Fátima" — o defeito que o
+        # Bruno reclamou em 2026-08-02. Ou seja, o sistema não só tolerava a
+        # capitalização errada: ele a SUGERIA, e o candidato aceitava com um
+        # toque. Consertar aqui é consertar a nascente.
+        from app.services.nomes import capitalizar_nome
+
         if len(nomes) == 2:
-            sug["nome_pai"], sug["nome_mae"] = nomes[0].title(), nomes[1].title()
+            sug["nome_pai"] = capitalizar_nome(nomes[0])
+            sug["nome_mae"] = capitalizar_nome(nomes[1])
         elif len(nomes) == 1:
-            sug["nome_mae"] = nomes[0].title()
+            sug["nome_mae"] = capitalizar_nome(nomes[0])
 
     return sug
 

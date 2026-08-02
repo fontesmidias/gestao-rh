@@ -88,6 +88,97 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Marcador que se atualiza à mão CONGELA — o guarda-corpo é o teste** (v2.54,
+  `app/versao.py` + `tests/test_versao.py`): o `VERSAO_DEPLOY` do
+  `api/health.py` era string chumbada e congelou **duas vezes** — na `v1.50`
+  por vinte versões e, depois de consertarem o campo VIZINHO e escreverem no
+  docstring que a constante era o mau exemplo, de novo na `v2.27` por outras
+  vinte e seis. O Bruno descobriu abrindo `/api/health` após um deploy
+  conferido. **Documentar que algo precisa ser atualizado à mão não funciona**;
+  o que funciona é falhar o build. Hoje a versão vem de `app/versao.py` e o
+  teste a compara com o topo do `CHANGELOG.md` (+ um segundo teste que impede a
+  literal de voltar ao `health.py`). Ao fechar uma versão, atualize os DOIS.
+  Não dá para derivar do CHANGELOG em runtime: o contexto de build da imagem da
+  API é `./backend` e o arquivo mora na RAIZ — leria certo só na máquina de
+  quem desenvolve, o pior dos dois mundos.
+- **Estado de CONTEÚDO e de VISIBILIDADE não podem ser independentes** (v2.54,
+  `TalentosRH.jsx`): `verCurriculo` fazia só `setDoc(...)`, mas o
+  `<VisualizadorArquivo>` mora DENTRO da `FichaTalento`, que só é montada com
+  `aberto === t.id`. Com a ficha fechada — o padrão de toda linha — o clique era
+  **literalmente morto**: baixava o arquivo e não acontecia nada na tela, sem
+  erro nem espera. Pior, o currículo aparecia RETROATIVAMENTE ao abrir a ficha
+  depois. Regra: quem abre um documento tem que abrir o lugar onde ele é
+  exibido, **na mesma ação**. Ao criar um `useState` cujo conteúdo renderiza
+  dentro de outro bloco condicional, verifique se a ação que o preenche também
+  garante a montagem do bloco.
+- **Painel do `DashPlanilha` precisa de UM wrapper — Fragment quebra duas
+  coisas** (v2.54, `Creche.jsx`): o `.dash-detalhe > td` tem `padding: 0` DE
+  PROPÓSITO (o respiro é de quem preenche a célula), e a regra
+  `.dash-detalhe > td > *` aplica `position: sticky` + `width: 100cqw` a cada
+  FILHO DIRETO. Com `<>…</>` eram dez filhos: sem padding nenhum E dez elementos
+  sticky independentes que se desmontam quando a tabela rola na horizontal. Use
+  `<div className="ficha-talento">` (o `TalentosRH` sempre fez certo). Se um
+  painel "perdeu o espaçamento" depois de um refactor, procure o wrapper que
+  sumiu antes de mexer no CSS.
+- **Dado LEGÍVEL e absurdo é um QUARTO estado** (v2.54, caso de campo
+  2026-08-02): a v2.27 ensinou que "não atende ao critério" ≠ "não consegui ler
+  o dado". Faltava o terceiro: **"li um dado que não pode ser daquilo"**. Um
+  filho apareceu com `12/10/1998 · 27a 9m` porque o campo tinha o nascimento do
+  PRÓPRIO COLABORADOR — o `InputData` não tinha `autoComplete="off"`, então o
+  navegador ofereceu a data digitada momentos antes. O cálculo estava certo. E o
+  estrago não parava no ❌: com 27 anos, `elegivel_idade=False` e
+  `idade_desconhecida=False` ligavam o `revisar_idade`, então o sistema marcava
+  **risco de glosa** e empurrava o RH a suspender quem tinha direito.
+  `_idade_implausivel` (≥18a) fica FORA do alarme pela mesma razão que
+  `idade_desconhecida`. É **aviso, nunca bloqueio** no painel (filho com
+  deficiência não tem limite de idade em várias normas), mas é **recusa 422 na
+  ENTRADA** (`_conferir_data_da_crianca`, nos DOIS caminhos de cadastro). E a
+  mensagem diz o que RESOLVE: `catch` cego mandando "tente de novo" faz a pessoa
+  repetir a mesma data.
+- **`autoComplete="off"` em data de nascimento** (v2.54, `InputData.jsx`): data
+  de nascimento nunca se repete entre pessoas diferentes — sugerir a anterior só
+  pode errar, e foi a causa provável do caso acima. Vale para qualquer campo
+  cujo valor correto é necessariamente único por pessoa.
+- **Exportador NOVO não reusa o gerador do vizinho** (v2.54,
+  `services/export_dexion.py`): Tirvu e Dexion parecem o mesmo problema e são
+  opostos em todos os pontos — 28 colunas × **97** (A→CS); aba `Plan1` ×
+  `Sheet1`; cabeçalho de 1 linha × **4** (dados na 5ª); autoFilter **recusado** ×
+  **exigido**; datas em TEXTO `dd/mm/aaaa` × **serial do Excel**… com exceção da
+  coluna `BZ`, que é texto **na mesma planilha**. Copiar produz arquivo que
+  PARECE certo — ou pior, aceito com as datas erradas em mil e duzentos dias,
+  porque serial e texto são as duas coisas que um parser lê sem reclamar.
+  A chave da linha é a **LETRA da coluna**, nunca o rótulo: o layout repete
+  nomes ("CATEGORIA" 3×, "UF" 3×, "TIPO DE JORNADA" 2×) e com rótulo uma
+  sobrescreveria a outra em silêncio. **Regra dos valores assumidos: chumba-se o
+  que é da EMPRESA, nunca o que é da PESSOA** — país e regime da empregadora vão
+  fixos (como o `EMPRESA_TIRVU_ID`); categoria, CBO, sindicato e conta bancária
+  viram PENDÊNCIA anunciada, porque código de eSocial errado não dá erro na
+  importação: entra limpo e sai errado na declaração meses depois (a assinatura
+  do "Registra Ponto" da v1.82). O sistema NÃO coleta agência/conta/tipo de
+  conta, município IBGE nem CBO por pessoa — decisão do Bruno (2026-08-02) foi
+  exportar vazio e tratar como pendência.
+- **Teste de layout compara com o ARQUIVO OFICIAL, não com cópia à mão** (v2.54,
+  `test_export_dexion.py`): cópia escrita no teste passa a divergir do modelo na
+  primeira revisão dele e o teste segue verde. Duas mutações escaparam da 1ª
+  versão e ensinaram o resto: (1) comparar a aba com a própria constante é
+  TAUTOLOGIA — renomear para `Plan1` mudava os dois lados juntos; (2) montar o
+  dict da linha à mão no teste testa a MINHA escolha de função, não a do código,
+  então trocar `_data_br_texto` por `_serial_excel` na coluna BZ passava batido.
+  A linha do teste tem que vir de `linha_dexion`, e a referência tem que ser o
+  `.xlsx` do fornecedor.
+- **`.title()` do Python PRODUZ o "Maria De Fátima"** (v2.54,
+  `services/nomes.py`): `"maria de fátima".title()` devolve exatamente o defeito
+  que o Bruno reclamou — e o `ocr_rg.py` usava isso para SUGERIR o nome da mãe,
+  que o candidato aceitava com um toque. O sistema não só tolerava a
+  capitalização errada: ele a gerava. Use `capitalizar_nome` (preposições, `d'`,
+  `Mc`, hífen, sufixo romano; idempotente, porque o wizard salva a cada 900ms),
+  aplicado na ENTRADA — wizard, convite do RH, Banco de Talentos, edição pelo
+  painel e o OCR. **NÃO acentua** (`FATIMA` continua `Fatima`) e por isso a base
+  existente **não se migra em lote**: o que está em caixa alta já perdeu o acento
+  na origem, e a migração cega gravaria "Fatima" como nome correto de alguém
+  (mesma regra da data do creche). O `test_nomes.py` é estrutural e reprova
+  `.title()` que volte a um ponto de escrita de nome.
+
 - **Telemetria de uso** (`models/telemetria.py`, `services/telemetria.py`,
   `api/telemetria.py`, `frontend/src/telemetria.js`, `rh/TelemetriaRH.jsx` +
   `rh/TelemetriaPessoa.jsx`, v2.24): o que acontece no APARELHO da pessoa —

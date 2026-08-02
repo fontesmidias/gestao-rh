@@ -96,6 +96,37 @@ def _idade_anos_meses(nasc: str, ref: datetime | None = None) -> tuple[int, int]
     return (anos, meses) if anos >= 0 else None
 
 
+# Acima disto, a "criança" tem idade de adulto e o dado quase certamente é de
+# outra pessoa. 18 é o limite de folga: cobre o caso real (o nascimento do PAI
+# no campo do filho) sem chutar em cima da faixa do benefício, que é 5a11m.
+IDADE_IMPLAUSIVEL_ANOS = 18
+
+
+def _idade_implausivel(nasc: str, ref: datetime | None = None) -> bool:
+    """A data é legível, mas não pode ser de uma criança deste benefício.
+
+    Nasceu do caso real de 2026-08-02: a tela mostrou "Raul Moreira Monteiro ·
+    12/10/1998 · 27a 9m · ❌ passou de 5a11m" para um filho que, na certidão,
+    nasceu em 19/04/2022. A conta estava certíssima — o que estava no campo era
+    o nascimento do PRÓPRIO COLABORADOR. O `InputData` não tem
+    `autoComplete="off"`, então nem foi preciso erro humano: basta o navegador
+    oferecer a data que a pessoa acabou de digitar em outro campo.
+
+    Por que isto não é só cosmético: com 27 anos, `elegivel_idade` é False e
+    `idade_desconhecida` é False — as duas condições que fazem `revisar_idade`
+    disparar. Ou seja, o sistema marcava o benefício como RISCO DE GLOSA e
+    empurrava o RH a suspender quem tinha direito. A defesa da v2.27 cobriu
+    "data ilegível" e não previu "data legível e absurda".
+
+    É AVISO, nunca bloqueio — a mesma escolha do `_indicio_tirvu`. Filho com
+    deficiência não tem limite de idade em várias normas de benefício, e uma
+    trava dura indeferiria calado um caso legítimo. Quem decide é o RH; o
+    sistema só se recusa a fingir que leu um dado plausível.
+    """
+    am = _idade_anos_meses(nasc, ref)
+    return am is not None and am[0] >= IDADE_IMPLAUSIVEL_ANOS
+
+
 def _elegivel_por_idade(nasc: str, ref: datetime | None = None) -> bool:
     """<= 5 anos e 11 meses (art. 2º, §1º da IN 147/2026).
 
@@ -112,6 +143,32 @@ def _elegivel_por_idade(nasc: str, ref: datetime | None = None) -> bool:
         return False
     anos, meses = am
     return anos < 5 or (anos == 5 and meses <= 11)
+
+
+def _fim_do_direito(nasc: str) -> str | None:
+    """Último dia em que a criança ainda tem direito — o dia anterior aos 6 anos.
+
+    A IN 147 dá direito até 5 anos e 11 meses, o que na prática significa "até
+    a véspera do sexto aniversário". Devolver a DATA, e não só um sim/não, é o
+    que transforma o benefício de reativo em previsível: o DP consegue saber em
+    julho quem sai da folha em setembro, em vez de descobrir no fechamento.
+
+    Devolve ISO (aaaa-mm-dd) — quem exibe usa `data_br`. `None` quando a data
+    de nascimento não é legível: sem base não se inventa previsão.
+    """
+    partes = partes_da_data(nasc)
+    if partes is None:
+        return None
+    d, m, a = partes
+    # Seis anos depois, menos um dia. O 29/02 vira 28/02 no ano não bissexto:
+    # `date` recusaria o dia inexistente, e adiar para 01/03 daria um dia a
+    # mais de benefício do que a norma prevê.
+    from datetime import date, timedelta
+    try:
+        seis = date(a + 6, m, d)
+    except ValueError:
+        seis = date(a + 6, m, 28) + timedelta(days=1)
+    return (seis - timedelta(days=1)).isoformat()
 
 
 def _postos_elegiveis(db: Session) -> list[PostoServico]:
@@ -290,6 +347,10 @@ def _dump_crianca_rh(c: CriancaCreche) -> dict:
         # Sem esta distinção, os dois casos apareciam como ❌ na tela e o RH
         # indeferiria por engano quem tem direito (incidente de 2026-07-30).
         "idade_desconhecida": am is None,
+        # QUARTO estado: data legível, idade de adulto — quase sempre o
+        # nascimento do colaborador digitado no campo do filho. Sem isto, o
+        # caso aparece como um ❌ comum e o RH decide sobre dado errado.
+        "idade_implausivel": _idade_implausivel(c.data_nascimento),
         "tem_certidao": bool(c.certidao_key), "tem_guarda": bool(c.guarda_key),
     }
 
@@ -327,10 +388,17 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
         # Só acusa quem REALMENTE passou da idade: criança com data ilegível
         # entra em `conferir_data`, não em risco de glosa — acusar as duas
         # coisas junto faria o RH suspender benefício de quem tem direito.
+        # `idade_implausivel` fica de FORA do alarme pela mesma razão que
+        # `idade_desconhecida`: nos dois casos não se sabe a idade real da
+        # criança, e acusar risco de glosa faria o RH suspender benefício
+        # legítimo — foi exatamente o que aconteceu no caso de 2026-08-02, em
+        # que o dado do campo era o nascimento do próprio colaborador.
         "revisar_idade": (ben.status == StatusBeneficio.ativo and bool(criancas)
                           and not any(c["elegivel_idade"] for c in criancas)
-                          and not any(c["idade_desconhecida"] for c in criancas)),
-        "conferir_data": any(c["idade_desconhecida"] for c in criancas),
+                          and not any(c["idade_desconhecida"] for c in criancas)
+                          and not any(c["idade_implausivel"] for c in criancas)),
+        "conferir_data": any(c["idade_desconhecida"] or c["idade_implausivel"]
+                             for c in criancas),
     }
 
 
@@ -343,6 +411,120 @@ def listar_levantamentos(status: str | None = None,
     if status:
         q = q.where(BeneficioCreche.status == StatusBeneficio(status))
     return [_dump_beneficio(db, b) for b in db.scalars(q).all()]
+
+
+# ROTA LITERAL antes da paramétrica `/{beneficio_id}`, senão "vigencia" seria
+# lido como UUID e viraria 422 (armadilha registrada no CLAUDE.md).
+@router.get("/rh/creche/vigencia")
+def vigencia(db: Session = Depends(get_db)) -> dict:
+    """Quem faz jus AGORA, quem deixou de fazer, e até quando cada um faz.
+
+    Pedido do Bruno (2026-08-02): *"com base na data de nascimento da pessoa,
+    quero que tenha um dash onde eu possa ver quem faz jus naquele momento,
+    considerando a data atual e quem não faz mais e também ter a previsão de
+    até quando a pessoa fará jus, e quando deixou de fazer. Isso vai ser
+    importante pois o DP irá precisar saber mensalmente quem tem direito e não
+    tem direito"*.
+
+    A pergunta é mensal e recorrente, e a resposta é inteiramente DERIVADA da
+    data de nascimento — nada aqui depende de coleta nova. O que o dash muda é
+    o tempo do verbo: em vez de "esta criança está fora da idade" (constatação
+    depois do fato), passa a responder "esta sai da folha em 12/09/2026"
+    (previsão), que é o que permite ao DP se preparar em vez de corrigir.
+
+    Uma linha por CRIANÇA, não por benefício: é a criança que faz aniversário,
+    e um mesmo colaborador pode ter uma dentro e outra fora da idade — a linha
+    por benefício esconderia exatamente o caso que exige decisão.
+
+    Consultas em LOTE (benefícios → crianças → colaboradores → postos), nunca
+    uma por linha: com a base inteira de elegíveis isso é a diferença entre
+    abrir e travar.
+    """
+    hoje = datetime.now(timezone.utc)
+
+    # Só benefícios que chegaram a ser decididos — quem está preenchendo ainda
+    # não tem direito a apurar, e apareceria como "sem direito" por engano.
+    bens = db.scalars(
+        select(BeneficioCreche).where(
+            BeneficioCreche.status.in_([StatusBeneficio.ativo,
+                                        StatusBeneficio.aguardando_repactuacao]))
+    ).all()
+    if not bens:
+        return {"gerado_em": hoje.isoformat(), "linhas": [],
+                "resumo": {"com_direito": 0, "perderam": 0, "a_vencer_90d": 0,
+                           "conferir": 0}}
+
+    ids = [b.id for b in bens]
+    criancas = db.scalars(
+        select(CriancaCreche).where(CriancaCreche.beneficio_id.in_(ids))).all()
+    col_ids = {b.candidato_id for b in bens}
+    cols = {c.id: c for c in db.scalars(
+        select(Candidato).where(Candidato.id.in_(col_ids))).all()}
+    posto_ids = {c.posto_servico_id for c in cols.values() if c.posto_servico_id}
+    postos = {p.id: p for p in db.scalars(
+        select(PostoServico).where(PostoServico.id.in_(posto_ids))).all()} if posto_ids else {}
+    por_beneficio = {b.id: b for b in bens}
+
+    linhas = []
+    for c in criancas:
+        ben = por_beneficio.get(c.beneficio_id)
+        if ben is None:
+            continue
+        col = cols.get(ben.candidato_id)
+        if col is None:
+            continue
+        posto = postos.get(col.posto_servico_id) if col.posto_servico_id else None
+        am = _idade_anos_meses(c.data_nascimento, hoje)
+        fim = _fim_do_direito(c.data_nascimento)
+        implausivel = _idade_implausivel(c.data_nascimento, hoje)
+        tem_direito = _elegivel_por_idade(c.data_nascimento, hoje)
+
+        # Quantos dias faltam para sair (negativo = já saiu). Serve para a
+        # coluna "a vencer" e para ordenar por urgência.
+        dias = None
+        if fim is not None:
+            from datetime import date
+            dias = (date.fromisoformat(fim) - hoje.date()).days
+
+        # A data de nascimento ilegível OU de adulto não vira "sem direito":
+        # é dado a conferir. Tratar como negativa é o erro que já custou caro
+        # duas vezes neste módulo.
+        situacao = ("conferir" if (am is None or implausivel)
+                    else "com_direito" if tem_direito else "perdeu")
+
+        linhas.append({
+            "crianca_id": c.id, "crianca": c.nome,
+            "data_nascimento": data_br(c.data_nascimento),
+            "idade": f"{am[0]}a {am[1]}m" if am else None,
+            "parentesco": c.parentesco,
+            "colaborador_id": col.id, "colaborador": col.nome_completo,
+            "matricula": col.matricula, "cpf": col.cpf,
+            "posto": posto.nome if posto else None,
+            "beneficio_id": ben.id, "status_beneficio": ben.status,
+            "valor_reembolso": ben.valor_reembolso or (
+                posto.valor_reembolso_creche if posto else None),
+            "situacao": situacao,
+            # ISO nos dois: a tela formata, e o CSV precisa ser ordenável.
+            "fim_do_direito": fim,
+            "dias_para_o_fim": dias,
+        })
+
+    # Ordem: o que exige ação primeiro — quem está para sair, depois quem já
+    # saiu, depois o resto.
+    linhas.sort(key=lambda l: (l["dias_para_o_fim"] is None,
+                               l["dias_para_o_fim"] if l["dias_para_o_fim"] is not None else 0))
+    return {
+        "gerado_em": hoje.isoformat(),
+        "linhas": linhas,
+        "resumo": {
+            "com_direito": sum(1 for l in linhas if l["situacao"] == "com_direito"),
+            "perderam": sum(1 for l in linhas if l["situacao"] == "perdeu"),
+            "a_vencer_90d": sum(1 for l in linhas if l["situacao"] == "com_direito"
+                                and l["dias_para_o_fim"] is not None
+                                and 0 <= l["dias_para_o_fim"] <= 90),
+            "conferir": sum(1 for l in linhas if l["situacao"] == "conferir"),
+        },
+    }
 
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}")
@@ -758,6 +940,67 @@ def editar_prazos(payload: PrazoMassaIn, db: Session = Depends(get_db),
               detalhe={"qtd": len(bens), "dia": dia})
     db.commit()
     return {"atualizados": len(bens), "dia_entrega_mensal": dia}
+
+
+class CondicoesIn(BaseModel):
+    """Prazo e valor de UM benefício, editáveis depois de aprovado."""
+    dia_entrega_mensal: int | None = None
+    valor_reembolso: str | None = None
+    motivo: str | None = None
+
+
+@router.put("/rh/creche/levantamentos/{beneficio_id}/condicoes")
+def editar_condicoes(beneficio_id: uuid.UUID, payload: CondicoesIn,
+                     db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Corrige o dia de entrega e o VALOR de um benefício já aprovado.
+
+    Pedido do Bruno (2026-08-02): *"para os reembolso creche que já obtiveram a
+    aprovação e estão aguardando a repactuação, quero que seja possível editar
+    ali no painel, tanto a data limite para ser remetida a documentação mensal
+    pelo colaborador, quanto também o valor do reembolso"*.
+
+    Faltava mesmo: o `valor_reembolso` só era gravado dentro de
+    `ativar_beneficio`, então repactuar um contrato deixava os benefícios já
+    ativos com o valor antigo congelado — e o único jeito de mexer era
+    RE-ATIVAR, o que regenera dossiê, recria roteiro de assinatura e dispara
+    e-mail para o colaborador. Muito estrago para trocar um número.
+
+    O valor NÃO é propagado do posto automaticamente, de propósito: o campo do
+    benefício existe justamente porque ele pode divergir do contrato (é uma
+    cópia congelada na ativação). Quem decide se a repactuação vale para um
+    caso específico é o RH.
+
+    Campo ausente no payload = não mexe. Assim dá para corrigir só o valor sem
+    ter que reenviar o prazo, e vice-versa.
+    """
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    # Só faz sentido em benefício que JÁ foi decidido — antes disso, a condição
+    # é definida na própria aprovação, e editar aqui criaria dois caminhos para
+    # a mesma coisa.
+    if ben.status not in (StatusBeneficio.ativo, StatusBeneficio.aguardando_repactuacao):
+        raise HTTPException(status_code=409, detail="beneficio_nao_aprovado")
+
+    antes = {"dia_entrega_mensal": ben.dia_entrega_mensal,
+             "valor_reembolso": ben.valor_reembolso}
+    if payload.dia_entrega_mensal is not None:
+        # 1-28 como no `editar_prazos`: dia 29-31 não existe em todo mês, e um
+        # prazo que some em fevereiro é prazo que o colaborador perde.
+        ben.dia_entrega_mensal = max(1, min(28, payload.dia_entrega_mensal))
+    if payload.valor_reembolso is not None:
+        novo = payload.valor_reembolso.strip()
+        ben.valor_reembolso = novo or None
+
+    registrar(db, "creche_condicoes_alteradas", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id,
+              detalhe={"antes": antes,
+                       "depois": {"dia_entrega_mensal": ben.dia_entrega_mensal,
+                                  "valor_reembolso": ben.valor_reembolso},
+                       "motivo": (payload.motivo or "").strip() or None})
+    db.commit()
+    return _dump_beneficio(db, ben)
 
 
 def _email_orientacoes_mensais(db: Session, ben: BeneficioCreche,

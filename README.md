@@ -34,6 +34,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Vínculo em massa**: a mesma planilha de Colaboradores preenche jornada, cargo, posto e PCD de mil pessoas de uma vez — quem já tem valor diferente **nunca é sobrescrito** (vira lista de decisão), e o que não casa aparece com quantas pessoas dependem
 - **Cargos e jornadas do Tirvu por upload de .txt** (o Tirvu não exporta: o RH copia a tela, salva no Bloco de Notas e sobe o arquivo) — com ID, CBO, escala e tratamento; o sistema propõe o de-para e separa o que é ambíguo para o RH decidir, nunca funde sozinho
 - Dashboard, filtros e **exportação Excel** com uma linha por colaborador e todas as respostas
+- **Exportação para os sistemas de folha**, fiel ao layout de cada um: **Tirvu** (28 colunas, aba `Plan1`, sem autofiltro — ele recusa a "decoração") e **Dexion** (97 colunas A→CS, cabeçalho de 4 linhas, datas em serial do Excel e `autoFilter`, que o outro rejeita). Cada um tem gerador próprio: os dois só se parecem de longe, e copiar um produziria um arquivo que *parece* certo. Antes do download, uma **pré-checagem diz quem tem campo faltando, com nome e motivo** — no Dexion, código do eSocial errado não dá erro na importação: entra limpo e sai errado na declaração meses depois
 
 ### Documentos e assinaturas
 - **Modelos de documento** no papel timbrado, com variáveis (`{{nome}}`, `{{cargo}}`…), prévia, envio pontual e predefinições (Ofício, Comunicado, Contrato, Declaração)
@@ -69,6 +70,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 
 ### Benefícios, testes, arquivo
 - **Reembolso-Creche** (IN SEGES/MGI 147/2026): elegibilidade por posto, link público de levantamento com 2FA (ou perguntas de verificação para quem não tem e-mail), assinatura do requerimento e ciclo completo de decisão do RH — aprovar, devolver para correção, indeferir, "não faço jus", suspender/encerrar — com aviso ao colaborador em cada passo
+- **Quem faz jus, e até quando**: aba própria com a data em que cada criança sai da idade, quantos dias faltam e quem já saiu — o fechamento mensal do DP deixa de ser constatação depois do fato e vira previsão. Tudo derivado da data de nascimento, sem coleta nova. A idade tem **quatro estados**, não dois: na idade, fora da idade, data ilegível e **data implausível** (nascimento de adulto no campo do filho, que já apareceu em campo) — os dois últimos são "conferir", nunca negativa, e ficam fora do alarme de risco de glosa
 - **Central de testes**: dashboard de todos os testes (admissão + testagem avulsa), reset, relatório de comportamento; links de testagem anônima onde a pessoa vê o próprio resultado
 - **Arquivo/backup**: inventário com filtros, download individual e **backup em lote** (ZIP por posto/pessoa + planilha XLSX), auditado
 - **DashPlanilha**: componente único de lista do RH (ordenação, filtro por coluna, seleção em massa, colunas configuráveis, export CSV e cards-métrica clicáveis) — o padrão de todas as telas de lista
@@ -163,9 +165,15 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 - **Confira depois de todo deploy:** `GET /api/health` →
 
   ```json
-  { "status": "ok", "versao": "v2.22-…",
-    "migracoes": { "em_dia": true, "no_codigo": "b8c9d0e1f2a3", "no_banco": "b8c9d0e1f2a3" } }
+  { "status": "ok", "versao": "v2.54.0 — …", "versao_numero": "2.54.0",
+    "migracoes": { "em_dia": true, "no_codigo": "b4c5d6e7f8a9", "no_banco": "b4c5d6e7f8a9" } }
   ```
+
+  A mesma informação aparece no painel em **Configurações → Sistema**, sem
+  precisar abrir a URL. A versão vem de `backend/app/versao.py` e o
+  `tests/test_versao.py` a mantém igual ao topo do `CHANGELOG.md` — ela já
+  congelou duas vezes quando era uma constante escrita à mão (`v1.50` por vinte
+  versões e `v2.27` por vinte e seis), mentindo com toda a confiança.
 
   `"em_dia": false` significa que o banco ficou para trás do código — o
   `alembic upgrade head` do entrypoint falhou. A API sobe assim mesmo, e o

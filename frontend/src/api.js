@@ -524,6 +524,16 @@ export const rh = {
   },
   exportarTirvuIndividual: (id) =>
     req(`/rh/candidatos/${id}/exportar-tirvu`, { headers: authRH() }),
+  // DEXION: mesmos filtros do Tirvu (a regra de quem entra é a mesma), layout
+  // totalmente diferente — 97 colunas, cabeçalho de 4 linhas, datas em serial.
+  pendenciasDexion: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/colaboradores/dexion-pendencias${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
+  exportarDexion: (filtros = {}) => {
+    const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+    return req(`/rh/colaboradores/exportar-dexion${q ? `?${q}` : ''}`, { headers: authRH() })
+  },
   backfillEnderecos: () => req('/rh/enderecos-backfill', { headers: authRH() }),
   aplicarBackfillEnderecos: (itens) =>
     req('/rh/enderecos-backfill', { method: 'POST', headers: authRH(),
@@ -676,6 +686,11 @@ export const rh = {
   incidenciaConfirmar: (decisoes) =>
     req('/rh/incidencia/confirmar', { method: 'POST', headers: authRH(),
                                       body: JSON.stringify({ decisoes }) }),
+  // Versão do sistema + se o banco acompanhou o código. Rota PÚBLICA e sem
+  // `authRH`: é a mesma que se abre no navegador para conferir um deploy, e
+  // continuar respondendo sem login é o que a torna útil quando o painel está
+  // fora do ar. Não começa com `/rh`, então não aciona o indicador de ocupado.
+  saude: () => req('/health'),
   lixeira: () => req('/rh/lixeira', { headers: authRH() }),
   lixeiraRestaurar: (id) =>
     req(`/rh/lixeira/${id}/restaurar`, { method: 'POST', headers: authRH() }),
@@ -869,6 +884,14 @@ export const rh = {
   crechePrazos: (beneficio_ids, dia_entrega_mensal) =>
     req('/rh/creche/prazos', { method: 'PUT', headers: authRH(),
         body: JSON.stringify({ beneficio_ids, dia_entrega_mensal }) }),
+  // Quem faz jus hoje, quem já não faz, e até quando cada criança faz —
+  // tudo derivado da data de nascimento, para o fechamento mensal do DP.
+  crecheVigencia: () => req('/rh/creche/vigencia', { headers: authRH() }),
+  // Prazo E valor de UM benefício já aprovado. Campo ausente não é alterado —
+  // dá para corrigir só o valor sem ter que reenviar o prazo.
+  crecheCondicoes: (id, dados) =>
+    req(`/rh/creche/levantamentos/${id}/condicoes`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify(dados) }),
   crecheGerarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { method: 'POST', headers: authRH() }),
   crecheBaixarDossie: (id) =>

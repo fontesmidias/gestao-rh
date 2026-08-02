@@ -581,10 +581,38 @@ def conferir_dados(token: str, payload: ConferirDadosIn, db: Session = Depends(g
 
 
 class CriancaIn(BaseModel):
+    # ISO (aaaa-mm-dd) ou BR (dd/mm/aaaa) — o `InputData.jsx` devolve ISO por
+    # padrão e é assim que a maioria dos registros foi gravada. Ver
+    # `creche.partes_da_data`, que lê os dois.
     nome: str
-    data_nascimento: str  # dd/mm/aaaa
+    data_nascimento: str
     parentesco: str       # filho | enteado | guarda
     tipo_comprovante: str | None = None  # declaracao | nota_fiscal
+
+
+def _conferir_data_da_crianca(valor: str) -> None:
+    """Barra data que não é de criança ANTES de gravar.
+
+    Existe por causa do caso de 2026-08-02: o nascimento do próprio
+    colaborador (12/10/1998) entrou no campo do filho, e o painel do RH passou
+    a mostrar "27a 9m · ❌ passou de 5a11m" para uma criança nascida em 2022 —
+    marcando ainda o benefício como risco de glosa. O campo aceitava qualquer
+    data que EXISTISSE; ninguém perguntava se ela era plausível.
+
+    Duas recusas, as duas com 422 e motivo próprio para a tela explicar:
+    data no FUTURO (não existe criança que ainda vai nascer) e idade de adulto.
+    Consertar na origem é mais barato que o RH descobrir na hora de deferir —
+    e evita o registro sujo que ninguém pode migrar em lote depois.
+    """
+    from app.api.creche import IDADE_IMPLAUSIVEL_ANOS, _idade_anos_meses, partes_da_data
+
+    if partes_da_data(valor) is None:
+        raise HTTPException(status_code=422, detail="data_invalida")
+    idade = _idade_anos_meses(valor)
+    if idade is None:                       # nascimento no futuro
+        raise HTTPException(status_code=422, detail="data_no_futuro")
+    if idade[0] >= IDADE_IMPLAUSIVEL_ANOS:
+        raise HTTPException(status_code=422, detail="data_de_adulto")
 
 
 @router.post("/creche/sessao/{token}/criancas", status_code=201)
@@ -594,6 +622,7 @@ def add_crianca(token: str, payload: CriancaIn, db: Session = Depends(get_db)) -
         raise HTTPException(status_code=409, detail="levantamento_encerrado")
     if payload.parentesco not in ("filho", "enteado", "guarda"):
         raise HTTPException(status_code=422, detail="parentesco_invalido")
+    _conferir_data_da_crianca(payload.data_nascimento.strip())
     c = CriancaCreche(
         beneficio_id=ben.id, nome=payload.nome.strip(),
         data_nascimento=payload.data_nascimento.strip(),
@@ -821,6 +850,9 @@ def creche_admissao_add(token: str, payload: CriancaIn, db: Session = Depends(ge
         raise HTTPException(status_code=409, detail="posto_nao_elegivel")
     if payload.parentesco not in ("filho", "enteado", "guarda"):
         raise HTTPException(status_code=422, detail="parentesco_invalido")
+    # Mesma trava do link público: a criança entra pelos DOIS caminhos, e
+    # validar só um deixaria a porta que ninguém olha aberta.
+    _conferir_data_da_crianca(payload.data_nascimento.strip())
     ben = db.scalar(select(BeneficioCreche).where(BeneficioCreche.candidato_id == cand.id))
     if ben is None:
         ben = BeneficioCreche(candidato_id=cand.id, email_confirmado=cand.email)
