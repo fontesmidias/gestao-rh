@@ -89,17 +89,21 @@ jobs:
             echo "::endgroup::"
           done
 
-      # O do Dexion precisa de openpyxl + sqlalchemy (lê o modelo .xlsx oficial
-      # e monta a linha a partir dos modelos), mas NÃO de FastAPI nem de banco.
-      # São ~15s de instalação por uma garantia que vale o preço: ele compara o
-      # cabeçalho gerado com o arquivo do Dexion CÉLULA A CÉLULA, e o importador
-      # de lá recusa (ou pior, aceita errado) qualquer desvio de forma.
-      - name: Testes do export Dexion (precisa de openpyxl)
+      # O do Dexion precisa só de OPENPYXL: ele lê o modelo .xlsx oficial e
+      # compara o cabeçalho gerado com ele CÉLULA A CÉLULA — o importador do
+      # Dexion recusa (ou, pior, aceita errado) qualquer desvio de forma.
+      #
+      # `export_dexion.py` mantém os imports de modelo DENTRO de `linha_dexion`
+      # justamente para isto: `app.models` puxaria `app.core.config` e
+      # `pydantic_settings`, obrigando a instalar meia aplicação para conferir
+      # a forma de uma planilha. A parte do teste que precisa dos modelos se
+      # anuncia como PULADA e roda no venv completo do backend.
+      - name: Teste do export Dexion (fidelidade ao modelo oficial)
         working-directory: backend
         env:
           PYTHONPATH: .
         run: |
-          pip install --quiet openpyxl 'sqlalchemy>=2'
+          pip install --quiet openpyxl
           python tests/test_export_dexion.py
 
       - name: Cria .env de teste

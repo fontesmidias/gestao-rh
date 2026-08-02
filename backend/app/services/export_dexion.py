@@ -50,13 +50,21 @@ Inventar dado bancário seria muito pior que entregar a coluna em branco.
 
 import io
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import Session
+if TYPE_CHECKING:                       # só para tipagem; não roda em runtime
+    from sqlalchemy.orm import Session
 
-from app.models.candidato import Candidato, Jornada, PostoServico
-from app.models.ficha import (DadosPessoais, DocumentosIdentificacao,
-                              Endereco)
-from app.services.export_tirvu import _so_digitos, garantir_matricula
+    from app.models.candidato import Candidato
+
+# NADA de import de modelo no topo. `app.models` puxa `app.core.config`, que
+# exige `pydantic_settings` — e isso tornaria impossível testar a FORMA da
+# planilha (as 97 colunas, o serial das datas, o cabeçalho contra o modelo
+# oficial) sem instalar meia aplicação. O CI pagou esse preço uma vez.
+#
+# Os imports de modelo ficam dentro de `linha_dexion`, que é a única função que
+# realmente toca o banco. `montar_workbook_dexion`, `pendencias_linha` e os
+# formatadores são puros e importáveis com openpyxl e stdlib apenas.
 
 # ---------------------------------------------------------------------------
 # As 97 colunas, na ordem EXATA do modelo (A→CS). É a única fonte de verdade da
@@ -273,7 +281,7 @@ def _salario_texto(bruto: str | None) -> str:
         return ""
 
 
-def linha_dexion(db: Session, c: Candidato, gerar_matricula: bool = False) -> dict:
+def linha_dexion(db: "Session", c: "Candidato", gerar_matricula: bool = False) -> dict:
     """Uma linha do layout, com a LETRA da coluna como chave.
 
     Chave por letra, e não por rótulo, porque o layout REPETE nomes: "CATEGORIA"
@@ -284,6 +292,13 @@ def linha_dexion(db: Session, c: Candidato, gerar_matricula: bool = False) -> di
     `gerar_matricula=True` só no EXPORT (grava); a pré-checagem passa False —
     consulta não muta dados. Mesma regra do `linha_tirvu`.
     """
+    # Imports AQUI, não no topo: é o que mantém o resto do módulo testável sem
+    # `pydantic_settings` e o resto da aplicação (ver a nota no cabeçalho).
+    from app.models.candidato import Jornada, PostoServico
+    from app.models.ficha import (DadosPessoais, DocumentosIdentificacao,
+                                  Endereco)
+    from app.services.export_tirvu import _so_digitos, garantir_matricula
+
     p = db.get(DadosPessoais, c.id)
     e = db.get(Endereco, c.id)
     d = db.get(DocumentosIdentificacao, c.id)
@@ -440,7 +455,7 @@ def linha_dexion(db: Session, c: Candidato, gerar_matricula: bool = False) -> di
     }
 
 
-def _tipo_sanguineo(db: Session, c: Candidato) -> str:
+def _tipo_sanguineo(db: "Session", c: "Candidato") -> str:
     """Tipo sanguíneo (coluna G) — mora na ficha de emergência.
 
     Dado de saúde (LGPD art. 11): vai para o Dexion porque o sistema de folha é
@@ -453,7 +468,7 @@ def _tipo_sanguineo(db: Session, c: Candidato) -> str:
     return (ficha.tipo_sanguineo if ficha else "") or ""
 
 
-def _cbo_do_cargo(db: Session, cargo: str | None) -> str:
+def _cbo_do_cargo(db: "Session", cargo: str | None) -> str:
     """CBO a partir do de-para de cargos do Tirvu, que já guarda o código.
 
     Reusa `CargoTirvu.cbo` em vez de criar um cadastro paralelo: o RH já
