@@ -176,6 +176,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **Demonstração de como responder o teste é CSS, não GIF** (v2.53,
+  `candidato/DemoTeste.jsx`): uma questão de mentira que se responde sozinha,
+  antes do DISC, do situacional, da testagem avulsa e das provas. Existe porque
+  a regra do DISC (uma marcação em cada coluna, nunca a mesma palavra) se
+  entende VENDO, e quem vai fazer um teste que decide contratação não deveria
+  gastar atenção com a mecânica. **Reusa as classes da tela REAL**
+  (`.teste-linha`, `.teste-adjetivo`, `.teste-tag`) — se o teste mudar de
+  aparência, a demo muda junto, em vez de congelar como um GIF congelaria. É
+  `aria-hidden` (decorativa; o texto ao lado diz o mesmo em palavras) e respeita
+  `prefers-reduced-motion` mostrando o estado FINAL preenchido. A rota pública
+  `GET /p/{token}` devolve `tempo_segundos` e `qtd_questoes` para a pessoa saber
+  o tamanho da tarefa antes de aceitar — **nunca o gabarito**.
 - **Tour guiado: `driver.js`, um por público, tematizado à mão** (v2.49,
   `rh/tour.js` + `candidato/CandidatoApp.jsx`): o painel do RH e o wizard do
   candidato têm tours SEPARADOS, com chaves de `localStorage` distintas

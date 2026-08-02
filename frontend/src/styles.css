@@ -1727,3 +1727,67 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   background: var(--verde); color: #fff; border-color: var(--verde);
 }
 .driver-popover-footer .driver-popover-next-btn:hover { background: var(--verde-vivo); }
+
+/* ===== Demonstração animada de como responder o teste (v2.53) =====
+   Mostrada ANTES de iniciar (ideia do Bruno: "para que a pessoa entre nos
+   testes sem dúvidas"). A instrução do DISC — "marque a que MAIS na esquerda e
+   a que MENOS na direita, nunca a mesma" — se entende vendo, não lendo.
+
+   É CSS puro, não GIF: bytes em vez de centenas de KB no celular de quem tem
+   conexão ruim, acompanha o tema, e reusa as classes da tela REAL
+   (`.teste-linha`, `.teste-adjetivo`, `.teste-tag`) — se o teste mudar de
+   aparência, a demo muda junto, em vez de congelar o dia da gravação. */
+.demo-bloco { margin: var(--esp-4) 0; }
+.demo-teste {
+  border: 1px solid var(--borda); border-radius: var(--raio-input);
+  background: var(--cartao); overflow: hidden; max-width: 26rem; margin: 0 auto;
+}
+.demo-instrucao { padding: .4rem .7rem; font-size: var(--fs-mini); }
+.demo-teste .teste-tag { font-size: .68rem; padding: .18rem .45rem; }
+.demo-linha { padding: .15rem 0; }
+/* Escolha única (situacional, prova): a linha tem 2 filhos em vez de 3, então
+   a 3ª coluna do grid do teste sobraria e o texto ficaria fora do centro. */
+.demo-linha:has(> :nth-child(2):last-child) { grid-template-columns: 56px 1fr; }
+.demo-teste .teste-adjetivo { font-size: .92rem; padding: .35rem 0; }
+/* O "radio" é um SPAN: a demo não tem estado, só aparência — assim ninguém
+   consegue clicar achando que já está respondendo. */
+.demo-radio {
+  width: 20px; height: 20px; margin: 0 auto; border-radius: 50%;
+  border: 2px solid var(--borda); display: block; position: relative;
+}
+.demo-radio::after {
+  content: ''; position: absolute; inset: 3px; border-radius: 50%;
+  background: #1c7ed6;              /* mesmo accent-color do radio real */
+  transform: scale(0); opacity: 0;
+}
+/* A marcação "acontece" na frente da pessoa, uma coluna de cada vez, e o ciclo
+   reinicia — quem chegou no meio da animação vê o começo em seguida. */
+.demo-marca-mais::after   { animation: demo-marcar 6s ease-in-out infinite; }
+.demo-marca-menos::after  { animation: demo-marcar 6s ease-in-out 1.4s infinite; }
+.demo-marca-unica::after  { animation: demo-marcar 5s ease-in-out .8s infinite; }
+.demo-marca-mais, .demo-marca-menos, .demo-marca-unica {
+  animation: demo-anel 6s ease-in-out infinite;
+}
+.demo-marca-menos { animation-delay: 1.4s; }
+.demo-marca-unica { animation-duration: 5s; animation-delay: .8s; }
+@keyframes demo-marcar {
+  0%, 8%    { transform: scale(0); opacity: 0; }
+  16%, 78%  { transform: scale(1); opacity: 1; }
+  88%, 100% { transform: scale(0); opacity: 0; }
+}
+@keyframes demo-anel {
+  0%, 8%    { border-color: var(--borda); }
+  16%, 78%  { border-color: #1c7ed6; }
+  88%, 100% { border-color: var(--borda); }
+}
+.demo-legenda { margin-top: var(--esp-3); text-align: left; }
+/* Sem movimento: mostra o estado FINAL preenchido, que é o que a animação
+   queria comunicar. Some o movimento, fica a informação. */
+@media (prefers-reduced-motion: reduce) {
+  .demo-marca-mais::after, .demo-marca-menos::after, .demo-marca-unica::after {
+    animation: none; transform: scale(1); opacity: 1;
+  }
+  .demo-marca-mais, .demo-marca-menos, .demo-marca-unica {
+    animation: none; border-color: #1c7ed6;
+  }
+}

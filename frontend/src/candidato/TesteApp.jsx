@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { candidato as api } from '../api.js'
 import { iniciarTelemetria } from './telemetria.js'
+import DemoTeste from './DemoTeste.jsx'
 
 // Testes do candidato (inventário DISC + situacional), no formato do material
 // de referência do RH: identificação mínima -> código por e-mail (2FA) ->
@@ -187,6 +188,9 @@ export function Instrucoes({ tipo, aoIniciar, comTelemetria = true }) {
               seletivo — conforme a LGPD.</li>
           )}
         </ul>
+        {/* Ver antes de fazer (v2.53): a mecânica do DISC — uma marcação em
+            cada coluna, nunca a mesma palavra — se entende melhor vendo. */}
+        <DemoTeste tipo={tipo} />
         <p className="explica" style={{ marginTop: '.8rem' }}>Ao responder, você declara que as
           questões serão respondidas de acordo com as orientações recebidas, assumindo total
           responsabilidade sobre a veracidade das respostas. Este é um instrumento de apoio à

@@ -601,9 +601,15 @@ def _fechar_aplicacao(db: Session, a: AplicacaoProva) -> None:
 def info_prova(token: str, db: Session = Depends(get_db)) -> dict:
     link = _link(token, db, exigir_ativo=False)
     p = db.get(ProvaCargo, link.prova_id)
+    # Tempo e quantidade de questões vão ANTES de começar (v2.53): quem entra
+    # numa prova de seleção sem saber quanto tempo tem decide errado como se
+    # organizar. O GABARITO continua fora daqui — só o tamanho da tarefa.
+    qtd = len(_questoes(db, link.prova_id)) if p else 0
     return {"nome": link.nome, "ativo": link.ativo,
             "titulo": p.titulo if p else link.nome,
-            "descricao": p.descricao if p else None}
+            "descricao": p.descricao if p else None,
+            "tempo_segundos": p.tempo_segundos if p else None,
+            "qtd_questoes": qtd}
 
 
 class ParticiparIn(BaseModel):
