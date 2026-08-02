@@ -305,7 +305,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     { chave: 'cpf', rotulo: 'CPF', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
     // Matrícula é a chave com que o ponto do Tirvu encontra a pessoa — por isso
     // ela aparece na lista e é editável aqui (v2.45).
-    { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, filtro: 'texto',
+    { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, nowrap: true, filtro: 'texto',
       valor: (c) => c.matricula || '',
       render: (c) => <MatriculaEditavel colaborador={c} aoTrocar={() => carregar()} /> },
     { chave: 'posto', rotulo: 'Posto', ordenavel: true, quebra: true,
@@ -326,12 +326,16 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     { chave: 'cadastro', rotulo: 'Cadastro', filtro: 'select', quebra: true,
       opcoes: [{ v: 'Completo', r: 'Completo' }, { v: 'Falta', r: 'Falta preencher' }],
       valor: (c) => (c.dados_faltando?.length ? 'Falta' : 'Completo'),
+      // CONTAGEM no chip, lista completa no `title` (v2.59): enumerar todos os
+      // campos faltantes fazia esta coluna chegar a 241px — a mais larga da
+      // tabela — e chip não quebra linha, então ela empurrava tudo para fora
+      // da tela. Quem precisa saber QUAIS aponta o mouse ou abre a ficha.
       render: (c) => (c.dados_faltando?.length
         ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}
                 title={`Faltam: ${c.dados_faltando.join(', ')}`}>
-            ⚠️ falta {c.dados_faltando.join(', ')}</span>
+            ⚠️ falta{c.dados_faltando.length > 1 ? `m ${c.dados_faltando.length}` : ` ${c.dados_faltando[0]}`}</span>
         : <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✓ completo</span>) },
-    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, oculta: true,
+    { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, nowrap: true, oculta: true,
       valor: (c) => c.criado_em, render: (c) => fmtData(c.criado_em) },
   ]
 

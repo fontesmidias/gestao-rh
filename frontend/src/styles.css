@@ -283,17 +283,79 @@ a { color: var(--verde-escuro); }
                       gap: var(--esp-2); }
 /* rolagem horizontal do dash: a tabela nunca estoura a tela; scrolla dentro
    do próprio container (o corpo da página nunca rola de lado) */
-.dash-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
-/* a tabela ocupa 100% e só cresce além disso se REALMENTE precisar — colunas de
-   texto longo (cargos, regiões) quebram linha em vez de esticar a página. */
+/* SOMBRA DE ROLAGEM: aparece sozinha quando há conteúdo além da borda.
+ *
+ * Sem ela, o corte parecia o FIM da tabela — o `border-radius` + `overflow:
+ * hidden` da `.rh-tabela` arredondam a borda e disfarçam o truncamento, e as
+ * barras de rolagem overlay do Windows/macOS só surgem durante o gesto. Foi
+ * por isso que o botão "Atender presencial" ficou invisível mesmo estando lá
+ * (feedback 2026-08-02).
+ *
+ * Feito 100% em CSS com `background-attachment: local/scroll`: as duas camadas
+ * brancas rolam COM o conteúdo e cobrem as sombras quando se chega ao fim de
+ * cada lado; as sombras ficam presas ao container. Nenhum listener de scroll,
+ * nenhum estado em JS — vale para as ~46 tabelas do painel de uma vez, e não
+ * há o que esquecer de ligar numa tela nova.
+ */
+.dash-scroll {
+  overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%;
+  background:
+    linear-gradient(to right, var(--cartao) 30%, transparent),
+    linear-gradient(to left, var(--cartao) 30%, transparent),
+    linear-gradient(to right, rgba(0, 0, 0, .18), transparent 12px),
+    linear-gradient(to left, rgba(0, 0, 0, .18), transparent 12px);
+  background-repeat: no-repeat;
+  background-size: 34px 100%, 34px 100%, 14px 100%, 14px 100%;
+  background-position: 0 0, 100% 0, 0 0, 100% 0;
+  background-attachment: local, local, scroll, scroll;
+}
+/* a tabela ocupa 100% e só cresce além disso se REALMENTE precisar. */
 .dash-scroll .dash-tabela { min-width: 100%; }
-.dash-tabela th, .dash-tabela td { padding: .55rem .6rem; font-size: .88rem; white-space: nowrap; vertical-align: top; }
-.dash-tabela td small { white-space: nowrap; }
+
+/* TEXTO QUEBRA POR PADRÃO (feedback 2026-08-02, com print: *"tive que segurar
+ * ctrl e rolar o scroll do mouse [...] o botão estava ali, mas eu não vi"*).
+ *
+ * Era o contrário: `white-space: nowrap` em TODA célula, e só as poucas
+ * marcadas `quebra: true` podiam fluir. Bastava um e-mail corporativo ou um
+ * nome longo para a tabela empurrar tudo para fora da tela — medido: Talentos
+ * estourava 381px, Desenvolvimento 474px, Colaboradores 238px.
+ *
+ * A inversão é o conserto de fundo: quebrar é o comportamento seguro (a linha
+ * fica mais alta, e nada some), e `nowrap` passa a ser a EXCEÇÃO declarada
+ * logo abaixo, para o que de fato não pode partir no meio — data, contagem,
+ * chip de status e os botões de ação.
+ */
+.dash-tabela th, .dash-tabela td {
+  padding: .55rem .6rem; font-size: .88rem; vertical-align: top;
+  /* `break-word`, NÃO `anywhere`: com `anywhere` o navegador parte no meio da
+     palavra assim que aperta, e "Recepcionista" virava "Recepcionist / a" —
+     pior de ler que a rolagem que veio consertar. `break-word` só parte
+     palavra que não cabe sozinha na linha (um e-mail longo), preferindo
+     sempre o espaço entre palavras. */
+  white-space: normal; overflow-wrap: break-word;
+}
+/* Piso para a coluna do NOME (a primeira de dados): é por onde o RH procura a
+   pessoa, e espremê-la até uma palavra por linha destrói a varredura vertical
+   da lista. `:first-of-type` sozinho pegava também a primeira célula depois de
+   cada quebra de contexto e devolvia o estouro — daí o escopo explícito na
+   linha do corpo. */
+.dash-tabela tbody tr > td:nth-child(1):not(.dash-check),
+.dash-tabela tbody tr > td.dash-check + td { min-width: 9ch; }
+/* O que NÃO pode quebrar: partir "14/07/2026" ou "8/10" em duas linhas
+   atrapalha mais do que a largura que economiza. Colunas declaram isso com
+   `nowrap: true` na config; chips e botões são automáticos. */
+.dash-tabela th { white-space: nowrap; }
+.dash-tabela td.dash-nowrap { white-space: nowrap; }
+.dash-tabela .chip, .dash-tabela .acoes-candidato .btn-mini { white-space: nowrap; }
 /* colunas marcadas com `quebra: true`: texto flui em várias linhas, largura
    limitada — acaba com a rolagem lateral de listas longas (feedback 2026-07-22). */
 .dash-tabela th.dash-quebra, .dash-tabela td.dash-quebra,
 .rh-tabela th.dash-quebra, .rh-tabela td.dash-quebra {
-  white-space: normal; max-width: 22rem; min-width: 10rem; word-break: break-word;
+  /* `min-width` em 6rem, não 10rem: era um PISO, e com 3-4 colunas assim numa
+     tabela (Talentos, Desenvolvimento) somava 480-640px que ninguém pediu —
+     parte do estouro medido em 2026-08-02. 6rem ainda impede a coluna de
+     virar uma tira de uma letra por linha, que é o que o piso protegia. */
+  white-space: normal; max-width: 22rem; min-width: 6rem; word-break: break-word;
 }
 .rh-tabela td.dash-quebra small { white-space: normal; }
 /* cards de métrica clicáveis: clicar ativa o filtro correspondente (item 3).
@@ -906,12 +968,54 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
 }
 :root[data-tema='escuro'] .rh-tabela th { color: #dfeae2; }
 
-/* Ações por candidato na tabela do painel */
-.acoes-candidato { white-space: nowrap; }
-.acoes-candidato .btn-mini { margin-right: .35rem; }
+/* Ações por linha na tabela do painel.
+ *
+ * QUEBRAM EM GRADE, nunca numa fila só (feedback 2026-08-02, com print: *"tive
+ * que segurar ctrl e rolar o scroll do mouse [...] o botão estava ali, como no
+ * exemplo, mas eu não vi"*).
+ *
+ * O que estava errado: `white-space: nowrap` obrigava os botões a caberem numa
+ * linha, e a coluna crescia com a quantidade deles. Medido na tela de
+ * Admissões: **560px de 1058px — 53% da tabela numa célula só**, e o quarto
+ * botão ("Atender presencial") foi o que estourou. Em 1366px sobravam DOIS
+ * pixels; qualquer janela menor cortava a ação, em silêncio, porque não há
+ * indicação de que a tabela continua à direita.
+ *
+ * Com a grade, quatro botões ocupam a largura de dois. `max-width` em `ch` é
+ * proporcional à fonte (respeita zoom e acessibilidade) e impede que uma
+ * coluna de ações domine a tabela por mais botões que ganhe no futuro — que é
+ * o que garante que este conserto não precise ser refeito no próximo botão.
+ */
+.acoes-candidato {
+  /* GRADE de 2 colunas, não fila livre: com `flex-wrap` os botões quebravam em
+     pontos diferentes por linha (um embaixo do outro aqui, dois ali) e a
+     tabela ficava serrilhada, com linhas de alturas distintas. Na grade, toda
+     linha tem a mesma forma e o olho encontra o mesmo botão sempre no mesmo
+     lugar — que é o que faz uma lista ser varrida rápido. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .3rem;
+  /* `width` fixo em `ch` (proporcional à fonte, respeita zoom) para a coluna
+     não variar de linha para linha conforme os botões CONDICIONAIS de cada
+     pessoa — a tabela ficaria com a última coluna dançando. 24ch cabe dois
+     botões de rótulo curto lado a lado. */
+  width: 24ch;
+}
+/* Uma ação só: não precisa de grade nem da largura de duas. */
+.acoes-candidato:has(> :only-child) {
+  grid-template-columns: minmax(0, 1fr); width: 12ch;
+}
+.acoes-candidato .btn-mini {
+  margin-right: 0;
+  /* Texto do botão CENTRALIZADO e sem estourar a célula da grade: rótulos de
+     tamanhos diferentes ("Abrir" e "Atender presencial") ficam alinhados. */
+  width: 100%; padding-inline: .5rem; justify-content: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 @media (max-width: 800px) {
-  .acoes-candidato { white-space: normal; }
-  .acoes-candidato .btn-mini { margin-bottom: .3rem; }
+  /* No card do celular a coluna vira largura total: aí os botões ocupam a
+     linha inteira, com área de toque generosa (regra que já existia). */
+  .acoes-candidato { width: auto; }
 }
 
 /* ---------- Leitor de RG (OCR) ---------- */
@@ -1282,7 +1386,15 @@ body[data-rh-ocupado] { cursor: progress; }
   .rh-visualizador { min-height: 40vh; max-height: 70vh; }
   .pdf-iframe { min-height: 60vh; }
 }
-@media (max-width: 760px) {
+/* TABELAS VIRAM CARDS abaixo de 1100px, não 760px (v2.59).
+   Medido em 2026-08-02: em 1024px as telas grandes (Colaboradores, Talentos,
+   Desenvolvimento) ainda estouravam ~200px mesmo depois de quebrar o texto e
+   compactar as ações — são 8-9 colunas, e não há CSS que faça isso caber sem
+   esconder informação. O modo card já existe, já é usado no celular e resolve
+   por completo: cada linha vira um bloco com os rótulos ao lado dos valores,
+   e NADA fica fora da vista. Vale para notebook pequeno e janela dividida —
+   os dois casos em que o botão sumia sem avisar. */
+@media (max-width: 1100px) {
   .rh-painel { padding: .8rem; }
   .rh-topo { flex-wrap: wrap; gap: .5rem; }
   /* ===== TABELAS VIRAM CARDS =====

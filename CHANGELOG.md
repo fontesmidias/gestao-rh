@@ -11,6 +11,78 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.59.0] — 2026-08-02 — Nenhuma tabela obriga a rolar para o lado
+
+> *"tive que segurar a tecla ctrl e rolar o scroll do mouse, mas isso não é
+> intuitivo. Quero que não seja necessário rolar nada, em tabela nenhuma de
+> todas as páginas [...] pois o botão estava ali, como no exemplo, mas eu não
+> vi."*
+
+O botão em questão era o **"Atender presencial" que eu tinha acabado de criar**
+na v2.56. Ele foi o quarto da coluna de ações e empurrou a tabela para fora da
+tela — um defeito que eu introduzi e não percebi porque, no código, cada botão
+parece inofensivo na linha em que é escrito. Ninguém soma as larguras.
+
+### O que a medição mostrou
+
+Medido no navegador, não estimado:
+
+| | antes | depois |
+|---|---|---|
+| coluna de ações | **560px (53% da tabela)** | 234px |
+| folga em 1366px | **2 pixels** | cabe |
+| estouro em 1024px | **310px** | 0 |
+| Talentos / Desenvolvimento | 381px / 474px | 0 / 0 |
+
+Em 1366px sobravam **dois pixels**. Qualquer janela menor — notebook pequeno,
+janela dividida ao meio — cortava a ação em silêncio, porque o `border-radius`
+da tabela faz o corte parecer o fim dela e a barra de rolagem só aparece
+durante o gesto.
+
+### Cinco causas, todas corrigidas
+
+1. **`white-space: nowrap` em TODA célula** — nada podia quebrar, então um
+   e-mail longo ou um nome comprido esticava a tabela inteira. Invertido:
+   quebrar virou o padrão (seguro: a linha fica mais alta e nada some) e
+   `nowrap` virou exceção declarada (`nowrap: true` na coluna), para data,
+   contagem, chip e botão. Usa `break-word`, não `anywhere` — este último
+   partia "Recepcionista" em "Recepcionist/a", pior que a rolagem.
+2. **Coluna de ações sem largura e em fila única** — virou **grade de 2
+   colunas** com largura fixa em `ch`. Quatro botões passam a ocupar a largura
+   de dois, e a coluna não cresce mais a cada botão novo.
+3. **Zero indicador de rolagem** — agora há sombra nas bordas, que aparece
+   sozinha quando há conteúdo além e some ao chegar ao fim. Feita só com
+   `background-attachment: local/scroll`, sem listener nem estado: vale para as
+   ~46 tabelas do painel de uma vez.
+4. **Células que enumeravam listas inteiras** — o chip "falta X, Y, Z" de
+   Colaboradores chegava a 241px (a coluna mais larga da tela) e chip não
+   quebra. Virou contagem, com a lista no `title`. Mesma coisa com datas que
+   mostravam hora e repetiam a mesma string no `title`.
+5. **`min-width: 10rem` nas colunas `quebra`** — era um piso, e com 3-4 delas
+   somava 480-640px que ninguém pediu. Reduzido para 6rem.
+
+### E onde o CSS não bastava
+
+Abaixo de **1100px**, as tabelas passam a virar **cards** — modo que já existia
+e era usado só no celular. Em 1024px, Talentos e Desenvolvimento têm 8-9
+colunas e não há CSS que faça isso caber sem esconder informação; o card
+resolve por completo, com cada valor ao lado do seu rótulo.
+
+Três colunas pouco usadas (Telefone e Cidade em Talentos, Cargo em
+Desenvolvimento) passaram a nascer ocultas — continuam a um clique em
+**⚙ Colunas**.
+
+### A régua que faltava
+
+`frontend/tests/e2e/tabelas-cabem-na-tela.spec.js`: mede 6 telas em 3 larguras
+e reprova se alguma exigir rolagem lateral, ou se a coluna de ações passar de
+35% da tabela. O defeito é invisível no código — este teste é o que impede o
+próximo botão de repetir a história. Validado por mutação (restaurar o `nowrap`
+faz dois testes falharem).
+
+Validação: 22 testes E2E passam (os 18 anteriores + 4 novos), telas conferidas
+renderizadas em 1024px e 1440px.
+
 ## [2.58.0] — 2026-08-02 — O atendimento presencial aparece na tela
 
 Pergunta do Bruno depois da v2.56: *"onde e como eu marco que o atendimento foi

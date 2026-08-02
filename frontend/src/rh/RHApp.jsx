@@ -179,7 +179,7 @@ const COLUNAS_ADMISSAO = () => [
     valor: (c) => statusInfo(c.status).label,
     render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
       {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>) },
-  { chave: 'docs', rotulo: 'Docs', ordenavel: true,
+  { chave: 'docs', rotulo: 'Docs', ordenavel: true, nowrap: true,
     valor: (c) => (c.progresso_docs?.total ? c.progresso_docs.ok / c.progresso_docs.total : -1),
     render: (c) => (c.progresso_docs?.total ? `${c.progresso_docs.ok}/${c.progresso_docs.total}` : '—') },
   // Testes já respondidos aproveitados para esta pessoa (v2.21) — só o RH vê.
@@ -190,7 +190,7 @@ const COLUNAS_ADMISSAO = () => [
       ? <span className="chip" title="Testes respondidos antes da admissão, aproveitados pelo RH"
               style={{ '--chip-cor': '#5b7' }}>🧪 {c.testes_vinculados}</span>
       : '—') },
-  { chave: 'criado_em', rotulo: 'Criado', ordenavel: true, valor: (c) => c.criado_em,
+  { chave: 'criado_em', rotulo: 'Criado', ordenavel: true, nowrap: true, valor: (c) => c.criado_em,
     render: (c) => fmtData(c.criado_em) },
 ]
 
@@ -296,7 +296,7 @@ const acoesAdmissao = (c, abrir) => (<>
               btn.textContent = err.detail === 'sem_email' ? '⚠ Cadastre o e-mail' : '⚠ Falhou'
               setTimeout(() => { btn.textContent = original }, 3000)
             }
-          }}>🧑‍💼 Atender presencial</button>
+          }}>🧑‍💼 Presencial</button>
 </>)
 
 // Sidebar esquerda retrátil: navegação sempre à vista, sem reload — mesmos

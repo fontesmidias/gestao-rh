@@ -207,6 +207,29 @@ Abas ativas usam a classe **`ativa`** (não `on`, não `active`).
 
 Tela estourando a margem lateral é defeito, sempre. Regras:
 
+> **⚠️ ROLAR PARA O LADO NÃO É SOLUÇÃO — é o defeito** (v2.59, feedback com
+> print: *"tive que segurar ctrl e rolar o scroll do mouse, mas isso não é
+> intuitivo [...] o botão estava ali, mas eu não vi"*). Ter o wrapper que rola
+> impede a PÁGINA de estourar, mas não faz o conteúdo aparecer: quem não sabe
+> que há algo à direita não vai procurar. Regras que vieram daí:
+>
+> - **A coluna de ações não passa de ~35% da tabela.** Ela é grade de 2
+>   colunas (`.acoes-candidato`), não fila única. Botão novo cabe na grade em
+>   vez de empurrar a tabela. Rótulo curto, explicação no `title`.
+> - **Texto de célula QUEBRA por padrão**; `nowrap: true` é declarado só para
+>   data, contagem e matrícula. Use `overflow-wrap: break-word`, nunca
+>   `anywhere` (parte no meio da palavra).
+> - **Célula não enumera lista**: mostre a contagem, deixe os itens no
+>   `title` — um chip com 5 itens vira a coluna mais larga da tela.
+> - **Abaixo de 1100px a tabela vira card.** Tela com 8+ colunas não cabe em
+>   notebook pequeno por mais CSS que se escreva.
+> - Coluna que não é usada todo dia nasce `oculta: true` — o RH liga no
+>   **⚙ Colunas** quando precisar.
+>
+> Régua: `frontend/tests/e2e/tabelas-cabem-na-tela.spec.js` mede 6 telas em 3
+> larguras. **Rode ao acrescentar botão de ação ou coluna** — o defeito é
+> invisível no código, porque ninguém soma larguras de olho.
+
 - **Tabela larga** vai dentro de um container com `overflow-x: auto` que **rola
   dentro de si**, nunca empurra o body. O `DashPlanilha` já faz isso com
   `.dash-scroll` + `container-type: inline-size`. Tabela `.rh-tabela` solta (sem
