@@ -343,10 +343,18 @@ def assinar_todos(
         raise HTTPException(status_code=422, detail="codigo_incorreto")
 
     agora = datetime.now(timezone.utc)
+    # Sessão ASSISTIDA (v2.56): o link pelo qual esta pessoa chegou foi emitido
+    # pelo RH para preencher com ela presente? A marca precisa ser gravada
+    # ANTES de `_gerar_pdf`, senão o manifesto sai sem a linha que descreve
+    # como a assinatura foi colhida — e o PDF é imutável depois do hash.
+    from app.services.magic_link import operador_assistente
+    assistida_por = operador_assistente(db, token)
+
     anexos: list[tuple[str, bytes]] = []
     assinados = []
     for assinatura in pendentes:
         chave = chave_doc(assinatura)
+        assinatura.assistida_por = assistida_por
         pdf_sem_bloco = _gerar_pdf(db, candidato, assinatura)
         assinatura.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
         assinatura.assinado_em = agora
@@ -367,8 +375,13 @@ def assinar_todos(
         anexos.append((f"{chave}.pdf", pdf_assinado))
         assinados.append({"documento": chave, "assinado_em": agora,
                           "hash_sha256": assinatura.hash_sha256})
+        # O ator continua sendo o CANDIDATO — foi ele que validou o código e
+        # quis assinar. O que se acrescenta é COMO: quem operou a tela. Trocar
+        # o ator para "rh" diria que o RH assinou, que é justamente a distorção
+        # que este recurso existe para evitar.
         registrar(db, "documento_assinado", ator="candidato", candidato_id=candidato.id,
-                  detalhe={"documento": chave, "hash": assinatura.hash_sha256})
+                  detalhe={"documento": chave, "hash": assinatura.hash_sha256,
+                           **({"assistida_por": assistida_por} if assistida_por else {})})
 
     if candidato.status == StatusCandidato.aguardando_assinatura:
         candidato.status = StatusCandidato.docs_pendentes
@@ -450,6 +463,10 @@ def assinar(
         raise HTTPException(status_code=422, detail="codigo_incorreto")
 
     # Evidências: hash do documento SEM o bloco de assinatura, IP, user-agent, instante.
+    # A marca de sessão assistida vem ANTES do `_gerar_pdf`, senão o manifesto
+    # sai sem a linha que descreve como a assinatura foi colhida (v2.56).
+    from app.services.magic_link import operador_assistente
+    assinatura.assistida_por = operador_assistente(db, token)
     pdf_sem_bloco = _gerar_pdf(db, candidato, assinatura)
     assinatura.hash_sha256 = hashlib.sha256(pdf_sem_bloco).hexdigest()
     assinatura.assinado_em = datetime.now(timezone.utc)

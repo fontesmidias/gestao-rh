@@ -11,6 +11,75 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.56.0] — 2026-08-02 — Atendimento presencial, e o upload com guarda-corpo
+
+### Admissão presencial assistida
+
+> *"quero pensar em uma estratégia para os casos em que a pessoa tiver baixo
+> grau de instrução, ou dificuldades [...] o RH fazer tudo, desde a inserção de
+> dados, coleta de documentos e tudo mais e ver alguma forma que a pessoa possa
+> assinar o documento. Pois hoje o RH gera o link mas fica inserindo tudo na mão
+> como se fosse uma correção e não como se o candidato estivesse ali."*
+
+**O recurso não é "deixar o RH preencher" — isso já dava para fazer** abrindo o
+link mágico no computador do escritório. O que faltava era o **registro**: sem
+ele, uma admissão preenchida pelo RH e uma feita pela pessoa em casa produzem
+documentos idênticos, e o manifesto afirma *"código enviado ao titular e
+validado nesta plataforma"* como se ela tivesse operado tudo sozinha.
+
+Botão **"🧑‍💼 Atender presencial"** na lista de Admissões: abre o mesmo wizard
+numa aba, marcado. O que muda:
+
+- **O manifesto declara como a assinatura foi colhida** — campo novo *"Forma de
+  coleta"*, entre Método e Modalidade: *"Assinatura colhida PRESENCIALMENTE, em
+  atendimento assistido: o preenchimento foi operado por [RH], a pedido e na
+  presença do titular, que validou o código recebido em seu próprio e-mail."* O
+  bloco no corpo do documento também registra. É o princípio já cravado na
+  `AutorizacaoEquipe`, que diz *"emitido sob autorização permanente de X"* em vez
+  de *"X assinou"*: o documento descreve o ato real, nunca a versão mais
+  conveniente dele.
+- **A prova de identidade não é enfraquecida**: o código continua indo ao e-mail
+  **da própria pessoa** (decisão do Bruno). Quem não tem e-mail é barrado na
+  abertura da sessão, com o código `sem_email` — e esse é o melhor momento
+  possível para resolver, com ela sentada na frente do RH.
+- **O ator da assinatura continua sendo o CANDIDATO.** Quem quis assinar foi
+  ele; o que se acrescenta é *como*, não *quem*. Trocar o ator para "rh"
+  registraria que o RH assinou — exatamente a distorção que isto evita.
+- **A marca vive no LINK** (`acesso_magico.assistido_por`), não numa tabela de
+  sessão à parte: o wizard já resolve o token a cada requisição, então não há
+  estado paralelo para sincronizar — nem sessão esquecida aberta. Validade de
+  **8 horas**, não as 72 do convite: é para usar agora, com a pessoa na sala.
+- Faixa permanente no wizard dizendo com quem se está atendendo e que o código
+  chegará no e-mail dela. O formulário é idêntico ao que a pessoa vê em casa —
+  sem o aviso, quem opera não sabe se está na aba certa.
+
+O documento de assinatura remota **não muda em nada** — há teste de regressão
+para isso, porque o manifesto é peça de prova e seu texto não deve variar por
+acidente.
+
+### Uploads do creche: as duas rotas sem nenhuma proteção
+
+Achado durante a v2.54 e confirmado num levantamento de todas as rotas de
+upload: **as duas do creche eram as únicas do backend inteiro sem
+`await arquivo.close()`** — e são rotas **públicas**.
+
+O Starlette faz *spool* em disco de qualquer upload acima de ~1 MB. Sem fechar,
+o arquivo temporário fica no container, e o que sobrava ali era **certidão de
+nascimento e guarda judicial de criança**. Também não havia teto de tamanho nem
+validação de formato: `ext or "bin"` aceitava `.exe`, `.svg` e arquivo sem nome.
+
+`services/upload_seguro.py` passa a ser a porta única — com o `close()` no
+`finally` **dentro da função**, que é o que impede o próximo call-site de
+esquecer, como este esqueceu.
+
+**O teto é configurável no painel** (Configurações → Sistema), a pedido do
+Bruno: limite chumbado no código exige deploy para ajustar, e quem descobre que
+10 MB não bastam para a foto de um celular novo é o RH, com a pessoa do outro
+lado da linha. Faixa de 1 a 200 MB, padrão 50.
+
+Validação: **smoke 15/15**, build limpo, design system OK, manifesto conferido
+renderizado em imagem, e as mutações dos testes novos detectadas.
+
 ## [2.55.0] — 2026-08-02 — Um filho de cada vez
 
 > *"se a pessoa tem mais de um filho e um eu defiro e outro eu indefiro, não tem

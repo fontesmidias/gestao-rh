@@ -82,4 +82,19 @@ class Assinatura(Base):
     # oculto em _docs_exigidos até o RH liberar (`liberar-informativo`), quando
     # vira False. Todos os demais docs nascem False (liberados) — não muda nada.
     aguardando_liberacao: Mapped[bool] = mapped_column(default=False)
+    # ---- sessão ASSISTIDA (v2.56) ----------------------------------------
+    # Quando a assinatura é colhida com a pessoa PRESENTE, no computador do RH,
+    # que operou o preenchimento no lugar dela (feedback 2026-08-02: pessoas
+    # com baixo grau de instrução ou sem prática com tecnologia).
+    #
+    # Existe para o manifesto NÃO MENTIR. O código de verificação continua indo
+    # ao e-mail da própria pessoa — a prova de identidade é a mesma —, mas quem
+    # operou o teclado foi o RH, e um manifesto que afirma "assinado pelo
+    # titular na plataforma" sem dizer isso descreve um ato que não aconteceu
+    # exatamente assim. É o mesmo princípio da `AutorizacaoEquipe`, que diz
+    # "emitido sob autorização permanente de X" em vez de "X assinou".
+    #
+    # SNAPSHOT do e-mail do operador, não FK: a evidência não pode sumir se o
+    # usuário for removido depois.
+    assistida_por: Mapped[str | None] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

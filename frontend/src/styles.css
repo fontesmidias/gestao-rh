@@ -531,6 +531,15 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .aviso-codigo { background: var(--verde-suave); border: 2px solid var(--verde);
                 border-radius: var(--raio-input); padding: 1rem; font-size: .93rem;
                 margin-bottom: 1rem; }
+/* Faixa do ATENDIMENTO PRESENCIAL (v2.56): o wizard assistido é idêntico ao
+   que o candidato vê sozinho, então quem opera precisa de um sinal permanente
+   de que está na aba certa. Âmbar (não verde) para não se confundir com
+   confirmação de sucesso, e sem `position: fixed` — rolar junto é o correto
+   aqui, já que a informação importa mais no fim (a assinatura) que no topo. */
+.aviso-assistido { background: var(--cartao); border: 2px dashed var(--ambar);
+                   border-left-width: 6px; border-left-style: solid;
+                   border-radius: var(--raio-input); padding: .75rem 1rem;
+                   font-size: .9rem; line-height: 1.45; margin-bottom: 1rem; }
 .email-confirma { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
                   margin: .5rem 0; }
 .email-confirma code { background: var(--cartao); border-radius: 8px; padding: .4rem .65rem;

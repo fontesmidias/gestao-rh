@@ -196,6 +196,60 @@ def reenviar_link(
     )
 
 
+# Sessão assistida vale poucas horas: é para usar AGORA, com a pessoa na sala.
+# Um link de preenchimento-por-terceiro válido por três dias (como o convite
+# comum) seria superfície de risco sem contrapartida nenhuma.
+HORAS_SESSAO_ASSISTIDA = 8
+
+
+@router.post("/rh/candidatos/{candidato_id}/sessao-assistida", response_model=ConviteOut)
+def abrir_sessao_assistida(
+    candidato_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    rh: UsuarioRH = Depends(requer_rh),
+) -> ConviteOut:
+    """Abre o wizard para o RH preencher COM A PESSOA PRESENTE.
+
+    Feedback 2026-08-02: *"para os casos em que a pessoa tiver baixo grau de
+    instrução, ou dificuldades [...] o RH fazer tudo, desde a inserção de dados,
+    coleta de documentos e tudo mais e ver alguma forma que a pessoa possa
+    assinar o documento. Pois hoje o RH gera o link mas fica inserindo tudo na
+    mão como se fosse uma correção e não como se o candidato estivesse ali"*.
+
+    O que muda em relação a simplesmente abrir o link de sempre — que é o que
+    já dá para fazer hoje — é o REGISTRO. O link nasce marcado, tudo que é
+    assinado por ele guarda quem operou, e o manifesto passa a descrever o ato
+    como ele foi. Sem isso, uma admissão assistida e uma feita pela pessoa em
+    casa são indistinguíveis no documento, e o manifesto afirma algo que não
+    aconteceu exatamente assim.
+
+    **O código de assinatura continua indo ao e-mail DELA** (decisão do Bruno):
+    é o que mantém a prova de identidade intacta. Quem não tem e-mail precisa
+    cadastrar um antes — por isso o 422 abaixo, que é orientação, não obstáculo.
+    """
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    # Sem e-mail não há para onde mandar o código, e a assinatura ficaria sem
+    # o fator que prova a identidade. Barrar AQUI, com a pessoa na frente do
+    # RH, é o melhor momento possível para resolver: basta perguntar o e-mail.
+    if not (candidato.email or "").strip():
+        raise HTTPException(status_code=422, detail="sem_email")
+    link = emitir_link(db, candidato, base_url_publica(request),
+                       assistido_por=rh.email, horas=HORAS_SESSAO_ASSISTIDA)
+    registrar(db, "sessao_assistida_aberta", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato.id,
+              detalhe={"validade_horas": HORAS_SESSAO_ASSISTIDA})
+    db.commit()
+    # NÃO manda e-mail: o link é para o RH abrir na própria tela, agora. Mandar
+    # um convite ao candidato aqui só confundiria quem está sentado ao lado.
+    return ConviteOut(
+        candidato=CandidatoOut.model_validate(candidato), link_magico=link,
+        email_enviado=False,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Testes JÁ RESPONDIDOS aproveitados para o candidato (v2.21)
 # ---------------------------------------------------------------------------

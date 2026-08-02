@@ -366,7 +366,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'emails' && <EmailsConfig />}
       {aba === 'telemetria' && <TelemetriaRH />}
       {aba === 'logs' && <LogsRH />}
-      {aba === 'sistema' && <><VersaoSistema /><Lixeira /><ErrosRecentes /><Auditoria /></>}
+      {aba === 'sistema' && <><VersaoSistema /><TetoUpload /><Lixeira /><ErrosRecentes /><Auditoria /></>}
     </main>
   )
 }
@@ -538,6 +538,65 @@ function VersaoSistema() {
             o painel não abre.</p>
         </>
       )}
+    </div>
+  )
+}
+
+// Tamanho máximo de arquivo que colaborador e candidato conseguem enviar.
+//
+// Editável aqui (pedido do Bruno, 2026-08-02) porque limite chumbado no código
+// exige deploy para ajustar — e quem descobre que o teto é pequeno demais é o
+// RH, com a pessoa do outro lado da linha tentando mandar a foto de um celular
+// novo. Vale para os uploads do creche, do portal e do currículo.
+function TetoUpload() {
+  const [dados, setDados] = useState(null)
+  const [mb, setMb] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [erro, setErro] = useState(null)
+
+  const carregar = () => {
+    setErro(null)
+    return api.tetoUpload().then((d) => { setDados(d); setMb(String(d.mb)) })
+  }
+  useEffect(() => { carregar().catch((e) => setErro(e.amigavel || e.detail || 'falha ao carregar')) }, [])
+
+  const salvar = async () => {
+    setMsg(null)
+    try {
+      await api.salvarTetoUpload(parseInt(mb, 10))
+      setMsg({ tipo: 'ok', texto: 'Limite atualizado.' })
+      await carregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: e.detail === 'fora_da_faixa'
+        ? `Informe um valor entre ${dados?.minimo || 1} e ${dados?.maximo || 200} MB.`
+        : `Não foi possível salvar (${e.detail || e.message}).` })
+    }
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>📎 Tamanho máximo de arquivo</h3>
+      {erro && (<>
+        <p className="alerta">Não foi possível carregar: {erro}</p>
+        <button className="btn-secundario btn-mini"
+                onClick={() => carregar().catch((e) => setErro(e.amigavel || e.detail || 'falha'))}>
+          Tentar de novo</button>
+      </>)}
+      {!dados && !erro && <p className="explica">Consultando…</p>}
+      {dados && (<>
+        <p className="explica">Vale para os envios do candidato, do creche e do portal do
+          colaborador. Foto de celular novo costuma passar de 10 MB — se alguém relatar que
+          o envio falha, aumente aqui, sem precisar de atualização do sistema.</p>
+        <div className="linha2" style={{ alignItems: 'end', marginTop: '.6rem' }}>
+          <label className="campo"><span className="rotulo">Limite por arquivo (MB)</span>
+            <input inputMode="numeric" value={mb} maxLength={3}
+                   onChange={(e) => setMb(e.target.value.replace(/\D/g, ''))} /></label>
+          <button className="btn-secundario" onClick={salvar}>Salvar limite</button>
+        </div>
+        <p className="explica">Entre {dados.minimo} e {dados.maximo} MB. Formatos aceitos:{' '}
+          {(dados.formatos || []).join(', ')}.</p>
+      </>)}
+      <Msg msg={msg} />
     </div>
   )
 }

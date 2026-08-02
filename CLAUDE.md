@@ -88,6 +88,43 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`await arquivo.close()` no `finally` mora DENTRO do serviço, não no
+  call-site** (v2.56, `services/upload_seguro.py`): as duas rotas de upload do
+  creche eram as ÚNICAS do backend inteiro sem o `close()` — e são PÚBLICAS. O
+  Starlette faz spool em disco acima de ~1MB, então sobrava certidão de
+  nascimento de criança em arquivo temporário no container. Também não havia
+  teto de tamanho nem allowlist: `ext or "bin"` aceitava `.exe`, `.svg` e
+  arquivo sem nome. Documentar "lembre de fechar" não funciona (o resto do
+  projeto fechava; estas duas escaparam): use `ler_upload`, que valida e fecha
+  numa função só. **O teto é configurável no painel** (Configurações →
+  Sistema) — limite chumbado exige deploy, e quem descobre que 10MB não bastam
+  para a foto de um celular novo é o RH com a pessoa na linha.
+- **O manifesto descreve o ato REAL, nunca a versão conveniente** (v2.56,
+  admissão assistida): quando o RH preenche a admissão com a pessoa presente, o
+  manifesto NÃO pode continuar afirmando "código enviado ao titular e validado
+  nesta plataforma" como se ela tivesse operado sozinha. Ganhou o campo *"Forma
+  de coleta"* (`fichas.py::pagina_manifesto` + `bloco_assinatura`), preenchido
+  a partir de `Assinatura.assistida_por`. Três regras que sustentam isso: (1) a
+  marca precisa ser gravada **ANTES de `_gerar_pdf`**, senão o manifesto sai
+  sem ela e o hash já foi calculado; (2) o **ator continua `candidato`** na
+  auditoria — quem quis assinar foi ele, e trocar para `rh` registraria que o
+  RH assinou; (3) exige e-mail da PRÓPRIA pessoa (422 `sem_email` na abertura),
+  porque é o código no e-mail dela que sustenta a identidade. Precedente da
+  casa: `AutorizacaoEquipe` diz "emitido sob autorização permanente de X", não
+  "X assinou". O documento de assinatura remota não muda — há teste de
+  regressão, porque manifesto é peça de prova e não deve variar por acidente.
+- **Sessão de trabalho marcada vive no LINK, não em tabela à parte** (v2.56,
+  `acesso_magico.assistido_por`): o wizard já resolve o token a cada
+  requisição, então marcar o próprio acesso dispensa estado paralelo para
+  sincronizar — e não existe "sessão esquecida aberta". Validade curta (8h, não
+  as 72 do convite): link de preenchimento-por-terceiro é superfície de risco
+  sem contrapartida se durar dias.
+- **Texto em PDF quebra linha — normalize antes de procurar a frase** (v2.56):
+  o `multi_cell` do fpdf quebra no meio da frase e o `extract_text` devolve o
+  `\n`, então `"em atendimento assistido por" in texto` falha por causa da
+  LARGURA DA CAIXA, não do conteúdo. Use `" ".join(texto.split())` no teste;
+  senão você "conserta" um código que já estava certo.
+
 - **Mudar a UNIDADE de um campo de dinheiro exige olhar o histórico** (v2.55,
   `creche.py::_valor_total`): o `valor_reembolso` do creche passou a ser POR
   CRIANÇA deferida. Só que, para quem foi aprovado ANTES, o valor gravado já

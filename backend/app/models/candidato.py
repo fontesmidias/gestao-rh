@@ -284,6 +284,19 @@ class AcessoMagico(Base):
     expira_em: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     usado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revogado: Mapped[bool] = mapped_column(default=False)
+    # ---- link de sessão ASSISTIDA (v2.56) --------------------------------
+    # Emitido pelo RH para preencher a admissão COM A PESSOA PRESENTE, no
+    # computador do escritório (feedback 2026-08-02: "para aquela pessoa que
+    # traz todos os documentos na mão e não tem lida nenhuma com tecnologia").
+    #
+    # A marca vive no LINK, não numa tabela de sessão à parte: o wizard já
+    # resolve o token a cada requisição, então tudo que acontece por este
+    # acesso é reconhecível como assistido sem nenhum estado paralelo para
+    # sincronizar (ou esquecer de encerrar).
+    #
+    # SNAPSHOT do e-mail do operador — a evidência não some se o usuário do RH
+    # for removido depois.
+    assistido_por: Mapped[str | None] = mapped_column(String(200))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     candidato: Mapped[Candidato] = relationship(back_populates="acessos")
