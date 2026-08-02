@@ -132,23 +132,37 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
                               _rh: UsuarioRH = Depends(requer_rh)) -> Response:
     """Planilha do Tirvu com UMA admissão (botão na ficha do aprovado)."""
     from app.services.export_planilha import slug
-    from app.services.export_tirvu import linha_tirvu, montar_workbook_tirvu
+    from app.services.export_tirvu import (linha_tirvu, montar_workbook_tirvu,
+                                           pendencias_linha)
 
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(404, "Candidato não encontrado")
     # planilha CRUA no formato exato do Tirvu (aba Plan1, sem filtro/cor/freeze);
     # gerar_matricula=True grava a matrícula automática se faltar (commit abaixo).
-    conteudo = montar_workbook_tirvu([linha_tirvu(db, cand, gerar_matricula=True)])
+    linha = linha_tirvu(db, cand, gerar_matricula=True)
+    conteudo = montar_workbook_tirvu([linha])
+    # As MESMAS pendências que o export em massa acusa (feedback de campo
+    # 2026-08-01: o Bruno exportou por AQUI e recebeu a planilha com posto,
+    # cargo e jornada em branco, sem um aviso sequer — o Tirvu aceita a célula
+    # vazia calado e o vínculo nasce torto lá). O download continua acontecendo
+    # (às vezes se quer a planilha incompleta mesmo), mas nunca mais em
+    # silêncio: vai no cabeçalho e na auditoria.
+    faltas = pendencias_linha(linha)
     registrar(db, "tirvu_exportado", ator="rh", ator_detalhe=_rh.email,
-              detalhe={"linhas": 1, "candidato": str(cand.id)})
+              detalhe={"linhas": 1, "candidato": str(cand.id),
+                       "pendencias": faltas or None})
     db.commit()
     nome = slug(cand.nome_completo, fallback="admissao")
     return Response(
         content=conteudo,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition":
-                 f'attachment; filename="importacao-tirvu-{nome}.xlsx"'})
+                 f'attachment; filename="importacao-tirvu-{nome}.xlsx"',
+                 # Latin-1: cabeçalho HTTP não aceita acento, e "Jornada de
+                 # Trabalho" com acento derrubaria a resposta inteira.
+                 "X-Tirvu-Pendencias": ", ".join(faltas).encode(
+                     "ascii", "ignore").decode() or "nenhuma"})
 
 
 @router.get("/rh/uniformes")
