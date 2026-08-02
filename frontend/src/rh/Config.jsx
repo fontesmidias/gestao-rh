@@ -1700,6 +1700,7 @@ function BackfillEnderecos() {
             ))}
           </tbody>
         </table>
+        <button className="btn-link" onClick={() => setAberto(false)}>ocultar</button>
       </>)}
       <Msg msg={msg} />
     </div>

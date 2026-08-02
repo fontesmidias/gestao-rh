@@ -119,8 +119,10 @@ function OrdemAssinatura() {
           <li key={d.documento} className="rh-lote"
               style={{ padding: '.4rem .6rem', border: '1px solid var(--borda)', borderRadius: 8, marginBottom: '.3rem' }}>
             <span style={{ flex: 1 }}><strong>{i + 1}.</strong> {d.titulo}</span>
-            <button className="btn-link" disabled={i === 0} onClick={() => mover(i, -1)}>↑</button>
-            <button className="btn-link" disabled={i === ordem.length - 1} onClick={() => mover(i, 1)}>↓</button>
+            <button className="btn-link" disabled={i === 0} onClick={() => mover(i, -1)}
+                    aria-label={`Subir "${d.titulo}"`} title="Subir">↑</button>
+            <button className="btn-link" disabled={i === ordem.length - 1} onClick={() => mover(i, 1)}
+                    aria-label={`Descer "${d.titulo}"`} title="Descer">↓</button>
           </li>
         ))}
       </ol>

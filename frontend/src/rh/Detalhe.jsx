@@ -768,8 +768,14 @@ export default function Detalhe({ id, aoVoltar }) {
   const [loteRejeitar, setLoteRejeitar] = useState(false)
   const [pendDossie, setPendDossie] = useState(null)
 
+  const [erroCarga, setErroCarga] = useState(null)
   const recarregar = () => api.detalhe(id).then(setDados)
-  useEffect(() => { recarregar() }, [id])
+  // O catch fica SÓ na carga inicial: `recarregar()` também é chamado depois de
+  // cada ação (aprovar, rejeitar, salvar) e ali o erro é reportado por `msg` —
+  // trocar a tela inteira por uma mensagem apagaria o trabalho em curso.
+  const carregar = () => recarregar().then(() => setErroCarga(null))
+    .catch(() => setErroCarga('Não foi possível carregar esta pessoa.'))
+  useEffect(() => { carregar() }, [id])
 
   const ver = async (slot) => {
     setVisualizando(slot.id)
@@ -777,6 +783,15 @@ export default function Detalhe({ id, aoVoltar }) {
     setPdf({ blob, url: URL.createObjectURL(blob) })
   }
 
+  if (erroCarga) return (
+    <main className="rh-painel">
+      <div className="rh-card">
+        <div className="alerta">{erroCarga}</div>
+        <button className="btn-secundario btn-mini" onClick={carregar}>tentar de novo</button>
+        {aoVoltar && <button className="btn-link" onClick={aoVoltar}>← voltar</button>}
+      </div>
+    </main>
+  )
   if (!dados) return <main className="rh-painel"><p>Carregando…</p></main>
 
   const enviados = dados.slots.filter((s) => s.status === 'enviado')

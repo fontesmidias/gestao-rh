@@ -47,6 +47,15 @@
   --perigo: var(--erro);
   --perigo-suave: var(--erro-suave);
   --tinta-suave: #6a7a70;
+  /* Aviso de atenção (âmbar) — par completo, para inverter no tema escuro. */
+  --aviso-bg: #fff8ec;
+  --aviso-txt: #8a5e0f;
+  --aviso-borda: #f5d9a8;
+  /* Texto secundário (rótulo de apoio, opção de prova, legenda). Existe porque
+     4 regras usavam este token com um fallback de cor fixa e ele NUNCA existiu —
+     o fallback fixo valia nos dois temas e dava 2,09:1 no escuro (mínimo WCAG
+     AA é 4,5:1). Ver a armadilha do "token fantasma" em 08-sistema-de-design. */
+  --texto-suave: #5c6b62;
 
   /* Tipografia (escala única — nunca tamanhos soltos) */
   --fonte: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -108,6 +117,13 @@
   --sombra-cartao: 0 10px 34px rgba(0, 0, 0, .35);
   --alerta-txt: #f1a0a3;
   --sucesso-txt: #7fd8a2;
+  /* Texto secundário no escuro. O claro (#6a7a70 / #5c6b62) sobre o cartão
+     escuro dá ~3,6:1 e ~2,8:1 — abaixo do mínimo AA. Estes dão 6,4:1. */
+  --tinta-suave: #8fa79a;
+  --texto-suave: #8fa79a;
+  --aviso-bg: #332711;
+  --aviso-txt: #f0c674;
+  --aviso-borda: #5a4520;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -192,9 +208,9 @@ a { color: var(--verde-escuro); }
 .talento-passo-num {
   width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
   font-size: .82rem; font-weight: 700; border: 2px solid var(--borda);
-  background: var(--fundo, #fff); color: var(--texto-suave, #6c7a72); z-index: 1;
+  background: var(--fundo, #fff); color: var(--texto-suave); z-index: 1;
 }
-.talento-passo-rot { font-size: .68rem; color: var(--texto-suave, #6c7a72); line-height: 1.2; }
+.talento-passo-rot { font-size: .68rem; color: var(--texto-suave); line-height: 1.2; }
 .talento-passo.ativo .talento-passo-num { border-color: var(--verde-vivo); color: var(--verde-escuro); }
 .talento-passo.ativo .talento-passo-rot { color: var(--verde-escuro); font-weight: 600; }
 .talento-passo.feito .talento-passo-num { background: var(--verde-vivo); border-color: var(--verde-vivo); color: #fff; }
@@ -235,7 +251,7 @@ a { color: var(--verde-escuro); }
 /* aceite LGPD */
 .talento-lgpd {
   display: flex; gap: .6rem; align-items: flex-start; margin-top: 1rem;
-  font-size: .82rem; color: var(--texto-suave, #47554d); line-height: 1.45;
+  font-size: .82rem; color: var(--texto-suave); line-height: 1.45;
 }
 .talento-lgpd input { margin-top: .2rem; flex-shrink: 0; width: 18px; height: 18px; accent-color: var(--verde-vivo); }
 
@@ -308,7 +324,7 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .prova-questao-topo { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
 .prova-questao-acoes { display: flex; gap: .6rem; flex-shrink: 0; }
 .prova-opcoes { list-style: none; padding: 0; margin: .4rem 0; }
-.prova-opcoes li { padding: .18rem 0; font-size: .9rem; color: var(--texto-suave, #47554d); }
+.prova-opcoes li { padding: .18rem 0; font-size: .9rem; color: var(--texto-suave); }
 .prova-opcoes li.certa { color: var(--verde-escuro); font-weight: 600; }
 .prova-opcoes li.errada { color: var(--erro); text-decoration: line-through; }
 .prova-opcoes-ed { margin: .5rem 0; }
@@ -455,10 +471,13 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
            padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
            border: 1px solid rgba(15, 178, 87, .2); animation: surgir .25s ease-out; }
 /* Nem erro, nem sucesso: "deu certo, MAS parte ficou de fora" — como o lote que
-   valida 8 e barra 2 documentos críticos. */
-.aviso-inline { background: #fff8ec; color: #9a6a12; border-radius: var(--raio-input);
+   valida 8 e barra 2 documentos críticos; ou o pedido do creche devolvido para
+   correção. Tokenizado em v2.46: o hex chumbado virava caixa clara isolada no
+   tema escuro, justamente na caixa que leva o motivo da devolução e do
+   indeferimento no portal público. */
+.aviso-inline { background: var(--aviso-bg); color: var(--aviso-txt); border-radius: var(--raio-input);
                 padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
-                border: 1px solid #f5d9a8; animation: surgir .25s ease-out; }
+                border: 1px solid var(--aviso-borda); animation: surgir .25s ease-out; }
 
 .ficha-item { display: flex; justify-content: space-between; align-items: center; gap: .75rem;
               border: 2px solid var(--borda-suave); border-radius: var(--raio-input); padding: 1rem;
@@ -545,7 +564,11 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   width: 100%; border: none; border-bottom: 1px solid var(--borda);
   padding: .55rem .7rem; font-size: .92rem; background: transparent; color: var(--tinta);
 }
-.select-busca-input:focus { outline: none; }
+/* O campo é autoFocus ao abrir o painel, então o anel verde de 4px da regra
+   global ficaria pesado — mas some-lo por inteiro deixava quem navega por
+   teclado sem NENHUMA indicação, na barra de filtros de todo o painel. O foco
+   passa a ser a própria borda inferior, reforçada. */
+.select-busca-input:focus { outline: none; border-bottom: 2px solid var(--verde); }
 .select-busca-lista { list-style: none; margin: 0; padding: .25rem; max-height: 260px; overflow-y: auto; }
 .select-busca-item { padding: .45rem .6rem; border-radius: 6px; cursor: pointer;
                      font-size: .9rem; color: var(--tinta); }
@@ -1429,11 +1452,17 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 .ajuda-q {
   display: inline-flex; align-items: center; justify-content: center;
   width: 15px; height: 15px; margin-left: .35rem; vertical-align: middle;
-  border-radius: 50%; border: 1px solid var(--borda, #cdd6cf);
-  background: #eef2ee; color: #5a6a60; font-size: .68rem; font-weight: 700;
+  border-radius: 50%; border: 1px solid var(--borda);
+  /* Tokens que INVERTEM com o tema: antes eram #eef2ee/#5a6a60 fixos, então a
+     bolinha ficava clara sobre o card escuro. 4,77:1 no claro, 5,94:1 no escuro. */
+  background: var(--borda-suave); color: var(--cinza-txt);
+  font-size: .68rem; font-weight: 700;
   cursor: help; position: relative; user-select: none; flex: none;
 }
-.ajuda-q:hover, .ajuda-q:focus { background: #dfe8e0; outline: none; }
+/* --verde-suave inverte com o tema; o #dfe8e0 fixo de antes deixava o realce
+   de foco invisível no escuro (o outline foi removido, então não sobrava nada). */
+.ajuda-q:hover, .ajuda-q:focus { background: var(--verde-suave); outline: none; }
+.ajuda-q:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
 .ajuda-q:hover::after, .ajuda-q:focus::after {
   content: attr(data-dica); position: absolute; z-index: 60;
   top: calc(100% + 6px); left: 50%; transform: translateX(-50%);

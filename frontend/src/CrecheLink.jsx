@@ -421,7 +421,7 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
   return (
     <div className="creche-sessao">
       {dados.motivo_devolucao && (
-        <div className="alerta" style={{ borderColor: '#e9a63a', background: '#fff8ec', color: '#7a5b1a' }}>
+        <div className="aviso-inline">
           <strong>Seu pedido foi devolvido para correção.</strong><br />
           Motivo do RH: <em>{dados.motivo_devolucao}</em><br />
           Corrija o que for necessário abaixo e reenvie.
@@ -620,7 +620,7 @@ function AposEnvio({ token, status, motivoIndeferimento }) {
         <h2>Pedido não deferido</h2>
         <p className="explica">Após a análise, seu pedido de Reembolso-Creche foi indeferido.</p>
         {motivoIndeferimento && (
-          <div className="alerta" style={{ borderColor: '#e9a63a', background: '#fff8ec', color: '#7a5b1a' }}>
+          <div className="aviso-inline">
             <strong>Motivo:</strong> {motivoIndeferimento}</div>)}
         <p className="explica">Em caso de dúvida, procure o RH.</p>
       </div>

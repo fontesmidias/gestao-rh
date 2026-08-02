@@ -96,8 +96,13 @@ export default function TelemetriaRH() {
   const [eventos, setEventos] = useState(null)
   const [filtros, setFiltros] = useState({ tipo: '', origem: '' })
 
+  // Falha de carga é ANUNCIADA: numa tela de monitoramento, silêncio se
+  // confunde com "nenhum problema" — e é o oposto do que esta tela existe
+  // para dizer.
+  const [erroResumo, setErroResumo] = useState(null)
   const carregar = () => {
-    api.telemetriaResumo(dias).then(setResumo).catch(() => setResumo(null))
+    api.telemetriaResumo(dias).then((r) => { setResumo(r); setErroResumo(null) })
+      .catch(() => setErroResumo('Não foi possível carregar o resumo — os números abaixo podem estar desatualizados.'))
     api.telemetria({ ...filtros, dias, limite: 300 })
       .then(setEventos).catch(() => setEventos([]))
   }
@@ -107,6 +112,12 @@ export default function TelemetriaRH() {
 
   return (
     <>
+      {erroResumo && (
+        <div className="rh-card">
+          <div className="alerta">{erroResumo}</div>
+          <button className="btn-secundario btn-mini" onClick={carregar}>tentar de novo</button>
+        </div>
+      )}
       <div className="rh-card">
         <div className="rh-topo">
           <h3>📈 Telemetria de uso</h3>

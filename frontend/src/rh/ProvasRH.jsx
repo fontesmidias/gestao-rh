@@ -397,7 +397,10 @@ function FormQuestao({ provaId, inicial, tipoInicial, aoSalvar, aoCancelar }) {
                      onChange={() => setGabarito(o.id)} title="Resposta correta" />
               <input value={o.texto} placeholder={`Opção ${letra(i).toUpperCase()}`}
                      onChange={(e) => setOpcao(i, e.target.value)} />
-              {opcoes.length > 2 && <button className="btn-link" onClick={() => removeOpcao(i)}>×</button>}
+              {opcoes.length > 2 && (
+                <button className="btn-link" onClick={() => removeOpcao(i)}
+                        aria-label={`Remover a opção ${letra(i).toUpperCase()}`}
+                        title="Remover esta opção">×</button>)}
             </div>
           ))}
           <button className="btn-link" onClick={addOpcao}>+ opção</button>
