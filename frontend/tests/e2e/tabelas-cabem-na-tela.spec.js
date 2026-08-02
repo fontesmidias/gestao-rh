@@ -40,11 +40,21 @@ const TELAS = [
 // cortado. Sem ela o teste ficaria intermitente por causa de meio pixel.
 const TOLERANCIA = 2
 
+// Token reaproveitado entre os testes deste arquivo: o painel tem rate limit
+// de login (proteção legítima), e cinco logins seguidos derrubavam a suíte com
+// "Muitas tentativas". Faz login UMA vez e injeta o token nos demais.
+let tokenCache = null
+
 async function entrar(page) {
+  if (!tokenCache) {
+    const r = await page.request.post('/api/rh/auth/login', {
+      data: { email: process.env.RH_EMAIL, senha: process.env.RH_SENHA },
+    })
+    tokenCache = (await r.json()).token
+  }
   await page.goto('/rh')
-  await page.locator('input[type=email]').first().fill(process.env.RH_EMAIL)
-  await page.locator('input[type=password]').first().fill(process.env.RH_SENHA)
-  await page.locator('button[type=submit]').first().click()
+  await page.evaluate((t) => localStorage.setItem('rh_token', t), tokenCache)
+  await page.goto('/rh')
   await page.waitForSelector('.dash-tabela, .rh-tabela', { timeout: 30000 })
   // Mede o PADRÃO, não a preferência de colunas que ficou salva de outra
   // execução — senão o teste passaria escondendo colunas por acidente.
@@ -103,6 +113,52 @@ for (const largura of LARGURAS) {
       .toEqual([])
   })
 }
+
+test('linha de tabela não vira um parágrafo', async ({ page }) => {
+  /* Tirar a rolagem lateral sem limitar a ALTURA só troca um problema por
+   * outro (feedback 2026-08-02, segundo print): um posto como "SESI-DF -
+   * 22/2026 - BRIGADISTA, RECEPÇÃO, GARÇONARIA, PORTARIA E LIMPEZA E
+   * CONSERVAÇÃO" quebrava em seis linhas, e a tabela mostrava DUAS pessoas por
+   * tela. O RH deixou de rolar para o lado e passou a rolar para baixo.
+   *
+   * O conserto é o corte em 3 linhas com reticências (`.dash-corta`), com o
+   * texto inteiro no `title` — pedido do Bruno: *"para textos longos ter
+   * reticências e, se parar o mouse, aparecer o texto completo"*.
+   */
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await entrar(page)
+  const problemas = []
+  for (const [nome, rota] of TELAS) {
+    await page.goto(rota)
+    await page.waitForTimeout(1200)
+    const m = await page.evaluate(() => {
+      const linhas = [...document.querySelectorAll('.dash-tabela tbody tr')]
+        .filter((tr) => !tr.classList.contains('dash-detalhe'))
+      if (!linhas.length) return null
+      const alturas = linhas.map((tr) => tr.getBoundingClientRect().height)
+      // Célula `quebra` sem o wrapper de corte é a que deixa a linha crescer
+      // sem limite — o defeito volta por aí.
+      const semCorte = [...document.querySelectorAll('.dash-tabela td.dash-quebra')]
+        .filter((td) => !td.querySelector('.dash-corta')).length
+      return { maior: Math.round(Math.max(...alturas)), semCorte }
+    })
+    if (!m) continue
+    // 170px: acima disso a tabela deixa de ser varrível. O piso é dado pelo
+    // Talentos, que tem SEIS botões de ação e chega a 162px legitimamente — a
+    // grade 2×2 vira três fileiras. O texto longo, esse, é cortado em 3 linhas
+    // e não passa de 115px; a garantia contra ele é a checagem de `semCorte`
+    // logo abaixo, que é específica e não depende deste limiar.
+    if (m.maior > 170) problemas.push(`${nome}: linha de ${m.maior}px de altura`)
+    if (m.semCorte > 0) {
+      problemas.push(`${nome}: ${m.semCorte} célula(s) de texto longo sem o corte em 3 linhas`)
+    }
+  }
+  expect(problemas,
+    'Alguma linha ficou alta demais. Texto longo deve ser CORTADO em 3 linhas '
+    + '(coluna com `quebra: true` ganha `.dash-corta` automaticamente) e o texto '
+    + 'inteiro fica no `title`.\n' + problemas.join('\n'))
+    .toEqual([])
+})
 
 test('a coluna de ações não domina a tabela', async ({ page }) => {
   // Regra que sustenta o resto: se as ações voltarem a ocupar metade da

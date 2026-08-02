@@ -11,6 +11,69 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.60.0] — 2026-08-02 — Texto longo tem reticências, e nada mais vaza
+
+Três prints depois da v2.59 mostraram que eu tinha resolvido o problema pela
+metade — e criado outro.
+
+### Tirar a rolagem lateral não pode criar rolagem vertical
+
+O posto `SESI-DF - 22/2026 - BRIGADISTA, RECEPÇÃO, GARÇONARIA, PORTARIA E
+LIMPEZA E CONSERVAÇÃO` (86 caracteres) quebrava em **seis linhas**, e a tabela
+de Colaboradores passou a mostrar **duas pessoas por tela**. O RH deixou de
+rolar para o lado e começou a rolar para baixo: não é melhor, é outro tipo de
+ruim.
+
+Agora texto longo é **cortado na 3ª linha com reticências**, e o texto inteiro
+aparece ao parar o mouse — exatamente o que o Bruno propôs: *"para textos
+longos ter reticências e, se parar o mouse, aparecer o texto completo"*. A
+linha de Colaboradores caiu de **188px para 115px**.
+
+Detalhe técnico que custou uma medição: o `line-clamp` **não funciona na
+`<td>`**. O navegador força `display: flow-root` em célula de tabela e engole o
+`-webkit-box` — o `clamp: 3` aparecia no computed style e a altura não mudava.
+O corte precisa de um elemento interno (`.dash-corta`), que o `DashPlanilha`
+agora injeta sozinho em toda coluna `quebra: true`.
+
+### Os botões vazavam em outros lugares além da tabela
+
+O primeiro print era do **checklist de documentos**, não do dash: `Ver /
+Aprovar / Rejeitar / Inserir` saindo pela borda do card. A causa era a mesma da
+v2.59 em outro lugar — `display: flex` **sem** `flex-wrap`, que faz o flex
+preferir estourar o container a quebrar a linha. Ali a quebra só valia abaixo
+de 480px.
+
+Como o Bruno pediu que virasse padrão global *"e para serem adotados daqui em
+diante também para as criações futuras"*, a correção não foi tela a tela: **uma
+regra só** liga `flex-wrap` em todos os agrupamentos de ação do painel
+(`.navegacao`, `.rh-lote`, `.rh-topo`, `.slot-linha`, `.ficha-item`,
+`.rh-abas`…). Tela nova que use qualquer um deles **já nasce certa**, sem
+precisar lembrar da regra.
+
+Vem junto o `min-width: 0` nos textos ao lado de botões — a pegadinha clássica
+do flexbox: um item usa o tamanho do CONTEÚDO como piso e empurra os vizinhos
+para fora **mesmo com `flex-wrap` ligado**.
+
+### Unidades relativas
+
+Observação do Bruno: *"vejo que você está considerando as medidas em pixel.
+Talvez não seja interessante em REM ou percentual?"*. As regras que escrevi já
+usavam `ch` e `rem` (os píxeis estavam só nos comentários de medição), mas
+converti o que era legado e importa ao layout: largura da sidebar
+(`236px` → `14.75rem`) e o rótulo do modo card (`96px` → `6rem`). Passam a
+acompanhar o zoom e a fonte do sistema.
+
+### A régua ficou mais completa
+
+O teste de regressão ganhou a verificação de **altura de linha** e da presença
+do corte. Validado por mutação: remover o `.dash-corta` faz o teste apontar
+"Colaboradores: linha de 188px" e as três telas com células sem corte.
+
+Um ajuste no próprio teste: ele fazia login cinco vezes e batia no **rate limit
+do painel** (proteção legítima). Agora entra uma vez e reaproveita o token.
+
+Validação: 23 testes E2E passam, telas conferidas renderizadas.
+
 ## [2.59.0] — 2026-08-02 — Nenhuma tabela obriga a rolar para o lado
 
 > *"tive que segurar a tecla ctrl e rolar o scroll do mouse, mas isso não é
