@@ -37,9 +37,47 @@ from app.services.export_dexion import (  # noqa: E402
 
 FALHAS = []
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+
+# O .xlsx do Dexion NÃO está no repositório, e não pode estar: o repo é PÚBLICO
+# e o `.gitignore` ignora `docs/*` inteiro (regra do CLAUDE.md, porque ali moram
+# planilhas de colaboradores, ofícios e contratos).
+#
+# Então a referência vem em duas camadas, e a garantia é a mesma nas duas:
+#
+#   * na máquina de quem desenvolve, o teste lê o .xlsx ORIGINAL e compara com
+#     ele — é o que pega uma revisão nova do modelo;
+#   * no CI, lê `tests/dados/dexion_cabecalho.json`, extraído do original e
+#     versionado. Ele tem apenas os RÓTULOS das colunas (nenhum dado de
+#     pessoa), o nome da aba e o autoFilter — o que define a FORMA.
+#
+# O JSON é gerado do .xlsx; se o Dexion mandar um modelo novo, regere-o e o
+# diff mostra exatamente o que mudou.
 MODELO = (Path(__file__).resolve().parents[2] / "docs"
           / "orientações importacao dexion"
           / "PLANILHA MODELO CONVERSÃO TRABALHADORES - dexion.xlsx")
+REFERENCIA_JSON = Path(__file__).resolve().parent / "dados" / "dexion_cabecalho.json"
+
+
+def _referencia() -> dict:
+    """Cabeçalho, aba e autoFilter do modelo — do .xlsx ou do JSON versionado."""
+    import json
+
+    if MODELO.exists():
+        cel = _celulas(MODELO, {LINHA_GRUPOS, LINHA_CABECALHO})
+        z = zipfile.ZipFile(MODELO)
+        wb = z.read("xl/workbook.xml").decode("utf-8")
+        nome = [n for n in z.namelist()
+                if "worksheets/sheet" in n and n.endswith(".xml")][0]
+        sx = z.read(nome).decode("utf-8")
+        return {
+            "fonte": "xlsx original",
+            "aba": re.search(r"name=[\"']([^\"']+)", wb).group(1),
+            "auto_filter": re.search(r"<autoFilter ref=[\"']([^\"']+)", sx).group(1),
+            "cabecalho": {f"{r}!{c}": v for (r, c), v in cel.items()},
+        }
+    dados = json.loads(REFERENCIA_JSON.read_text(encoding="utf-8"))
+    dados["fonte"] = "json versionado (o .xlsx não vai ao repo público)"
+    return dados
 
 
 def checar(condicao, descricao):
@@ -94,14 +132,13 @@ def _gerar(linhas: list[dict]) -> bytes:
 
 
 def test_cabecalho_identico_ao_modelo_oficial():
-    """As linhas 3 e 4 têm que bater com o arquivo do Dexion, célula a célula."""
-    print("\n[cabeçalho vs. modelo oficial]")
-    if not MODELO.exists():
-        checar(False, f"modelo oficial não encontrado em {MODELO}")
-        return
+    """As linhas 3 e 4 têm que bater com o modelo do Dexion, célula a célula."""
+    ref = _referencia()
+    print(f"\n[cabeçalho vs. modelo oficial — {ref['fonte']}]")
 
-    esperado = _celulas(MODELO, {LINHA_GRUPOS, LINHA_CABECALHO})
-    obtido = _celulas(_gerar([]), {LINHA_GRUPOS, LINHA_CABECALHO})
+    esperado = ref["cabecalho"]
+    obtido = {f"{r}!{c}": v for (r, c), v in
+              _celulas(_gerar([]), {LINHA_GRUPOS, LINHA_CABECALHO}).items()}
 
     divergentes = [
         (k, esperado.get(k), obtido.get(k))
@@ -175,9 +212,8 @@ def test_forma_do_arquivo():
     # Comparar com a constante seria TAUTOLOGIA: renomear a aba para "Plan1"
     # (o nome do Tirvu — o erro exato de quem copia o gerador vizinho) mudaria
     # os dois lados juntos e o teste continuaria verde. Foi o que uma mutação
-    # provou. A referência é o ARQUIVO OFICIAL.
-    wb_modelo = zipfile.ZipFile(MODELO).read("xl/workbook.xml").decode("utf-8")
-    aba_modelo = re.search(r"name=[\"']([^\"']+)[\"']", wb_modelo).group(1)
+    # provou. A referência é o MODELO (o .xlsx, ou o JSON extraído dele).
+    aba_modelo = _referencia()["aba"]
     wb = z.read("xl/workbook.xml").decode("utf-8")
     m = re.search(r"name=[\"']([^\"']+)[\"']", wb)
     checar(m is not None and m.group(1) == aba_modelo,
