@@ -9,7 +9,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -65,6 +65,41 @@ def _upsert(db: Session, model, candidato_id: uuid.UUID, dados: BaseModel):
 # ---------- Schemas (todos parciais: autosave) ----------
 
 
+class _AparaEspacos(BaseModel):
+    """Base que APARA espaço de todo campo de texto, antes de qualquer validação.
+
+    Feedback 2026-08-02: *"tem gente que quando termina de digitar o nome ainda
+    dá um espaço depois da última palavra"*. É o hábito mais comum de quem
+    digita rápido — e no celular o teclado às vezes acrescenta sozinho, junto
+    com a sugestão de palavra.
+
+    No NOME o `capitalizar_nome` já resolvia; o problema é que ele não vale
+    para os demais campos. `"TAGUATINGA "` ficava com o espaço, e isso:
+
+    * suja o export do Tirvu/Dexion, que é lido por outro sistema;
+    * duplica a opção no filtro de coluna do painel — `"Taguatinga"` e
+      `"Taguatinga "` viram DUAS entradas na lista suspensa, e nenhuma
+      encontra as pessoas da outra;
+    * quebra casamento por texto (cargo, lotação, jornada), que é como boa
+      parte do sistema liga as coisas.
+
+    `mode="before"` para rodar ANTES da validação de tipo: um e-mail com espaço
+    no fim seria recusado pelo `EmailStr` sem isto — e a pessoa veria "e-mail
+    inválido" olhando para um e-mail que está certo.
+
+    Campo que fica só com espaços vira `None`, não `""`: no banco os dois
+    significam "vazio", mas `None` é o que o resto do código já testa.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apara(cls, dados):
+        if not isinstance(dados, dict):
+            return dados
+        return {k: (v.strip() or None) if isinstance(v, str) else v
+                for k, v in dados.items()}
+
+
 def _padronizar_nome(v):
     """Capitaliza nome de pessoa na ENTRADA — o único lugar que resolve.
 
@@ -86,7 +121,7 @@ def _padronizar_nome(v):
     return capitalizar_nome(v)
 
 
-class SecaoPessoais(BaseModel):
+class SecaoPessoais(_AparaEspacos):
     nome_completo: str | None = None
     nome_social: str | None = None
     nome_mae: str | None = None
@@ -115,7 +150,7 @@ class SecaoPessoais(BaseModel):
     pcd_medico_crm: str | None = None
 
 
-class SecaoEndereco(BaseModel):
+class SecaoEndereco(_AparaEspacos):
     cep: str | None = None
     # Legado (string única) — segue aceito para quem começou a ficha antes; a
     # coleta nova usa os três campos separados (layout do Tirvu).
@@ -143,7 +178,7 @@ def _validar_cpf(v):
     return numeros
 
 
-class SecaoDocumentos(BaseModel):
+class SecaoDocumentos(_AparaEspacos):
     rg_numero: str | None = None
     rg_orgao_emissor: str | None = None
     rg_data_expedicao: date | None = None
@@ -169,7 +204,7 @@ class SecaoDocumentos(BaseModel):
     titulo_eleitor_secao: str | None = None
 
 
-class SecaoTrabalhoBanco(BaseModel):
+class SecaoTrabalhoBanco(_AparaEspacos):
     tamanho_calca: str | None = None
     tamanho_camisa: str | None = None
     tamanho_calcado: str | None = None
@@ -178,7 +213,7 @@ class SecaoTrabalhoBanco(BaseModel):
     pix_chave: str | None = None
 
 
-class DependenteIn(BaseModel):
+class DependenteIn(_AparaEspacos):
     nome_completo: str
     data_nascimento: date
     cpf: str
@@ -189,7 +224,7 @@ class DependenteIn(BaseModel):
     _nome_ok = field_validator("nome_completo")(_padronizar_nome)
 
 
-class ContatoEmergenciaIn(BaseModel):
+class ContatoEmergenciaIn(_AparaEspacos):
     nome_completo: str
     parentesco: str
     telefone_celular: str
@@ -198,7 +233,7 @@ class ContatoEmergenciaIn(BaseModel):
     _nome_ok = field_validator("nome_completo")(_padronizar_nome)
 
 
-class SecaoVtEmergencia(BaseModel):
+class SecaoVtEmergencia(_AparaEspacos):
     vt_optante: bool | None = None
     vt_cartao_dftrans: str | None = None
     vt_trajeto_descricao: str | None = None
