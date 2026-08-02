@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import CheckMestre from '../CheckMestre.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 
@@ -20,7 +20,12 @@ export default function DashPlanilha({
   // Filtros que o PAI controla (tipicamente server-side, que recarregam a
   // API): [{chave, rotulo, valor, opcoes, aoMudar, vazioRotulo?}]. Aparecem na
   // MESMA grade dos filtros de coluna, para a tela ter um bloco de filtros só.
+  // Sem `opcoes` vira campo de TEXTO (busca server-side por nome/CPF, v2.51) —
+  // com `debounce` em ms, para não disparar uma consulta por tecla.
   filtrosExtras,
+  // Ações extras na barra de filtros (ex.: "Exportar planilha" do servidor,
+  // que é diferente do "Exportar CSV" do que está na tela).
+  acoesFiltro,
   chaveLinha = (l) => l.id,
   acoesLinha,       // (linha) => JSX  (opcional)
   linhaExpandida,   // (linha) => JSX | null — detalhe aberto LOGO ABAIXO da linha
@@ -118,7 +123,11 @@ export default function DashPlanilha({
                     className={`rh-metrica dash-card${card.filtro ? ' clicavel' : ''}${cardAtivo(card) ? ' ativo' : ''}`}
                     style={card.cor ? { '--card-cor': card.cor } : undefined}
                     onClick={() => clicarCard(card)} disabled={!card.filtro}
-                    title={card.filtro ? (cardAtivo(card) ? 'Clique para limpar o filtro' : `Filtrar por ${card.rotulo}`) : undefined}>
+                    // `dica` explica a MÉTRICA (como o número é calculado);
+                    // sem ela, o title continua sendo o do filtro.
+                    title={card.dica || (card.filtro
+                      ? (cardAtivo(card) ? 'Clique para limpar o filtro' : `Filtrar por ${card.rotulo}`)
+                      : undefined)}>
               <strong>{card.valor}</strong><span>{card.rotulo}</span>
             </button>
           ))}
@@ -140,11 +149,15 @@ export default function DashPlanilha({
         {(filtrosExtras || []).map((f) => (
           <label key={f.chave} className="dash-filtro">
             <span className="dash-filtro-rot">{f.rotulo}</span>
-            <SelectBusca
-              opcoes={(f.opcoes || []).map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) }))}
-              valor={f.valor || ''} aoEscolher={f.aoMudar}
-              placeholder={`${f.rotulo}…`} vazioRotulo={f.vazioRotulo || `${f.rotulo}: todos`}
-              style={{ minWidth: '100%' }} />
+            {f.opcoes ? (
+              <SelectBusca
+                opcoes={f.opcoes.map((o) => ({ valor: String(o.v ?? o), rotulo: String(o.r ?? o) }))}
+                valor={f.valor || ''} aoEscolher={f.aoMudar}
+                placeholder={`${f.rotulo}…`} vazioRotulo={f.vazioRotulo || `${f.rotulo}: todos`}
+                style={{ minWidth: '100%' }} />
+            ) : (
+              <FiltroTexto f={f} />
+            )}
           </label>
         ))}
         {colunas.filter((c) => c.filtro).map((c) => (
@@ -164,6 +177,7 @@ export default function DashPlanilha({
           </label>
         ))}
         <div className="dash-filtros-acoes">
+          {acoesFiltro}
           <button className="btn-secundario btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
           <button className="btn-secundario btn-mini" onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
         </div>
@@ -251,6 +265,25 @@ export default function DashPlanilha({
       )}
     </>
   )
+}
+
+// Filtro de TEXTO controlado pelo pai (server-side). O estado é local para a
+// digitação não esperar o servidor, e só chama `aoMudar` depois da pausa
+// (`debounce`, 400ms por padrão) — senão cada tecla vira uma consulta.
+function FiltroTexto({ f }) {
+  const [txt, setTxt] = useState(f.valor || '')
+  const primeiro = useRef(true)
+  // O pai é a fonte da verdade: se ele limpar o filtro por fora ("limpar
+  // filtros"), o campo acompanha.
+  useEffect(() => { setTxt(f.valor || '') }, [f.valor])
+  useEffect(() => {
+    if (primeiro.current) { primeiro.current = false; return }
+    if (txt === (f.valor || '')) return
+    const t = setTimeout(() => f.aoMudar(txt), f.debounce ?? 400)
+    return () => clearTimeout(t)
+  }, [txt])
+  return <input placeholder={f.placeholder || `${f.rotulo}…`} value={txt}
+                onChange={(e) => setTxt(e.target.value)} />
 }
 
 function carregarOcultas(id) {

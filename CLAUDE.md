@@ -419,6 +419,31 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (dimensão) continua só no servidor. O front lê `.palavra`; a pontuação
   compara a palavra enviada. Definições em `SIGNIFICADOS_DISC` (disc.py),
   escritas à mão.
+- **Tempo de preenchimento é LÍQUIDO, vem da TELEMETRIA** (v2.51,
+  `services/telemetria.py::tempo_liquido_por_candidato`): o card de Admissões
+  mostrava `dossie_gerado_em - criado_em` (o campo se chamava
+  `tempo_medio_minutos_convite_ao_dossie`) — 2.590 min que incluíam a pessoa
+  dormindo e esperando documento chegar. Agora soma os intervalos entre eventos
+  consecutivos da MESMA `sessao` e **descarta buracos > 30 min**
+  (`GAP_INATIVIDADE_S`) — mesmo raciocínio do import de ponto, onde `00:00`
+  com entrada é registro incompleto e não jornada de zero hora. Três regras que
+  NÃO devem ser afrouxadas (travadas em `test_tempo_liquido.py`): sessões
+  diferentes SOMAM (voltar no dia seguinte é a mesma pessoa); a cauda de sessão
+  tem TETO (`CAUDA_MAX_S`), senão quem entra e sai 10 vezes infla a média em
+  ~17%; e **quem não tem telemetria fica FORA da média**, nunca entra como
+  zero. A métrica antiga continua na API (responde "quanto o processo demora")
+  e vive no tooltip do card. Duração na tela sempre por `fmt.js::fmtDuracao` —
+  a unidade acompanha o número (`45s`/`25min`/`1h30`/`1d19h`).
+- **Filtro server-side entra na barra do dash, NUNCA num card à parte** (regra
+  da v2.30, aplicada a Admissões e Colaboradores só na v2.51): as duas telas
+  tinham DUAS caixas de filtro empilhadas, com o mesmo campo nas duas (status
+  em Admissões; nome e posto em Colaboradores) — uma consultando o servidor,
+  outra a memória. Use `filtrosExtras` do `DashPlanilha` e **tire o `filtro:`
+  da coluna que o filtro do pai cobre** (um assunto, um controle); a coluna
+  segue ordenável e os cards clicáveis continuam funcionando, porque a
+  filtragem em memória roda sobre TODAS as colunas. `filtrosExtras` sem
+  `opcoes` vira campo de TEXTO com debounce; `acoesFiltro` põe botões próprios
+  na barra (foi onde o "Exportar planilha" foi parar).
 - **NUNCA escreva `<select>` nativo — o padrão é `SelectBusca`** (v2.50, pedido
   do Bruno: *"toda vez que tiver um select, já imponha esse padrão"*). Vale para
   filtro E preenchimento, em qualquer tela. Ele tem 111 cargos, 269 jornadas e

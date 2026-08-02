@@ -562,6 +562,10 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   display: block; width: 100%; min-width: 0;
 }
 .campo > .select-busca .select-busca-campo { min-height: var(--toque); }
+/* Checkbox com o rótulo ao lado, alinhados na mesma linha — o padrão que
+   várias telas faziam com `style` inline (display:flex, gap, margin:0). */
+.campo-check { display: inline-flex; align-items: center; gap: var(--esp-1);
+               margin: 0; white-space: nowrap; }
 .select-busca-campo {
   width: 100%; display: flex; justify-content: space-between; align-items: center;
   gap: .4rem; padding: .5rem .7rem; border: 1px solid var(--borda);
