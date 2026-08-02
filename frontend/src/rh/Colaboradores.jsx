@@ -316,7 +316,7 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         ? <span className="chip" style={{ '--chip-cor': '#e9a63a' }}
                 title={`Faltam: ${c.dados_faltando.join(', ')}`}>
             ⚠️ falta {c.dados_faltando.join(', ')}</span>
-        : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✓ completo</span>) },
+        : <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✓ completo</span>) },
     { chave: 'criado_em', rotulo: 'Cadastro', ordenavel: true, oculta: true,
       valor: (c) => c.criado_em, render: (c) => fmtData(c.criado_em) },
   ]

@@ -1047,6 +1047,9 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
   justify-content: space-between; padding: .6rem .8rem;
   border-top: 1px solid var(--borda); overflow: hidden; white-space: nowrap;
 }
+/* Rever o tour: ícone e não texto — o rodapé não comporta um terceiro rótulo
+   sem espremer o nome de quem está logado (medido: sobrava só o avatar). */
+.rh-sidebar-tour { flex: none; padding: 0 var(--esp-1); font-size: var(--fs-apoio); }
 .rh-conteudo { flex: 1; min-width: 0; }
 /* Hambúrguer (só no celular) e fundo escurecido da gaveta */
 .rh-hamburguer {
@@ -1678,3 +1681,38 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
 .linha-atalhos { display: flex; flex-wrap: wrap; gap: var(--esp-2);
   margin-top: var(--esp-1); }
 .linha-atalhos .btn-link { font-size: var(--fs-mini); padding: 0; }
+
+/* ===== Tour guiado (driver.js) — adaptação ao tema e à marca =====
+   O `driver.css` vem com cores fixas e não expõe variável nenhuma de cor
+   (só `--driver-animation-duration` e a fonte). No tema escuro o balão saía
+   BRANCO no meio da tela escura. Como o tour é a primeira coisa que alguém vê
+   no painel, valia arrumar. Vale para o painel do RH e para o wizard do
+   candidato, que usa o mesmo componente. */
+.driver-popover {
+  background: var(--cartao); color: var(--texto);
+  border: 1px solid var(--borda); border-radius: var(--raio);
+  box-shadow: var(--sombra-cartao); font-family: var(--fonte);
+  max-width: 22rem;
+}
+.driver-popover-title { color: var(--tinta); font-size: var(--fs-secao); }
+.driver-popover-description { color: var(--texto); font-size: var(--fs-apoio); }
+.driver-popover-progress-text { color: var(--tinta-suave); font-size: var(--fs-mini); }
+.driver-popover-close-btn { color: var(--tinta-suave); }
+.driver-popover-close-btn:hover { color: var(--tinta); }
+/* A seta que aponta o elemento destacado é desenhada com `border-*-color`;
+   sem isto ela continuaria branca, apontando para o card escuro. */
+.driver-popover-arrow-side-left.driver-popover-arrow { border-left-color: var(--cartao); }
+.driver-popover-arrow-side-right.driver-popover-arrow { border-right-color: var(--cartao); }
+.driver-popover-arrow-side-top.driver-popover-arrow { border-top-color: var(--cartao); }
+.driver-popover-arrow-side-bottom.driver-popover-arrow { border-bottom-color: var(--cartao); }
+/* Botões do tour com o vocabulário da casa: o "Próximo" é a ação primária. */
+.driver-popover-footer button {
+  font-family: var(--fonte); font-weight: 600; text-shadow: none;
+  border-radius: var(--raio-botao); padding: .4rem .9rem;
+  background: var(--cartao); color: var(--tinta); border: 1px solid var(--borda);
+}
+.driver-popover-footer button:hover { background: var(--hover); }
+.driver-popover-footer .driver-popover-next-btn {
+  background: var(--verde); color: #fff; border-color: var(--verde);
+}
+.driver-popover-footer .driver-popover-next-btn:hover { background: var(--verde-vivo); }

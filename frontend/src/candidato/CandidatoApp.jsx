@@ -104,6 +104,7 @@ export default function CandidatoApp() {
 
   const tour = useMemo(() => driver({
     showProgress: true,
+    progressText: '{{current}} de {{total}}',   // o padrão é "2 of 4", em inglês
     nextBtnText: 'Próximo', prevBtnText: 'Voltar', doneBtnText: 'Entendi!',
     steps: [
       { popover: { title: '👋 Bem-vindo(a)!', description: 'Sua admissão é 100% digital e leva poucos minutos. Vamos te mostrar como funciona.' } },

@@ -11,6 +11,63 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.49.0] — 2026-08-02 — O sistema explica a si mesmo
+
+Quarta e última leva da reforma. As três anteriores corrigiram e protegeram;
+esta **acrescenta** — é a parte do pedido original do Bruno sobre tornar o
+sistema intuitivo.
+
+Vale registrar a decisão de método, porque ela contraria o pedido literal: o
+Bruno pediu **GIFs** de instrução. Apresentados os custos — peso no celular do
+candidato (que já sofreu com tela branca e OCR lento), desatualização
+silenciosa a cada mudança de tela, e o fato de não serem acessíveis nem
+traduzíveis —, ele escolheu **onboarding embutido + animação CSS/SVG onde o
+gesto for insubstituível**. GIF é remédio para interface que não se explica; a
+aposta aqui é a interface se explicar.
+
+### Adicionado
+
+- **Tour do painel do RH** (`rh/tour.js`). O wizard do candidato tinha tour
+  desde a v1.x; o painel — **17 telas em 6 grupos** — nunca teve, e quem entra
+  pela primeira vez vê um menu grande sem indicação de por onde começar. Cinco
+  passos que dizem o que a pessoa **ganha** em cada caminho, não o que a tela
+  é. Dispara uma vez (chave `tour_rh_visto`, separada da do candidato — o RH
+  também abre o link do candidato para conferir) e fica no rodapé do menu para
+  rever.
+- **12 termos novos no glossário** (`Ajuda.jsx`), cobrindo a lacuna que o
+  próprio `08-sistema-de-design.md` registrava como pendente desde as Ondas
+  B/C: `homologar`, `manifestacao`, `feedback_dado`, `avaliacao_vertical`,
+  `avaliacao_horizontal`, `calibracao`, `fato_observado`, `pdi`, `reciclagem`,
+  `documento_critico`. As definições explicam a **consequência**, não a
+  palavra: manifestação diz que o prazo é de 7 dias; horizontal diz que com
+  menos de 2 respondentes o resultado é suprimido.
+
+### Corrigido
+
+- **O tour saía BRANCO no tema escuro** — em ambos os tours, inclusive o do
+  candidato, que está em produção há meses. O `driver.css` traz cores fixas e
+  não expõe variável de cor nenhuma (só duração de animação e fonte), então as
+  classes foram sobrescritas com os tokens da casa: fundo, texto, a seta que
+  aponta o elemento (desenhada com `border-*-color`) e os botões, com o
+  "Próximo" no verde da marca. Medido: **12,29:1 no escuro, 13,32:1 no claro**.
+- **"2 of 5" em inglês** no meio de uma interface inteiramente em pt-BR —
+  também nos dois tours. O `driver.js` aceita `progressText`, e ninguém tinha
+  passado.
+- **O botão de rever o tour espremia o nome de quem está logado.** A primeira
+  versão usava rótulo "? Como usar"; medindo o rodapé (`space-between` com
+  `nowrap`), o nome caía de 124px para o avatar sozinho. Virou ícone.
+- Mais **13 hex crus** convertidos para token nos chips de estado — só os que
+  eram **idênticos** a um token existente. Os outros 11 são cores próprias
+  (vermelhos, âmbares, azuis, um roxo) que não existem na paleta: trocá-las
+  pelo "token mais parecido" mudaria a cor na tela sem ninguém ter pedido.
+
+### Verificação
+
+`test_design_system` OK · `npm run build` ok · tour conferido **renderizado**
+nos dois temas, com os 5 passos exibidos e **nenhum pulado por elemento
+ausente** (o modo de falha silenciosa do `driver.js`) · contraste do popover
+medido no Chromium.
+
 ## [2.48.0] — 2026-08-02 — Guarda-corpo: a dívida de design não volta sozinha
 
 Terceira leva da reforma. As duas anteriores corrigiram defeitos; esta impede

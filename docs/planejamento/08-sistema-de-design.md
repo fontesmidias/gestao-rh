@@ -418,6 +418,40 @@ ponha um `<Ajuda>`.
 do candidato) abrem no CLIQUE de propósito — texto longo que a pessoa lê enquanto
 age no celular; hover as faria sumir no meio do passo a passo.
 
+### O glossário explica a CONSEQUÊNCIA, não a palavra
+
+Uma definição de dicionário não ajuda quem está decidindo. Compare:
+
+- ❌ *"Manifestação: ato de manifestar-se sobre a avaliação."*
+- ✅ *"Manifestação: o direito do colaborador de registrar a própria opinião
+  sobre a avaliação recebida (seção 9 da cartilha). Tem prazo de 7 dias —
+  passado ele, o RH pode homologar assim mesmo."*
+
+A segunda diz o que muda na vida de quem lê. Quando o termo vem de norma ou de
+instrumento oficial (cartilha, IN, CLT), **cite a origem** — é o que permite ao
+RH defender a decisão depois.
+
+### Tour guiado (`driver.js`)
+
+Há dois, com chaves de `localStorage` separadas: painel do RH
+([`rh/tour.js`](../../frontend/src/rh/tour.js), `tour_rh_visto`) e wizard do
+candidato (`tour_visto`). Dispara uma vez na primeira visita e fica acessível
+para rever — no rodapé do menu, no RH.
+
+Três regras vindas de defeito real (v2.49):
+
+1. **Ancore em elemento que existe sempre.** `element` não encontrado faz o
+   `driver.js` **pular o passo em silêncio**: o tour encolhe e ninguém percebe.
+   Use sidebar e cabeçalho, não card que depende de dados. Ao mexer, conte os
+   passos exibidos.
+2. **O `driver.css` não conhece o tema.** Ele traz cores fixas e não expõe
+   variável de cor — as classes `.driver-popover*` estão sobrescritas no
+   `styles.css` com os tokens da casa. Sem isso o balão sai branco no escuro
+   (foi assim no tour do candidato por meses).
+3. **`progressText: '{{current}} de {{total}}'`** — o padrão é "2 of 5".
+
+Cada passo deve dizer **o que a pessoa ganha**, não o que a tela é.
+
 ---
 
 ## 8. Botões

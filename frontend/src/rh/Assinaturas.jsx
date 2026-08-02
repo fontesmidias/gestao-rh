@@ -81,7 +81,7 @@ function DocsCandidatos({ aoAbrirPessoa }) {
                   <td>{p.assinadas}/{p.total}</td>
                   <td>{p.pendentes > 0
                     ? <span className="chip" style={{ '--chip-cor': '#f0ad4e' }}>⏳ {p.pendentes}</span>
-                    : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ em dia</span>}</td>
+                    : <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✅ em dia</span>}</td>
                   <td>{p.ultima_assinatura ? fmtData(p.ultima_assinatura) : '—'}</td>
                   <td className="acoes-candidato">
                     {aoAbrirPessoa && (
@@ -220,7 +220,7 @@ function Feitas() {
                   <td><strong>{f.titulo}</strong></td><td>{f.colaborador}</td><td>{f.papel}</td>
                   <td>{fmtData(f.assinado_em)}</td>
                   <td>{f.documento_concluido
-                    ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ concluído</span>
+                    ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✅ concluído</span>
                     : <span className="chip" style={{ '--chip-cor': '#3b7dd8' }}>aguardando outros</span>}</td>
                 </tr>
               ))}

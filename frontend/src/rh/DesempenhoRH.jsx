@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import SelectBusca from '../SelectBusca.jsx'
+import Ajuda from '../Ajuda.jsx'
 
 // Gestão de Desempenho — Fatos Observados (Onda C, 1ª fatia).
 //
@@ -57,7 +58,7 @@ export default function DesempenhoRH({ aoVoltar }) {
   return (
     <section className="pagina">
       <div className="rh-topo">
-        <h1>📌 Fatos Observados</h1>
+        <h1>📌 Fatos Observados<Ajuda termo="fato_observado" /></h1>
         <button className="btn-secundario btn-mini" onClick={aoVoltar}>← voltar</button>
       </div>
       <p className="explica">Registre <strong>na hora</strong> o que a pessoa fez — bom

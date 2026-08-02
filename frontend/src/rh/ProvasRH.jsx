@@ -478,7 +478,7 @@ function Aplicacoes() {
         if (c.quedas_de_conexao) partes.push(`${c.quedas_de_conexao}× caiu a conexão`)
         return n > 0
           ? <span className="chip" style={{ '--chip-cor': '#d9534f' }} title={partes.join(' · ')}>⚠️ {n}</span>
-          : <span className="chip" style={{ '--chip-cor': '#0fb257' }} title="Sem sinais de saída/cópia">✓ limpo</span>
+          : <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }} title="Sem sinais de saída/cópia">✓ limpo</span>
       } },
     { chave: 'criado_em', rotulo: 'Quando', ordenavel: true, valor: (a) => a.criado_em,
       render: (a) => fmtData(a.criado_em) },
@@ -521,7 +521,7 @@ function RelatorioComportamento({ c }) {
   return (
     <div className="rh-card">
       <h3>🖥️ Comportamento na tela {limpo
-        ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✓ sem sinais</span>
+        ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>✓ sem sinais</span>
         : <span className="chip" style={{ '--chip-cor': '#d9534f' }}>⚠️ requer atenção</span>}</h3>
       <p className="explica">Registrado durante a prova — <strong>indício</strong>, não prova de
         fraude. {c.total_eventos} evento(s) capturado(s).</p>

@@ -17,6 +17,7 @@ import DesempenhoRH from './DesempenhoRH.jsx'
 import AvaliacoesRH from './AvaliacoesRH.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 import { anotar, definirContexto } from '../telemetria.js'
+import { criarTour, jaViu, marcarVisto } from './tour.js'
 import Creche from './Creche.jsx'
 import TestagemRH from './TestagemRH.jsx'
 import Arquivo from './Arquivo.jsx'
@@ -278,7 +279,7 @@ const GRUPOS = [
 // coisas em outra aba" — sem <Link>/<NavLink> o navegador não tem link
 // nenhum para oferecer no botão direito). Ctrl+clique e "abrir em nova aba"
 // passam a funcionar de graça: o React Router intercepta só o clique simples.
-function Sidebar({ aoSair }) {
+function Sidebar({ aoSair, aoRever }) {
   const [movelAberto, setMovelAberto] = useState(false)
   const nome = localStorage.getItem('rh_nome') || ''
   return (
@@ -316,6 +317,11 @@ function Sidebar({ aoSair }) {
             <span className="rh-sidebar-avatar">{(nome || '?').trim()[0]?.toUpperCase()}</span>
             <span className="rh-nome">{nome}</span>
           </span>
+          {/* Ícone, não texto: o rodapé é `space-between` com `nowrap`, e um
+              terceiro item com rótulo comprimia o nome de quem está logado
+              até sobrar só o avatar. */}
+          <button className="btn-link rh-sidebar-tour" title="Rever o tour do painel"
+                  aria-label="Rever o tour do painel" onClick={aoRever}>❓</button>
           <button className="btn-link" title="Sair da conta" onClick={aoSair}>Sair</button>
         </div>
       </aside>
@@ -353,6 +359,17 @@ function PainelConteudo({ aoSair }) {
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [filtros, setFiltros] = useState({ status: '', busca: '', posto_id: '' })
+
+  // Tour do painel: dispara UMA vez, na primeira visita, e fica disponível pelo
+  // "?" do rodapé do menu. O atraso deixa a sidebar montar — sem ele o driver
+  // não acha os elementos e pula os passos EM SILÊNCIO.
+  const tour = useMemo(() => criarTour(), [])
+  useEffect(() => {
+    if (jaViu()) return
+    marcarVisto()
+    const t = setTimeout(() => tour.drive(), 600)
+    return () => clearTimeout(t)
+  }, [tour])
 
   const recarregar = (f = filtros) => {
     const limpos = Object.fromEntries(Object.entries(f).filter(([, v]) => v))
@@ -430,7 +447,7 @@ function PainelConteudo({ aoSair }) {
 
   return (
     <div className="rh-layout">
-      <Sidebar aoSair={aoSair} />
+      <Sidebar aoSair={aoSair} aoRever={() => tour.drive()} />
       <div className="rh-conteudo">
         {pagina === 'config' && <Config aoVoltar={() => navegar('inicio')} />}
         {pagina === 'colaboradores' && (

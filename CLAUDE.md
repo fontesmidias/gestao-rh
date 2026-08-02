@@ -176,6 +176,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **Tour guiado: `driver.js`, um por público, tematizado à mão** (v2.49,
+  `rh/tour.js` + `candidato/CandidatoApp.jsx`): o painel do RH e o wizard do
+  candidato têm tours SEPARADOS, com chaves de `localStorage` distintas
+  (`tour_rh_visto` × `tour_visto`) — compartilhar faria um esconder o outro, e
+  o RH também abre o link do candidato para conferir. Três armadilhas pagas:
+  (1) **passo com `element` que não existe é PULADO EM SILÊNCIO** — o tour
+  encolhe sem avisar; ancore em elemento sempre presente (sidebar, cabeçalho),
+  nunca em card que depende de dados, e confira contando os passos exibidos;
+  (2) o `driver.css` tem **cores fixas e nenhuma variável de cor** — sem
+  sobrescrever as classes `.driver-popover*` com os tokens, o balão sai BRANCO
+  no tema escuro (ficou assim no tour do candidato por meses); (3) o progresso
+  vem como **"2 of 5" em inglês** — passe `progressText: '{{current}} de
+  {{total}}'`. Ao acrescentar passo, diga o que a pessoa GANHA, não o que a
+  tela é.
 - **O design system tem GUARDA-CORPO — rode antes de commitar tela**
   (v2.48, `backend/tests/test_design_system.py`): teste estrutural, stdlib
   pura, roda em segundos e **agora roda no CI**. Cobra classe fantasma, token
