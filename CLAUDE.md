@@ -404,6 +404,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Trocar matrícula guarda a ANTERIOR — e o ponto depende disso** (v2.45,
+  `colaboradores.py::trocar_matricula`): a matrícula é a chave com que
+  `desempenho.py::_casar_matricula` liga a planilha de ponto do Tirvu à pessoa.
+  Trocar sem guardar o número velho parte o histórico de frequência em dois, em
+  SILÊNCIO — uma planilha de período anterior deixa de casar e o registro vira
+  órfão, sem erro nenhum. Por isso `Candidato.matriculas_anteriores` é uma
+  LISTA (recontratação, correção, fusão), e `_casar_matricula` a consulta
+  depois de tentar a atual. **A matrícula atual tem precedência**: número
+  reciclado vai para quem o usa hoje. Unicidade comparada NORMALIZADA
+  (`matricula_norm`: só dígitos, sem zeros à esquerda — "003035" == "3035"),
+  senão duas pessoas ficam com a mesma e o ponto cai na errada. Motivo
+  obrigatório + auditoria com de → para.
 - **Documento pedido DEPOIS da conclusão: `slot.liberado_em`** (v2.43): quando
   o RH marca `pcd` de quem já concluiu/foi aprovado, o LAUDO vira obrigatório
   num checklist congelado — pendência que ninguém consegue resolver. As guardas

@@ -236,6 +236,13 @@ class Candidato(Base):
     # deduplicar a importação em massa e autenticar no autocadastro público.
     cpf: Mapped[str | None] = mapped_column(String(14), index=True, nullable=True)
     matricula: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
+    # Matrículas que esta pessoa JÁ TEVE (v2.45). Não é histórico decorativo: o
+    # import de ponto do Tirvu casa a pessoa pela MATRÍCULA, e uma planilha de
+    # período anterior traz a antiga. Sem esta lista, trocar a matrícula
+    # desligaria a pessoa do próprio histórico de frequência — em silêncio, que
+    # é o pior jeito. Lista, não campo único: ninguém troca de matrícula uma
+    # vez só na vida (recontratação, correção, fusão de cadastro).
+    matriculas_anteriores: Mapped[list | None] = mapped_column(JSON, nullable=True)
     data_nascimento: Mapped[str | None] = mapped_column(String(10))  # dd/mm/aaaa
     # Situação do vínculo: None enquanto é candidato em admissão; "ativo" ou
     # "desligado" quando vira colaborador. Não confundir com `status` (fluxo).

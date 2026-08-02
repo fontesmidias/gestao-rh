@@ -22,6 +22,72 @@ const fmtDataBR = (s) => {
 // (status/situação/posto/busca/incluir_admissao) continuam SERVER-SIDE
 // (recarregam a API); o DashPlanilha refina em memória por cima e cuida da
 // seleção + ações em massa contextuais.
+// Trocar a matrícula NA LINHA (v2.45, pedido do Bruno em 2026-08-01) — editar
+// perto do item é a regra do sistema de design, e aqui vale duas vezes: quem
+// troca uma matrícula está olhando para o nome da pessoa.
+//
+// O motivo é obrigatório porque toda ação manual do RH sai com motivo (linha
+// vermelha do projeto), e porque esta em especial mexe na chave que liga a
+// pessoa ao histórico de ponto dela.
+function MatriculaEditavel({ colaborador, aoTrocar }) {
+  const [aberto, setAberto] = useState(false)
+  const [valor, setValor] = useState(colaborador.matricula || '')
+  const [motivo, setMotivo] = useState('')
+  const [msg, setMsg] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+
+  const salvar = async () => {
+    setMsg(null); setSalvando(true)
+    try {
+      const r = await api.trocarMatricula(colaborador.id, valor.trim(), motivo.trim())
+      setAberto(false); setMotivo('')
+      aoTrocar()
+      if (r.periodos_de_ponto > 0) {
+        window.alert(`Matrícula alterada. Esta pessoa tem ${r.periodos_de_ponto} `
+          + 'período(s) de ponto importado — o histórico continua ligado a ela, '
+          + 'porque a matrícula anterior fica guardada.')
+      }
+    } catch (e) {
+      const textos = {
+        matricula_em_uso: 'Já existe outra pessoa com essa matrícula. Duas pessoas com o '
+          + 'mesmo número tornam impossível saber de quem é o ponto.',
+        motivo_obrigatorio: 'Escreva o motivo da troca.',
+        matricula_obrigatoria: 'Informe a nova matrícula.',
+        matricula_igual: 'A matrícula é a mesma que já está cadastrada.',
+        matricula_muito_longa: 'Matrícula longa demais (máximo de 30 caracteres).',
+      }
+      setMsg(textos[e.detail] || `Não foi possível trocar (${e.detail || e.message}).`)
+    } finally { setSalvando(false) }
+  }
+
+  if (!aberto) {
+    return (
+      <button className="btn-link" title="Trocar o número da matrícula"
+              onClick={() => { setValor(colaborador.matricula || ''); setAberto(true) }}>
+        {colaborador.matricula || '— definir —'}
+      </button>
+    )
+  }
+  return (
+    <div className="rh-adicional" onClick={(e) => e.stopPropagation()}>
+      <input value={valor} placeholder="Nova matrícula" style={{ maxWidth: 120 }}
+             onChange={(e) => setValor(e.target.value)} />
+      <input value={motivo} placeholder="Motivo (obrigatório)" style={{ maxWidth: 220 }}
+             onChange={(e) => setMotivo(e.target.value)} />
+      <button className="btn-principal btn-mini" disabled={salvando || !valor.trim() || !motivo.trim()}
+              onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+      <button className="btn-link" onClick={() => { setAberto(false); setMsg(null) }}>cancelar</button>
+      {(colaborador.matriculas_anteriores || []).length > 0 && (
+        <span className="explica" style={{ width: '100%' }}>
+          Já teve: {colaborador.matriculas_anteriores.join(', ')} — o ponto importado
+          com esses números continua sendo dela.
+        </span>
+      )}
+      {msg && <div className="alerta" style={{ width: '100%' }}>{msg}</div>}
+    </div>
+  )
+}
+
 export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [lista, setLista] = useState(null)
   const [postos, setPostos] = useState([])
@@ -223,6 +289,11 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       valor: (c) => c.nome_completo,
       render: (c) => (<><strong>{c.nome_completo}</strong><br /><small>{c.email || '—'}</small></>) },
     { chave: 'cpf', rotulo: 'CPF', filtro: 'texto', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
+    // Matrícula é a chave com que o ponto do Tirvu encontra a pessoa — por isso
+    // ela aparece na lista e é editável aqui (v2.45).
+    { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, filtro: 'texto',
+      valor: (c) => c.matricula || '',
+      render: (c) => <MatriculaEditavel colaborador={c} aoTrocar={() => carregar()} /> },
     { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true,
       valor: (c) => c.posto_nome || '' },
     { chave: 'nascimento', rotulo: 'Nascimento', ordenavel: true, oculta: true,
