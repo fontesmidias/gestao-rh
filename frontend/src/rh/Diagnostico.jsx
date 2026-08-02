@@ -59,8 +59,8 @@ export function DiagnosticoColaborador({ id }) {
           obrigatório(s) em aberto — {d.formulario_incompleto.join(', ')}</div>
       )}
 
-      <details style={{ marginTop: '.6rem' }}>
-        <summary style={{ cursor: 'pointer' }}>Documentos ({d.documentos.length})</summary>
+      <details>
+        <summary>Documentos ({d.documentos.length})</summary>
         <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
           <thead><tr><th>Documento</th><th>Situação</th><th>Obrigatório</th></tr></thead>
           <tbody>
@@ -72,8 +72,8 @@ export function DiagnosticoColaborador({ id }) {
         </table>
       </details>
 
-      <details style={{ marginTop: '.6rem' }} open>
-        <summary style={{ cursor: 'pointer' }}>Linha do tempo ({d.linha_do_tempo.length} eventos)</summary>
+      <details open>
+        <summary>Linha do tempo ({d.linha_do_tempo.length} eventos)</summary>
         <table className="rh-tabela" style={{ marginTop: '.4rem' }}>
           <thead><tr><th>Quando</th><th>Ação</th><th>Ator</th><th>Detalhe</th></tr></thead>
           <tbody>

@@ -11,6 +11,37 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.47.1] — 2026-08-02 — O respiro e a setinha (padronizados no CSS)
+
+Dois defeitos que o Bruno pegou em prints da v2.47 — ambos introduzidos por
+ela. Não eram "para tratar depois": o padrão já existia e a leva não o seguiu.
+
+- **Card do posto colado na lista de documentos.** Todo `.rh-card` tem
+  `margin-bottom`, mas a `.rh-revisao` (a lista) é um grid, não um card, e não
+  declarava o seu. Ninguém tinha visto porque, até a v2.47, ela era o **último**
+  bloco da tela — o defeito nasceu ao pôr o cadastro logo abaixo.
+- **A setinha ▸ do "Histórico e consulta" furava o padding do card.** Culpa do
+  `list-style-position: outside` que eu mesmo escrevi ao criar
+  `details.rh-card > summary`: com `outside`, o marcador é desenhado FORA da
+  caixa de conteúdo e encosta na borda.
+
+Como a pergunta era "isso vai se repetir em outras partes?", a correção foi
+feita na **regra base**, não no ponto do defeito:
+
+- `summary` agora tem `cursor: pointer`, `list-style-position: inside` e anel de
+  foco no `styles.css`. Isso apagou **seis remendos inline** espalhados por
+  `Detalhe`, `Diagnostico` e `Config` — três `style={{ cursor:'pointer' }}` e
+  três `style={{ marginTop }}` — e evita o próximo.
+- `details:not([class])` ganha o respiro do dobrável solto. O `:not([class])`
+  não é detalhe: sem ele, a regra global sobrescrevia o espaçamento de
+  `.ficha-rh-secao` e as seções da ficha iam de 8px para 12px — **regressão numa
+  tela que estava certa**, pega ao medir os três casos lado a lado antes de
+  fechar.
+
+Verificação: `deploy-tela-branca` 8/8, medição no Chromium dos três tipos de
+`<details>` (com classe própria, sem classe, e card dobrável) e conferência
+visual no tema escuro.
+
 ## [2.47.0] — 2026-08-02 — A tela do candidato para de fazer você rolar
 
 Segunda leva da reforma de frontend, e a que ataca a queixa original do Bruno:

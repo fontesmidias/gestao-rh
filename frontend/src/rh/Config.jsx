@@ -945,8 +945,8 @@ function WebhookEmail() {
         tanto o SMTP autenticado quanto o registro de aplicativo: você cria um fluxo no
         <strong> Power Automate</strong> e o sistema só manda os dados do e-mail para ele.
         Usado quando o Microsoft 365 e o Google acima não estiverem conectados.</p>
-      <details style={{ margin: '.2rem 0 .8rem' }}>
-        <summary style={{ cursor: 'pointer', color: 'var(--verde-escuro)' }}>Como montar o fluxo (uma vez)</summary>
+      <details>
+        <summary className="btn-link">Como montar o fluxo (uma vez)</summary>
         <ol className="explica" style={{ marginTop: '.5rem' }}>
           <li>Em <strong>make.powerautomate.com</strong> → <em>Criar → Fluxo de nuvem instantâneo</em>,
             gatilho <em>"Quando uma solicitação HTTP é recebida"</em>.</li>
