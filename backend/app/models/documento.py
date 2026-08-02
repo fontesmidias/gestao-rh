@@ -69,6 +69,13 @@ class SlotDocumento(Base):
     # o RH o inseriu manualmente — etiqueta visível no painel e na auditoria.
     origem_envio: Mapped[str | None] = mapped_column(String(20))
     origem_envio_obs: Mapped[str | None] = mapped_column(String(120))
+    # Liberado pelo RH para envio TARDIO (v2.43): documento que passou a ser
+    # exigido depois que a pessoa já concluiu — o caso real é o laudo de PCD,
+    # quando ela não declarou no formulário e o RH soube por fora. Autoriza só
+    # ESTE slot, sem reabrir a admissão inteira. Guarda quem e quando porque
+    # abrir uma porta fechada é ato que precisa de dono.
+    liberado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    liberado_por: Mapped[str | None] = mapped_column(String(200))
     enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revisado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revisado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario_rh.id"))

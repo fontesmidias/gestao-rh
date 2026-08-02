@@ -354,6 +354,13 @@ export default function Checklist({ token, aoConcluir }) {
                 {s.status === 'rejeitado' && (
                   <div className="slot-motivo">{MOTIVOS[s.motivo_rejeicao] || ''} {s.motivo_rejeicao_obs || ''}</div>
                 )}
+                {/* Documento que o RH pediu DEPOIS (v2.43). Sem esta frase, a
+                    pessoa vê um item novo num checklist que ela já tinha
+                    concluído e conclui que perdeu alguma coisa no caminho. */}
+                {s.pedido_pelo_rh && s.status === 'pendente' && (
+                  <div className="slot-motivo">O RH pediu este documento agora — é
+                    só enviá-lo, o resto do seu envio continua registrado.</div>
+                )}
               </div>
               <button className="btn-ajuda" title="Como conseguir este documento"
                       onClick={() => setDicaAberta(dicaAberta === s.id ? null : s.id)}>?</button>

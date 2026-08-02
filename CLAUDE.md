@@ -404,6 +404,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (logradouro/numero/complemento); o legado (string única) vai inteiro na coluna
   "Endereço" e migra só pelo backfill ASSISTIDO (parser propõe, RH confirma —
   heurística cega erra endereço de Brasília).
+- **Documento pedido DEPOIS da conclusão: `slot.liberado_em`** (v2.43): quando
+  o RH marca `pcd` de quem já concluiu/foi aprovado, o LAUDO vira obrigatório
+  num checklist congelado — pendência que ninguém consegue resolver. As guardas
+  de `documentos.py::enviar_arquivo` abrem exceção para o slot com
+  `liberado_em` **e** `status=pendente`: vale para AQUELE documento e mais
+  nada (o resto continua fechado; o teste cobre o vazamento). Com o checklist
+  ainda ABERTO nada é liberado — o slot aparece pela sincronização normal, e
+  etiquetar fluxo comum como "pedido pelo RH" só confunde. Rota genérica:
+  `/rh/candidatos/{id}/pedir-documento` (recusa 409 se já enviado). O front do
+  candidato roteia para o checklist quando há slot `rejeitado` OU
+  `pedido_pelo_rh`.
 - **Log: `req=`/`ator=` em toda linha, hora de BRASÍLIA, nível INFO garantido**
   (v2.41, `services/contexto_log.py` + `logs.py::configurar`): o contexto é
   injetado por `FiltroContexto` (contextvars) — nenhum call-site passa nada, e
