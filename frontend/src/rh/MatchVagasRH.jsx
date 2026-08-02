@@ -102,27 +102,29 @@ export default function MatchVagasRH() {
           {vagas.length === 0
             ? <p className="explica">Nenhuma vaga cadastrada ainda.</p>
             : (
-              <table className="rh-tabela">
-                <thead><tr><th>Título</th><th>Cargo</th><th>Status</th><th></th></tr></thead>
-                <tbody>{vagas.map((v) => (
-                  <tr key={v.id}>
-                    <td><strong>{v.titulo}</strong></td>
-                    <td>{v.cargo || '—'}</td>
-                    <td>{v.ativa ? 'Ativa' : <em>Inativa</em>}</td>
-                    <td>
-                      <button className="btn-secundario btn-mini" onClick={() => ranquear(v)}>
-                        🎯 Ranquear</button>
-                      {' '}
-                      <button className="btn-link" onClick={() => { setAba('resultados'); setVagaResultado(v) }}>
-                        resultados</button>
-                      {' · '}
-                      <button className="btn-link" onClick={() => setEditando(v)}>editar</button>
-                      {' · '}
-                      <button className="btn-link" onClick={() => excluir(v)}>excluir</button>
-                    </td>
-                  </tr>
-                ))}</tbody>
-              </table>
+              <div className="dash-scroll">
+                <table className="rh-tabela">
+                  <thead><tr><th>Título</th><th>Cargo</th><th>Status</th><th></th></tr></thead>
+                  <tbody>{vagas.map((v) => (
+                    <tr key={v.id}>
+                      <td><strong>{v.titulo}</strong></td>
+                      <td>{v.cargo || '—'}</td>
+                      <td>{v.ativa ? 'Ativa' : <em>Inativa</em>}</td>
+                      <td>
+                        <button className="btn-secundario btn-mini" onClick={() => ranquear(v)}>
+                          🎯 Ranquear</button>
+                        {' '}
+                        <button className="btn-link" onClick={() => { setAba('resultados'); setVagaResultado(v) }}>
+                          resultados</button>
+                        {' · '}
+                        <button className="btn-link" onClick={() => setEditando(v)}>editar</button>
+                        {' · '}
+                        <button className="btn-link" onClick={() => excluir(v)}>excluir</button>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
             )}
         </>
       )}

@@ -213,46 +213,48 @@ function Confirmar({ jornadas, postos, onConfirmou, setMsg }) {
         </div>
       </div>
     )}
-    <table className="rh-tabela">
-      <thead><tr><th>Jornada</th><th>Proposta do parser</th><th></th></tr></thead>
-      <tbody>
-        {jornadas.map((j) => (
-          <tr key={j.id}>
-            <td><strong>{j.descricao}</strong></td>
-            <td>
-              {edit?.id === j.id && prop ? (
-                <div className="rh-lote" style={{ flexWrap: 'wrap', gap: '.4rem' }}>
-                  <select value={prop.escala || ''} onChange={(e) => setProp({ ...prop, escala: e.target.value || null })}>
-                    <option value="">— escala —</option>
-                    {ESCALAS.map((es) => <option key={es.v} value={es.v}>{es.r}</option>)}
-                  </select>
-                  {['hora_entrada', 'saida_almoco', 'volta_almoco', 'hora_saida'].map((k) => (
-                    <input key={k} style={{ width: 70 }} placeholder={k.split('_')[0]} value={prop[k] || ''}
-                           onChange={(e) => setProp({ ...prop, [k]: e.target.value || null })} />))}
-                  <label className="explica" style={{ margin: 0, display: 'flex', gap: '.3rem', alignItems: 'center' }}>
-                    <input type="checkbox" checked={!!prop.adicional_noturno}
-                           onChange={(e) => setProp({ ...prop, adicional_noturno: e.target.checked, turno: e.target.checked ? 'noturno' : 'diurno' })} /> noturno</label>
-                  <label className="explica" style={{ margin: 0, display: 'flex', gap: '.3rem', alignItems: 'center' }}>
-                    <input type="checkbox" checked={!!prop.tem_intrajornada}
-                           onChange={(e) => setProp({ ...prop, tem_intrajornada: e.target.checked })} /> intrajornada</label>
-                  {prop.tem_intrajornada && (
-                    <input style={{ width: 120 }} placeholder="obs (15 MINUTOS)" value={prop.intrajornada_obs || ''}
-                           onChange={(e) => setProp({ ...prop, intrajornada_obs: e.target.value || null })} />)}
-                </div>
-              ) : (
-                <span className="explica" style={{ margin: 0 }}>clique em "Revisar" para ver e confirmar</span>
-              )}
-            </td>
-            <td className="acoes-candidato">
-              {edit?.id === j.id
-                ? (<><button className="btn-principal btn-mini" onClick={confirmar}>✓ Confirmar</button>
-                     <button className="btn-link" onClick={() => { setEdit(null); setProp(null) }}>cancelar</button></>)
-                : <button className="btn-secundario btn-mini" onClick={() => abrir(j)}>Revisar</button>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="dash-scroll">
+      <table className="rh-tabela">
+        <thead><tr><th>Jornada</th><th>Proposta do parser</th><th></th></tr></thead>
+        <tbody>
+          {jornadas.map((j) => (
+            <tr key={j.id}>
+              <td><strong>{j.descricao}</strong></td>
+              <td>
+                {edit?.id === j.id && prop ? (
+                  <div className="rh-lote" style={{ flexWrap: 'wrap', gap: '.4rem' }}>
+                    <select value={prop.escala || ''} onChange={(e) => setProp({ ...prop, escala: e.target.value || null })}>
+                      <option value="">— escala —</option>
+                      {ESCALAS.map((es) => <option key={es.v} value={es.v}>{es.r}</option>)}
+                    </select>
+                    {['hora_entrada', 'saida_almoco', 'volta_almoco', 'hora_saida'].map((k) => (
+                      <input key={k} style={{ width: 70 }} placeholder={k.split('_')[0]} value={prop[k] || ''}
+                             onChange={(e) => setProp({ ...prop, [k]: e.target.value || null })} />))}
+                    <label className="explica" style={{ margin: 0, display: 'flex', gap: '.3rem', alignItems: 'center' }}>
+                      <input type="checkbox" checked={!!prop.adicional_noturno}
+                             onChange={(e) => setProp({ ...prop, adicional_noturno: e.target.checked, turno: e.target.checked ? 'noturno' : 'diurno' })} /> noturno</label>
+                    <label className="explica" style={{ margin: 0, display: 'flex', gap: '.3rem', alignItems: 'center' }}>
+                      <input type="checkbox" checked={!!prop.tem_intrajornada}
+                             onChange={(e) => setProp({ ...prop, tem_intrajornada: e.target.checked })} /> intrajornada</label>
+                    {prop.tem_intrajornada && (
+                      <input style={{ width: 120 }} placeholder="obs (15 MINUTOS)" value={prop.intrajornada_obs || ''}
+                             onChange={(e) => setProp({ ...prop, intrajornada_obs: e.target.value || null })} />)}
+                  </div>
+                ) : (
+                  <span className="explica" style={{ margin: 0 }}>clique em "Revisar" para ver e confirmar</span>
+                )}
+              </td>
+              <td className="acoes-candidato">
+                {edit?.id === j.id
+                  ? (<><button className="btn-principal btn-mini" onClick={confirmar}>✓ Confirmar</button>
+                       <button className="btn-link" onClick={() => { setEdit(null); setProp(null) }}>cancelar</button></>)
+                  : <button className="btn-secundario btn-mini" onClick={() => abrir(j)}>Revisar</button>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
     </>
   )
 }
@@ -285,21 +287,23 @@ function Duplicidades({ dups, onMudou, setMsg }) {
     <p className="explica">Jornadas com <strong>horário diferente</strong> (uma sai 16h, outra
       17h) ou de <strong>clientes diferentes</strong> no mesmo horário não aparecem aqui —
       são jornadas distintas de verdade, não duplicidade.</p>
-    <table className="rh-tabela">
-      <thead><tr><th>Jornada A</th><th>Jornada B</th><th>Semelhança</th><th></th></tr></thead>
-      <tbody>
-        {dups.map((d, i) => (
-          <tr key={i}>
-            <td>{d.a}</td><td>{d.b}</td>
-            <td>{Math.round(d.similaridade * 100)}%
-              {d.identicas_apos_normalizar && <span title="Iguais após ignorar acento/espaço/typo"> ✓</span>}</td>
-            <td className="acoes-candidato">
-              <button className="btn-secundario btn-mini" onClick={() => fundir(d.a, d.b)}>Manter A</button>
-              <button className="btn-secundario btn-mini" onClick={() => fundir(d.b, d.a)}>Manter B</button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="dash-scroll">
+      <table className="rh-tabela">
+        <thead><tr><th>Jornada A</th><th>Jornada B</th><th>Semelhança</th><th></th></tr></thead>
+        <tbody>
+          {dups.map((d, i) => (
+            <tr key={i}>
+              <td>{d.a}</td><td>{d.b}</td>
+              <td>{Math.round(d.similaridade * 100)}%
+                {d.identicas_apos_normalizar && <span title="Iguais após ignorar acento/espaço/typo"> ✓</span>}</td>
+              <td className="acoes-candidato">
+                <button className="btn-secundario btn-mini" onClick={() => fundir(d.a, d.b)}>Manter A</button>
+                <button className="btn-secundario btn-mini" onClick={() => fundir(d.b, d.a)}>Manter B</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </>)
 }

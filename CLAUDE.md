@@ -176,6 +176,17 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rolar a tela lá no final para conferir e depois voltar ao topo"). Se a tela
   usa `DashPlanilha`, o detalhe vai em `linhaExpandida`; renderizar depois da
   tabela obriga a rolar a página inteira a cada item conferido.
+- **O design system tem GUARDA-CORPO — rode antes de commitar tela**
+  (v2.48, `backend/tests/test_design_system.py`): teste estrutural, stdlib
+  pura, roda em segundos e **agora roda no CI**. Cobra classe fantasma, token
+  inexistente, fallback de cor em `var()`, token de superfície sem par escuro,
+  `.rh-tabela` sem `.dash-scroll` e `<details>` remendado no JSX. Descoberta da
+  leva: **nenhum dos 38 testes Python rodava no CI** — o `test_upload_multipart`
+  (v2.39.1) só rodava se alguém lembrasse. Ao criar teste estrutural novo,
+  ACRESCENTE ao passo "Testes estruturais" do `ci.yml`; se ele importar
+  `app.main`, NÃO entra (exigiria instalar FastAPI/SQLAlchemy e custaria
+  minutos). O que o teste deliberadamente NÃO cobra: os ~560 `style` inline de
+  espaçamento — dívida herdada que travaria o CI sem consertar nada.
 - **`<details>`: cursor, marcador e margem vêm do `styles.css`** (v2.47.1):
   `summary` tem `cursor: pointer` + `list-style-position: inside` + anel de
   foco na folha; `details:not([class])` traz o respiro do dobrável solto. NÃO

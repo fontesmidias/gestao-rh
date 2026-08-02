@@ -626,7 +626,7 @@ function FichaRH({ id }) {
   }
 
   return (
-    <div className="rh-card ficha-rh">
+    <div className="rh-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>✏️ Corrigir dados da ficha</strong>
         <button className="btn-link" onClick={() => setAberta(false)}>fechar</button>

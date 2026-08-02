@@ -11,6 +11,56 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.48.0] — 2026-08-02 — Guarda-corpo: a dívida de design não volta sozinha
+
+Terceira leva da reforma. As duas anteriores corrigiram defeitos; esta impede
+que voltem — porque eles **já voltaram** antes: a armadilha da classe fantasma
+está no `CLAUDE.md` desde a v2.25 e mesmo assim havia sete delas na base.
+
+### Adicionado
+
+- **`backend/tests/test_design_system.py`** — teste ESTRUTURAL (lê os arquivos,
+  não precisa de banco nem navegador) que cobra as cinco regras que já custaram
+  correção: classe usada no JSX que não existe no CSS · `var(--token)`
+  inexistente e **fallback de cor** em `var()` · token de superfície sem par no
+  tema escuro · `.rh-tabela` sem o wrapper `.dash-scroll` · `<details>` com
+  `cursor`/margem remendados no JSX. Roda em segundos.
+- **Os testes estruturais passaram a rodar no CI.** Descoberta desta leva:
+  **nenhum dos 38 testes Python do projeto rodava no pipeline** — inclusive o
+  `test_upload_multipart`, escrito na v2.39.1 justamente para pegar regressão
+  futura, que só rodava se alguém lembrasse de executá-lo à mão. Um
+  guarda-corpo que ninguém executa não é guarda-corpo. Entram os dois que são
+  **stdlib pura**; os outros três importam `app.main` e exigiriam instalar
+  FastAPI + SQLAlchemy, trocando segundos por minutos. Rodam **antes** da stack
+  subir: falhar ali poupa ~4 min de build + Playwright.
+
+### Corrigido
+
+- **32 tabelas ganharam o wrapper `.dash-scroll`** — a dívida que a v2.46 mediu
+  e adiou. Medição na tela real (17 telas × 4 larguras): **2 telas estouravam
+  de fato** (`arquivo` +7px e `testagem` +198px a 1000px) e mais 2 a 820px
+  (`postos`, `assinaturas`). As demais apareciam "largas" mas **não empurravam
+  a página**, porque estão no `DashPlanilha`, que já rola dentro de si — o
+  número "31 tabelas quebradas" da auditoria era inflado. Corrigidas todas
+  assim mesmo, já que o padrão se repetiria. Resultado: **68 combinações
+  verificadas, nenhuma estoura**.
+- **Sete classes fantasma**, a armadilha da v2.25 de volta. A pior:
+  `<p className="erro">` no relatório do Creche — uma mensagem de erro que
+  **não estava estilizada como erro** (virou `.alerta`). As outras viraram
+  regra de verdade no `styles.css` (`.lista-fichas`, `.prova-revisao`,
+  `.dash-espaco`, `.rh-conferencia-docs/-campos`) ou saíram do JSX
+  (`.ficha-rh`, que nunca existiu — só `.ficha-rh-secao`).
+- **14 fallbacks de cor** em `var()` removidos do `styles.css`. Todos
+  apontavam para tokens que existem, então não havia bug ativo — mas é o padrão
+  exato que produziu o `--texto-suave` da v2.46, e agora o teste o proíbe.
+
+### Nota sobre o que o teste NÃO cobra
+
+Os ~560 `style` inline de espaçamento **não** reprovam o CI. São dívida
+herdada; transformá-los em erro travaria o projeto sem consertar nada. Ficam
+medidos aqui e são pagos tela a tela — foi assim que a v2.47 e esta leva
+reduziram alguns deles de passagem.
+
 ## [2.47.1] — 2026-08-02 — O respiro e a setinha (padronizados no CSS)
 
 Dois defeitos que o Bruno pegou em prints da v2.47 — ambos introduzidos por

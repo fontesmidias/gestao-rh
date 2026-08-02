@@ -435,6 +435,28 @@ candidato toca no celular.
 
 ---
 
+## 8b. O checklist tem guarda-corpo automático
+
+Desde a v2.48, `backend/tests/test_design_system.py` cobra por você as regras
+deste documento que já custaram correção — e **roda no CI**, antes mesmo da
+stack subir:
+
+```bash
+cd backend && PYTHONPATH=. .venv/Scripts/python.exe tests/test_design_system.py
+```
+
+O que ele reprova: classe usada no JSX que não existe no `styles.css` (§ v2.25)
+· `var(--token)` inexistente e **fallback de cor** em `var()` (§3) · token de
+superfície sem par no tema escuro (§3) · `.rh-tabela` fora do `.dash-scroll`
+(§5) · `<details>` com `cursor`/margem no JSX (§6).
+
+**O que ele deliberadamente NÃO reprova:** os ~560 `style` inline de
+espaçamento. É dívida herdada — transformá-la em erro de CI travaria o projeto
+sem consertar nada. Ela é paga tela a tela, e o CHANGELOG registra o saldo.
+
+Isso não substitui o checklist abaixo: contraste, dark mode de verdade,
+hierarquia visual e "abri a tela e olhei" continuam sendo trabalho humano.
+
 ## 9. Checklist de tela nova (cole no PR mental)
 
 Antes de dar uma tela do RH por pronta:

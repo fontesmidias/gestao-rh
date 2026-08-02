@@ -66,6 +66,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Rodam ANTES da stack subir: leem o código-fonte, não precisam de banco
+      # nem de navegador, e levam segundos. Falhar aqui poupa os ~4 min de
+      # build + Playwright. Até a v2.48 nenhum teste Python rodava no CI — o
+      # `test_upload_multipart`, escrito justamente para pegar regressão
+      # futura, só rodava se alguém lembrasse de executá-lo à mão.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Só os que são STDLIB PURA (leem arquivos e conferem regras). Os demais
+      # testes estruturais — catálogo de documentos, textos de e-mail,
+      # minutário — importam `app.main` e exigiriam instalar FastAPI +
+      # SQLAlchemy + todo o resto, trocando segundos por minutos de pipeline.
+      - name: Testes estruturais (design system, upload multipart)
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+        run: |
+          for t in test_design_system test_upload_multipart; do
+            echo "::group::$t"
+            python "tests/$t.py" || exit 1
+            echo "::endgroup::"
+          done
+
       - name: Cria .env de teste
         run: |
           cat > .env <<'EOF'

@@ -128,48 +128,50 @@ export default function AlertasTelemetria() {
       </p>
 
       {regras === null ? <p className="explica">Carregando…</p> : (
-        <table className="rh-tabela">
-          <thead><tr>
-            <th>Regra</th><th>Tipo</th><th>Dispara quando</th>
-            <th>Silêncio</th><th>Ativa</th><th></th>
-          </tr></thead>
-          <tbody>
-            {regras.length === 0 && (
-              <tr><td colSpan="6" className="explica">
-                Nenhuma regra. Sem elas, a telemetria só fala quando você pergunta.
-              </td></tr>
-            )}
-            {regras.map((r) => (
-              <tr key={r.id}>
-                <td className="dash-quebra">
-                  <strong>{r.nome}</strong>
-                  {(r.origem || r.pagina || r.evento) && (
-                    <><br /><small className="explica">
-                      {r.origem && `origem: ${r.origem} `}
-                      {r.pagina && `página: ${r.pagina} `}
-                      {r.evento && `evento: ${r.evento}`}
-                    </small></>
-                  )}
-                </td>
-                <td>{TIPOS[r.tipo]?.rotulo || r.tipo}</td>
-                <td className="dash-quebra">{descrever(r)}</td>
-                <td>{r.silencio_min} min</td>
-                <td>{r.ativa
-                  ? <span className="chip" style={{ '--chip-cor': 'var(--ok)' }}>ativa</span>
-                  : <span className="chip" style={{ '--chip-cor': 'var(--cinza-txt)' }}>pausada</span>}
-                </td>
-                <td>
-                  <button className="btn-secundario btn-mini" onClick={() => {
-                    setEditando(r.id)
-                    setRascunho({ ...r, origem: r.origem || '', pagina: r.pagina || '',
-                                  evento: r.evento || '' })
-                  }}>Editar</button>
-                  <button className="btn-remover" onClick={() => excluir(r)}>Excluir</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr>
+              <th>Regra</th><th>Tipo</th><th>Dispara quando</th>
+              <th>Silêncio</th><th>Ativa</th><th></th>
+            </tr></thead>
+            <tbody>
+              {regras.length === 0 && (
+                <tr><td colSpan="6" className="explica">
+                  Nenhuma regra. Sem elas, a telemetria só fala quando você pergunta.
+                </td></tr>
+              )}
+              {regras.map((r) => (
+                <tr key={r.id}>
+                  <td className="dash-quebra">
+                    <strong>{r.nome}</strong>
+                    {(r.origem || r.pagina || r.evento) && (
+                      <><br /><small className="explica">
+                        {r.origem && `origem: ${r.origem} `}
+                        {r.pagina && `página: ${r.pagina} `}
+                        {r.evento && `evento: ${r.evento}`}
+                      </small></>
+                    )}
+                  </td>
+                  <td>{TIPOS[r.tipo]?.rotulo || r.tipo}</td>
+                  <td className="dash-quebra">{descrever(r)}</td>
+                  <td>{r.silencio_min} min</td>
+                  <td>{r.ativa
+                    ? <span className="chip" style={{ '--chip-cor': 'var(--ok)' }}>ativa</span>
+                    : <span className="chip" style={{ '--chip-cor': 'var(--cinza-txt)' }}>pausada</span>}
+                  </td>
+                  <td>
+                    <button className="btn-secundario btn-mini" onClick={() => {
+                      setEditando(r.id)
+                      setRascunho({ ...r, origem: r.origem || '', pagina: r.pagina || '',
+                                    evento: r.evento || '' })
+                    }}>Editar</button>
+                    <button className="btn-remover" onClick={() => excluir(r)}>Excluir</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Edição PERTO do item, nunca no topo (sistema de design, item 3) */}
@@ -226,26 +228,28 @@ export default function AlertasTelemetria() {
               há destinatário cadastrado em Avisos internos.
             </p>
           ) : (
-            <table className="rh-tabela">
-              <thead><tr>
-                <th>Quando</th><th>Tipo</th><th>O quê</th><th>Enviado a</th>
-              </tr></thead>
-              <tbody>
-                {hist.map((h) => (
-                  <tr key={h.id}>
-                    <td>{fmtDataHora(h.quando)}</td>
-                    <td>{h.rotulo}</td>
-                    <td className="dash-quebra">{h.resumo}</td>
-                    {/* Zero destinatários = o alerta foi calculado mas não
-                        chegou a ninguém. Precisa ser visível, senão o RH
-                        acharia que está coberto quando não está. */}
-                    <td>{h.destinatarios > 0 ? `${h.destinatarios} e-mail(s)`
-                      : <span className="chip" style={{ '--chip-cor': 'var(--perigo)' }}>
-                          ninguém cadastrado</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="dash-scroll">
+              <table className="rh-tabela">
+                <thead><tr>
+                  <th>Quando</th><th>Tipo</th><th>O quê</th><th>Enviado a</th>
+                </tr></thead>
+                <tbody>
+                  {hist.map((h) => (
+                    <tr key={h.id}>
+                      <td>{fmtDataHora(h.quando)}</td>
+                      <td>{h.rotulo}</td>
+                      <td className="dash-quebra">{h.resumo}</td>
+                      {/* Zero destinatários = o alerta foi calculado mas não
+                          chegou a ninguém. Precisa ser visível, senão o RH
+                          acharia que está coberto quando não está. */}
+                      <td>{h.destinatarios > 0 ? `${h.destinatarios} e-mail(s)`
+                        : <span className="chip" style={{ '--chip-cor': 'var(--perigo)' }}>
+                            ninguém cadastrado</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

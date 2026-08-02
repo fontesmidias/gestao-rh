@@ -189,90 +189,92 @@ export default function Modelos() {
       {filtrados.length === 0
         ? <p className="explica">Nenhum modelo {busca ? 'encontrado com essa busca' : 'ainda — crie o primeiro acima'}.</p>
         : (
-        <table className="rh-tabela">
-          <thead><tr><th>Título</th><th>Aplica-se a</th><th>Opções de envio</th><th></th></tr></thead>
-          <tbody>
-            {filtrados.map((m) => {
-              const editando = edit?.id === m.id
-              return (
-                <Fragment key={m.id}>
-                  <tr className={editando ? 'linha-editando' : ''}>
-                    <td><strong>{m.titulo}</strong></td>
-                    <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
-                      {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}
-                      {m.escopo === 'colaborador' &&
-                        `: ${pessoas.find((p) => p.id === m.candidato_alvo_id)?.nome || '…'}`}</td>
-                    <td>
-                      {m.exige_assinatura && (
-                        <span className="chip" style={{ '--chip-cor': '#3b7dd8' }}
-                              title={`Vai para assinatura eletrônica${m.papel_assinatura ? ` — assina como ${m.papel_assinatura}` : ''}`}>
-                          ✍️ assinatura{m.papel_assinatura ? ` (${m.papel_assinatura})` : ''}</span>
-                      )}{' '}
-                      {m.enviar_por_email && (
-                        <span className="chip" style={{ '--chip-cor': '#0fb257' }}
-                              title="Ao enviar, a pessoa recebe por e-mail">✉️ e-mail</span>
-                      )}
-                      {!m.exige_assinatura && !m.enviar_por_email &&
-                        <span className="explica" style={{ margin: 0 }}>só baixar</span>}
-                    </td>
-                    <td className="acoes-candidato">
-                      <button className="btn-secundario btn-mini" title="PDF com as variáveis em aberto"
-                              onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
-                      <button className="btn-secundario btn-mini"
-                              title="Gerar/baixar/enviar para uma pessoa específica"
-                              onClick={() => setEnviando(enviando === m.id ? null : m.id)}>
-                        📤 Enviar</button>
-                      <button className="btn-secundario btn-mini"
-                              title="Autorizações da equipe e roteiro-padrão de assinatura"
-                              onClick={() => setAssinaturas(assinaturas === m.id ? null : m.id)}>
-                        🎭 Assinaturas</button>
-                      <button className="btn-secundario btn-mini"
-                              onClick={() => editando ? setEdit(null) : setEdit({
-                        id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
-                        cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
-                        candidato_alvo_id: m.candidato_alvo_id || '',
-                        enviar_por_email: m.enviar_por_email, exige_assinatura: m.exige_assinatura,
-                        papel_assinatura: m.papel_assinatura || '',
-                      })}>{editando ? 'Fechar' : 'Editar'}</button>
-                      <button className="btn-link" title="Criar uma cópia deste modelo"
-                              onClick={() => duplicar(m)}>duplicar</button>
-                      <button className="btn-link" onClick={async () => {
-                        if (!window.confirm(`Excluir o modelo "${m.titulo}"? Ele vai para a lixeira.`)) return
-                        await api.excluirModelo(m.id); await recarregar()
-                      }}>excluir</button>
-                    </td>
-                  </tr>
-                  {editando && (
-                    <tr className="linha-form-inline">
-                      <td colSpan={4}>
-                        <CamposModelo edit={edit} setEdit={setEdit} postos={postos}
-                                      papeis={papeis} pessoas={pessoas} inline
-                                      salvar={salvar} salvando={salvando}
-                                      onCancelar={() => setEdit(null)} />
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Título</th><th>Aplica-se a</th><th>Opções de envio</th><th></th></tr></thead>
+            <tbody>
+              {filtrados.map((m) => {
+                const editando = edit?.id === m.id
+                return (
+                  <Fragment key={m.id}>
+                    <tr className={editando ? 'linha-editando' : ''}>
+                      <td><strong>{m.titulo}</strong></td>
+                      <td>{(ESCOPOS.find((e) => e[0] === m.escopo) || [])[1] || m.escopo}
+                        {m.cargo_alvo ? `: ${m.cargo_alvo}` : ''}
+                        {m.escopo === 'colaborador' &&
+                          `: ${pessoas.find((p) => p.id === m.candidato_alvo_id)?.nome || '…'}`}</td>
+                      <td>
+                        {m.exige_assinatura && (
+                          <span className="chip" style={{ '--chip-cor': '#3b7dd8' }}
+                                title={`Vai para assinatura eletrônica${m.papel_assinatura ? ` — assina como ${m.papel_assinatura}` : ''}`}>
+                            ✍️ assinatura{m.papel_assinatura ? ` (${m.papel_assinatura})` : ''}</span>
+                        )}{' '}
+                        {m.enviar_por_email && (
+                          <span className="chip" style={{ '--chip-cor': '#0fb257' }}
+                                title="Ao enviar, a pessoa recebe por e-mail">✉️ e-mail</span>
+                        )}
+                        {!m.exige_assinatura && !m.enviar_por_email &&
+                          <span className="explica" style={{ margin: 0 }}>só baixar</span>}
+                      </td>
+                      <td className="acoes-candidato">
+                        <button className="btn-secundario btn-mini" title="PDF com as variáveis em aberto"
+                                onClick={() => abrirBlob(api.previaModelo(m.id), setMsg)}>Prévia</button>
+                        <button className="btn-secundario btn-mini"
+                                title="Gerar/baixar/enviar para uma pessoa específica"
+                                onClick={() => setEnviando(enviando === m.id ? null : m.id)}>
+                          📤 Enviar</button>
+                        <button className="btn-secundario btn-mini"
+                                title="Autorizações da equipe e roteiro-padrão de assinatura"
+                                onClick={() => setAssinaturas(assinaturas === m.id ? null : m.id)}>
+                          🎭 Assinaturas</button>
+                        <button className="btn-secundario btn-mini"
+                                onClick={() => editando ? setEdit(null) : setEdit({
+                          id: m.id, titulo: m.titulo, corpo: m.corpo, escopo: m.escopo,
+                          cargo_alvo: m.cargo_alvo || '', posto_alvo_id: m.posto_alvo_id || '',
+                          candidato_alvo_id: m.candidato_alvo_id || '',
+                          enviar_por_email: m.enviar_por_email, exige_assinatura: m.exige_assinatura,
+                          papel_assinatura: m.papel_assinatura || '',
+                        })}>{editando ? 'Fechar' : 'Editar'}</button>
+                        <button className="btn-link" title="Criar uma cópia deste modelo"
+                                onClick={() => duplicar(m)}>duplicar</button>
+                        <button className="btn-link" onClick={async () => {
+                          if (!window.confirm(`Excluir o modelo "${m.titulo}"? Ele vai para a lixeira.`)) return
+                          await api.excluirModelo(m.id); await recarregar()
+                        }}>excluir</button>
                       </td>
                     </tr>
-                  )}
-                  {enviando === m.id && (
-                    <tr className="linha-form-inline">
-                      <td colSpan={4}>
-                        <EnviarParaPessoa modelo={m} pessoas={pessoas} setMsg={setMsg}
-                                          aoFechar={() => setEnviando(null)} />
-                      </td>
-                    </tr>
-                  )}
-                  {assinaturas === m.id && (
-                    <tr className="linha-form-inline">
-                      <td colSpan={4}>
-                        <AssinaturasDoModelo modelo={m} papeis={papeis} setMsg={setMsg}
-                                             aoFechar={() => setAssinaturas(null)} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
+                    {editando && (
+                      <tr className="linha-form-inline">
+                        <td colSpan={4}>
+                          <CamposModelo edit={edit} setEdit={setEdit} postos={postos}
+                                        papeis={papeis} pessoas={pessoas} inline
+                                        salvar={salvar} salvando={salvando}
+                                        onCancelar={() => setEdit(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {enviando === m.id && (
+                      <tr className="linha-form-inline">
+                        <td colSpan={4}>
+                          <EnviarParaPessoa modelo={m} pessoas={pessoas} setMsg={setMsg}
+                                            aoFechar={() => setEnviando(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    {assinaturas === m.id && (
+                      <tr className="linha-form-inline">
+                        <td colSpan={4}>
+                          <AssinaturasDoModelo modelo={m} papeis={papeis} setMsg={setMsg}
+                                               aoFechar={() => setAssinaturas(null)} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
       <Msg msg={msg} />
       </div>
@@ -314,53 +316,55 @@ function AssinaturasDoModelo({ modelo, papeis, setMsg, aoFechar }) {
         conste nos documentos deste modelo. Não é assinatura no ato — o documento diz "emitido sob
         autorização de X". Revogável a qualquer momento.</p>
       {!autos ? <p>Carregando…</p> : (
-        <table className="rh-tabela">
-          <thead><tr><th>Representante</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
-          <tbody>
-            {autos.map((a) => (
-              <tr key={a.id}>
-                <td><strong>{a.nome}</strong>{a.cargo ? ` — ${a.cargo}` : ''}<br /><small>{a.email}</small></td>
-                <td>{a.papel}</td>
-                <td>{a.revogada_em ? '⚪ revogada'
-                  : a.ativa ? '🟢 ativa'
-                  : a.autorizado_em ? '⏳ expirada' : '📧 aguardando confirmação'}</td>
-                <td className="acoes-candidato">
-                  {!a.autorizado_em && (
-                    confirmando?.id === a.id ? (
-                      <span className="rejeicao">
-                        <input inputMode="numeric" maxLength={6} placeholder="Código"
-                               value={confirmando.codigo} style={{ maxWidth: 90 }}
-                               onChange={(e) => setConfirmando({ ...confirmando, codigo: e.target.value.replace(/\D/g, '') })} />
-                        <button className="btn-principal btn-mini" onClick={async () => {
-                          setMsg(null)
-                          try {
-                            await api.confirmarAutorizacaoEquipe(a.id, confirmando.codigo)
-                            setConfirmando(null); await recarregar()
-                            setMsg({ tipo: 'ok', texto: `Autorização de ${a.nome} confirmada e ativa.` })
-                          } catch (e) {
-                            setMsg({ tipo: 'erro', texto: e.detail === 'codigo_incorreto'
-                              ? 'Código incorreto.' : `Não confirmou (${e.detail || e.message}).` })
-                          }
-                        }}>Confirmar</button>
-                        <button className="btn-link" onClick={() => setConfirmando(null)}>cancelar</button>
-                      </span>
-                    ) : (
-                      <button className="btn-secundario btn-mini"
-                              title="Digite aqui o código que o representante recebeu por e-mail"
-                              onClick={() => setConfirmando({ id: a.id, codigo: '' })}>Confirmar código</button>
-                    )
-                  )}
-                  {a.ativa && (
-                    <button className="btn-link" onClick={async () => {
-                      if (!window.confirm(`Revogar a autorização de ${a.nome}?`)) return
-                      await api.revogarAutorizacaoEquipe(a.id); await recarregar()
-                    }}>revogar</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Representante</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
+            <tbody>
+              {autos.map((a) => (
+                <tr key={a.id}>
+                  <td><strong>{a.nome}</strong>{a.cargo ? ` — ${a.cargo}` : ''}<br /><small>{a.email}</small></td>
+                  <td>{a.papel}</td>
+                  <td>{a.revogada_em ? '⚪ revogada'
+                    : a.ativa ? '🟢 ativa'
+                    : a.autorizado_em ? '⏳ expirada' : '📧 aguardando confirmação'}</td>
+                  <td className="acoes-candidato">
+                    {!a.autorizado_em && (
+                      confirmando?.id === a.id ? (
+                        <span className="rejeicao">
+                          <input inputMode="numeric" maxLength={6} placeholder="Código"
+                                 value={confirmando.codigo} style={{ maxWidth: 90 }}
+                                 onChange={(e) => setConfirmando({ ...confirmando, codigo: e.target.value.replace(/\D/g, '') })} />
+                          <button className="btn-principal btn-mini" onClick={async () => {
+                            setMsg(null)
+                            try {
+                              await api.confirmarAutorizacaoEquipe(a.id, confirmando.codigo)
+                              setConfirmando(null); await recarregar()
+                              setMsg({ tipo: 'ok', texto: `Autorização de ${a.nome} confirmada e ativa.` })
+                            } catch (e) {
+                              setMsg({ tipo: 'erro', texto: e.detail === 'codigo_incorreto'
+                                ? 'Código incorreto.' : `Não confirmou (${e.detail || e.message}).` })
+                            }
+                          }}>Confirmar</button>
+                          <button className="btn-link" onClick={() => setConfirmando(null)}>cancelar</button>
+                        </span>
+                      ) : (
+                        <button className="btn-secundario btn-mini"
+                                title="Digite aqui o código que o representante recebeu por e-mail"
+                                onClick={() => setConfirmando({ id: a.id, codigo: '' })}>Confirmar código</button>
+                      )
+                    )}
+                    {a.ativa && (
+                      <button className="btn-link" onClick={async () => {
+                        if (!window.confirm(`Revogar a autorização de ${a.nome}?`)) return
+                        await api.revogarAutorizacaoEquipe(a.id); await recarregar()
+                      }}>revogar</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {!nova ? (

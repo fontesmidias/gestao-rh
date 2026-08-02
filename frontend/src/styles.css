@@ -208,7 +208,7 @@ a { color: var(--verde-escuro); }
 .talento-passo-num {
   width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
   font-size: .82rem; font-weight: 700; border: 2px solid var(--borda);
-  background: var(--fundo, #fff); color: var(--texto-suave); z-index: 1;
+  background: var(--fundo); color: var(--texto-suave); z-index: 1;
 }
 .talento-passo-rot { font-size: .68rem; color: var(--texto-suave); line-height: 1.2; }
 .talento-passo.ativo .talento-passo-num { border-color: var(--verde-vivo); color: var(--verde-escuro); }
@@ -227,7 +227,7 @@ a { color: var(--verde-escuro); }
 /* chips de escolha múltipla (cargos, regiões, tipo, sim/não) */
 .chips-escolha { display: flex; flex-wrap: wrap; gap: .45rem; margin: .35rem 0 .2rem; }
 .chip-escolha {
-  border: 1.5px solid var(--borda); background: var(--fundo, #fff); color: var(--texto, #16201a);
+  border: 1.5px solid var(--borda); background: var(--fundo); color: var(--texto);
   border-radius: 999px; padding: .42rem .85rem; font-size: .86rem; cursor: pointer;
   transition: background .12s, border-color .12s, color .12s; line-height: 1.2;
 }
@@ -276,6 +276,9 @@ a { color: var(--verde-escuro); }
 .dash-filtro > .select-busca .select-busca-campo { min-height: 0; padding: .45rem .6rem;
                                                     font-size: var(--fs-apoio); }
 /* Ações (CSV, Colunas) ocupam a última faixa da grade, alinhadas à direita. */
+/* Espaçador flexível: empurra o que vem depois para a direita numa linha de
+   botões. Era `style={{ flex: 1 }}` repetido no JSX das Provas. */
+.dash-espaco { flex: 1; }
 .dash-filtros-acoes { grid-column: 1 / -1; display: flex; justify-content: flex-end;
                       gap: var(--esp-2); }
 /* rolagem horizontal do dash: a tabela nunca estoura a tela; scrolla dentro
@@ -316,9 +319,12 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .dash-colunas-lista input { width: auto; min-height: 0; }
 
 /* Editor de provas por cargo */
+/* Revisão da prova (gabarito + explicação, só quando a prova permite): a tela
+   do participante é centralizada, mas o texto das questões lê-se à esquerda. */
+.prova-revisao { margin-top: var(--esp-4); text-align: left; }
 .prova-questao {
   border: 1px solid var(--borda); border-radius: 10px; padding: .8rem 1rem;
-  margin: .6rem 0; background: var(--fundo, #fff);
+  margin: .6rem 0; background: var(--fundo);
 }
 .prova-questao.editando { border-color: var(--verde-vivo); background: var(--verde-suave); }
 .prova-questao-topo { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
@@ -334,7 +340,7 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .prova-resposta { width: 100%; margin-top: .5rem; }
 .prova-correcao { margin-top: .5rem; }
 .prova-resposta-txt {
-  background: var(--fundo, #f4f6f4); border: 1px solid var(--borda); border-radius: 8px;
+  background: var(--fundo); border: 1px solid var(--borda); border-radius: 8px;
   padding: .6rem .8rem; margin: .4rem 0; white-space: pre-wrap; font-size: .92rem;
 }
 /* honeypot: invisível para humanos, presente no DOM para bots preencherem */
@@ -479,6 +485,9 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
                 padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
                 border: 1px solid var(--aviso-borda); animation: surgir .25s ease-out; }
 
+/* Lista de fichas a assinar (wizard do candidato): empilha os .ficha-item com
+   respiro uniforme, em vez de deixar cada item resolver a própria margem. */
+.lista-fichas { display: flex; flex-direction: column; gap: var(--esp-2); }
 .ficha-item { display: flex; justify-content: space-between; align-items: center; gap: .75rem;
               border: 2px solid var(--borda-suave); border-radius: var(--raio-input); padding: 1rem;
               margin-bottom: .75rem; flex-wrap: wrap; transition: border-color .2s; }
@@ -666,8 +675,8 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
         font-size: var(--fs-mini);
         font-weight: 700; white-space: nowrap;
         color: var(--chip-cor, var(--tinta-suave));
-        background: color-mix(in srgb, var(--chip-cor, #889) 14%, transparent);
-        border: 1px solid color-mix(in srgb, var(--chip-cor, #889) 28%, transparent); }
+        background: color-mix(in srgb, var(--chip-cor, var(--tinta-suave)) 14%, transparent);
+        border: 1px solid color-mix(in srgb, var(--chip-cor, var(--tinta-suave)) 28%, transparent); }
 
 /* Mini-CRM: anotações + tags da pessoa (MemoriaPessoa.jsx). Tokens; legível nos
    dois temas (fundo --cartao/--input-bg, texto --tinta). */
@@ -1217,7 +1226,7 @@ body[data-rh-ocupado] { cursor: progress; }
 /* Card de fichas e assinaturas no detalhe */
 .fichas-status { list-style: none; margin: .6rem 0 0; padding: 0; }
 .fichas-status li { padding: .25rem 0; }
-.fichas-status small { color: var(--tinta-suave, #6a7a70); }
+.fichas-status small { color: var(--tinta-suave); }
 
 /* Correção de ficha pelo RH + etiqueta de origem */
 .etiqueta-rh { color: var(--verde); font-weight: 600; }
@@ -1273,7 +1282,7 @@ body[data-rh-ocupado] { cursor: progress; }
   .rh-tabela tbody td[data-rotulo]::before {
     content: attr(data-rotulo); flex-shrink: 0; min-width: 96px;
     font-weight: 700; font-size: .72rem; text-transform: uppercase;
-    letter-spacing: .03em; color: var(--tinta-suave, #6a7a70);
+    letter-spacing: .03em; color: var(--tinta-suave);
   }
   .rh-tabela tbody td:empty { display: none; }
   .rh-tabela tbody td[colspan] { display: block; }
@@ -1306,7 +1315,7 @@ body[data-rh-ocupado] { cursor: progress; }
            margin: .4rem 0 1rem; flex-wrap: wrap; }
 .rh-abas button { background: transparent; border: none; border-bottom: 2px solid transparent;
                   margin-bottom: -2px; padding: .55rem .9rem; cursor: pointer; font-weight: 600;
-                  color: var(--tinta-suave, #6a7a70); border-radius: 0; width: auto; min-height: 0; }
+                  color: var(--tinta-suave); border-radius: 0; width: auto; min-height: 0; }
 .rh-abas button.ativa { color: var(--verde-escuro); border-bottom-color: var(--verde); }
 
 /* ---------- Link público do Reembolso-Creche ---------- */
@@ -1314,7 +1323,7 @@ body[data-rh-ocupado] { cursor: progress; }
 .creche-topo { text-align: center; margin-bottom: 1.2rem; }
 .creche-topo .logo-img { height: 54px; margin-bottom: .5rem; }
 .creche-topo h1 { margin: .2rem 0; }
-.creche-sub { color: var(--tinta-suave, #6a7a70); max-width: 46ch; margin: .3rem auto 0; }
+.creche-sub { color: var(--tinta-suave); max-width: 46ch; margin: .3rem auto 0; }
 .creche-card { margin-bottom: 1rem; }
 
 /* --- Portal do colaborador (/meu) --------------------------------------- */
@@ -1429,6 +1438,10 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 .rh-conferencia-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
                         gap: 1.4rem; align-items: start; }
 .rh-conferencia-corpo > div { min-width: 0; }
+/* Os dois lados da conferência. Herdam o essencial da regra acima; existem
+   nomeados para que o JSX não use classe que não está declarada em lugar
+   nenhum (o defeito da v2.25 — o build passa e a tela sai crua). */
+.rh-conferencia-docs, .rh-conferencia-campos { min-width: 0; }
 .rh-conferencia-corpo .campo { margin-bottom: .8rem; }
 .rh-conferencia-bloco-titulo { display: block; font-weight: 700; font-size: .82rem;
                                letter-spacing: .04em; text-transform: uppercase;
@@ -1481,7 +1494,7 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 .teste-corpo { padding: 1rem 1.1rem; }
 .teste-rodape {
   display: flex; align-items: center; justify-content: space-between;
-  gap: .8rem; padding: .7rem 1.1rem; background: var(--fundo, #f4f6f4);
+  gap: .8rem; padding: .7rem 1.1rem; background: var(--fundo);
   border-top: 1px solid var(--borda);
 }
 .teste-rodape .btn-principal, .teste-rodape .btn-mini { margin-left: auto; }
@@ -1526,7 +1539,7 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
 .teste-orientacoes li:last-child { border-bottom: none; }
 .teste-instrucao {
   display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-  padding: .55rem 1.1rem; font-size: .85rem; color: var(--tinta-suave, #6a7a70);
+  padding: .55rem 1.1rem; font-size: .85rem; color: var(--tinta-suave);
   border-bottom: 1px solid var(--borda); text-align: center;
 }
 .teste-tag {
@@ -1601,7 +1614,7 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
 }
 .disc-coluna { display: flex; flex-direction: column; align-items: center; gap: .15rem; width: 64px; }
 .disc-barra-area { height: 120px; width: 100%; display: flex; align-items: flex-end;
-                   background: var(--input-bg, #f2f5f2); border-radius: 6px; overflow: hidden; }
+                   background: var(--input-bg); border-radius: 6px; overflow: hidden; }
 .disc-barra { width: 100%; border-radius: 6px 6px 0 0; transition: height .5s ease; }
 .disc-perfil { max-width: 62ch; }
 .disc-perfil p { margin: .35rem 0; }

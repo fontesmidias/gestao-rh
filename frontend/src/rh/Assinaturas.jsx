@@ -70,27 +70,29 @@ function DocsCandidatos({ aoAbrirPessoa }) {
       {!dados ? <p>Carregando…</p> : dados.pessoas.length === 0 ? (
         <p className="explica centro">Ninguém com esses filtros.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Pessoa</th><th>Situação</th><th>Assinadas</th><th>Pendentes</th><th>Última</th><th></th></tr></thead>
-          <tbody>
-            {dados.pessoas.map((p) => (
-              <tr key={p.id}>
-                <td><strong>{p.nome_completo}</strong></td>
-                <td>{p.situacao}</td>
-                <td>{p.assinadas}/{p.total}</td>
-                <td>{p.pendentes > 0
-                  ? <span className="chip" style={{ '--chip-cor': '#f0ad4e' }}>⏳ {p.pendentes}</span>
-                  : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ em dia</span>}</td>
-                <td>{p.ultima_assinatura ? fmtData(p.ultima_assinatura) : '—'}</td>
-                <td className="acoes-candidato">
-                  {aoAbrirPessoa && (
-                    <button className="btn-secundario btn-mini" onClick={() => aoAbrirPessoa(p.id)}>Abrir</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Pessoa</th><th>Situação</th><th>Assinadas</th><th>Pendentes</th><th>Última</th><th></th></tr></thead>
+            <tbody>
+              {dados.pessoas.map((p) => (
+                <tr key={p.id}>
+                  <td><strong>{p.nome_completo}</strong></td>
+                  <td>{p.situacao}</td>
+                  <td>{p.assinadas}/{p.total}</td>
+                  <td>{p.pendentes > 0
+                    ? <span className="chip" style={{ '--chip-cor': '#f0ad4e' }}>⏳ {p.pendentes}</span>
+                    : <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ em dia</span>}</td>
+                  <td>{p.ultima_assinatura ? fmtData(p.ultima_assinatura) : '—'}</td>
+                  <td className="acoes-candidato">
+                    {aoAbrirPessoa && (
+                      <button className="btn-secundario btn-mini" onClick={() => aoAbrirPessoa(p.id)}>Abrir</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -154,45 +156,47 @@ function Pendentes() {
       {!pendentes ? <p>Carregando…</p> : pendentes.length === 0 ? (
         <p className="explica centro">Nada aguardando a sua assinatura. 🎉</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Documento</th><th>Colaborador</th><th>Meu papel</th><th>Desde</th><th></th></tr></thead>
-          <tbody>
-            {pendentes.map((p) => (
-              <tr key={p.etapa_id}>
-                <td><strong>{p.titulo}</strong></td><td>{p.colaborador}</td><td>{p.papel}</td>
-                <td>{fmtData(p.criado_em)}</td>
-                <td className="acoes-candidato">
-                  {assinando === p.etapa_id ? (
-                    <span className="rejeicao">
-                      {/* Único campo de senha do projeto que ainda era um
-                          <input> cru, sem o olhinho (2026-07-30). Assinar
-                          errando a senha por não conseguir conferir o que
-                          digitou é atrito à toa num ato jurídico. */}
-                      <InputSenha placeholder="Sua senha" value={senha} autoFocus
-                                  onChange={(e) => setSenha(e.target.value)} />
-                      <button className="btn-principal btn-mini" onClick={async () => {
-                        setMsg(null)
-                        try {
-                          await api.assinarEtapaRh(p.etapa_id, senha)
-                          setAssinando(null); setSenha('')
-                          setMsg({ tipo: 'ok', texto: `Você assinou "${p.titulo}" como ${p.papel}.` })
-                          await recarregar()
-                        } catch (e) {
-                          setMsg({ tipo: 'erro', texto: e.detail === 'senha_invalida'
-                            ? 'Senha incorreta.' : `Não foi possível assinar (${e.detail || e.message}).` })
-                        }
-                      }}>Confirmar</button>
-                      <button className="btn-link" onClick={() => { setAssinando(null); setSenha('') }}>cancelar</button>
-                    </span>
-                  ) : (
-                    <button className="btn-principal btn-mini"
-                            onClick={() => { setAssinando(p.etapa_id); setSenha('') }}>✍️ Assinar</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Documento</th><th>Colaborador</th><th>Meu papel</th><th>Desde</th><th></th></tr></thead>
+            <tbody>
+              {pendentes.map((p) => (
+                <tr key={p.etapa_id}>
+                  <td><strong>{p.titulo}</strong></td><td>{p.colaborador}</td><td>{p.papel}</td>
+                  <td>{fmtData(p.criado_em)}</td>
+                  <td className="acoes-candidato">
+                    {assinando === p.etapa_id ? (
+                      <span className="rejeicao">
+                        {/* Único campo de senha do projeto que ainda era um
+                            <input> cru, sem o olhinho (2026-07-30). Assinar
+                            errando a senha por não conseguir conferir o que
+                            digitou é atrito à toa num ato jurídico. */}
+                        <InputSenha placeholder="Sua senha" value={senha} autoFocus
+                                    onChange={(e) => setSenha(e.target.value)} />
+                        <button className="btn-principal btn-mini" onClick={async () => {
+                          setMsg(null)
+                          try {
+                            await api.assinarEtapaRh(p.etapa_id, senha)
+                            setAssinando(null); setSenha('')
+                            setMsg({ tipo: 'ok', texto: `Você assinou "${p.titulo}" como ${p.papel}.` })
+                            await recarregar()
+                          } catch (e) {
+                            setMsg({ tipo: 'erro', texto: e.detail === 'senha_invalida'
+                              ? 'Senha incorreta.' : `Não foi possível assinar (${e.detail || e.message}).` })
+                          }
+                        }}>Confirmar</button>
+                        <button className="btn-link" onClick={() => { setAssinando(null); setSenha('') }}>cancelar</button>
+                      </span>
+                    ) : (
+                      <button className="btn-principal btn-mini"
+                              onClick={() => { setAssinando(p.etapa_id); setSenha('') }}>✍️ Assinar</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -207,20 +211,22 @@ function Feitas() {
       {!feitas ? <p>Carregando…</p> : feitas.length === 0 ? (
         <p className="explica centro">Você ainda não assinou nenhum documento por aqui.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Documento</th><th>Colaborador</th><th>Meu papel</th><th>Assinado em</th><th>Documento</th></tr></thead>
-          <tbody>
-            {feitas.map((f) => (
-              <tr key={f.etapa_id}>
-                <td><strong>{f.titulo}</strong></td><td>{f.colaborador}</td><td>{f.papel}</td>
-                <td>{fmtData(f.assinado_em)}</td>
-                <td>{f.documento_concluido
-                  ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ concluído</span>
-                  : <span className="chip" style={{ '--chip-cor': '#3b7dd8' }}>aguardando outros</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Documento</th><th>Colaborador</th><th>Meu papel</th><th>Assinado em</th><th>Documento</th></tr></thead>
+            <tbody>
+              {feitas.map((f) => (
+                <tr key={f.etapa_id}>
+                  <td><strong>{f.titulo}</strong></td><td>{f.colaborador}</td><td>{f.papel}</td>
+                  <td>{fmtData(f.assinado_em)}</td>
+                  <td>{f.documento_concluido
+                    ? <span className="chip" style={{ '--chip-cor': '#0fb257' }}>✅ concluído</span>
+                    : <span className="chip" style={{ '--chip-cor': '#3b7dd8' }}>aguardando outros</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
@@ -244,28 +250,30 @@ function Gerenciar() {
       {!sols ? <p>Carregando…</p> : sols.length === 0 ? (
         <p className="explica centro">Nenhum roteiro ainda.</p>
       ) : (
-        <table className="rh-tabela">
-          <thead><tr><th>Documento</th><th>Colaborador</th><th>Situação</th><th>Progresso</th><th>Criado</th><th></th></tr></thead>
-          <tbody>
-            {sols.map((s) => (
-              <tr key={s.id}>
-                <td><strong>{s.titulo}</strong></td><td>{s.colaborador}</td>
-                <td><span className="chip" style={{ '--chip-cor': CORES[s.status] || '#889' }}>
-                  {ROTULO[s.status] || s.status}</span></td>
-                <td>{s.progresso}</td><td>{fmtData(s.criado_em)}</td>
-                <td className="acoes-candidato">
-                  {['rascunho', 'aguardando', 'pendente_rh'].includes(s.status) && (
-                    <button className="btn-link" onClick={async () => {
-                      if (!window.confirm('Cancelar este roteiro?')) return
-                      try { await api.cancelarRoteiro(s.id, 'cancelado pelo RH'); await recarregar() }
-                      catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível (${e.detail || e.message}).` }) }
-                    }}>cancelar</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Documento</th><th>Colaborador</th><th>Situação</th><th>Progresso</th><th>Criado</th><th></th></tr></thead>
+            <tbody>
+              {sols.map((s) => (
+                <tr key={s.id}>
+                  <td><strong>{s.titulo}</strong></td><td>{s.colaborador}</td>
+                  <td><span className="chip" style={{ '--chip-cor': CORES[s.status] || '#889' }}>
+                    {ROTULO[s.status] || s.status}</span></td>
+                  <td>{s.progresso}</td><td>{fmtData(s.criado_em)}</td>
+                  <td className="acoes-candidato">
+                    {['rascunho', 'aguardando', 'pendente_rh'].includes(s.status) && (
+                      <button className="btn-link" onClick={async () => {
+                        if (!window.confirm('Cancelar este roteiro?')) return
+                        try { await api.cancelarRoteiro(s.id, 'cancelado pelo RH'); await recarregar() }
+                        catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível (${e.detail || e.message}).` }) }
+                      }}>cancelar</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   )
