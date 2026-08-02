@@ -89,6 +89,11 @@ async function criarConvite(request, dados) {
   if (!dados.cargo_funcao) {
     dados = { ...dados, cargo_funcao: 'Auxiliar de Serviços Gerais' }
   }
+  // Registra ponto passou a ser obrigatório (v2.44): o Tirvu aceita a célula
+  // vazia calado, então o campo é exigido já na criação do link.
+  if (dados.registra_ponto === undefined) {
+    dados = { ...dados, registra_ponto: true }
+  }
   const convite = await request.post('/api/rh/candidatos', {
     headers: auth, data: dados,
   })
