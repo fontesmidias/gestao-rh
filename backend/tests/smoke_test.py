@@ -46,12 +46,23 @@ assert sem_jornada.status_code == 422 and sem_jornada.json()["detail"] == "jorna
 sem_cargo = c.post("/api/rh/candidatos", headers=rh,
                    json={"nome_completo": "Sem Cargo", "jornada_id": jornada_id})
 assert sem_cargo.status_code == 422 and sem_cargo.json()["detail"] == "cargo_obrigatorio", sem_cargo.text
+# registra ponto é obrigatório no convite (v2.44): era pendência só na hora do
+# export, e o Tirvu aceita a célula vazia CALADO — o colaborador nascia lá sem
+# a marcação. No convite não existe importado, então exigir aqui não briga com
+# a regra da v1.82 (não travar a edição de quem veio do Tirvu sem o campo).
+sem_ponto = c.post("/api/rh/candidatos", headers=rh,
+                   json={"nome_completo": "Sem Ponto", "jornada_id": jornada_id,
+                         "cargo_funcao": "Auxiliar de Serviços Gerais"})
+assert (sem_ponto.status_code == 422
+        and sem_ponto.json()["detail"] == "registra_ponto_obrigatorio"), sem_ponto.text
 r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "José Teste da Silva",
     "email": "jose@example.com",
     "celular_whatsapp": "+5561999998888",
     "jornada_id": jornada_id,
     "cargo_funcao": "Auxiliar de Serviços Gerais",
+    # registra_ponto passou a ser obrigatório no convite (v2.44)
+    "registra_ponto": True,
 })
 assert r.status_code == 201, r.text
 convite = r.json()

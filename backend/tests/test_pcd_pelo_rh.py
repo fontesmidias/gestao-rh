@@ -85,7 +85,7 @@ def _candidato_que_concluiu() -> tuple[str, str]:
     r = c.post("/api/rh/candidatos", headers=H, json={
         "nome_completo": f"Pessoa PCD {suf}", "email": f"pcd{suf}@example.com",
         "celular_whatsapp": "+5561999994444", "jornada_id": jid,
-        "cargo_funcao": "Auxiliar de Serviços Gerais"})
+        "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
     cid, tok = r.json()["candidato"]["id"], r.json()["link_magico"].rsplit("/c/", 1)[1]
     c.post(f"/api/c/{tok}/aceite", json={"aceite_lgpd": True})
     for s in c.get(f"/api/c/{tok}/documentos").json()["slots"]:
@@ -158,7 +158,7 @@ print("\n[com o checklist aberto, o fluxo normal basta]")
 r = c.post("/api/rh/candidatos", headers=H, json={
     "nome_completo": f"Ainda Preenchendo {suf}", "email": f"abre{suf}@example.com",
     "celular_whatsapp": "+5561999993333", "jornada_id": jid,
-    "cargo_funcao": "Auxiliar de Serviços Gerais"})
+    "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
 cid2, tok2 = r.json()["candidato"]["id"], r.json()["link_magico"].rsplit("/c/", 1)[1]
 c.post(f"/api/c/{tok2}/aceite", json={"aceite_lgpd": True})
 r = c.put(f"/api/rh/candidatos/{cid2}/ficha/pessoais", headers=H,

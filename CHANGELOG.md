@@ -11,6 +11,44 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.44.0] — 2026-08-02 — Ponto e empresa já no convite
+
+Fecha o item 4 da leva de 2026-08-01:
+
+> *"Tornar obrigatório o RH marcar a empresa na hora de gerar o link para o
+> candidato, bem como se bate ponto ou não, pois isso é uma das coisas
+> fundamentais para o Tirvu."*
+
+### Modificado
+
+- **`registra_ponto` é obrigatório no convite** (422
+  `registra_ponto_obrigatorio`). Era pendência só na hora do export — e o
+  Tirvu **aceita a célula vazia calado**, então o colaborador nascia lá sem a
+  marcação e ninguém descobria.
+- **Empresa entra no cadastro**, já escolhida quando existe uma só — que é o
+  caso do grupo. O seletor aparece apenas com duas ou mais.
+
+### Notas
+
+Exigir o ponto aqui **não briga** com a regra da v1.82 (que decidiu não torná-lo
+obrigatório no formulário para não travar a edição de quem veio importado do
+Tirvu sem o campo): no convite não existe importado — a admissão começa agora.
+
+**A empresa continua fixa = 1 no export** (`EMPRESA_TIRVU_ID`, decisão de
+2026-07-24, reconfirmada pelo Bruno ontem). O campo serve ao cadastro interno.
+Obrigar um clique numa lista de um item é teatro, não conferência — por isso a
+tela pré-seleciona em vez de exigir.
+
+Ficou registrada a discordância levantada na revisão: campo obrigatório sem
+saída pode fazer o RH marcar qualquer coisa só para o formulário passar. O
+Bruno decidiu assim mesmo, ciente. Se aparecer gente marcada "Sim" que não bate
+ponto, o próximo passo é o padrão vir do POSTO.
+
+A validação vem **depois** de jornada e cargo de propósito: quem esquece o
+formulário inteiro precisa ouvir primeiro sobre os campos na ordem da tela.
+Coberto no `smoke_test` junto das demais obrigatoriedades (15/15), e os oito
+testes que criam convite foram atualizados.
+
 ## [2.43.0] — 2026-08-02 — PCD registrado pelo RH, e o laudo com como chegar
 
 Fecha o item 1 da leva de 2026-08-01. O Bruno relatou um colaborador PCD sem a

@@ -56,7 +56,7 @@ jid = c.post("/api/rh/jornadas", headers=rh,
 r = c.post("/api/rh/candidatos", headers=rh, json={
     "nome_completo": "Teste Cota Codigo", "email": f"cota{_ID}@example.com",
     "celular_whatsapp": "+5561999990000", "jornada_id": jid,
-    "cargo_funcao": "Auxiliar de Serviços Gerais"})
+    "cargo_funcao": "Auxiliar de Serviços Gerais", "registra_ponto": True})
 assert r.status_code == 201, r.text
 tok = r.json()["link_magico"].rsplit("/c/", 1)[1]
 c.post(f"/api/c/{tok}/aceite", json={"aceite_lgpd": True})
