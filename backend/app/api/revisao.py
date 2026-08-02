@@ -16,6 +16,7 @@ from app.models.candidato import Candidato, StatusCandidato
 from app.models.documento import MotivoRejeicao, SlotDocumento, StatusSlot
 from app.models.usuario_rh import UsuarioRH
 from app.services import storage
+from app.services import telemetria as telemetria_svc
 from app.services.auditoria import registrar
 from app.services.dossie import DossieIncompleto, gerar_dossie
 from app.services.email import enviar_email
@@ -234,8 +235,17 @@ def metricas(db: Session = Depends(get_db)) -> dict:
     tempo_medio_min = None
     if concluidos:
         total = sum((c.dossie_gerado_em - c.criado_em).total_seconds() for c in concluidos)
-        # Em minutos (pedido do RH): a média real é curta demais para "dias".
         tempo_medio_min = round(total / len(concluidos) / 60)
+
+    # Tempo LÍQUIDO de preenchimento (v2.51, pedido do Bruno): quanto a pessoa
+    # de fato passou na tela, somando as sessões e descartando os intervalos em
+    # que ela estava fora. O de cima (convite → dossiê) responde outra
+    # pergunta — "quanto o processo demora" — e continua no retorno, mas saiu
+    # do card: 2.590 min de calendário não dizem nada sobre o formulário.
+    liquidos = telemetria_svc.tempo_liquido_por_candidato(
+        db, [c.id for c in candidatos])
+    tempo_liquido_s = (round(sum(liquidos.values()) / len(liquidos))
+                       if liquidos else None)
 
     return {
         "total_candidatos": len(candidatos),
@@ -244,6 +254,9 @@ def metricas(db: Session = Depends(get_db)) -> dict:
         "documentos_rejeitados_em_aberto": rejeitados_abertos,
         "dossies_gerados": len(concluidos),
         "tempo_medio_minutos_convite_ao_dossie": tempo_medio_min,
+        # segundos; None = ainda não há telemetria suficiente
+        "tempo_liquido_medio_s": tempo_liquido_s,
+        "tempo_liquido_amostra": len(liquidos),
     }
 
 

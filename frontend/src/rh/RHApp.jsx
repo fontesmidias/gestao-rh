@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
-import { fmtData, fmtTelefone } from '../fmt.js'
+import { fmtData, fmtDuracao, fmtTelefone } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { STATUS_OPCOES, statusInfo } from '../status.js'
 import SelectBusca from '../SelectBusca.jsx'
@@ -157,12 +157,16 @@ function RedefinirSenha({ token }) {
 
 // --- Admissões no DashPlanilha (v1.78): sort/filtro por coluna + cards clicáveis ---
 const COLUNAS_ADMISSAO = () => [
-  { chave: 'nome', rotulo: 'Candidato', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+  // Sem `filtro:` em `nome` e `status` (v2.51): a busca e o status são
+  // SERVER-SIDE e vivem em `filtrosExtras`. Dois controles para o mesmo campo
+  // — um filtrando o servidor, outro a memória — dá resultado que parece
+  // errado. As colunas seguem ordenáveis, e os cards clicáveis continuam
+  // funcionando porque a filtragem em memória roda sobre TODAS as colunas.
+  { chave: 'nome', rotulo: 'Candidato', ordenavel: true, sempreVisivel: true,
     valor: (c) => c.nome_completo,
     render: (c) => (<><strong>{c.nome_completo}</strong><br />
       <small>{c.email || c.celular_whatsapp || 'sem contato — use 📋 Copiar link'}</small></>) },
-  { chave: 'status', rotulo: 'Status', ordenavel: true, filtro: 'select',
-    opcoes: STATUS_OPCOES.filter(([v]) => v).map(([v, r]) => ({ v: r, r })),
+  { chave: 'status', rotulo: 'Status', ordenavel: true,
     valor: (c) => statusInfo(c.status).label,
     render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>
       {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>) },
@@ -205,9 +209,21 @@ function cardsAdmissao(lista, m) {
   if (m) {
     cards.push({ rotulo: 'Docs p/ revisar', valor: m.documentos_aguardando_revisao, cor: '#d9534f' })
     cards.push({ rotulo: 'Reenvios pendentes', valor: m.documentos_rejeitados_em_aberto, cor: '#e9a63a' })
-    cards.push({ rotulo: 'Tempo médio',
-      valor: m.tempo_medio_minutos_convite_ao_dossie == null ? '—'
-        : `${m.tempo_medio_minutos_convite_ao_dossie.toLocaleString('pt-BR')}min` })
+    // Tempo de PREENCHIMENTO, não de calendário (v2.51). O card mostrava
+    // `dossie_gerado_em - criado_em` — 2.590min de convite a dossiê, que
+    // inclui a pessoa dormindo e esperando documento chegar. O que o RH quer
+    // saber é quanto tempo o formulário toma de quem o preenche.
+    cards.push({
+      rotulo: m.tempo_liquido_medio_s == null ? 'Tempo de preenchimento' : 'Preenchimento (média)',
+      valor: m.tempo_liquido_medio_s == null ? '—' : fmtDuracao(m.tempo_liquido_medio_s),
+      dica: m.tempo_liquido_medio_s == null
+        ? 'Ainda sem telemetria suficiente. A média aparece quando houver candidatos com sessões registradas.'
+        : `Tempo que a pessoa REALMENTE passou preenchendo, somando as sessões `
+          + `(intervalos acima de 30 min não contam). Amostra: ${m.tempo_liquido_amostra} pessoa(s). `
+          + (m.tempo_medio_minutos_convite_ao_dossie != null
+            ? `Do convite ao dossiê, o processo leva ${fmtDuracao(m.tempo_medio_minutos_convite_ao_dossie * 60)}.`
+            : ''),
+    })
   }
   return cards
 }
@@ -670,34 +686,48 @@ function PainelConteudo({ aoSair }) {
         </div>
       )}
 
-      <div className="rh-card rh-lote">
-        <input placeholder="🔎 Nome, e-mail ou CPF" value={filtros.busca} style={{ maxWidth: 220 }}
-               onChange={(e) => { const f = { ...filtros, busca: e.target.value }; setFiltros(f); recarregar(f) }} />
-        <SelectBusca style={{ minWidth: 190 }} vazioRotulo="Status: todos" placeholder="Buscar status…"
-          valor={filtros.status} aoEscolher={(v) => { const f = { ...filtros, status: v }; setFiltros(f); recarregar(f) }}
-          opcoes={STATUS_OPCOES.filter(([v]) => v).map(([v, r]) => ({ valor: v, rotulo: r }))} />
-        <SelectBusca style={{ minWidth: 180 }} vazioRotulo="Posto: todos" placeholder="Buscar posto…"
-          valor={filtros.posto_id} aoEscolher={(v) => { const f = { ...filtros, posto_id: v }; setFiltros(f); recarregar(f) }}
-          opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.sigla || p.nome }))} />
-        {(filtros.busca || filtros.status || filtros.posto_id) && (
-          <button className="btn-link" onClick={() => { const f = { status: '', busca: '', posto_id: '' }; setFiltros(f); recarregar(f) }}>limpar</button>
-        )}
-        <span style={{ flex: 1 }} />
-        <button className="btn-secundario btn-mini" title="Baixa uma planilha das admissões que casam o filtro"
-                onClick={() => comAmpulheta('Gerando a planilha…', async () => {
-                  const blob = await api.exportarAdmissoes(Object.fromEntries(
-                    Object.entries(filtros).filter(([, v]) => v)))
-                  const a = document.createElement('a')
-                  a.href = URL.createObjectURL(blob)
-                  a.download = `admissoes-${new Date().toISOString().slice(0, 10)}.xlsx`
-                  a.click()
-                })}>⬇ Exportar planilha</button>
-      </div>
-
       {!candidatos ? <p>Carregando…</p> : (
+        /* UM bloco de filtros só (v2.51): busca, status e posto são
+           server-side e entram na MESMA grade do dash, via `filtrosExtras`.
+           Antes eram dois cards empilhados — e STATUS aparecia nos dois, um
+           filtrando o servidor e o outro a memória. O Bruno já tinha apontado
+           isso no creche (v2.30): "tem dois cards, acho que apenas um, tudo
+           concentrado e coeso de filtros". As colunas `nome` e `status`
+           perderam o `filtro:` — um assunto, um controle; elas seguem
+           ordenáveis e os cards clicáveis continuam funcionando. */
         <DashPlanilha id="admissoes" colunas={COLUNAS_ADMISSAO()}
                       dados={candidatos} cards={cardsAdmissao(candidatos, metricas)}
                       acoesLinha={(c) => acoesAdmissao(c, abrirPessoa)}
+                      filtrosExtras={[
+                        { chave: 'busca', rotulo: 'Candidato', valor: filtros.busca,
+                          placeholder: '🔎 Nome, e-mail ou CPF',
+                          aoMudar: (v) => { const f = { ...filtros, busca: v }; setFiltros(f); recarregar(f) } },
+                        { chave: 'status', rotulo: 'Status', valor: filtros.status,
+                          vazioRotulo: 'Status: todos',
+                          opcoes: STATUS_OPCOES.filter(([v]) => v).map(([v, r]) => ({ v, r })),
+                          aoMudar: (v) => { const f = { ...filtros, status: v }; setFiltros(f); recarregar(f) } },
+                        { chave: 'posto_id', rotulo: 'Posto', valor: filtros.posto_id,
+                          vazioRotulo: 'Posto: todos',
+                          opcoes: postos.map((p) => ({ v: p.id, r: p.sigla || p.nome })),
+                          aoMudar: (v) => { const f = { ...filtros, posto_id: v }; setFiltros(f); recarregar(f) } },
+                      ]}
+                      acoesFiltro={<>
+                        {(filtros.busca || filtros.status || filtros.posto_id) && (
+                          <button className="btn-link" onClick={() => {
+                            const f = { status: '', busca: '', posto_id: '' }; setFiltros(f); recarregar(f)
+                          }}>limpar filtros</button>
+                        )}
+                        <button className="btn-secundario btn-mini"
+                                title="Baixa uma planilha das admissões que casam o filtro"
+                                onClick={() => comAmpulheta('Gerando a planilha…', async () => {
+                                  const blob = await api.exportarAdmissoes(Object.fromEntries(
+                                    Object.entries(filtros).filter(([, v]) => v)))
+                                  const a = document.createElement('a')
+                                  a.href = URL.createObjectURL(blob)
+                                  a.download = `admissoes-${new Date().toISOString().slice(0, 10)}.xlsx`
+                                  a.click()
+                                })}>⬇ Exportar planilha</button>
+                      </>}
                       vazio={(filtros.busca || filtros.status || filtros.posto_id)
                         ? 'Nenhuma admissão com esses filtros.'
                         : 'Nenhum candidato ainda. Toque em "+ Novo candidato" para enviar o primeiro convite.'} />

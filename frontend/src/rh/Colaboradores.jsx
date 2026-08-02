@@ -285,16 +285,16 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         {statusInfo(c.status).icone} {statusInfo(c.status).label}</span>
 
   const colunas = [
-    { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
+    { chave: 'nome', rotulo: 'Nome', ordenavel: true, sempreVisivel: true,
       valor: (c) => c.nome_completo,
       render: (c) => (<><strong>{c.nome_completo}</strong><br /><small>{c.email || '—'}</small></>) },
-    { chave: 'cpf', rotulo: 'CPF', filtro: 'texto', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
+    { chave: 'cpf', rotulo: 'CPF', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
     // Matrícula é a chave com que o ponto do Tirvu encontra a pessoa — por isso
     // ela aparece na lista e é editável aqui (v2.45).
     { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, filtro: 'texto',
       valor: (c) => c.matricula || '',
       render: (c) => <MatriculaEditavel colaborador={c} aoTrocar={() => carregar()} /> },
-    { chave: 'posto', rotulo: 'Posto', ordenavel: true, filtro: 'texto', quebra: true,
+    { chave: 'posto', rotulo: 'Posto', ordenavel: true, quebra: true,
       valor: (c) => c.posto_nome || '' },
     { chave: 'nascimento', rotulo: 'Nascimento', ordenavel: true, oculta: true,
       valor: (c) => c.nascimento, render: (c) => fmtDataBR(c.nascimento) },
@@ -392,25 +392,33 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
         massa, veja <strong>Configurações → 📥 Importações</strong>.</p>
 
       {/* filtros de topo SERVER-SIDE (recarregam a base) */}
-      <div className="rh-card rh-lote">
-        <SelectBusca style={{ minWidth: 200 }} vazioRotulo="Todos os postos" placeholder="Buscar posto…"
-          valor={postoId} aoEscolher={(v) => { setPostoId(v); carregar({ posto_id: v }) }}
-          opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.nome }))} />
-        <input placeholder="Buscar por nome, e-mail ou CPF…" value={busca}
-               style={{ flex: 1, minWidth: 200 }} onChange={(e) => aoBuscar(e.target.value)} />
-        <label className="explica" style={{ display: 'flex', alignItems: 'center', gap: '.4rem', margin: 0 }}>
-          <input type="checkbox" checked={incluirAdmissao}
-                 onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
-          incluir em admissão
-        </label>
-      </div>
-
       {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
       {erro && <div className="alerta">{erro}</div>}
 
       {!lista ? <p>Carregando…</p> : (
+        /* UM bloco de filtros só (v2.51): posto e busca são server-side e
+           entram na MESMA grade do dash. Antes eram dois cards empilhados, com
+           nome e posto filtráveis nos DOIS — um consultando o servidor, outro
+           a memória. Ver o feedback do creche na v2.30. */
         <DashPlanilha id="colaboradores" colunas={colunas} dados={lista} cards={cards}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
+                      filtrosExtras={[
+                        { chave: 'busca', rotulo: 'Buscar', valor: busca,
+                          placeholder: '🔎 Nome, e-mail ou CPF',
+                          debounce: 0,   // `aoBuscar` já tem o seu (400ms)
+                          aoMudar: aoBuscar },
+                        { chave: 'posto_id', rotulo: 'Posto', valor: postoId,
+                          vazioRotulo: 'Todos os postos',
+                          opcoes: postos.map((p) => ({ v: p.id, r: p.nome })),
+                          aoMudar: (v) => { setPostoId(v); carregar({ posto_id: v }) } },
+                      ]}
+                      acoesFiltro={
+                        <label className="explica campo-check">
+                          <input type="checkbox" checked={incluirAdmissao}
+                                 onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
+                          incluir em admissão
+                        </label>
+                      }
                       vazio="Nenhum colaborador com esses filtros." />
       )}
     </main>

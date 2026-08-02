@@ -362,6 +362,76 @@ def jornada_csv(db: Session, *, dias: int = 30, origem: str | None = None,
     return "﻿" + saida.getvalue(), len(dados), truncado
 
 
+# Um intervalo maior que isto entre dois eventos da MESMA sessão não é a
+# pessoa preenchendo devagar — é ela tendo ido embora (buscar um documento,
+# almoçar, dormir). O trecho é cortado e não entra na conta.
+GAP_INATIVIDADE_S = 30 * 60
+# A última interação de cada sessão tem um tempo de leitura/digitação que não
+# é registrado (não há evento seguinte para medir contra). Este é o crédito
+# dado a ela — mas com TETO: quem entra e sai dez vezes acumularia 5 min de
+# crédito por nada, inflando a média em ~17% (medido). O teto mantém o
+# arredondamento honesto sem premiar a fragmentação.
+CAUDA_SESSAO_S = 30
+CAUDA_MAX_S = 120
+
+
+def tempo_liquido_por_candidato(
+    db: Session, candidato_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Segundos que cada pessoa REALMENTE passou preenchendo.
+
+    Pedido do Bruno em 2026-08-02, olhando o card "Tempo médio: 2.590min":
+
+        "o card de tempo deveria refletir o real, de quanto tempo uma pessoa
+        leva em média para preencher, mas o tempo LÍQUIDO que ela esteve
+        preenchendo, não o tempo que ela iniciou e terminou."
+
+    A métrica antiga era `dossie_gerado_em - criado_em`: incluía a pessoa
+    dormindo, trabalhando e esperando o documento chegar pelo correio. Não
+    respondia "quanto tempo leva para preencher" — respondia "quanto tempo o
+    processo demora", que é outra pergunta (e continua disponível).
+
+    Aqui somamos os intervalos ENTRE eventos consecutivos da mesma sessão de
+    navegador, descartando os buracos maiores que `GAP_INATIVIDADE_S`. É o
+    mesmo raciocínio do import de ponto: `00:00` com entrada é registro
+    incompleto, não jornada de zero hora.
+
+    Devolve só quem tem evento suficiente — quem não tem fica FORA da média,
+    em vez de entrar como zero e puxá-la para baixo.
+    """
+    if not candidato_ids:
+        return {}
+    linhas = db.execute(
+        select(EventoTelemetria.candidato_id, EventoTelemetria.sessao,
+               EventoTelemetria.criado_em)
+        .where(EventoTelemetria.candidato_id.in_(candidato_ids),
+               EventoTelemetria.sessao.is_not(None))
+        .order_by(EventoTelemetria.candidato_id, EventoTelemetria.sessao,
+                  EventoTelemetria.criado_em)
+    ).all()
+
+    # (candidato, sessao) -> soma dos intervalos ativos
+    por_sessao: dict[tuple, int] = {}
+    anterior: tuple | None = None
+    for cid, sessao, quando in linhas:
+        chave = (cid, sessao)
+        if anterior is not None and anterior[0] == chave:
+            delta = (quando - anterior[1]).total_seconds()
+            if 0 < delta <= GAP_INATIVIDADE_S:
+                por_sessao[chave] = por_sessao.get(chave, 0) + int(delta)
+        else:
+            por_sessao.setdefault(chave, 0)
+        anterior = (chave, quando)
+
+    ativo: dict[uuid.UUID, int] = {}
+    sessoes: dict[uuid.UUID, int] = {}
+    for (cid, _sessao), segundos in por_sessao.items():
+        ativo[cid] = ativo.get(cid, 0) + segundos
+        sessoes[cid] = sessoes.get(cid, 0) + 1
+    return {cid: s + min(sessoes[cid] * CAUDA_SESSAO_S, CAUDA_MAX_S)
+            for cid, s in ativo.items()}
+
+
 def resumo(db: Session, dias: int = 7) -> dict:
     """Os números do topo da aba — o que se olha antes de filtrar.
 

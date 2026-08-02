@@ -315,6 +315,21 @@ cards clicáveis continuam funcionando, porque a filtragem em memória roda sobr
 todas as colunas, não só as que declaram `filtro`). Dois controles para o mesmo
 campo é pior do que dois cards.
 
+**A regra é de 2026-07-30 e as telas de Admissões e Colaboradores só a
+receberam na v2.51** — o Bruno apontou de novo, com print: *"parece que os dois
+que assinalei são a mesma coisa, não faz sentido ter dois cards"*. Ao criar uma
+regra, aplique-a a TODAS as telas que já têm o problema; senão ela vira
+documentação de intenção.
+
+Duas capacidades do `DashPlanilha` que a migração exigiu e que ficam
+disponíveis:
+
+- **`filtrosExtras` sem `opcoes` vira campo de TEXTO** (busca server-side por
+  nome/CPF), com `debounce` em ms — sem ele, cada tecla dispara uma consulta.
+- **`acoesFiltro`** aceita botões próprios na barra, à esquerda do "Exportar
+  CSV": é onde vão o "Exportar planilha" (do servidor, diferente do CSV do que
+  está à vista) e o "limpar filtros".
+
 ## 5b. Ordem da tela: agrupe por NATUREZA, não por ordem histórica
 
 Tela que cresce por acréscimo vira pilha: cada leva põe um bloco no fim, e a

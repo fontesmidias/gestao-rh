@@ -93,3 +93,18 @@ export const brParaISO = (br) => {
   if (!real || a < 1900 || a > new Date().getFullYear() + 1) return null
   return `${n.slice(4)}-${n.slice(2, 4)}-${n.slice(0, 2)}`
 }
+
+// Duração legível, com a unidade que o número pede (v2.51). O card de tempo
+// médio mostrava "2.590min" — quase 43 horas escritas em minutos, que ninguém
+// lê como "quase dois dias". Use em QUALQUER card de duração.
+export function fmtDuracao(segundos) {
+  if (segundos == null || isNaN(segundos)) return '—'
+  const s = Math.round(segundos)
+  if (s < 60) return `${s}s`
+  const min = Math.round(s / 60)
+  if (min < 60) return `${min}min`
+  const h = Math.floor(min / 60), rmin = min % 60
+  if (h < 24) return rmin ? `${h}h${String(rmin).padStart(2, '0')}` : `${h}h`
+  const d = Math.floor(h / 24), rh = h % 24
+  return rh ? `${d}d${rh}h` : `${d}d`
+}

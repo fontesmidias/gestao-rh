@@ -11,6 +11,80 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.51.0] — 2026-08-02 — Um bloco de filtros, e o tempo que a pessoa leva de verdade
+
+Os dois pedidos que restavam do print de Admissões.
+
+### Mudado — um bloco de filtros só
+
+> *"parece que os dois que assinalei com as setas vermelhas são a mesma coisa,
+> não faz sentido ter dois cards, isso pode gerar confusão. Não seria melhor ter
+> um apenas com todas as funções necessárias?"*
+
+**Admissões** e **Colaboradores** tinham **duas caixas de filtro empilhadas** —
+e o mesmo campo aparecia nas duas (status em Admissões; nome e posto em
+Colaboradores), uma consultando o servidor e a outra a memória. Filtrar por uma
+enquanto a outra dizia coisa diferente dava resultado que parecia errado.
+
+A regra e a solução já existiam desde a v2.30, quando o Bruno apontou o mesmo
+no Reembolso-Creche (*"tudo concentrado e coeso de filtros"*) — só não tinham
+sido aplicadas a estas duas telas. Agora os filtros server-side entram na mesma
+grade do `DashPlanilha`, via `filtrosExtras`, e as colunas duplicadas perderam
+o `filtro:` (**um assunto, um controle**). Elas seguem ordenáveis, e os cards
+clicáveis continuam funcionando — a filtragem em memória roda sobre todas as
+colunas, não só as que declaram filtro.
+
+Para isso o `DashPlanilha` ganhou duas capacidades: **`filtrosExtras` sem
+`opcoes` vira campo de texto** (com debounce, para não disparar uma consulta
+por tecla) e **`acoesFiltro`** aceita botões próprios na barra — foi onde o
+"Exportar planilha" e o "limpar filtros" foram parar.
+
+### Mudado — tempo LÍQUIDO de preenchimento
+
+> *"o card de tempo deveria refletir o real, de quanto tempo uma pessoa leva em
+> média para preencher, mas o tempo LÍQUIDO que ela esteve preenchendo, não o
+> tempo que ela iniciou e terminou. Quero o líquido."*
+
+O card mostrava **2.590min** — o campo se chamava, literalmente,
+`tempo_medio_minutos_convite_ao_dossie`: a diferença entre o convite e o
+dossiê, incluindo a pessoa dormindo, trabalhando e esperando o documento chegar
+pelo correio. Respondia "quanto o processo demora", não "quanto tempo leva para
+preencher".
+
+Agora o número vem da **telemetria**, que já registrava `sessao` (a visita) e
+`criado_em` de cada evento desde a v2.24 — não foi preciso coletar nada novo.
+`tempo_liquido_por_candidato` soma os intervalos entre eventos consecutivos da
+mesma sessão e **descarta os buracos maiores que 30 minutos**, que são a pessoa
+tendo ido embora. Medido com dados sintéticos: **20 min de preenchimento real
+contra 8h30 de calendário**.
+
+Três decisões travadas em `test_tempo_liquido.py` (9 verificações), porque
+todas mudam o número que o RH vai olhar: buraco > 30 min não conta · sessões
+diferentes somam (voltar no dia seguinte é a mesma pessoa) · a cauda de sessão
+tem **teto**, senão quem entra e sai dez vezes ganha 5 min de crédito por nada
+(~17% de inflação, medido). **Quem não tem telemetria fica fora da média**, em
+vez de entrar como zero e puxá-la para baixo.
+
+A métrica antiga continua no retorno da API — responde outra pergunta legítima
+— e aparece no tooltip do card. O que saiu foi o número enganoso do rosto.
+
+### Adicionado
+
+- **`fmtDuracao`** em `fmt.js`: a unidade acompanha o número (`45s` · `25min` ·
+  `1h30` · `1d19h`). "2.590min" não se lê como "quase dois dias". Use em
+  qualquer card de duração.
+- Cards do `DashPlanilha` aceitam **`dica`**, para explicar como a métrica é
+  calculada — antes o `title` só servia ao filtro.
+- Classe `.campo-check` (checkbox + rótulo na mesma linha), que várias telas
+  faziam com `style` inline.
+
+### Verificação
+
+Build ok · `test_tempo_liquido` **9/9** · `test_design_system` OK ·
+`deploy-tela-branca` 8/8 · as duas telas conferidas **renderizadas**: **1 bloco
+de filtro** onde havia 2, zero cards soltos, nada estoura · busca testada ao
+vivo (filtrou 4→3 linhas com **uma** consulta ao servidor, provando o debounce).
+
 ## [2.50.0] — 2026-08-02 — Toda lista suspensa filtra ao digitar
 
 Pedido do Bruno, com um exemplo bom e dois ruins na mesma tela:
