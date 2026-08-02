@@ -63,7 +63,7 @@ export default function JornadasRH({ aoVoltar }) {
       sempreVisivel: true, quebra: true,
       render: (j) => (<><strong>{j.descricao}</strong>{!j.estruturado &&
         <span title="Estrutura ainda não confirmada pelo RH"> ⚠️</span>}</>) },
-    { chave: 'posto', rotulo: 'Posto', filtro: 'texto', valor: (j) => postoNome(j.posto_servico_id),
+    { chave: 'posto', rotulo: 'Posto', filtro: 'lista', valor: (j) => postoNome(j.posto_servico_id),
       render: (j) => (
         <SelectBusca style={{ minWidth: 160 }} vazioRotulo="— sem posto —" placeholder="Buscar posto…"
           valor={j.posto_servico_id || ''} aoEscolher={(v) => salvarPosto(j, v)}
@@ -87,7 +87,7 @@ export default function JornadasRH({ aoVoltar }) {
       valor: (j) => simNao(j.tem_intrajornada),
       render: (j) => j.tem_intrajornada
         ? <span title={j.intrajornada_obs || ''}>Sim{j.intrajornada_obs ? ` (${j.intrajornada_obs})` : ''}</span> : '—' },
-    { chave: 'cargo_relacionado', rotulo: 'Cargo', filtro: 'texto', oculta: true, valor: (j) => j.cargo_relacionado || '' },
+    { chave: 'cargo_relacionado', rotulo: 'Cargo', filtro: 'lista', oculta: true, valor: (j) => j.cargo_relacionado || '' },
     { chave: 'estruturado', rotulo: 'Estrutura', filtro: 'select',
       opcoes: [{ v: 'Confirmada', r: 'Confirmada' }, { v: 'A confirmar', r: 'A confirmar' }],
       valor: (j) => (j.estruturado ? 'Confirmada' : 'A confirmar'),

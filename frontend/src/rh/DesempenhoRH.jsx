@@ -39,7 +39,7 @@ export default function DesempenhoRH({ aoVoltar }) {
       render: (l) => <ChipTipo tipo={l.tipo} /> },
     { chave: 'descricao', rotulo: 'O que aconteceu', filtro: 'texto', quebra: true },
     { chave: 'impacto', rotulo: 'Impacto', quebra: true, oculta: true },
-    { chave: 'autor', rotulo: 'Registrado por', ordenavel: true, filtro: 'texto',
+    { chave: 'autor', rotulo: 'Registrado por', ordenavel: true, filtro: 'lista',
       quebra: true },
     { chave: 'tem_anexo', rotulo: 'Anexo',
       valor: (l) => (l.tem_anexo ? 'Sim' : 'Não'),

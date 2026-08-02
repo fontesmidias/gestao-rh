@@ -288,7 +288,21 @@ calendário (sem digitação), `<input type="date">` é aceitável.
 ## 6c. Barra de filtros: grade compacta, tudo com busca
 
 Listas do RH filtram pela barra do `DashPlanilha` — declare `filtro` na config
-da coluna (`'texto'` ou `'select'`) e a barra se monta sozinha. Ela é uma
+da coluna e a barra se monta sozinha. **Três tipos, e o critério é a natureza
+do campo** (v2.52):
+
+| Tipo | Quando | Exemplos |
+|---|---|---|
+| `'lista'` | O valor vem de um **conjunto que se repete**. As opções são derivadas dos próprios dados — não escreva lista nenhuma. | posto, cargo, tags, cidade, tipo, autor |
+| `'texto'` | Busca por **trecho**. | nome de pessoa, descrição, telefone, matrícula, ID |
+| `'select'` | Lista **fixa e conhecida** no código. | Sim/Não, status, senioridade |
+
+Nome de pessoa é `'texto'` de propósito: digitar "mari" acha Maria, Mariana e
+Marisa; numa lista de 1.171 nomes você teria que saber qual escolher.
+
+Coluna cujo `valor` devolve **array** (tags, cargos) entra na lista **item a
+item** — senão a opção seria a string concatenada ("Auxiliar, Copeiro"), que
+não filtra nada. Ela é uma
 **grade compacta** (vários filtros por linha, rótulo pequeno em cima), nunca uma
 linha por filtro. Todo filtro `'select'` vira `SelectBusca` (começa a digitar e
 a lista filtra) — filtro é funcional, a pessoa não deve rolar 300 opções. Não

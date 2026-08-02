@@ -11,6 +11,53 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.52.0] — 2026-08-02 — Filtro de coluna também escolhe da lista
+
+Continuação do pedido da v2.50, agora nos filtros das tabelas. O Bruno mandou
+prints de cinco telas:
+
+> *"no segundo print, quero aquele filtro maroto para posto, pois está a escrita
+> livre. Na de uniformes, quero o filtro bom para cargo e posto. No de creche
+> também. No de banco de talentos, os que sinalizei."*
+
+A v2.50 resolveu os `<select>` de **preenchimento**; ficaram de fora os filtros
+de **coluna** do `DashPlanilha`, que eram campo de texto: para filtrar por posto
+o RH tinha que saber escrever o nome exato.
+
+### Adicionado
+
+- **`filtro: 'lista'`** na config de coluna: monta as opções a partir dos
+  **próprios dados** da tela e usa o `SelectBusca`. Não exige escrever lista
+  nenhuma — e acompanha os dados quando eles mudam.
+- **Coluna que devolve ARRAY entra item a item.** Tags e cargos são listas por
+  pessoa; sem isso a opção seria a string concatenada ("Auxiliar, Copeiro"),
+  que não filtra nada. Quem tem 3 tags aparece nas 3.
+
+### Mudado — 24 filtros
+
+Os 7 que o Bruno apontou (posto em Jornadas e Creche; cargo e posto em
+Uniformes; cargos, tags e cidade em Talentos) **mais 17 do mesmo tipo em telas
+que ele não printou** — Avaliações, Desempenho, Desenvolvimento, Provas,
+Telemetria. Ele pediu coerência; corrigir só o que estava no print deixaria o
+resto incoerente na semana seguinte.
+
+**O que continua sendo texto, de propósito:** nome de pessoa, descrição livre,
+telefone, matrícula e ID do Tirvu. Nome se busca por **trecho** — digitar
+"mari" acha Maria, Mariana e Marisa; numa lista de 1.171 nomes você teria que
+saber qual escolher. O critério é a natureza do campo, não o tipo do filtro.
+
+### Nota
+
+O primeiro print (Colaboradores com dois blocos de filtro) era anterior à
+v2.51, que já unificou aquela tela.
+
+### Verificação
+
+Build ok · `test_design_system` OK · `deploy-tela-branca` 8/8 · **8 telas
+varridas com captura de erro de JS: zero erros**, nenhuma estoura · filtro de
+array testado ao vivo (CARGOS derivou 4 opções item a item, não a string
+concatenada).
+
 ## [2.51.0] — 2026-08-02 — Um bloco de filtros, e o tempo que a pessoa leva de verdade
 
 Os dois pedidos que restavam do print de Admissões.
