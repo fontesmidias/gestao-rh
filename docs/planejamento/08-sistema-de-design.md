@@ -221,8 +221,8 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
 >   `anywhere` (parte no meio da palavra).
 > - **Célula não enumera lista**: mostre a contagem, deixe os itens no
 >   `title` — um chip com 5 itens vira a coluna mais larga da tela.
-> - **Abaixo de 1100px a tabela vira card.** Tela com 8+ colunas não cabe em
->   notebook pequeno por mais CSS que se escreva.
+> - **Abaixo de 1250px a tabela vira card.** Tela com 8+ colunas não cabe em
+>   notebook pequeno nem em janela dividida, por mais CSS que se escreva.
 > - Coluna que não é usada todo dia nasce `oculta: true` — o RH liga no
 >   **⚙ Colunas** quando precisar.
 > - **Altura também é limite** (v2.60): texto longo é cortado na 3ª linha com
@@ -238,8 +238,10 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
 > - **Medidas em `rem`/`ch`/`%`, não em `px`** — acompanham o zoom e a fonte do
 >   sistema. `px` só para borda, sombra e raio.
 >
-> Régua: `frontend/tests/e2e/tabelas-cabem-na-tela.spec.js` mede 6 telas em 3
-> larguras. **Rode ao acrescentar botão de ação ou coluna** — o defeito é
+> Régua: `frontend/tests/e2e/tabelas-cabem-na-tela.spec.js` mede 7 telas em 5
+> larguras (inclusive os limiares 1150/1200, onde a primeira versão tinha um
+> buraco). **Tela de lista nova entra na lista `TELAS` do teste.**
+> **Rode ao acrescentar botão de ação ou coluna** — o defeito é
 > invisível no código, porque ninguém soma larguras de olho.
 
 - **Tabela larga** vai dentro de um container com `overflow-x: auto` que **rola

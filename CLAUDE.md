@@ -88,6 +88,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Teste de layout mede a FAIXA, não três pontos — e com dados REAIS** (v2.62):
+  a régua da v2.59 rodava em 1024/1280/1440 e passava verde enquanto o Bruno
+  mandava print de tela cortada. Ela pulava **1150–1249**, onde o modo card já
+  saíra mas a tela ainda era estreita — ali Colaboradores estourava 53px,
+  Talentos 78px e Jornadas 223px. Some a isso que eu media com **19 registros
+  contra os 1171 reais**: com poucos dados o texto não estica a coluna. Ao
+  medir layout, cubra os limiares das media queries (logo acima e logo abaixo)
+  e crie dados com o VOLUME e o TEXTO de produção — posto de 86 caracteres,
+  talento com quatro cargos.
+- **Tela nova de lista entra na lista do teste** (v2.62): Jornadas era a que
+  mais estourava e simplesmente **não estava** em `TELAS` no
+  `tabelas-cabem-na-tela.spec.js`. Teste de cobertura que não enumera a tela
+  nova dá falsa sensação de proteção — pior que não ter teste, porque ninguém
+  vai conferir à mão o que "já está coberto".
+
 - **Upload fora do wizard também normaliza — mas NUNCA recusa por isso** (v2.61,
   `creche_publico::_guardar_doc_crianca` e `portal::subir_documento`): creche e
   portal gravavam o arquivo CRU enquanto o wizard timbrava a mesma foto. Hoje

@@ -188,7 +188,11 @@ export default function TalentosRH({ aoAbrir }) {
     // célula tinha um segundo "📎 ver" idêntico, então o mesmo currículo era
     // clicável duas vezes na MESMA linha; e quem não anexou virava um "—" que
     // não diz se ninguém pediu ou se a pessoa não mandou. Sim/Não responde.
-    { chave: 'tem_curriculo', rotulo: 'Currículo', filtro: 'select',
+    // Oculta por padrão (v2.62): quem TEM currículo já mostra o atalho "📎
+    // currículo" embaixo do nome, então a coluna só respondia pelos que não
+    // têm — e custava 102px numa tabela que estourava em 1200px. O FILTRO
+    // continua na barra, que é o uso real ("me mostre só quem anexou").
+    { chave: 'tem_curriculo', rotulo: 'Currículo', filtro: 'select', oculta: true,
       opcoes: [{ v: 'Sim', r: 'Sim' }, { v: 'Não', r: 'Não' }],
       valor: (t) => t.tem_curriculo ? 'Sim' : 'Não',
       render: (t) => t.tem_curriculo ? 'Sim' : 'Não' },

@@ -1060,11 +1060,15 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .3rem;
-  /* `width` fixo em `ch` (proporcional à fonte, respeita zoom) para a coluna
-     não variar de linha para linha conforme os botões CONDICIONAIS de cada
-     pessoa — a tabela ficaria com a última coluna dançando. 24ch cabe dois
-     botões de rótulo curto lado a lado. */
-  width: 24ch;
+  /* Largura em `ch` (proporcional à fonte, respeita zoom) para a coluna não
+     variar de linha para linha conforme os botões CONDICIONAIS de cada pessoa
+     — a tabela ficaria com a última coluna dançando.
+     `clamp` em vez de valor fixo (v2.62): em telas estreitas os 24ch fixos
+     eram o maior peso da tabela (234px de ~1150) e a empurravam para fora;
+     agora a coluna CEDE até 17ch quando o espaço aperta e volta a 24ch onde
+     há folga. `vw` é a unidade que enxerga a largura da janela — `%` aqui
+     seria relativo à célula, que é justamente o que se quer limitar. */
+  width: clamp(17ch, 16vw, 24ch);
 }
 /* Uma ação só: não precisa de grade nem da largura de duas. */
 .acoes-candidato:has(> :only-child) {
@@ -1459,7 +1463,7 @@ body[data-rh-ocupado] { cursor: progress; }
    por completo: cada linha vira um bloco com os rótulos ao lado dos valores,
    e NADA fica fora da vista. Vale para notebook pequeno e janela dividida —
    os dois casos em que o botão sumia sem avisar. */
-@media (max-width: 1100px) {
+@media (max-width: 1250px) {
   .rh-painel { padding: .8rem; }
   .rh-topo { flex-wrap: wrap; gap: .5rem; }
   /* ===== TABELAS VIRAM CARDS =====

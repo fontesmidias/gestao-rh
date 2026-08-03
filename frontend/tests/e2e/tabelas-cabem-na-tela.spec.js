@@ -25,13 +25,20 @@ import { test, expect } from '@playwright/test'
 // Larguras que importam: 1024 é notebook pequeno e janela dividida ao meio num
 // monitor grande — os dois casos em que o botão sumia. 1280 e 1440 são os
 // monitores do escritório.
-const LARGURAS = [1024, 1280, 1440]
+// **1200 é o pior caso, e a primeira versão deste teste NÃO o media** — só
+// 1024/1280/1440. Nessa faixa o modo card já saiu (limiar de 1100px) mas a
+// tela ainda é estreita, e Colaboradores/Talentos/Jornadas estouravam
+// 53/78/223px sem que nada acusasse (feedback 2026-08-02, com prints).
+//
+// Lição que fica: uma régua com poucos pontos mede os pontos, não a faixa.
+const LARGURAS = [1024, 1150, 1200, 1280, 1440]
 
 const TELAS = [
   ['Admissões', '/rh'],
   ['Colaboradores', '/rh/colaboradores'],
   ['Talentos', '/rh/talentos'],
   ['Postos', '/rh/postos'],
+  ['Jornadas', '/rh/jornadas'],          // faltava — e era a que mais estourava
   ['Desenvolvimento', '/rh/desenvolvimento'],
   ['Creche', '/rh/creche'],
 ]
