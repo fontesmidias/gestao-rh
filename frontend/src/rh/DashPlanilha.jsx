@@ -283,11 +283,25 @@ export default function DashPlanilha({
                       então o texto inteiro vai no `title`, senão o corte
                       esconderia informação sem dar como recuperá-la. */}
                   {visiveis.map((c) => {
-                    const conteudo = c.render ? c.render(l) : (textoDe(l, c) || '—')
+                    const bruto = textoDe(l, c)
+                    const conteudo = c.render ? c.render(l) : (bruto || '—')
+                    // `dash-vazio` marca a célula SEM valor. Na tabela ela
+                    // continua mostrando o travessão (a coluna precisa alinhar
+                    // com o cabeçalho); no CARD ela some — sem isso, "TAGS —"
+                    // e "TESTE —" viravam linhas ocupando altura para dizer
+                    // que não há nada, e o card chegava a 491px (v2.63).
+                    // Vale também para coluna com `render`: muitas devolvem o
+                    // travessão quando não há dado (`t.tags?.length ? … : '—'`),
+                    // e no card isso vira "TAGS —" — uma linha inteira para
+                    // dizer que não há nada. Usa o `conteudo` já calculado; não
+                    // chama o `render` de novo (ele roda para toda célula de
+                    // toda linha).
+                    const vazio = !bruto && (conteudo === '—' || conteudo == null)
                     return (
                       <td key={c.chave}
-                          title={c.quebra ? (textoDe(l, c) || undefined) : undefined}
-                          className={[c.quebra && 'dash-quebra', c.nowrap && 'dash-nowrap']
+                          title={c.quebra ? (bruto || undefined) : undefined}
+                          className={[c.quebra && 'dash-quebra', c.nowrap && 'dash-nowrap',
+                                      vazio && 'dash-vazio']
                             .filter(Boolean).join(' ') || undefined}>
                         {/* O corte em 3 linhas precisa de um elemento INTERNO:
                             a `<td>` é forçada a `display: flow-root` pelo

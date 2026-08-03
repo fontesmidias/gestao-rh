@@ -11,6 +11,56 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.63.0] — 2026-08-02 — O card não é um pergaminho
+
+Print do Banco de Talentos ainda ruim, e uma pergunta do Bruno sobre os dados
+de teste que criei. As duas coisas tratadas.
+
+### O modo card tinha o mesmo defeito, virado de lado
+
+As correções anteriores mediram o modo TABELA. No modo CARD (abaixo de 1250px),
+uma linha do Banco de Talentos chegava a **491px de altura** — o card ocupava
+quase a tela inteira, e o RH via uma pessoa por vez. Três causas somadas:
+
+1. **Botões empilhados na vertical.** A regra do card usava `flex: 1 1 auto`,
+   herança de quando `.acoes-candidato` era flex; desde a v2.59 ela é **grid**, e
+   `flex` não faz efeito ali — cada botão virava uma fileira. Agora é
+   `repeat(auto-fit, minmax(9rem, 1fr))`: os botões se distribuem pela largura,
+   preservando a área de toque de 44px.
+2. **Campo vazio virando linha.** "TAGS —" e "TESTE —" ocupavam altura para
+   dizer que não há nada. Já existia regra para célula `:empty`, mas o
+   `DashPlanilha` preenche com travessão — a célula nunca ficava vazia de fato.
+   Agora ela é marcada com `dash-vazio` (inclusive quando o `render` devolve
+   "—") e some **no card**; na tabela o travessão continua, porque ali a coluna
+   precisa alinhar com o cabeçalho.
+3. **Um campo por linha, de largura total.** Com 8-9 colunas, o card virava uma
+   coluna de 9 linhas. Passou a ser **grade de duas colunas**
+   (`auto-fit`/`minmax`), voltando a uma no celular sem media query extra. A
+   coluna de ações e o checkbox atravessam a grade inteira.
+
+Resultado medido: Talentos **491px → ~120px**; Desenvolvimento 330px,
+Jornadas 268px e Colaboradores 245px, todos abaixo do teto.
+
+### A régua, de novo
+
+O teste de altura rodava **só em 1440px** — modo tabela. O defeito estava no
+card. Agora roda nos dois modos (1440 e 1150), com teto próprio para cada um:
+no card a linha é naturalmente mais alta (rótulo ao lado de cada valor, botão
+com área de toque), mas 240px já significa card ocupando meia tela.
+
+Validado por mutação: devolver o card ao empilhamento faz o teste de 1150px
+falhar apontando as três telas.
+
+### Sobre os dados de teste
+
+O Bruno perguntou se eu estava gravando coisas nas informações globais. Estava
+— no banco **local** de desenvolvimento, para reproduzir o volume real (a base
+tem 1171 colaboradores; eu media com 19). Tudo removido e conferido: 40
+colaboradores, 30 jornadas, 30 talentos, o usuário de medição e o posto de
+teste. Os três colaboradores reais que eu havia apontado para esse posto
+voltaram a ficar sem posto, como estavam. **Nada disso tocou produção** — o
+ambiente é o `deploy-*` da máquina local.
+
 ## [2.62.0] — 2026-08-02 — A régua tinha buraco: 1200px e Jornadas
 
 Prints do Bruno mostrando Colaboradores, Talentos e Jornadas **ainda cortando**
