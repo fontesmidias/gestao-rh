@@ -302,7 +302,9 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     { chave: 'nome', rotulo: 'Nome', ordenavel: true, sempreVisivel: true,
       valor: (c) => c.nome_completo,
       render: (c) => (<><strong>{c.nome_completo}</strong><br /><small>{c.email || '—'}</small></>) },
-    { chave: 'cpf', rotulo: 'CPF', valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
+    // Oculta por padrão (v2.62): o CPF se BUSCA na barra (o campo aceita nome,
+    // e-mail ou CPF) e custava 119px numa tabela que estourava a tela.
+    { chave: 'cpf', rotulo: 'CPF', oculta: true, valor: (c) => c.cpf, render: (c) => fmtCpf(c.cpf) },
     // Matrícula é a chave com que o ponto do Tirvu encontra a pessoa — por isso
     // ela aparece na lista e é editável aqui (v2.45).
     { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, nowrap: true, filtro: 'texto',

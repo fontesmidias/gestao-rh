@@ -11,6 +11,48 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.62.0] — 2026-08-02 — A régua tinha buraco: 1200px e Jornadas
+
+Prints do Bruno mostrando Colaboradores, Talentos e Jornadas **ainda cortando**
+— depois de duas versões consertando exatamente isso, e com o teste de
+regressão passando.
+
+### Por que o teste não pegou
+
+Três falhas minhas, e a primeira é a que ensina:
+
+1. **A régua media três pontos, não a faixa.** O teste rodava em 1024, 1280 e
+   1440 — e **pulava justamente 1150–1249**, onde o modo card já saíra (limiar
+   de 1100px) mas a tela ainda era estreita. Medido depois: Colaboradores
+   estourava 53px, Talentos 78px e Jornadas **223px** nessa janela.
+2. **Jornadas nem estava na lista de telas testadas** — e era a que mais
+   estourava, em quase toda largura.
+3. **Medi com 19 registros; a base real tem 1171.** Com poucos dados, textos
+   longos não aparecem e as colunas não incham. Reproduzi o volume e o
+   conteúdo reais (posto de 86 caracteres, talento com quatro cargos) antes de
+   consertar.
+
+### O que mudou
+
+- **Limiar do modo card: 1100px → 1250px.** Abaixo disso a tabela vira card,
+  onde nada fica fora da vista. Foi o que zerou a faixa inteira; as telas com
+  8–9 colunas não cabem em 1200px por mais CSS que se escreva.
+- **Coluna de ações agora CEDE**: `clamp(17ch, 16vw, 24ch)` em vez de largura
+  fixa. Em tela estreita ela era o maior peso da tabela (234px de ~1150).
+- **Cinco colunas passaram a nascer ocultas**, todas com o filtro mantido na
+  barra: CPF em Colaboradores (busca-se na barra, que aceita nome/e-mail/CPF),
+  Currículo em Talentos (quem tem já mostra o atalho embaixo do nome), Ad.
+  noturno e Intrajornada em Jornadas (são Sim/Não que se filtram).
+
+### A régua consertada
+
+O teste passou a medir **5 larguras × 7 telas** (era 3 × 6), com 1150 e 1200
+incluídos e Jornadas na lista. Validado por mutação: devolver o limiar a 1100px
+faz falhar exatamente 1150 e 1200 — as duas que antes escapavam.
+
+Validação: 25 testes E2E, telas conferidas renderizadas em 1200px e 1440px com
+dados de volume realista.
+
 ## [2.61.0] — 2026-08-02 — A câmera guiada e o timbrado em todo lugar
 
 > *"ainda sobre o reembolso creche ou qualquer outra área que a pessoa tem que

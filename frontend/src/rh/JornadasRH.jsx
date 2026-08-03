@@ -80,9 +80,12 @@ export default function JornadasRH({ aoVoltar }) {
         [j.hora_entrada, j.saida_almoco, j.volta_almoco, j.hora_saida].filter(Boolean).join(' · ') },
     { chave: 'turno', rotulo: 'Turno', filtro: 'select', oculta: true,
       opcoes: [{ v: 'diurno', r: 'Diurno' }, { v: 'noturno', r: 'Noturno' }], valor: (j) => j.turno || '' },
-    { chave: 'adicional_noturno', rotulo: 'Ad. noturno', filtro: 'select',
+    // Ocultas por padrão (v2.62): são Sim/Não que já se FILTRAM na barra do
+    // dash, e a tabela tem 8 colunas — estourava a tela em 1200px. Continuam
+    // a um clique em "⚙ Colunas".
+    { chave: 'adicional_noturno', rotulo: 'Ad. noturno', filtro: 'select', oculta: true,
       opcoes: [{ v: 'Sim', r: 'Sim' }, { v: '—', r: 'Não' }], valor: (j) => simNao(j.adicional_noturno) },
-    { chave: 'tem_intrajornada', rotulo: 'Intrajornada', filtro: 'select',
+    { chave: 'tem_intrajornada', rotulo: 'Intrajornada', filtro: 'select', oculta: true,
       opcoes: [{ v: 'Sim', r: 'Sim' }, { v: '—', r: 'Não' }],
       valor: (j) => simNao(j.tem_intrajornada),
       render: (j) => j.tem_intrajornada
