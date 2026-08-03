@@ -121,7 +121,12 @@ for (const largura of LARGURAS) {
   })
 }
 
-test('linha de tabela não vira um parágrafo', async ({ page }) => {
+// Roda nos DOIS modos: 1440px é tabela, 1150px é card. A primeira versão
+// media só 1440 — e o defeito estava no CARD, onde o Banco de Talentos chegou
+// a **491px por linha** (botões empilhados verticalmente + campos vazios
+// virando linha). Um teste de altura que só olha um modo mede metade da tela.
+for (const largura of [1440, 1150]) {
+test(`linha de tabela não vira um parágrafo — ${largura}px`, async ({ page }) => {
   /* Tirar a rolagem lateral sem limitar a ALTURA só troca um problema por
    * outro (feedback 2026-08-02, segundo print): um posto como "SESI-DF -
    * 22/2026 - BRIGADISTA, RECEPÇÃO, GARÇONARIA, PORTARIA E LIMPEZA E
@@ -132,7 +137,7 @@ test('linha de tabela não vira um parágrafo', async ({ page }) => {
    * texto inteiro no `title` — pedido do Bruno: *"para textos longos ter
    * reticências e, se parar o mouse, aparecer o texto completo"*.
    */
-  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.setViewportSize({ width: largura, height: 900 })
   await entrar(page)
   const problemas = []
   for (const [nome, rota] of TELAS) {
@@ -155,7 +160,11 @@ test('linha de tabela não vira um parágrafo', async ({ page }) => {
     // grade 2×2 vira três fileiras. O texto longo, esse, é cortado em 3 linhas
     // e não passa de 115px; a garantia contra ele é a checagem de `semCorte`
     // logo abaixo, que é específica e não depende deste limiar.
-    if (m.maior > 170) problemas.push(`${nome}: linha de ${m.maior}px de altura`)
+    // No CARD a linha é naturalmente mais alta (rótulo ao lado de cada valor
+    // e botões com área de toque), mas 240px já significa card ocupando meia
+    // tela — foi o sintoma do Banco de Talentos.
+    const teto = largura <= 1250 ? 240 : 170
+    if (m.maior > teto) problemas.push(`${nome}: linha de ${m.maior}px de altura`)
     if (m.semCorte > 0) {
       problemas.push(`${nome}: ${m.semCorte} célula(s) de texto longo sem o corte em 3 linhas`)
     }
@@ -166,6 +175,7 @@ test('linha de tabela não vira um parágrafo', async ({ page }) => {
     + 'inteiro fica no `title`.\n' + problemas.join('\n'))
     .toEqual([])
 })
+}
 
 test('a coluna de ações não domina a tabela', async ({ page }) => {
   // Regra que sustenta o resto: se as ações voltarem a ocupar metade da

@@ -140,7 +140,10 @@ export default function TalentosRH({ aoAbrir }) {
     // 📎 era só um enfeite — agora abre o currículo direto daqui.
     { chave: 'nome', rotulo: 'Nome', ordenavel: true, filtro: 'texto', sempreVisivel: true,
       render: (t) => (<>
-        <strong>{t.nome}</strong><br /><small>{t.email || '—'}</small>
+        {/* Sem e-mail, NADA embaixo do nome — nem o travessão. Ele não
+            informa (o rótulo "e-mail" nem aparece ali) e no modo card ficava
+            um traço solto ao lado do nome. */}
+        <strong>{t.nome}</strong>{t.email && <><br /><small>{t.email}</small></>}
         <div className="linha-atalhos">
           {/* ÚNICO ponto clicável do currículo na linha (feedback 2026-08-02:
               *"fica o clicável em dois lugares, é necessário apenas um"*). A

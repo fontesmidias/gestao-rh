@@ -1473,12 +1473,22 @@ body[data-rh-ocupado] { cursor: progress; }
   .rh-tabela { display: block; white-space: normal; }
   .rh-tabela thead { display: none; }
   .rh-tabela tbody { display: block; }
+  /* GRADE de 2 colunas dentro do card (v2.63): com 8-9 campos, um por linha
+     de largura total, o card chegava a 330px e mostrava duas pessoas por tela
+     — o mesmo defeito que a rolagem lateral tinha, virado de lado. `auto-fit`
+     usa duas colunas onde cabe e volta a uma no celular, sem media query
+     extra. A coluna de AÇÕES e o checkbox atravessam a grade inteira. */
   .rh-tabela tbody tr {
-    display: block; background: var(--cartao);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: .1rem .9rem; align-content: start;
+    background: var(--cartao);
     border: 1px solid var(--borda); border-radius: 14px;
     padding: .65rem .9rem; margin-bottom: .7rem;
     box-shadow: var(--sombra-cartao);
   }
+  .rh-tabela tbody td.acoes-candidato,
+  .rh-tabela tbody td.dash-check,
+  .rh-tabela tbody td[colspan] { grid-column: 1 / -1; }
   .rh-tabela tbody td {
     display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap;
     border: none !important; padding: .22rem 0; white-space: normal;
@@ -1488,14 +1498,32 @@ body[data-rh-ocupado] { cursor: progress; }
     font-weight: 700; font-size: .72rem; text-transform: uppercase;
     letter-spacing: .03em; color: var(--tinta-suave);
   }
-  .rh-tabela tbody td:empty { display: none; }
+  /* Campo SEM valor não vira linha no card: "TAGS —" ocupa altura para dizer
+     que não há nada. Na tabela o travessão continua (a coluna precisa alinhar
+     com o cabeçalho); aqui ele some. `:empty` sozinho não bastava — o
+     DashPlanilha preenche com "—", então a célula nunca fica vazia de fato. */
+  .rh-tabela tbody td:empty,
+  .rh-tabela tbody td.dash-vazio { display: none; }
   .rh-tabela tbody td[colspan] { display: block; }
   /* linha em edição inline mantém o destaque como card */
   .rh-tabela tr.linha-editando { border-color: var(--verde); }
   .rh-tabela tr.linha-form-inline { padding: 0; overflow: hidden; }
-  /* ações ganham área de toque confortável e ocupam a largura */
-  .rh-tabela .acoes-candidato { gap: .4rem; }
-  .rh-tabela .acoes-candidato .btn-mini { flex: 1 1 auto; min-height: 44px; }
+  /* Ações no CARD: botões lado a lado, quantos couberem por linha.
+   *
+   * A regra antiga era `flex: 1 1 auto` — herança de quando `.acoes-candidato`
+   * era flex. Desde a v2.59 ela é GRID, e `flex` não faz efeito nenhum ali:
+   * cada botão virava uma linha da grade e o card do Banco de Talentos, com 4
+   * ações, chegava a **491px de altura** (feedback 2026-08-02, com print — o
+   * card ocupava a tela inteira).
+   *
+   * `auto-fit` + `minmax` resolve sem contar botões: eles se distribuem pela
+   * largura disponível, dois ou três por linha conforme o espaço, e a área de
+   * toque de 44px é preservada para o dedo. */
+  .rh-tabela .acoes-candidato {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: .4rem; width: auto;
+  }
+  .rh-tabela .acoes-candidato .btn-mini { min-height: 44px; width: 100%; }
   /* ===== fim tabelas-cards ===== */
   .rh-metricas { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; }
   .linha2, .linha3 { grid-template-columns: 1fr; display: grid; gap: .5rem; }

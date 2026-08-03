@@ -221,8 +221,13 @@ Tela estourando a margem lateral é defeito, sempre. Regras:
 >   `anywhere` (parte no meio da palavra).
 > - **Célula não enumera lista**: mostre a contagem, deixe os itens no
 >   `title` — um chip com 5 itens vira a coluna mais larga da tela.
-> - **Abaixo de 1250px a tabela vira card.** Tela com 8+ colunas não cabe em
->   notebook pequeno nem em janela dividida, por mais CSS que se escreva.
+> - **Abaixo de 1250px a tabela vira card**, e o card é **grade de 2 colunas**
+>   — não uma pilha de campos. Tela com 8+ colunas não cabe em notebook pequeno
+>   nem em janela dividida, por mais CSS que se escreva; empilhar tudo troca a
+>   rolagem lateral por vertical, que não é melhor.
+> - **Campo sem valor não vira linha no card.** O travessão continua na tabela
+>   (a coluna alinha com o cabeçalho), mas no card ele some — "TAGS —" ocupava
+>   altura para dizer que não há nada.
 > - Coluna que não é usada todo dia nasce `oculta: true` — o RH liga no
 >   **⚙ Colunas** quando precisar.
 > - **Altura também é limite** (v2.60): texto longo é cortado na 3ª linha com

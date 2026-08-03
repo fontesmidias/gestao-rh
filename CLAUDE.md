@@ -88,6 +88,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **O modo CARD tem os mesmos defeitos da tabela, virados de lado** (v2.63):
+  as correções da v2.59–v2.62 mediram só o modo tabela; no card (abaixo de
+  1250px) a linha do Banco de Talentos chegava a **491px** — uma pessoa por
+  tela. Três causas: (1) a regra do card usava `flex: 1 1 auto` nos botões,
+  herança de quando `.acoes-candidato` era flex — desde a v2.59 ela é **grid**,
+  e `flex` ali não faz efeito nenhum (cada botão virava uma fileira); (2) campo
+  vazio virava linha ("TAGS —" ocupando altura para dizer que não há nada) —
+  `:empty` não bastava porque o `DashPlanilha` preenche com travessão, daí a
+  classe `dash-vazio`; (3) um campo por linha de largura total, com 8-9
+  colunas. Hoje o card é **grade de 2 colunas** e os botões se distribuem por
+  `auto-fit`. **Ao mexer em layout de tabela, meça nos DOIS modos** — o teste
+  de altura roda em 1440 (tabela) e 1150 (card), com teto próprio para cada.
+- **Trocar `display` de um contêiner invalida as regras de filho em silêncio**
+  (v2.63): `.acoes-candidato` virou grid na v2.59, e a media query do card
+  continuou com `flex: 1 1 auto` nos botões — CSS não avisa que a propriedade
+  deixou de valer. Ao mudar `flex` → `grid` (ou o contrário), procure TODAS as
+  regras que estilizam os filhos daquele contêiner, inclusive dentro de media
+  queries.
+
 - **Teste de layout mede a FAIXA, não três pontos — e com dados REAIS** (v2.62):
   a régua da v2.59 rodava em 1024/1280/1440 e passava verde enquanto o Bruno
   mandava print de tela cortada. Ela pulava **1150–1249**, onde o modo card já
