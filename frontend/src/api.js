@@ -1320,4 +1320,56 @@ export const rh = {
     req('/rh/config/gmail/desconectar', { method: 'POST', headers: authRH() }),
   desconectarM365: () =>
     req('/rh/config/m365/desconectar', { method: 'POST', headers: authRH() }),
+
+  // ---- Entrevistas (v2.64) ----
+  // O INSTRUMENTO (4 competências, âncoras, escalas, perguntas de triagem) vem
+  // daqui e o front NÃO duplica nenhum texto — mudar uma âncora é mexer só em
+  // `services/entrevistas.py`, e a tela acompanha sozinha.
+  formularioEntrevista: () =>
+    req('/rh/entrevistas/formulario', { headers: authRH() }),
+  entrevistas: (filtros = {}) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, v)
+    const s = q.toString()
+    return req(`/rh/entrevistas${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  entrevistasPendentes: () =>
+    req('/rh/entrevistas/pendencias', { headers: authRH() }),
+  entrevista: (id) => req(`/rh/entrevistas/${id}`, { headers: authRH() }),
+  criarEntrevista: (dados) =>
+    req('/rh/entrevistas',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  salvarEntrevista: (id, dados) =>
+    req(`/rh/entrevistas/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  desfechoEntrevista: (id, dados) =>
+    req(`/rh/entrevistas/${id}/desfecho`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  arquivarEntrevista: (id, motivo) =>
+    req(`/rh/entrevistas/${id}/arquivar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
+  excluirEntrevista: (id) =>
+    req(`/rh/entrevistas/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Entrevistas de uma VAGA (comparação) e de uma PESSOA (histórico que
+  // atravessa talento↔candidato).
+  entrevistasDaVaga: (vagaId) =>
+    req(`/rh/vagas/${vagaId}/entrevistas`, { headers: authRH() }),
+  entrevistasDaPessoa: ({ talentoId, candidatoId }) => {
+    const q = new URLSearchParams()
+    if (talentoId) q.set('talento_id', talentoId)
+    if (candidatoId) q.set('candidato_id', candidatoId)
+    return req(`/rh/pessoa/entrevistas?${q.toString()}`, { headers: authRH() })
+  },
+  // ⚠️ Upload NUNCA passa pelo `req()`: ele força Content-Type JSON e o
+  // navegador precisa escrever o `boundary` do multipart (v2.39.1 — o 422
+  // "Field required" mais enganoso do projeto).
+  anexarEntrevista: async (id, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/entrevistas/${id}/anexo`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  urlAnexoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/anexo`,
 }

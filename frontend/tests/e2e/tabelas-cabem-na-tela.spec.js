@@ -41,6 +41,7 @@ const TELAS = [
   ['Jornadas', '/rh/jornadas'],          // faltava — e era a que mais estourava
   ['Desenvolvimento', '/rh/desenvolvimento'],
   ['Creche', '/rh/creche'],
+  ['Entrevistas', '/rh/entrevistas'],    // v2.64 — lista nova entra AQUI no mesmo commit
 ]
 
 // Folga de 2px: arredondamento de subpixel do próprio navegador, não conteúdo

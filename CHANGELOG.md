@@ -11,6 +11,116 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.64.0] — 2026-08-05 — A conversa que não deixava rastro
+
+Módulo de Entrevistas (fases 1 e 2 do
+`docs/planejamento/12-modulo-de-entrevistas.md`). Entre "o RH olhou o currículo"
+e "o RH mandou o convite" acontecia uma conversa que **não deixava rastro
+nenhum** — virava, na melhor das hipóteses, uma anotação solta: *"entrevistei,
+gostei, mandar convite"*. Isso falhava em três frentes: não dava para
+**comparar** (com três entrevistados, "gostei dele", "pareceu boa" e "achei meio
+devagar" não decidem nada), não dava para **prestar contas** de por que aquela
+pessoa foi escolhida, e não **protegia a empresa** — sem roteiro, o que foi
+perguntado dependia de quem perguntou, e há perguntas que a Lei 9.029/95 veda.
+
+Não é módulo novo: é o degrau que faltava no funil que já existe. Não inventa
+entidade de pessoa, formulário nem mecanismo de acesso — costura peças prontas.
+
+### Duas fichas, porque são coisas de natureza diferente
+
+- **Triagem** — checagem de viabilidade por telefone, **sem nota, sem
+  competência, sem âncora**. Em terceirização a desistência raramente é por
+  incapacidade: é escala que não cabe na vida, local inacessível, salário abaixo
+  do esperado. Cinco perguntas de sim/não decidem se vale gastar uma hora
+  presencial. **Seguro-desemprego entra aqui e NUNCA é critério de exclusão** —
+  é dado que explica falta e desistência, e a tela diz isso em voz alta.
+- **Entrevista** — avaliação ancorada: 4 competências, escala **1–4 sem ponto
+  médio** (com 1–5 o avaliador foge para o 3), **justificativa obrigatória em
+  cada uma**. Nota sem evidência é ruído: o 422 **nomeia** a competência que
+  falta, porque "preenchimento inválido" faz o RH procurar qual das quatro.
+
+Quatro competências e não oito: com 15, preenche-se no automático; com 4,
+pensa-se. Cada uma tem **duas variantes da mesma pergunta** — comportamental
+para quem tem experiência, situacional para quem não tem. A comportamental
+("conte uma vez em que…") exige que a pessoa tenha uma história para contar, e
+com quem nunca trabalhou formalmente ela mediria currículo, não competência.
+Competência, escala e âncoras são idênticas nas duas: duas portas, mesma sala.
+
+### O sistema pergunta, nunca conclui
+
+Entrevista cuja data passou e ninguém preencheu vira **pendência que cobra** —
+card próprio no topo da lista. **Jamais** é marcada como "não compareceu"
+sozinha: silêncio não é falta. É a mesma lição do `00:00` no import de ponto,
+onde tratar registro incompleto como falta acusaria 28 pessoas injustamente.
+Há teste por mutação: fazer o sistema concluir sozinho reprova a suíte.
+
+### Arquiva, não apaga
+
+Retenção de 180 dias configurável, no `workers/expurgo.py` que já roda diário.
+O Bruno respondeu fora do menu de três opções que a sala ofereceu — todas
+assumiam apagar algo. **Arquivar resolve a tensão que as outras não resolviam**:
+nota velha não deve assombrar quem se candidata de novo dois anos depois, mas
+reentrevistar quem faltou três vezes sem saber é desperdício. Sai da vista e das
+métricas; a memória continua acessível a quem procurar. Entrevista de quem virou
+**colaborador fica fora do prazo** — é parte do vínculo, não material de
+recrutamento com validade.
+
+### O que se reusou em vez de reinventar
+
+- **Identidade da pessoa**: as DUAS FKs opcionais do mini-CRM
+  (`talento_id`/`candidato_id`). Com FK única, a entrevista feita com o talento
+  **sumiria** da ficha do candidato depois do `converter()` — que é justamente
+  quando ela mais importa. Teste por mutação cobre isso.
+- **Instrumento em constante de módulo**, nunca no banco (padrão da cartilha de
+  desempenho): o front lê de `GET /rh/entrevistas/formulario` e **não duplica
+  nenhum texto**. Há teste estrutural que varre o JSX e reprova a duplicação —
+  mudar uma âncora é mexer num arquivo só.
+- Anexo, listagem `{itens, metricas}`, `DashPlanilha` com detalhe **na linha**,
+  `SelectBusca`, auditoria e lixeira: tudo padrão da casa.
+- **Ao concluir, escreve uma `Anotacao` no mini-CRM** — a entrevista não *é* uma
+  anotação (o valor está na nota ancorada comparável), mas o histórico da pessoa
+  continua num lugar só.
+
+### A vaga pode ser excluída; a entrevista sobrevive
+
+`DELETE /rh/vagas/{id}` é delete **físico** e não passa pela lixeira. Por isso
+`ondelete=SET NULL` **e** snapshot `vaga_titulo`: a entrevista sobrevive com o
+nome da vaga preservado, e a tela avisa "vaga excluída". A recomendação de
+passar a exclusão de vaga pela lixeira fica registrada — mudar exclusão de outro
+módulo não estava no pedido desta leva.
+
+### Medido na tela, não no código
+
+O screenshot pegou dois defeitos que a leitura não pega: a tabela exigia **56px
+além da área visível em 1440px** (a coluna "Desfecho / recomendação" com 20% e
+"Situação" com 17% — o chip "⚠ aguardando desfecho" por extenso não quebra
+linha), e o rótulo "+ Triagem" partia em duas linhas. Correções: o chip virou só
+o sinal **⚠** com o texto no `title` (o card do topo já anuncia por extenso),
+"Entrevistador" nasce oculta (com um só entrevistador repete o mesmo nome em
+toda linha) e `white-space: nowrap` entrou na regra base do botão no
+`styles.css` — não em `style` inline. Depois: **−2px** (cabe) e altura de linha
+de 126px para 96px. A tela nova entrou em `TELAS` do
+`tabelas-cabem-na-tela.spec.js` **no mesmo commit**.
+
+### Testes
+
+Os 8 testes de comportamento da seção 11 do documento + o design system, todos
+**validados por mutação** (5 mutações aplicadas e revertidas; cada uma fez a
+suíte falhar). Uma delas reprovou o **próprio teste**: a asserção do snapshot da
+vaga comparava a resposta com uma variável lida da mesma resposta — tautologia
+que passava com o defeito presente. Agora compara com uma constante conhecida.
+O teste de N+1 compara **duas listagens de tamanhos diferentes** em vez de um
+limite absoluto (que mediria o tamanho do banco): 2 registros → 3 consultas,
+8 registros → 3 consultas.
+
+### Fase 3 — não entregue, e por quê
+
+Lembrete por e-mail, convite de calendário (.ics), segundo avaliador com trava
+anti-peeking e roteiro por cargo **dependem de decisão do Bruno** e ficaram de
+fora deliberadamente. Registrar a pergunta é entrega; respondê-la sozinho seria
+inventar produto no lugar dele. Detalhes em
+`docs/planejamento/12b-entrevistas-relatorio-execucao.md`.
+
 ## [2.63.0] — 2026-08-02 — O card não é um pergaminho
 
 Print do Banco de Talentos ainda ruim, e uma pergunta do Bruno sobre os dados

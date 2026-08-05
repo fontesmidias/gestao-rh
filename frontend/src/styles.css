@@ -500,6 +500,11 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
   border-radius: var(--raio-botao); font-weight: 800; font-size: .95rem;
   cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
   gap: .45rem; letter-spacing: .01em; font-family: inherit;
+  /* Rótulo de botão NÃO quebra (v2.64): "+ Triagem" partia em duas linhas
+     ("+" em cima) e o botão ficava mais alto que o vizinho — defeito visível
+     só na tela renderizada, nunca no código. Rótulo de botão é curto por
+     definição; se não couber, o problema é o rótulo, não a quebra. */
+  white-space: nowrap;
   transition: transform .12s, box-shadow .18s, filter .15s;
 }
 .btn-principal:hover, .btn-secundario:hover, .btn-rejeitar:hover {

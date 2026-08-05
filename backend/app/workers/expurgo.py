@@ -8,7 +8,7 @@ Rode: python -m app.workers.expurgo (o compose agenda diariamente).
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -119,8 +119,85 @@ def expurgar_logs() -> int:
     return n
 
 
+def arquivar_entrevistas() -> int:
+    """Arquiva entrevistas antigas (v2.64) — **ARQUIVA, NÃO APAGA**.
+
+    Decisão do Bruno (2026-08-04), fora do menu de três opções que a sala
+    ofereceu — todas assumiam apagar algo. Arquivar resolve a tensão que as
+    outras não resolviam:
+
+    - nota velha não deve assombrar quem se candidata de novo dois anos depois;
+    - mas reentrevistar quem faltou três vezes sem saber é desperdício.
+
+    O julgamento vencido sai da vista e das métricas; a memória continua
+    acessível a quem procurar (`?incluir_arquivadas=true`).
+
+    ⚠️ Se algum dia isto virar `db.delete`, é REGRESSÃO — há teste por mutação
+    (`test_entrevistas.py`, bloco 7) que reprova a troca.
+
+    **Quem virou colaborador fica FORA do prazo** (cenário 14): a entrevista de
+    movimentação interna é parte do vínculo, não material de recrutamento com
+    validade. Por isso o filtro exige `candidato_id IS NULL` OU candidato sem
+    `situacao` — quem tem vínculo ativo/desligado não entra na varredura.
+
+    Retenção configurável (padrão 180 dias). **0 = indeterminado**, e então
+    nada é arquivado — mesma convenção da retenção de logs; trocar por
+    `is not None` transformaria "guardar para sempre" em "arquivar tudo hoje".
+    """
+    from app.models.candidato import Candidato
+    from app.models.entrevista import Entrevista, StatusEntrevista
+    from app.services.config_dinamica import ler_config
+    from app.services.entrevistas import RETENCAO_PADRAO_DIAS
+
+    with SessionLocal() as db:
+        try:
+            cfg = ler_config(db, ("entrevistas_retencao_dias",))
+            dias = int(cfg.get("entrevistas_retencao_dias") or RETENCAO_PADRAO_DIAS)
+        except (TypeError, ValueError):
+            dias = RETENCAO_PADRAO_DIAS
+        if dias <= 0:
+            log.info("Retenção de entrevistas indeterminada; nada a arquivar.")
+            return 0
+
+        corte = datetime.now(timezone.utc) - timedelta(days=dias)
+        # A data de referência é quando a entrevista ACONTECEU (ou, na falta,
+        # quando foi criada) — não a de preenchimento: preencher tarde não pode
+        # esticar a validade do julgamento.
+        candidatas = db.scalars(
+            select(Entrevista).where(
+                Entrevista.status != StatusEntrevista.arquivada.value,
+                func.coalesce(Entrevista.realizada_em,
+                              Entrevista.marcada_para,
+                              Entrevista.criada_em) < corte,
+            )).all()
+
+        # Colaborador (situacao preenchida) fica de fora — parte do vínculo.
+        com_vinculo = set()
+        cids = [e.candidato_id for e in candidatas if e.candidato_id]
+        if cids:
+            com_vinculo = {
+                c_id for c_id in db.scalars(
+                    select(Candidato.id).where(Candidato.id.in_(cids),
+                                               Candidato.situacao.is_not(None)))}
+
+        n = 0
+        agora = datetime.now(timezone.utc)
+        for e in candidatas:
+            if e.candidato_id and e.candidato_id in com_vinculo:
+                continue
+            e.status = StatusEntrevista.arquivada
+            e.arquivada_em = agora
+            n += 1
+        db.commit()
+        if n:
+            log.info("Entrevistas arquivadas: %s com mais de %s dias (o registro "
+                     "PERMANECE, só sai da vista)", n, dias)
+        return n
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"Candidatos expurgados: {expurgar()}")
     print(f"Eventos de telemetria expurgados: {expurgar_telemetria()}")
     print(f"Arquivos de log expurgados: {expurgar_logs()}")
+    print(f"Entrevistas arquivadas: {arquivar_entrevistas()}")

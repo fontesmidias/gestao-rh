@@ -10,6 +10,7 @@ import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
+import EntrevistasDaPessoa from './EntrevistasDaPessoa.jsx'
 import TestesVinculados from './TestesVinculados.jsx'
 import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
@@ -1175,6 +1176,10 @@ export default function Detalhe({ id, aoVoltar }) {
         {/* Mini-CRM: anotações + tags que acompanham a pessoa desde o Banco de
             Talentos. */}
         <MemoriaColaborador id={id} nome={dados.nome_completo} />
+        {/* Entrevistas da pessoa (v2.64): atravessa talento↔candidato pelo
+            escopo do CRM — a entrevista feita quando ela era talento continua
+            aqui depois da conversão. */}
+        <EntrevistasDaPessoa candidatoId={id} />
         <TestesVinculados candidatoId={id} nome={dados.nome_completo} />
         {/* O que aconteceu na TELA desta pessoa (v2.24) */}
         <TelemetriaPessoa candidatoId={id} />
