@@ -4,6 +4,7 @@ import { fmtDataHora } from '../fmt.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import Modal from '../Modal.jsx'
 import SelectBusca from '../SelectBusca.jsx'
+import EntrevistasDaVaga from './EntrevistasDaVaga.jsx'
 
 // Match de Vagas × Banco de Talentos (v2.00 — reescrito após o incidente de
 // 2026-07-28, em que 131 talentos viraram 18 analisados e depois 2).
@@ -268,6 +269,11 @@ function Resultados({ vagas, vagaSelecionada, aoSelecionar, aoReanalisar }) {
             )}
         </>
       )}
+
+      {/* Comparação dos entrevistados desta vaga (v2.64, § 8.4): o ranking da
+          IA diz quem CHAMAR; a entrevista diz o que aconteceu na conversa. As
+          duas coisas pertencem à mesma tela da vaga. */}
+      {vagaId && <EntrevistasDaVaga vagaId={vagaId} />}
     </>
   )
 }

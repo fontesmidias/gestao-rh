@@ -53,9 +53,14 @@ function lerOptions(children) {
   return out
 }
 
+// `desabilitado` (v2.64): registro em modo somente-leitura (entrevista
+// arquivada, ficha encerrada). O `<select>` nativo tem `disabled` e este
+// componente o substituiu em toda a base — sem isso, cada tela precisaria
+// esconder o campo à mão, e um `desabilitado` passado por engano seria
+// SILENCIOSAMENTE ignorado, deixando editável o que deveria estar travado.
 export default function SelectBusca({ opcoes, children, valor, aoEscolher,
                                       placeholder = 'Buscar…', vazioRotulo, style,
-                                      titulo, id }) {
+                                      titulo, id, desabilitado = false }) {
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [foco, setFoco] = useState(0)
@@ -103,7 +108,8 @@ export default function SelectBusca({ opcoes, children, valor, aoEscolher,
     <div className="select-busca" ref={ref} style={style}>
       <button type="button" className="select-busca-campo" id={id} title={titulo}
               aria-haspopup="listbox" aria-expanded={aberto}
-              onClick={() => { setAberto(!aberto); setFoco(0) }}
+              disabled={desabilitado}
+              onClick={() => { if (!desabilitado) { setAberto(!aberto); setFoco(0) } }}
               // Sem campo de busca, as setas ainda navegam: o teclado funciona
               // igual nos dois modos.
               onKeyDown={(e) => { if (!comBusca && aberto) aoTeclar(e) }}>
@@ -111,7 +117,7 @@ export default function SelectBusca({ opcoes, children, valor, aoEscolher,
           {selecionado ? selecionado.rotulo : (rotuloVazio || placeholder)}</span>
         <span className="select-busca-seta" aria-hidden="true">▾</span>
       </button>
-      {aberto && (
+      {aberto && !desabilitado && (
         <div className="select-busca-painel">
           {comBusca && (
             <input className="select-busca-input" autoFocus value={busca} placeholder={placeholder}

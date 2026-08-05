@@ -88,6 +88,41 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Teste que compara a resposta com ela mesma passa com o defeito presente**
+  (v2.64, pego por mutação): o `test_entrevista_vaga_excluida` guardava
+  `titulo_original = resposta["vaga_titulo"]` e depois conferia
+  `depois["vaga_titulo"] == titulo_original`. A mutação que ZERA o snapshot
+  zerava os DOIS lados (`None == None`) e a asserção passava verde enquanto o
+  defeito estava lá. **Referência de teste tem que ser CONSTANTE conhecida do
+  teste**, nunca valor lido do próprio sistema sob teste — é a mesma lição da
+  v2.54 ("comparar a aba com a própria constante é TAUTOLOGIA") numa variação
+  nova. Foi a mutação que reprovou o teste, não o código: sem rodar as
+  mutações, isto teria ido para produção parecendo coberto.
+- **`prop` inventada em componente compartilhado não faz NADA e não avisa**
+  (v2.64): a ficha de entrevista passava `desabilitado={encerrada}` ao
+  `SelectBusca` para travar registro arquivado — e o `SelectBusca` **não tinha
+  essa prop**. O React ignora prop desconhecida em silêncio, então a entrevista
+  arquivada continuaria editável na tela, com o código *parecendo* certo. Mesma
+  família da classe CSS fantasma (v2.25) e do token inexistente (v2.46): o
+  JSX fica plausível e o build passa. **Antes de passar prop nova, abra a
+  assinatura do componente** — foi corrigido acrescentando `desabilitado` de
+  verdade ao `SelectBusca` (o `<select>` nativo que ele substituiu tinha
+  `disabled`; a lacuna ia reaparecer em qualquer tela somente-leitura).
+- **Modelo importado só como ALVO de FK precisa entrar no import do teste**
+  (v2.64): teste que monta objetos direto pelo SQLAlchemy (sem subir a app)
+  estourava `NoReferencedTableError: could not find table 'usuario_rh'` no
+  primeiro flush — depois `'vaga'`. Os modelos entram no `metadata` quando são
+  importados, e `app/models/__init__.py` é VAZIO neste projeto (quem registra
+  tudo é a cadeia de imports da `app.main`). Em teste que não importa a app,
+  importe explicitamente os modelos das tabelas apontadas pelas FKs, com
+  `# noqa: F401` — o erro não fala do seu modelo, fala do vizinho.
+- **`grep -c` que devolve 0 tem exit code 1 e corta o `&&` da cadeia** (v2.64):
+  `cp backup x && grep -c MUTACAO x && rodar_teste` parava calado depois do
+  grep quando o resultado era zero — exatamente o caso BOM (nenhuma mutação
+  sobrando). O passo seguinte simplesmente não rodava, e a saída vazia parecia
+  falha da restauração. Em verificação pós-mutação use `;` ou
+  `$(grep -c ... || true)`.
+
 - **O modo CARD tem os mesmos defeitos da tabela, virados de lado** (v2.63):
   as correções da v2.59–v2.62 mediram só o modo tabela; no card (abaixo de
   1250px) a linha do Banco de Talentos chegava a **491px** — uma pessoa por
@@ -1199,6 +1234,42 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   server-side (posto via SelectBusca, busca com debounce, status do creche)
   ficam FORA do dash, no topo, alimentando `dados`; o dash refina em memória por
   cima. Ao criar uma lista nova, use o DashPlanilha — não escreva `<table>` à mão.
+- **Entrevistas** (`models/entrevista.py`, `services/entrevistas.py`,
+  `api/entrevistas.py`, `rh/EntrevistasRH.jsx` + `rh/FichaEntrevista.jsx` +
+  `rh/EntrevistasDaVaga.jsx` + `rh/EntrevistasDaPessoa.jsx`, v2.64): o degrau
+  entre "o RH olhou o currículo" e "o RH mandou o convite". Desenho completo em
+  `docs/planejamento/12-modulo-de-entrevistas.md`; execução em `12b-…`.
+  - **UMA tabela, DUAS naturezas** (`tipo`): triagem = checagem de viabilidade
+    (SEM nota, competência ou âncora — é outra coisa, não entrevista curta);
+    entrevista = avaliação ancorada (4 competências, escala 1–4 **sem ponto
+    médio**, justificativa obrigatória por nota). O 422 **NOMEIA** a competência
+    que falta.
+  - **O instrumento vive em CONSTANTE de módulo, nunca no banco** (mesma regra
+    da cartilha de desempenho): o front lê `GET /rh/entrevistas/formulario` e
+    NÃO duplica texto. `test_entrevistas.py` varre o JSX e reprova a duplicação.
+  - **DUAS FKs de pessoa** (`talento_id`/`candidato_id`), padrão do mini-CRM.
+    Com FK única a entrevista feita com o talento SUMIRIA da ficha do candidato
+    após o `converter()` — que é quando ela mais importa. Coberto por mutação.
+  - **`vaga_id` é `ondelete=SET NULL` + snapshot `vaga_titulo`**: o
+    `DELETE /rh/vagas/{id}` é delete FÍSICO e não passa pela lixeira. A
+    entrevista sobrevive à vaga, com o nome dela. (Recomendação em aberto:
+    passar a exclusão de vaga pela lixeira.)
+  - **O sistema PERGUNTA, nunca conclui**: passou da data e ninguém preencheu →
+    vira PENDÊNCIA que cobra, **jamais** `nao_veio` automático. Silêncio não é
+    falta (a lição do `00:00` no import de ponto). Há teste por mutação.
+  - **ARQUIVA, NÃO APAGA** (`workers/expurgo.py::arquivar_entrevistas`, 180
+    dias configuráveis): sai da vista e das métricas, o registro permanece e é
+    consultável com `?incluir_arquivadas=true`. Trocar por `db.delete` é
+    reprovação imediata. **Retenção 0 = indeterminado** (não arquiva nada) —
+    trocar `if dias <= 0` por `is not None` viraria "arquivar tudo hoje".
+    **Quem virou colaborador fica FORA do prazo**: é parte do vínculo.
+  - **Ao concluir, escreve `Anotacao` no mini-CRM** — a entrevista não *é* uma
+    anotação (o valor está na nota ancorada comparável), mas o histórico da
+    pessoa fica num lugar só (padrão de `talentos.py::mudar_status`).
+  - **Roteiro FIXO, sem campo de "outras perguntas"** (Lei 9.029/95): campo de
+    pergunta livre é risco jurídico; roteiro pré-aprovado é defesa da empresa. O
+    `observacao` é livre; o ROTEIRO não. **Seguro-desemprego** entra na triagem
+    e **nunca** é critério de exclusão — a tela diz isso.
 - **Mini-CRM — anotações e tags no ciclo de vida** (`models/crm.py`,
   `services/crm.py`, `api/crm.py`, `frontend/src/rh/MemoriaPessoa.jsx`): memória
   do RH sobre a PESSOA que atravessa talento → candidato → efetivo → desligado.
