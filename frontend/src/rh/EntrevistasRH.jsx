@@ -285,21 +285,21 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
 
       <div className="rh-grid-2">
         <div className="campo">
-          <label className="rotulo">Tipo</label>
+          <span className="rotulo">Tipo</span>
           <SelectBusca valor={tipo} aoEscolher={setTipo}>
             <option value="triagem">Triagem (checagem por telefone, sem nota)</option>
             <option value="entrevista">Entrevista (avaliação ancorada)</option>
           </SelectBusca>
         </div>
         <div className="campo">
-          <label className="rotulo">A pessoa é</label>
+          <span className="rotulo">A pessoa é</span>
           <SelectBusca valor={quem} aoEscolher={(v) => { setQuem(v); setPessoaId('') }}>
             <option value="talento">Do Banco de Talentos</option>
             <option value="candidato">Candidato / colaborador</option>
           </SelectBusca>
         </div>
         <div className="campo">
-          <label className="rotulo">Pessoa</label>
+          <span className="rotulo">Pessoa</span>
           <SelectBusca valor={pessoaId} aoEscolher={setPessoaId}
                        opcoes={lista.map((p) => ({
                          valor: p.id, rotulo: p.nome || p.nome_completo,
@@ -307,31 +307,36 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
                        }))} />
         </div>
         <div className="campo">
-          <label className="rotulo">Vaga (opcional)</label>
+          <span className="rotulo">Vaga
+            <span className="dica-inline"> — opcional; conversa exploratória é caso real</span></span>
           {/* Nullable de propósito: conversa exploratória é caso real. */}
           <SelectBusca valor={vagaId} aoEscolher={setVagaId}
                        opcoes={[{ valor: '', rotulo: '— sem vaga —' },
                                 ...vagas.map((v) => ({ valor: v.id, rotulo: v.titulo }))]} />
         </div>
-        <div className="campo">
-          <label className="rotulo">Marcada para</label>
+        {/* `datetime-local` e não o `InputData` do projeto: aquele componente é
+            de DATA (máscara dd/mm/aaaa, `maxLength={10}`, guarda ISO
+            aaaa-mm-dd) e não tem hora — e entrevista sem hora não se marca.
+            Registrado na v2.65 para não parecer descuido. */}
+        <label className="campo">
+          <span className="rotulo">Marcada para
+            <span className="dica-inline"> — em branco = já aconteceu, nasce realizada</span></span>
           <input type="datetime-local" value={quando}
                  onChange={(e) => setQuando(e.target.value)} />
-          <span className="explica">
-            Deixe em branco se a entrevista já aconteceu — ela nasce como realizada.
-          </span>
-        </div>
-        <div className="campo">
-          <label className="rotulo">Local</label>
+        </label>
+        <label className="campo">
+          <span className="rotulo">Local</span>
           <input value={local} onChange={(e) => setLocal(e.target.value)}
                  placeholder="telefone, sede, vídeo…" />
-        </div>
+        </label>
       </div>
 
       {erro && <p className="alerta">{erro}</p>}
-      <button className="btn-principal" onClick={criar} disabled={salvando}>
-        {salvando ? 'Registrando…' : 'Registrar'}
-      </button>
+      <div className="rh-conferencia-acoes">
+        <button className="btn-principal btn-mini" onClick={criar} disabled={salvando}>
+          {salvando ? 'Registrando…' : 'Registrar'}
+        </button>
+      </div>
     </div>
   )
 }

@@ -11,6 +11,78 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.65.0] — 2026-08-05 — Passar no teste não é seguir o padrão
+
+Correção **só visual** da tela de Entrevistas. Nenhuma mudança de backend,
+schema, rota ou regra de negócio — o diff é de três arquivos JSX, e o
+`styles.css` **não foi tocado** (zero classe nova).
+
+O Bruno reprovou o visual da v2.64: *"você fugiu do padrão visual da página de
+entrevistas. NÃO INVENTE NADA QUANTO A ISSO. Siga padrões já estabelecidos"*.
+Ele está certo, e o mais importante é **por que a tela passou pelo guarda-corpo
+assim mesmo**: o `test_design_system.py` deu verde nos 6 itens — zero classe
+fantasma, zero token inexistente, zero `<select>` nativo, tabela em
+`.dash-scroll`. A tela tinha o vocabulário certo e a composição errada.
+
+**A lição, que vale para toda tela futura:** o teste estrutural cobre
+VOCABULÁRIO (a classe existe? o token existe?), não COMPOSIÇÃO (qual primitiva
+serve a qual papel). É a v2.25 numa variação nova — lá a tela saiu crua porque
+as classes não existiam; aqui ela saiu estranha porque as classes existiam e
+eram as erradas para o papel. Antes de escrever formulário novo, abra a tela
+equivalente que já existe e copie a composição dela.
+
+A referência canônica de formulário longo é o `FormularioAvaliacao.jsx` (o
+formulário da cartilha). O que mudou, medido no navegador:
+
+- **A escala de nota voltou a ser escala.** As notas 1–4 eram um `SelectBusca`
+  — uma lista suspensa para escolher entre quatro opções, num instrumento cujo
+  ponto inteiro é comparar âncoras. Agora são `.chips-escolha`/`.chip-escolha`,
+  todas à vista, a escolhida marcada, um clique (o mesmo `TabelaEscala` da
+  cartilha). A regra da casa é *"nunca `<select>` nativo"* e ela **não** implica
+  *"sempre SelectBusca"*: `.chips-escolha` não é um select, é a primitiva
+  específica de escala de nota. A infraestrutura já estava lá sem uso —
+  `.chip-escolha` com 5 regras e `.rh-escala` com 7 no `styles.css`. Clicar no
+  chip marcado desmarca (antes, a opção "— sem nota —" fazia esse papel).
+- **Um `.rh-conferencia`, não N cards.** A ficha empilhava um `.rh-card` com
+  borda e sombra POR COMPETÊNCIA (4 cards + 2). Medido depois: **0 `.rh-card`
+  dentro da ficha**.
+- **Duas colunas.** Passou a usar `.rh-conferencia-corpo` — competências à
+  esquerda, justificativas à direita, com a nota repetida no rótulo da
+  justificativa. Antes era pergaminho vertical de coluna única. Grid real
+  medido: `454px 545px` em 1440 e `376px 451px` em 1150.
+- **`<label className="rotulo">` era regressão funcional, não só estética.** As
+  14 ocorrências eram as ÚNICAS do repositório (contra 202 `<span
+  className="rotulo">` dentro de `<label className="campo">`), e como o `<label>`
+  não tinha `htmlFor` nem envolvia o controle, **clicar no rótulo não focava o
+  campo**. Zeradas.
+- Botões soltos separados por `{' '}` viraram `.rh-conferencia-acoes` com
+  `btn-mini`; `<h4>` cru virou `.rh-conferencia-bloco-titulo`; `.explica` ao
+  lado de rótulo virou `.dica-inline`; e o bloco "aguardando desfecho" virou
+  `.aviso-inline` (é aviso, não card).
+- **Triagem também é instrumento**: as 5 perguntas viraram linhas de
+  `.rh-escala` com Sim/Não/Não sei em chips — antes era um `SelectBusca` por
+  pergunta, cinco listas suspensas para responder sim ou não. O desfecho idem.
+  O aviso de que seguro-desemprego **nunca é critério de exclusão** continua na
+  tela, agora como `.dica-inline` na própria pergunta.
+- `EntrevistasDaPessoa` estava sem classe onde o irmão `EntrevistasDaVaga` usava
+  `.rh-card` no mesmo papel; ambos agora são `.rh-card` — que é também o que o
+  vizinho direto (`TestesVinculados`) faz na mesma posição do `<details>` do
+  `Detalhe.jsx`.
+
+Conferido RENDERIZADO com Playwright, lado a lado com a tela de Avaliações, nos
+dois temas e nas duas larguras (1440 tabela / 1150 card): 22 chips com 3
+marcados, 0 `label.rotulo`, 0 `.rh-card` na ficha, 0 `<h4>`, 0 `SelectBusca`, e
+**0px de estouro horizontal** nas quatro combinações. `tabelas-cabem-na-tela`
+verde nas 5 larguras (8/8); `test_design_system` verde nos 6 itens;
+`test_entrevistas` e `test_entrevista_arquivamento` verdes — inclusive o guarda
+estrutural de que o front NÃO duplica texto do instrumento.
+
+Divergência registrada, sem mudar nada: o `08-sistema-de-design.md` (linhas
+70–74) pede `.pagina` para tela nova, mas a prática são **17 telas com
+`.rh-painel` contra 4 com `.pagina`**, incluindo as três telas de referência.
+Entrevistas segue `.rh-painel` como as vizinhas. Qual das duas corrigir — o doc
+ou as 17 telas — é decisão do Bruno.
+
 ## [2.64.0] — 2026-08-05 — A conversa que não deixava rastro
 
 Módulo de Entrevistas (fases 1 e 2 do
