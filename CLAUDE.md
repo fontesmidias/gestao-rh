@@ -88,6 +88,31 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Passar no teste estrutural NÃO é seguir o padrão — ele cobre VOCABULÁRIO,
+  não COMPOSIÇÃO** (v2.65, reprovação do Bruno: *"você fugiu do padrão visual
+  da página de entrevistas. NÃO INVENTE NADA QUANTO A ISSO. Siga padrões já
+  estabelecidos"*). A ficha de Entrevistas da v2.64 passou nos 6 itens do
+  `test_design_system.py` — zero classe fantasma, zero token inexistente, zero
+  `<select>` nativo, tabela em `.dash-scroll` — e mesmo assim não parecia com o
+  resto do sistema. O teste responde *"a classe existe?"*; ele não tem como
+  responder *"esta é a primitiva certa para este papel?"*. Os defeitos reais
+  eram todos de composição, com classes que existem: escala de nota 1–4 num
+  `SelectBusca` (lista suspensa para comparar quatro âncoras) em vez de
+  `.chips-escolha`; um `.rh-card` com borda e sombra POR COMPETÊNCIA em vez de
+  um `.rh-conferencia` só; coluna única em vez de `.rh-conferencia-corpo`;
+  `<h4>` cru em vez de `.rh-conferencia-bloco-titulo`. **É a v2.25 numa
+  variação nova**: lá a tela saiu crua porque as classes NÃO existiam; aqui
+  saiu estranha porque existiam e eram as erradas. Regra: **antes de escrever
+  formulário/tela nova, abra a tela equivalente que já existe e copie a
+  COMPOSIÇÃO dela** — para formulário longo com escala, a referência canônica é
+  `FormularioAvaliacao.jsx`. Dois corolários pagos na mesma leva: (1) *"nunca
+  `<select>` nativo"* **não** implica *"sempre `SelectBusca`"* — `.chips-escolha`
+  não é um select, é a primitiva ESPECÍFICA de escala de nota, e a
+  infraestrutura estava lá sem uso (`.chip-escolha` com 5 regras,
+  `.rh-escala` com 7); (2) `<label className="rotulo">` (14 ocorrências, as
+  ÚNICAS do repo contra 202 `<span className="rotulo">` dentro de `<label
+  className="campo">`) era **regressão funcional**, não desvio estético — sem
+  `htmlFor` e sem envolver o controle, clicar no rótulo não focava o campo.
 - **Teste que compara a resposta com ela mesma passa com o defeito presente**
   (v2.64, pego por mutação): o `test_entrevista_vaga_excluida` guardava
   `titulo_original = resposta["vaga_titulo"]` e depois conferia

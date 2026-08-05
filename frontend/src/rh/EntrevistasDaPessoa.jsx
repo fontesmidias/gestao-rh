@@ -32,19 +32,22 @@ export default function EntrevistasDaPessoa({ talentoId, candidatoId }) {
   if (!talentoId && !candidatoId) return null
   if (erro) {
     return (
-      <div>
+      <div className="rh-card">
         <p className="alerta">Não foi possível carregar as entrevistas: {erro}</p>
         <button className="btn-secundario btn-mini" onClick={carregar}>Tentar de novo</button>
       </div>
     )
   }
   // Carregando reserva o lugar; vazio some (o bloco não se aplica à pessoa).
-  if (dados === null) return <p>Carregando entrevistas…</p>
+  // O `.rh-card` acompanha o irmão `EntrevistasDaVaga` e o vizinho direto
+  // `TestesVinculados`, que ocupa esta mesma posição no `<details>` do
+  // Detalhe: bloco de consulta da pessoa é card, sem exceção (v2.65).
+  if (dados === null) return <div className="rh-card"><p>Carregando entrevistas…</p></div>
   if (!dados.itens.length) return null
 
   return (
-    <div>
-      <h4>Entrevistas ({dados.total})</h4>
+    <div className="rh-card">
+      <h3>Entrevistas ({dados.total})</h3>
       <div className="dash-scroll">
         <table className="rh-tabela">
           <thead>

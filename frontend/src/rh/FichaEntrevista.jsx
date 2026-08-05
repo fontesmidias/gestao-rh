@@ -14,6 +14,16 @@ import { fmtDataHora } from '../fmt.js'
 // livre é risco jurídico (Lei 9.029/95 veda perguntar sobre situação familiar,
 // filhos, gravidez…), roteiro pré-aprovado é defesa da empresa. O `observacao`
 // é livre; o ROTEIRO não.
+//
+// COMPOSIÇÃO (v2.65): esta ficha é um formulário longo com escala de nota, e a
+// referência canônica desse papel no projeto é o `FormularioAvaliacao.jsx` (o
+// formulário da cartilha). Ela reusa as MESMAS primitivas: um `.rh-conferencia`
+// só (não N cards empilhados), `.rh-conferencia-corpo` para as duas colunas,
+// `.chips-escolha`/`.chip-escolha` para a escala — todas as opções à vista, um
+// clique — e `.rh-conferencia-acoes` para os botões. A v2.64 passou no
+// `test_design_system.py` e mesmo assim não parecia com o resto do sistema: o
+// teste cobre VOCABULÁRIO (classe existe? token existe?), não COMPOSIÇÃO (qual
+// primitiva serve a qual papel).
 
 export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar }) {
   const [e, setE] = useState(null)
@@ -44,14 +54,14 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
 
   if (erroCarga) {
     return (
-      <div>
+      <div className="rh-conferencia">
         <p className="alerta">Não foi possível carregar: {erroCarga}</p>
-        <button className="btn-principal" onClick={carregar}>Tentar de novo</button>
+        <button className="btn-principal btn-mini" onClick={carregar}>Tentar de novo</button>
       </div>
     )
   }
   // Guard ANTES de qualquer uso dos estados nulos.
-  if (!e || !campos) return <p>Carregando…</p>
+  if (!e || !campos) return <div className="rh-conferencia"><p>Carregando…</p></div>
 
   const eTriagem = e.tipo === 'triagem'
   const encerrada = e.status === 'arquivada'
@@ -101,7 +111,7 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
   }
 
   return (
-    <div>
+    <div className="rh-conferencia">
       <div className="rh-conferencia-topo">
         <div>
           <h3>{e.pessoa}</h3>
@@ -127,18 +137,20 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
       {/* Entrevista que passou da data e ninguém fechou: o sistema PERGUNTA.
           Nunca marca `nao_veio` sozinho — silêncio não é falta. */}
       {e.aguardando_desfecho && (
-        <div className="rh-card">
-          <p><strong>Esta entrevista está aguardando um desfecho.</strong></p>
-          <p className="explica">
+        <div className="aviso-inline">
+          <strong>Esta entrevista está aguardando um desfecho.</strong>
+          <div className="explica" style={{ margin: '.3rem 0 .5rem' }}>
             A data marcada já passou e ninguém registrou o que aconteceu. O
             sistema não conclui por você — diga o que houve:
-          </p>
-          <button className="btn-secundario btn-mini" disabled={salvando}
-                  onClick={() => desfecho('nao_veio')}>Não compareceu</button>{' '}
-          <button className="btn-secundario btn-mini" disabled={salvando}
-                  onClick={() => desfecho('remarcada')}>Remarcada</button>{' '}
-          <button className="btn-secundario btn-mini" disabled={salvando}
-                  onClick={() => desfecho('cancelada')}>Cancelada</button>
+          </div>
+          <div className="chips-escolha">
+            <button type="button" className="chip-escolha" disabled={salvando}
+                    onClick={() => desfecho('nao_veio')}>Não compareceu</button>
+            <button type="button" className="chip-escolha" disabled={salvando}
+                    onClick={() => desfecho('remarcada')}>Remarcada</button>
+            <button type="button" className="chip-escolha" disabled={salvando}
+                    onClick={() => desfecho('cancelada')}>Cancelada</button>
+          </div>
         </div>
       )}
 
@@ -150,23 +162,26 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
                    desabilitado={encerrada} />
       )}
 
-      <div className="campo">
-        <label className="rotulo">Observação (livre)</label>
+      <label className="campo">
+        <span className="rotulo">Observação
+          <span className="dica-inline"> — livre; o roteiro acima não é</span></span>
         <textarea rows={2} value={campos.observacao} disabled={encerrada}
                   onChange={(ev) => setCampos({ ...campos, observacao: ev.target.value })} />
-      </div>
+      </label>
 
       {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
 
       {!encerrada && (
-        <>
-          <button className="btn-secundario" onClick={() => salvar(false)} disabled={salvando}>
+        <div className="rh-conferencia-acoes">
+          <button className="btn-secundario btn-mini" onClick={() => salvar(false)}
+                  disabled={salvando}>
             {salvando ? 'Salvando…' : 'Salvar rascunho'}
-          </button>{' '}
-          <button className="btn-principal" onClick={() => salvar(true)} disabled={salvando}>
+          </button>
+          <button className="btn-principal btn-mini" onClick={() => salvar(true)}
+                  disabled={salvando}>
             Concluir
           </button>
-        </>
+        </div>
       )}
     </div>
   )
@@ -176,47 +191,66 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
 // TRIAGEM — sem nota, sem competência, sem âncora. É outra coisa (§ 4.1).
 // --------------------------------------------------------------------------
 
+const RESPOSTAS_TRIAGEM = [
+  { valor: 'sim', rotulo: 'Sim' },
+  { valor: 'nao', rotulo: 'Não' },
+  { valor: 'nao_sei', rotulo: 'Não sei' },
+]
+
 function Triagem({ form, campos, marcar, setCampos, desabilitado }) {
-  const respostas = [
-    { valor: 'sim', rotulo: 'Sim' },
-    { valor: 'nao', rotulo: 'Não' },
-    { valor: 'nao_sei', rotulo: 'Não sei' },
-  ]
   return (
-    <div className="rh-card">
+    <>
       <p className="explica">
         Checagem de viabilidade: descobrir em cinco minutos se vale marcar uma
         hora presencial. Sem nota — o que derruba a contratação raramente é
         incapacidade, é escala que não cabe, local inacessível ou salário abaixo
         do esperado.
       </p>
-      {form.triagem.perguntas.map((p) => (
-        <div className="campo" key={p.chave}>
-          <label className="rotulo">{p.pergunta}</label>
-          <SelectBusca valor={campos.triagem[p.chave] || ''}
-                       aoEscolher={(v) => marcar('triagem', p.chave, v)}
-                       desabilitado={desabilitado}
-                       opcoes={[{ valor: '', rotulo: '— sem resposta —' }, ...respostas]} />
-          {/* Seguro-desemprego é registrado porque EXPLICA falta e desistência
-              — nunca para excluir alguém. Dizer isso na tela é o que impede o
-              campo de virar critério na prática. */}
-          {p.nunca_exclui && (
-            <span className="explica">
-              Registrado para entender disponibilidade. <strong>Nunca é critério
-              de exclusão.</strong>
+
+      <span className="rh-conferencia-bloco-titulo">Roteiro de triagem</span>
+      {/* Cada pergunta é uma linha da escala: enunciado à esquerda, as três
+          respostas à direita, todas à vista. Mesma primitiva do formulário da
+          cartilha (`TabelaEscala`) — sim/não/não sei é escala curta, não
+          motivo para uma lista suspensa por pergunta. */}
+      <div className="rh-escala">
+        {form.triagem.perguntas.map((p) => (
+          <div className="rh-escala-linha" key={p.chave}>
+            <span className="rh-escala-rotulo">
+              {p.pergunta}
+              {/* Seguro-desemprego é registrado porque EXPLICA falta e
+                  desistência — nunca para excluir alguém. Dizer isso na tela é
+                  o que impede o campo de virar critério na prática. */}
+              {p.nunca_exclui && (
+                <span className="dica-inline"> — registrado para entender
+                  disponibilidade; <strong>nunca é critério de exclusão</strong></span>
+              )}
             </span>
-          )}
-        </div>
-      ))}
-      <div className="campo">
-        <label className="rotulo">Desfecho</label>
-        <SelectBusca valor={campos.triagem_desfecho} desabilitado={desabilitado}
-                     aoEscolher={(v) => setCampos({ ...campos, triagem_desfecho: v })}
-                     opcoes={[{ valor: '', rotulo: '— escolher —' },
-                              ...form.triagem.desfechos.map((d) => ({
-                                valor: d.chave, rotulo: d.rotulo }))]} />
+            <span className="chips-escolha">
+              {RESPOSTAS_TRIAGEM.map((r) => (
+                <button type="button" key={r.valor} disabled={desabilitado}
+                        className={`chip-escolha ${campos.triagem[p.chave] === r.valor ? 'on' : ''}`}
+                        onClick={() => marcar('triagem', p.chave,
+                                              campos.triagem[p.chave] === r.valor ? undefined : r.valor)}>
+                  {r.rotulo}</button>
+              ))}
+            </span>
+          </div>
+        ))}
       </div>
-    </div>
+
+      <div className="campo" style={{ marginTop: '1rem' }}>
+        <span className="rotulo">Desfecho</span>
+        <div className="chips-escolha">
+          {form.triagem.desfechos.map((d) => (
+            <button type="button" key={d.chave} disabled={desabilitado}
+                    className={`chip-escolha ${campos.triagem_desfecho === d.chave ? 'on' : ''}`}
+                    onClick={() => setCampos({ ...campos,
+                      triagem_desfecho: campos.triagem_desfecho === d.chave ? '' : d.chave })}>
+              {d.rotulo}</button>
+          ))}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -230,82 +264,111 @@ function Avaliacao({ form, campos, marcar, setCampos, desabilitado }) {
 
   return (
     <>
-      <div className="rh-card">
-        <div className="campo">
-          <label className="rotulo">Variante das perguntas</label>
-          <SelectBusca valor={campos.variante} desabilitado={desabilitado}
-                       aoEscolher={(v) => setCampos({ ...campos, variante: v })}
-                       opcoes={form.variantes.map((v) => ({ valor: v.chave, rotulo: v.rotulo }))} />
-          <span className="explica">
-            A comportamental exige que a pessoa tenha uma história para contar —
-            com quem nunca trabalhou formalmente ela mede currículo, não
-            competência. A competência, a escala e as âncoras são as mesmas nas
-            duas.
-          </span>
+      <div className="campo">
+        <span className="rotulo">Variante das perguntas</span>
+        <div className="chips-escolha">
+          {form.variantes.map((v) => (
+            <button type="button" key={v.chave} disabled={desabilitado}
+                    className={`chip-escolha ${campos.variante === v.chave ? 'on' : ''}`}
+                    onClick={() => setCampos({ ...campos, variante: v.chave })}>
+              {v.rotulo}</button>
+          ))}
         </div>
+        <span className="explica">
+          A comportamental exige que a pessoa tenha uma história para contar —
+          com quem nunca trabalhou formalmente ela mede currículo, não
+          competência. A competência, a escala e as âncoras são as mesmas nas
+          duas.
+        </span>
       </div>
 
-      {form.competencias.map((c) => (
-        <div className="rh-card" key={c.chave}>
-          <h4>{c.nome}</h4>
-          <p className="explica">{c.perguntas[campos.variante] || c.perguntas.comportamental}</p>
-
-          <div className="campo">
-            <label className="rotulo">Nota</label>
-            <SelectBusca valor={String(campos.competencias[c.chave] ?? '')}
-                         desabilitado={desabilitado}
-                         aoEscolher={(v) => marcar('competencias', c.chave,
-                                                   v === '' ? undefined : Number(v))}
-                         opcoes={[{ valor: '', rotulo: '— sem nota —' },
-                                  ...form.escala.map((s) => ({
-                                    valor: String(s.valor), rotulo: s.rotulo }))]} />
+      {/* Duas colunas, como o formulário da cartilha: as competências à
+          esquerda, as justificativas à direita — o avaliador vê a nota que deu
+          ao lado do que escreveu para sustentá-la, em vez de rolar entre elas. */}
+      <div className="rh-conferencia-corpo">
+        <div>
+          <span className="rh-conferencia-bloco-titulo">Competências</span>
+          <div className="rh-escala">
+            {form.competencias.map((c) => (
+              <div className="rh-escala-linha" key={c.chave}>
+                <span className="rh-escala-rotulo">
+                  {c.nome}
+                  <span className="dica-inline"> — {c.perguntas[campos.variante]
+                    || c.perguntas.comportamental}</span>
+                </span>
+                <span className="chips-escolha">
+                  {form.escala.map((s) => (
+                    <button type="button" key={s.valor} disabled={desabilitado}
+                            title={c.ancoras[s.valor]}
+                            className={`chip-escolha ${campos.competencias[c.chave] === s.valor ? 'on' : ''}`}
+                            onClick={() => marcar('competencias', c.chave,
+                                                  campos.competencias[c.chave] === s.valor
+                                                    ? undefined : s.valor)}>
+                      {s.rotulo}</button>
+                  ))}
+                </span>
+              </div>
+            ))}
           </div>
-
           {/* As âncoras num <details>: cursor, marcador e margem vêm do
               styles.css (regra da v2.47.1) — nada de style inline aqui. */}
           <details>
-            <summary>ver âncoras</summary>
-            <ul>
-              {form.escala.map((s) => (
-                <li key={s.valor}><strong>{s.valor}</strong> — {c.ancoras[s.valor]}</li>
-              ))}
-            </ul>
+            <summary>ver âncoras das notas</summary>
+            {form.competencias.map((c) => (
+              <div className="campo" key={c.chave}>
+                <span className="rotulo">{c.nome}</span>
+                <ul>
+                  {form.escala.map((s) => (
+                    <li key={s.valor}><strong>{s.valor}</strong> — {c.ancoras[s.valor]}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </details>
-
-          <div className="campo">
-            <label className="rotulo">Justificativa (obrigatória)</label>
-            <textarea rows={2} disabled={desabilitado}
-                      value={campos.justificativas[c.chave] || ''}
-                      onChange={(ev) => marcar('justificativas', c.chave, ev.target.value)}
-                      placeholder="O que a pessoa disse que sustenta esta nota." />
-            <span className="explica">
-              Nota sem evidência é ruído — descreva o que foi observado, não o
-              adjetivo.
-            </span>
-          </div>
         </div>
-      ))}
 
-      <div className="rh-card">
-        <div className="campo">
-          <label className="rotulo">Recomendação</label>
-          <SelectBusca valor={campos.recomendacao} desabilitado={desabilitado}
-                       aoEscolher={(v) => setCampos({ ...campos, recomendacao: v })}
-                       opcoes={[{ valor: '', rotulo: '— escolher —' },
-                                ...form.recomendacoes.map((r) => ({
-                                  valor: r.chave, rotulo: r.rotulo }))]} />
+        <div>
+          <span className="rh-conferencia-bloco-titulo">Justificativas (obrigatórias)</span>
+          <p className="explica" style={{ margin: '0 0 .4rem' }}>
+            Nota sem evidência é ruído — descreva o que foi observado, não o
+            adjetivo.
+          </p>
+          {form.competencias.map((c) => (
+            <label className="campo" key={c.chave}>
+              <span className="rotulo">{c.nome}
+                {campos.competencias[c.chave] != null && (
+                  <span className="dica-inline"> — nota {campos.competencias[c.chave]}</span>
+                )}</span>
+              <textarea rows={2} disabled={desabilitado}
+                        value={campos.justificativas[c.chave] || ''}
+                        onChange={(ev) => marcar('justificativas', c.chave, ev.target.value)}
+                        placeholder="O que a pessoa disse que sustenta esta nota." />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="campo">
+        <span className="rotulo">Recomendação</span>
+        <div className="chips-escolha">
+          {form.recomendacoes.map((r) => (
+            <button type="button" key={r.chave} disabled={desabilitado}
+                    className={`chip-escolha ${campos.recomendacao === r.chave ? 'on' : ''}`}
+                    onClick={() => setCampos({ ...campos,
+                      recomendacao: campos.recomendacao === r.chave ? '' : r.chave })}>
+              {r.rotulo}</button>
+          ))}
         </div>
         {exigeMotivo && (
-          <div className="campo">
-            <label className="rotulo">Motivo (obrigatório nesta recomendação)</label>
+          <label className="campo" style={{ marginTop: '.5rem' }}>
+            <span className="rotulo">Motivo
+              <span className="dica-inline"> — obrigatório nesta recomendação: "com
+                ressalva" sem dizer qual ressalva não é recomendação, é
+                impressão</span></span>
             <textarea rows={2} disabled={desabilitado}
                       value={campos.recomendacao_motivo}
                       onChange={(ev) => setCampos({ ...campos, recomendacao_motivo: ev.target.value })} />
-            <span className="explica">
-              "Com ressalva" sem dizer qual ressalva não é recomendação, é
-              impressão.
-            </span>
-          </div>
+          </label>
         )}
       </div>
     </>
