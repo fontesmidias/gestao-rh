@@ -597,11 +597,15 @@ Comparação na tela da vaga (§ 8.4) · histórico na ficha da pessoa (§ 8.5) 
 carimbo de defasagem · arquivamento automático aos 180 dias no
 `workers/expurgo.py` · exclusão de vaga passando pela lixeira (cenário 4).
 
-### Fase 3 — se for pedido
+### Fase 3 — PEDIDA pelo Bruno em 2026-08-05
 
-Lembrete por e-mail ao candidato (nasce no `CATALOGO`) · convite de calendário
-· segundo avaliador **com a trava anti-peeking** (§ 2.6) · roteiro por cargo em
-vez de único.
+Deixou de ser "se for pedido". Ver § 14 — o desenho mudou de forma com quatro
+pedidos dele, e o maior deles (roteiros múltiplos) **tira as competências do
+código e as leva para o banco**, o que resolve a pendência nº 1 por outro
+caminho.
+
+Continua **fora**: segundo avaliador com a trava anti-peeking (§ 2.6), porque
+só o RH entrevista (decisão 1) e não há colega cuja nota espiar.
 
 ---
 
@@ -626,15 +630,18 @@ defeito e confirma-se que o teste falha.
 
 ## 12. Pendências com o Bruno
 
-1. **Aprovar as 4 competências e as âncoras** (§ 4.2). São o instrumento; ele
-   sai da sala e precisa da aprovação de quem responde pelo RH — mesma regra
-   da cartilha do avaliador.
-2. **Confirmar as perguntas de triagem** (§ 4.1) — falta alguma que ele
-   pergunta hoje ao telefone?
-3. **Exclusão de vaga pela lixeira** — hoje é delete físico. Entra nesta leva
-   ou fica para depois?
+1. ~~**Aprovar as 4 competências e as âncoras**~~ — **RESOLVIDA por outro
+   caminho** (2026-08-05). Com roteiros múltiplos (§ 14.1) as competências saem
+   do código e viram o **roteiro padrão no banco, editável pela tela**. Ele
+   ajusta âncora, pergunta e competência sem deploy e sem esperar ninguém.
+2. ~~**Confirmar as perguntas de triagem**~~ — **RESPONDIDA**: *"pode colocar
+   mais, mas desde que sejam coerentes e coesas"* (§ 14.2).
+3. **Exclusão de vaga pela lixeira** — hoje é delete físico. Ele respondeu o
+   que importava (§ 14.3: a entrevista sobrevive **e** a pessoa é tagueada para
+   reaproveitamento), mas não disse se a vaga em si deve ir para a lixeira.
+   **Continua aberta.**
 4. **A entrevista de quem virou colaborador** (cenário 14) fica fora do prazo
-   de arquivamento? A sala assumiu que sim.
+   de arquivamento? A sala assumiu que sim. **Continua aberta.**
 
 ---
 
@@ -654,6 +661,215 @@ defeito e confirma-se que o teste falha.
   destravam isso, e o e-mail vira só a fonte.
 - **Gravação de entrevista** — exige consentimento próprio (§ 2.6).
 - **Trava anti-peeking** — datada, não descartada (§ 2.6).
+
+---
+
+## 14. Fase 3 — o desenho (decisões do Bruno, 2026-08-05)
+
+Quatro pedidos dele depois de ver a v2.64 rodando. Um deles reorganiza o
+módulo; três são encaixes.
+
+### 14.1 Roteiros múltiplos — o pedido que muda a forma
+
+> *"poderiam haver vários modelos de roteiros já, para os mais variados níveis
+> de senioridades e cargos que já temos, para que possamos escolher os roteiros
+> mais adequadamente, bem como customizar roteiros para que sejam submetidos a
+> aprovação e, após isso, poderem ser utilizados."*
+
+Hoje o roteiro é **uma** constante de módulo em `services/entrevistas.py`. Vira
+um **catálogo no banco**, com estas três decisões travadas:
+
+**(a) Rascunho → publicado, o próprio RH publica.**
+
+Roteiro nasce `rascunho` e **não pode ser usado em entrevista nenhuma**.
+Publicar é ato separado e deliberado, com autor e data na auditoria.
+
+Isso é o que sustenta o argumento jurídico do § 6: a defesa não é "existe um
+roteiro", é **"o roteiro foi aprovado ANTES de ser usado"**. Sem a trava, o
+argumento cai.
+
+**Versão congelada:** publicar cria uma versão. Editar um roteiro publicado
+gera a **versão seguinte** — a entrevista já feita continua mostrando o roteiro
+com que foi feita, não o texto de hoje. É a mesma regra do snapshot de
+`titulo_doc`/`corpo_doc` em `solicitacao_assinatura`: editar o modelo não muda
+o que a pessoa assinou.
+
+**(b) Escolha por cargo, com exceção por senioridade.**
+
+Mesma herança que ele escolheu para salário (§ 13 do dump da 22ª leva) e que o
+módulo de Desenvolvimento já usa em `meses_validade_de` — o mais específico
+vence:
+
+```
+1. cargo + senioridade   ("Auxiliar Administrativo · pleno")
+2. cargo                 ("Auxiliar Administrativo")
+3. roteiro padrão        (as 4 competências de hoje)
+```
+
+**Sugerido, nunca imposto** — o RH troca na hora, e a entrevista guarda qual
+roteiro foi usado.
+
+**Cuidado herdado:** cargo é **texto livre** (`Candidato.cargo_funcao`), e a
+base tem 87 pessoas em "AUXILIAR DE SERVIÇOS GERAIS" com dois CBOs distintos.
+O casamento é por `normalizar_cargo` (minúsculo, sem acento) — a mesma função
+do de-para do Tirvu. Cargo sem roteiro **cai no padrão**, nunca em erro.
+
+**(c) As 4 competências viram o roteiro padrão, no banco.**
+
+Saem de `services/entrevistas.py` e viram um registro `publicado`, usado quando
+nenhum roteiro específico casa. **Isso resolve a pendência nº 1 por outro
+caminho:** em vez de esperar aprovação das âncoras que a sala escreveu, o Bruno
+passa a editá-las pela tela, sem deploy.
+
+> **Consequência a não perder de vista:** o instrumento deixa de viver em
+> constante e passa a viver em dado. A regra "o front lê da API e não duplica
+> texto" continua valendo e continua coberta por teste estrutural — o que muda
+> é a **fonte**, não o contrato. `GET /rh/entrevistas/formulario` passa a
+> aceitar `?roteiro_id=` e a devolver o roteiro resolvido.
+
+**Modelo:**
+
+```python
+class StatusRoteiro(str, Enum):
+    rascunho  = "rascunho"
+    publicado = "publicado"
+    arquivado = "arquivado"   # aposentado; entrevistas antigas continuam legíveis
+
+class RoteiroEntrevista(Base):
+    __tablename__ = "roteiro_entrevista"
+    id: UUID
+    nome: String(120)                       # "Vigia — operacional"
+    cargo: String(120) | None               # texto livre; None = padrão
+    cargo_norm: String(120) | None indexado # normalizar_cargo(cargo)
+    senioridade: String(20) | None          # None = vale para todas
+    status: Enum StatusRoteiro
+    versao: Integer                         # 1, 2, 3…
+    competencias: JSON                      # [{chave, nome, ancoras{4..1}, perguntas{...}}]
+    padrao: Boolean                         # o roteiro-raiz; não se apaga
+    publicado_em / publicado_por            # o ATO de aprovação, auditado
+    criado_em / criado_por
+```
+
+A `Entrevista` ganha `roteiro_id` (FK, `SET NULL`) **e** `roteiro_snapshot`
+(JSON) — pelo mesmo motivo de `vaga_titulo`: o registro tem que continuar
+legível se o roteiro for arquivado.
+
+**Rotas:** `GET/POST /rh/roteiros-entrevista` · `PUT /{id}` (só rascunho) ·
+`POST /{id}/publicar` · `POST /{id}/duplicar` · `POST /{id}/arquivar`.
+Literais antes de paramétricas.
+
+**Tela:** Configurações, junto dos outros catálogos (Tags, Modelos). Não é tela
+de uso diário.
+
+### 14.2 Mais perguntas de triagem
+
+> *"pode colocar mais, mas desde que sejam coerentes e coesas"*
+
+O critério é dele e é o certo: a triagem **não pode virar entrevista curta**
+(§ 4.1). Toda pergunta nova tem que passar em três filtros:
+
+1. Responde-se **sim/não/não sei** — se precisa de julgamento, é competência,
+   não triagem.
+2. Responde-se **por telefone em segundos**.
+3. **Prediz desistência**, não desempenho.
+
+Acréscimos propostos, todos dentro do critério:
+
+| Campo | Pergunta | Por quê |
+|---|---|---|
+| `tem_disponibilidade_imediata` | Se aprovado, consegue começar em até 15 dias? | Distingue interesse de disponibilidade — a pessoa quer, mas só em março. |
+| `tem_documentacao` | Está com CTPS, RG, CPF e comprovante de residência em mãos? | Documento pendente trava a admissão depois do sim. |
+| `ja_trabalhou_no_cliente` | Já trabalhou neste posto ou para este cliente antes? | Há contratos com veto a recontratação; descobrir depois custa a vaga. |
+| `aceita_uniforme_epi` | O posto exige uniforme e EPI. Tudo bem? | Recusa aparece no primeiro dia, não na entrevista. |
+
+**Continua sem nota, sem competência, sem âncora.** Com nove perguntas de
+sim/não o preenchimento segue abaixo de dois minutos.
+
+### 14.3 Tag na pessoa quando a vaga é excluída
+
+> *"quando excluir uma vaga, a entrevista sobrevive, pois posso poder taguear a
+> pessoa, de modo que ela possa ser reaproveitada para outro cargo"*
+
+Ele resolveu o cenário 4 melhor do que a sala tinha resolvido. A entrevista já
+sobrevivia (com `vaga_titulo`), mas isso preservava **o registro**; o que ele
+quer é preservar **a pessoa como oportunidade**.
+
+E o sistema já tem a peça: `PessoaTag` do mini-CRM, com catálogo, CRUD e as
+mesmas duas FKs opcionais que a entrevista usa. **Nada de campo novo.**
+
+- **Ao excluir uma vaga**, o RH vê quantas pessoas foram entrevistadas para ela
+  e pode aplicar uma tag em lote — sugerida a partir do cargo da vaga
+  (ex.: `reaproveitar: vigia`), editável.
+- A recomendação **`banco_para_outra_vaga`** (que já existe e já exige motivo)
+  ganha o mesmo atalho: recomendou, oferece a tag.
+- As tags já aparecem e filtram no dash de Talentos — o reaproveitamento
+  funciona sem tela nova.
+
+**Não é automático.** Tag aplicada sozinha vira ruído, e o RH deixa de
+confiar na tag. O sistema propõe, o RH confirma — regra da casa.
+
+### 14.4 Lembrete por e-mail e convite de calendário
+
+> *"lembrete por email, sim. convite de calendário, sim. considere que pode ser
+> entrevista online (pelo teams) ou presencial"*
+
+**Modalidade** vira campo (`modalidade`: `presencial` | `online`), e ela decide
+o conteúdo dos dois:
+
+| | Presencial | Online (Teams) |
+|---|---|---|
+| Campo extra | `local` (endereço) | `link_reuniao` (URL) |
+| E-mail diz | onde é, e o que levar | o link, e como entrar |
+| `.ics` traz | `LOCATION` = endereço | `LOCATION` = link + no corpo |
+
+**Lembrete por e-mail** — duas entradas novas no `CATALOGO` de
+`services/email_templates.py` (regra da v2.21: e-mail novo nasce na sua
+página, editável com preview e histórico):
+
+- `entrevista_marcada` — no ato de marcar.
+- `entrevista_lembrete` — na véspera, por worker.
+
+**Variáveis obrigatórias:** `{{data_hora}}` e — conforme a modalidade —
+`{{local}}` ou `{{link_reuniao}}`. Sem elas o e-mail sai bonito e inútil, e o
+salvamento é recusado com 422 (mecânica que já existe).
+
+**Só envia se houver e-mail.** Sem e-mail, o campo de lembrete fica desligado
+e a tela diz por quê — nunca falha calada.
+
+**Convite de calendário (`.ics`)** — arquivo gerado pelo servidor e anexado ao
+e-mail. Três cuidados:
+
+1. **`UID` estável por entrevista** + `SEQUENCE` incrementado a cada
+   remarcação, e `METHOD:REQUEST` — é o que faz o Outlook **atualizar** o
+   compromisso em vez de criar um segundo.
+2. **Cancelamento manda `METHOD:CANCEL`** com o mesmo `UID`; senão o
+   compromisso fica na agenda da pessoa depois de cancelado.
+3. **`TZID=America/Sao_Paulo`**, nunca UTC solto — o container roda em UTC
+   (armadilha da v2.41, que já mordeu no log) e o convite chegaria três horas
+   adiantado.
+
+Não há integração com a API do Teams: o link é **colado pelo RH**, como o
+`wa.me` do Minutário. Integrar exigiria app registrado no tenant e OAuth
+próprio, e o ganho não paga.
+
+**Worker do lembrete:** roda junto do `avisar_vencimentos` (já existe, já é
+cron, já tem anti-spam por auditoria). Não criar cron novo — é mais uma peça
+para esquecer de subir no Portainer.
+
+### 14.5 Cenários novos que a fase 3 abre
+
+| # | Cenário | Tratamento |
+|---|---|---|
+| 21 | Roteiro editado depois de usado | Nova **versão**; a entrevista antiga mostra o roteiro com que foi feita (`roteiro_snapshot`). |
+| 22 | Roteiro em rascunho | **Não aparece** para escolher. Publicar é ato explícito. |
+| 23 | Cargo sem roteiro específico | Cai no **padrão**. Nunca erro, nunca tela vazia. |
+| 24 | Roteiro arquivado com entrevistas antigas | As entrevistas seguem legíveis pelo snapshot. |
+| 25 | Alguém tenta apagar o roteiro padrão | Recusa — `padrao=True` não se apaga; arquivar exige que exista outro padrão. |
+| 26 | Pessoa sem e-mail | Lembrete desligado, **com o motivo na tela**. |
+| 27 | Entrevista remarcada depois do convite | `.ics` novo com mesmo `UID` e `SEQUENCE+1`. |
+| 28 | Entrevista cancelada depois do convite | `.ics` de cancelamento; sem isso fica na agenda. |
+| 29 | Online sem link preenchido | Não deixa marcar como online sem link — o e-mail seria inútil. |
+| 30 | Vaga excluída com 5 entrevistados | Oferece tag em lote; **o RH confirma**, nada automático. |
 
 ---
 
