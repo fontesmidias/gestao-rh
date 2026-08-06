@@ -56,8 +56,27 @@ def email_recrutamento(db: Session) -> str | None:
     omite o `From` e o provedor põe o dele, que é o comportamento que o sistema
     já tinha antes desta chave existir.
     """
-    valor = (ler_config(db, (CHAVE_EMAIL_RECRUTAMENTO,))
-             .get(CHAVE_EMAIL_RECRUTAMENTO) or "").strip()
+    valor = email_recrutamento_escolhido(db)
     if valor:
         return valor
     return (smtp_config(db).get("from_") or "").strip() or None
+
+
+def email_recrutamento_escolhido(db: Session) -> str:
+    """O endereço que o RH **escolheu**, sem cair no `smtp_from`. `""` = nenhum.
+
+    A diferença entre esta função e a de cima é sutil e custou uma reprovação
+    (v2.68): para o `ORGANIZER` do `.ics`, cair no `smtp_from` é o certo — o
+    arquivo precisa de um endereço, qualquer que seja. Para o `From` do
+    **Microsoft 365**, não: pedir ao Graph que envie como o próprio `smtp_from`
+    é pedir permissão para ser quem já se é, e o Graph responde
+    `ErrorSendAsDenied` do mesmo jeito. O sistema então avisaria o RH que falta
+    liberar o `Send As` de um endereço que ele nunca configurou — ruído que
+    manda mexer no tenant sem motivo, e o oposto do cenário 40, que exige
+    silêncio quando a chave está vazia.
+
+    Regra: **o fallback serve para PREENCHER um campo, nunca para pedir uma
+    permissão.**
+    """
+    return (ler_config(db, (CHAVE_EMAIL_RECRUTAMENTO,))
+            .get(CHAVE_EMAIL_RECRUTAMENTO) or "").strip()

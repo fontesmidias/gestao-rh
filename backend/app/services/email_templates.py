@@ -903,6 +903,23 @@ def enviar_modelo(db: Session, chave: str, destinatario: str | None,
                         remetente=remetente)
 
 
+def enviar_modelo_com_aviso(db: Session, chave: str, destinatario: str | None,
+                            contexto: dict, anexos=None,
+                            remetente: str | None = None) -> dict:
+    """`enviar_modelo` que devolve `{ok, aviso}` (v2.68, § 16.1).
+
+    O `aviso` é o desfecho que o booleano não conta: o e-mail SAIU, mas do
+    endereço de sempre, porque o `Send As` do remetente de recrutamento não
+    está liberado no M365. Só o convite de entrevista usa esta porta — os
+    demais e-mails não pedem remetente próprio e nada muda para eles.
+    """
+    from app.services.email import enviar_com_aviso
+
+    assunto, texto, html = renderizar(db, chave, contexto)
+    return enviar_com_aviso(destinatario or "", assunto, texto, html,
+                            anexos=anexos, remetente=remetente)
+
+
 def listar(db: Session) -> list[dict]:
     """Catálogo + estado atual, para a tela do RH."""
     personalizados = {t.chave: t for t in db.scalars(select(EmailTemplate)).all()}

@@ -253,6 +253,10 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
   // Mensagem local: o card fica no meio da tela, e um setMsg do pai
   // renderizaria a confirmação fora do campo de visão de quem clicou.
   const [erro, setErro] = useState(null)
+  // Separado do `erro` DE PROPÓSITO: o convite saiu. Pintar de vermelho faria o
+  // RH achar que a pessoa não foi avisada e reenviar — que não muda nada,
+  // porque o que falta é uma liberação no admin do Microsoft 365.
+  const [aviso, setAviso] = useState(null)
 
   useEffect(() => {
     api.talentos().then((r) => setTalentos(r.itens || r.talentos || [])).catch(() => {})
@@ -265,6 +269,7 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
     if (!pessoaId) { setErro('Escolha a pessoa.'); return }
     setSalvando(true)
     setErro(null)
+    setAviso(null)
     try {
       const criada = await api.criarEntrevista({
         tipo,
@@ -289,6 +294,11 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
         setErro(`Entrevista registrada, mas o convite não saiu: ${criada.convite.motivo}`)
         return
       }
+      // O convite SAIU, mas do endereço de sempre — o `Send As` do remetente de
+      // recrutamento não está liberado no Microsoft 365 (v2.68, cenário 39).
+      // Não é erro: é um aviso do que falta configurar. Some sozinho quando o
+      // administrador libera, sem ninguém precisar mexer aqui.
+      if (criada?.convite?.aviso) setAviso(criada.convite.aviso)
     } catch (e) {
       setErro(e.detail?.erro || e.detail || e.message || 'Não foi possível registrar.')
     } finally { setSalvando(false) }
@@ -396,6 +406,7 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
       )}
 
       {erro && <p className="alerta">{erro}</p>}
+      {aviso && <p className="aviso-inline">⚠️ {aviso}</p>}
       <div className="rh-conferencia-acoes">
         <button className="btn-principal btn-mini" onClick={criar} disabled={salvando}>
           {salvando ? 'Registrando…' : 'Registrar'}

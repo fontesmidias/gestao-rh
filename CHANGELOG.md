@@ -11,6 +11,99 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.68.0] — 2026-08-06 — O e-mail sai, mesmo quando o tenant não colabora
+
+§ 16.1 de `docs/planejamento/12-modulo-de-entrevistas.md`. Das 4 respostas que o
+Bruno deu em 2026-08-06, **só uma vira código**: o remetente de recrutamento
+passa a valer no Microsoft 365. As outras três eram "não", "como está" e
+"corrigir o doc" — já registradas no commit `969bd2b`.
+
+### O problema: uma configuração que não configurava nada
+
+A v2.67 criou a chave `email_recrutamento`, e ela mudava o `ORGANIZER` do `.ics`
+e o `From` no SMTP. Só que **em produção o envio não passa pelo SMTP** — sai
+pela caixa do M365 conectada por OAuth, e o `remetente` era descartado antes de
+chegar ao Graph. O RH podia preencher o endereço e nada mudava no e-mail que a
+pessoa recebia.
+
+Pior: **a chave não tinha rota nem tela**. Só dava para preenchê-la escrevendo
+direto no banco. Um campo configurável que ninguém consegue configurar é uma
+funcionalidade que existe só no código.
+
+### São duas metades, e uma não é código
+
+| Metade | Quem faz |
+|---|---|
+| Passar o remetente ao Graph e usá-lo quando houver permissão | o sistema (esta leva) |
+| **Liberar `Send As` do endereço de recrutamento para a conta conectada, no admin do M365** | **o Bruno**, no tenant |
+
+Sem a liberação o Graph responde `ErrorSendAsDenied` e **o e-mail não sai**. Por
+isso o desenho tem duas tentativas e nunca desiste da carta: tenta com o
+remetente; se a recusa for **de permissão**, reenvia da caixa conectada e
+**avisa na tela** o que falta liberar. O convite sempre sai.
+
+> É a regra da v2.00 na terceira variação: erro de **permissão** (permanente,
+> resolve-se no admin) ≠ erro de **envio** (transitório, tenta de novo). Tratar
+> os dois igual faria o RH achar que o sistema quebrou quando falta um clique no
+> tenant — e mexer no lugar errado. Um 500 **não** vira segunda tentativa.
+
+### A distinção que custou uma reprovação nesta leva
+
+`email_recrutamento()` **cai no `smtp_from`** quando a chave está vazia — certo
+para o `ORGANIZER` do `.ics`, que precisa de um endereço qualquer. Usar a mesma
+função para o `From` do Graph pedia permissão para enviar como a caixa que já se
+é: o Graph recusava igual, e o sistema avisava o RH que faltava liberar `Send
+As` de um endereço **que ele nunca configurou** — ruído mandando mexer no tenant
+sem motivo, e o oposto do cenário 40, que exige silêncio com a chave vazia.
+
+Foi o **teste que reprovou o código**, não o contrário. Ficou a regra, agora em
+`config_dinamica.email_recrutamento_escolhido`:
+
+> **O fallback serve para PREENCHER um campo, nunca para pedir uma permissão.**
+
+### Um defeito encontrado no caminho: o `.ics` chegava como PDF
+
+O caminho do Graph tinha `"contentType": "application/pdf"` **chumbado** para
+todo anexo — o mesmo defeito que a v2.41 consertou no SMTP, sobrevivendo aqui. O
+`.ics` do convite passa por este caminho: com o tipo errado, o Outlook mostra um
+anexo em vez de oferecer "adicionar à agenda". Agora o tipo vem da extensão.
+
+### O que foi medido
+
+- **4 mutações** aplicadas e conferidas. A da recusa-que-aborta reprovou 6
+  asserções; a que classifica todo erro como permissão, 4; a do fallback no
+  `From`, 3.
+- **A 4ª mutação NÃO reprovou de primeira** — a asserção do `.ics` chamava
+  `_tipo_grafo` isolada e passava verde com `application/pdf` chumbado na
+  mensagem. Reescrita para ler o `contentType` da mensagem **real** que
+  `enviar_via_graph` entrega ao limite HTTP. É a mesma lição do teste do `.ics`
+  na v2.67: **teste que exercita a função interna não prova que a rota a usa**.
+
+### Detalhes
+
+- `services/m365.py`: `enviar_via_graph` aceita `remetente` e devolve
+  `{ok, aviso}`; `recusou_por_permissao` classifica a recusa (só 400/403 com
+  assinatura conhecida — rede e 500 são falha de envio); `aviso_send_as` monta o
+  texto que nomeia a permissão e a conta; `_tipo_grafo` corrige o MIME do anexo.
+- `services/email.py`: `enviar_com_aviso` é a porta que devolve `{ok, aviso}`.
+  **`enviar_email` continua devolvendo booleano** — os ~40 call-sites do projeto
+  não mudaram (há teste cobrando isso).
+- `api/configuracoes.py`: `GET/PUT /rh/config/recrutamento`. Vazio é valor
+  VÁLIDO (é como se volta ao padrão) — por isso `str` validado à mão, e não
+  `EmailStr`, que recusaria a string vazia e deixaria o RH sem como desfazer.
+- `rh/Config.jsx`: o card **Endereço de recrutamento**, com o aviso que só
+  aparece quando o M365 está conectado — a tela não promete uma exigência que
+  não existe.
+- `rh/EntrevistasRH.jsx`: o aviso usa `.aviso-inline` (âmbar), **não** `.alerta`
+  (vermelho): o convite saiu, e pintar de erro faria o RH reenviar — o que não
+  muda nada, porque o que falta é uma liberação no admin.
+
+### Fora desta leva, registrado
+
+- **O `webhook_email.py` tem o MESMO `application/pdf` chumbado** (linha 56).
+  Não mexi: é outro caminho de envio, não é o que o Bruno usa, e alargar escopo
+  sem pedido é o que esta casa evita. Fica como recomendação.
+
 ## [2.67.0] — 2026-08-05 — Documento gerado que não entra no catálogo não existe
 
 Fase 4 do Módulo de Entrevistas (§ 15 de

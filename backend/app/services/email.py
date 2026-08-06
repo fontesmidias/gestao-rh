@@ -35,10 +35,32 @@ def _tipo_do_anexo(nome: str) -> tuple[str, str]:
     return principal, secundario or "octet-stream"
 
 
+def enviar_com_aviso(destinatario: str, assunto: str, corpo_texto: str,
+                     corpo_html: str | None = None,
+                     anexos: list[tuple[str, bytes]] | None = None,
+                     remetente: str | None = None) -> dict:
+    """Igual a `enviar_email`, mas devolve `{ok, aviso}` em vez de só `ok`.
+
+    Existe porque há um desfecho que um booleano não sabe contar (v2.68,
+    § 16.1): **o e-mail saiu, mas não do endereço pedido**. `True` esconderia
+    que o remetente de recrutamento foi ignorado, e o RH nunca saberia que
+    falta liberar o `Send As` no M365; `False` seria mentira, porque a pessoa
+    recebeu o convite.
+
+    Quem só precisa saber se saiu continua usando `enviar_email` — os ~40
+    call-sites do projeto não mudaram.
+    """
+    aviso: list[str | None] = [None]
+    ok = enviar_email(destinatario, assunto, corpo_texto, corpo_html,
+                      anexos=anexos, remetente=remetente, _aviso=aviso)
+    return {"ok": bool(ok), "aviso": aviso[0]}
+
+
 def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
                  levantar_erro: bool = False,
                  anexos: list[tuple[str, bytes]] | None = None,
-                 remetente: str | None = None) -> bool:
+                 remetente: str | None = None,
+                 _aviso: list | None = None) -> bool:
     """Envia e REGISTRA o resultado — saiu, por onde, e por que não saiu.
 
     O registro existe porque "o e-mail não chegou" é a pergunta mais frequente
@@ -55,7 +77,7 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
     ok = False
     try:
         ok = _enviar_email(destinatario, assunto, corpo_texto, corpo_html,
-                           levantar_erro, anexos, remetente)
+                           levantar_erro, anexos, remetente, _aviso)
         return ok
     finally:
         try:
@@ -73,17 +95,21 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
 def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
                   levantar_erro: bool = False,
                   anexos: list[tuple[str, bytes]] | None = None,
-                  remetente: str | None = None) -> bool:
+                  remetente: str | None = None,
+                  _aviso: list | None = None) -> bool:
     """anexos: lista de (nome_do_arquivo.pdf, bytes).
 
-    `remetente` (v2.67) sobrepõe o `From` **no caminho SMTP**, e só nele. É
-    honesto dizer o limite: nos caminhos M365, Google e webhook a mensagem sai
-    da CAIXA CONECTADA por construção — o Graph recusa `From` de terceiro sem
-    permissão de aplicação (`SendAs`), e forjar o cabeçalho ali resultaria em
-    e-mail rejeitado ou marcado como spam, que é pior do que sair do endereço
-    de sempre. Nesses casos o remetente pedido é ignorado em vez de derrubar o
-    envio: o convite de entrevista sair do endereço padrão é um detalhe de
-    apresentação; não sair é uma entrevista perdida.
+    `remetente` sobrepõe o `From` no caminho **SMTP** e, desde a v2.68 (§ 16.1),
+    também no **M365/Graph** — lá com a ressalva que dá nome a esta leva: o
+    Graph só aceita `From` de terceiro se o admin do tenant tiver liberado
+    `Send As`. Sem a liberação ele recusa, e o serviço **reenvia da caixa
+    conectada** e devolve um aviso em `_aviso` (ver `enviar_com_aviso`), em vez
+    de deixar o convite sem sair.
+
+    Nos caminhos **Google e webhook** o remetente pedido continua sendo
+    ignorado: a mensagem sai da caixa conectada por construção. É ignorado de
+    propósito, e não vira erro — o convite sair do endereço de sempre é um
+    detalhe de apresentação; não sair é uma entrevista perdida.
     """
     if not destinatario:
         # Candidato cadastrado sem e-mail (convite copiado para o WhatsApp):
@@ -98,8 +124,11 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
     # Prioridade: Microsoft 365 → Google → Webhook (Power Automate) → SMTP.
     with SessionLocal() as db:
         if config_m365(db).get("m365_refresh_token"):
-            ok = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
-            if ok:
+            r = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html,
+                                 anexos, remetente=remetente)
+            if _aviso is not None and r.get("aviso"):
+                _aviso[0] = r["aviso"]
+            if r.get("ok"):
                 return True
             if levantar_erro:
                 raise RuntimeError("falha_envio_m365: reconecte a conta em Configurações")

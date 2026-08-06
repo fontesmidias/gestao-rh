@@ -190,12 +190,22 @@ def enviar_convite(db, e, pessoa_nome: str, pessoa_email: str | None, *,
         e.sequencia_convite = (e.sequencia_convite or 0) + 1
 
     chave = "entrevista_cancelada" if cancelar else "entrevista_marcada"
+    aviso = None
     try:
-        from app.services.config_dinamica import email_recrutamento
-        from app.services.email_templates import enviar_modelo
-        ok = enviar_modelo(db, chave, pessoa_email, _contexto(pessoa_nome, e),
-                           anexos=_anexo_ics(db, e, pessoa_email, cancelar),
-                           remetente=email_recrutamento(db))
+        from app.services.config_dinamica import email_recrutamento_escolhido
+        from app.services.email_templates import enviar_modelo_com_aviso
+        # `_escolhido` (e NÃO `email_recrutamento`) de propósito: o `From` só é
+        # pedido quando o RH escolheu um endereço. Com a chave vazia o fallback
+        # devolveria o próprio `smtp_from`, e pedir ao Graph para enviar como a
+        # caixa que já se é levaria a um aviso de `Send As` sobre uma
+        # configuração que ninguém fez (cenário 40 exige silêncio aqui).
+        # O `.ics` continua usando o fallback — lá o endereço é para PREENCHER
+        # um campo, não para pedir permissão.
+        r = enviar_modelo_com_aviso(db, chave, pessoa_email,
+                                    _contexto(pessoa_nome, e),
+                                    anexos=_anexo_ics(db, e, pessoa_email, cancelar),
+                                    remetente=email_recrutamento_escolhido(db))
+        ok, aviso = r.get("ok"), r.get("aviso")
     except Exception:
         log.exception("Falha ao enviar convite da entrevista %s", e.id)
         return {"enviado": False,
@@ -208,10 +218,16 @@ def enviar_convite(db, e, pessoa_nome: str, pessoa_email: str | None, *,
         # da data NOVA. Sem isso o lembrete da véspera nunca sairia para uma
         # entrevista remarcada, porque o carimbo antigo continuaria lá.
         e.lembrete_enviado_em = None
+    # `aviso` é o TERCEIRO desfecho (v2.68, § 16.1, cenário 39): o e-mail SAIU,
+    # mas do endereço de sempre, porque o `Send As` do remetente de recrutamento
+    # não está liberado no tenant. `enviado` continua True — a pessoa recebeu o
+    # convite — e o aviso diz ao RH o que falta fazer no admin do M365. Dizer
+    # só "enviado" esconderia que a configuração dele não está valendo.
     return {"enviado": bool(ok),
             "motivo": None if ok else
                       "O sistema não conseguiu enviar o e-mail (confira as "
-                      "configurações de e-mail em Configurações)."}
+                      "configurações de e-mail em Configurações).",
+            "aviso": aviso}
 
 
 def deve_lembrar(e, agora: datetime | None = None) -> bool:
@@ -243,11 +259,18 @@ def enviar_lembrete(db, e, pessoa_nome: str, pessoa_email: str | None) -> bool:
     if motivo_sem_envio(pessoa_email, e.marcada_para):
         return False
     try:
-        from app.services.config_dinamica import email_recrutamento
-        from app.services.email_templates import enviar_modelo
-        ok = enviar_modelo(db, "entrevista_lembrete", pessoa_email,
-                           _contexto(pessoa_nome, e),
-                           remetente=email_recrutamento(db))
+        from app.services.config_dinamica import email_recrutamento_escolhido
+        from app.services.email_templates import enviar_modelo_com_aviso
+        # O lembrete passa pelo MESMO caminho do convite — inclusive o reenvio
+        # da caixa conectada quando o `Send As` não está liberado. Aqui o aviso
+        # não vai para tela nenhuma (quem chama é o worker da véspera, sem
+        # ninguém olhando); fica no log, que é onde se procura depois.
+        r = enviar_modelo_com_aviso(db, "entrevista_lembrete", pessoa_email,
+                                    _contexto(pessoa_nome, e),
+                                    remetente=email_recrutamento_escolhido(db))
+        ok = r.get("ok")
+        if r.get("aviso"):
+            log.warning("Lembrete da entrevista %s: %s", e.id, r["aviso"])
     except Exception:
         log.exception("Falha ao enviar lembrete da entrevista %s", e.id)
         return False

@@ -365,6 +365,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
+        <div className="rh-grid-2"><RemetenteRecrutamento /></div>
         <div className="rh-grid-2"><OcrIA /><GroqIA /></div>
         <div className="rh-grid-2"><AvisosInternos /></div>
         <Teams />
@@ -993,6 +994,72 @@ function M365() {
           </div>
         </>
       )}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Remetente próprio do recrutamento (v2.68, § 16.1). A metade que NÃO é código
+// mora aqui: o texto que diz ao Bruno o que ele precisa fazer no admin do
+// Microsoft 365 para o endereço valer nos e-mails. Sem isso, o campo prometeria
+// algo que o tenant não cumpre, e ele descobriria pelo remetente errado num
+// convite já enviado — que é tarde.
+function RemetenteRecrutamento() {
+  const [cfg, setCfg] = useState(null)
+  const [valor, setValor] = useState('')
+  const [erroCarga, setErroCarga] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const recarregar = () => api.verRecrutamento()
+    .then((c) => { setCfg(c); setValor(c.email_recrutamento || '') })
+  // Falha de carga vira ERRO na tela com botão de tentar de novo, nunca
+  // "Carregando…" para sempre (a regra da v2.46).
+  useEffect(() => {
+    setErroCarga(null)
+    recarregar().catch((e) => setErroCarga(e.detail || e.message || 'Falha ao carregar.'))
+  }, [])
+  if (erroCarga) return (
+    <div className="rh-card">
+      <h3>Endereço de recrutamento</h3>
+      <p className="alerta">Não foi possível carregar: {erroCarga}</p>
+      <button className="btn-secundario" onClick={() => {
+        setErroCarga(null)
+        recarregar().catch((e) => setErroCarga(e.detail || e.message || 'Falha ao carregar.'))
+      }}>Tentar de novo</button>
+    </div>
+  )
+  if (!cfg) return <div className="rh-card"><h3>Endereço de recrutamento</h3>
+    <p className="explica">Carregando…</p></div>
+  return (
+    <div className="rh-card">
+      <h3>Endereço de recrutamento</h3>
+      <p className="explica">De qual endereço saem o convite e o lembrete de
+        entrevista. Em branco, eles saem do endereço padrão do sistema
+        {cfg.padrao ? <> (<code>{cfg.padrao}</code>)</> : null}.</p>
+      <input type="email" placeholder="recrutamento@suaempresa.com.br"
+             value={valor} onChange={(e) => setValor(e.target.value)} />
+      {cfg.depende_de_send_as && (
+        <p className="aviso-inline">⚠️ Este endereço só aparece nos e-mails
+          depois que o administrador do Microsoft 365 liberar a permissão
+          <strong> “Enviar como” (Send As)</strong> dele para a conta conectada
+          {cfg.conta_conectada ? <> (<code>{cfg.conta_conectada}</code>)</> : null}.
+          Até lá os convites <strong>continuam saindo normalmente</strong>, mas
+          pelo endereço de sempre — e o sistema avisa quando isso acontecer.</p>
+      )}
+      <div className="navegacao">
+        <button className="btn-secundario" onClick={async () => {
+          setMsg(null)
+          try {
+            await api.salvarRecrutamento({ email_recrutamento: valor.trim() })
+            await recarregar()
+            setMsg({ tipo: 'ok', texto: valor.trim()
+              ? 'Endereço de recrutamento salvo.'
+              : 'Endereço limpo — os e-mails voltam a sair do endereço padrão.' })
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: e.detail || e.message || 'Não foi possível salvar.' })
+          }
+        }}>Salvar</button>
+      </div>
+      {/* Mensagem PERTO do botão que a gerou — este card fica no meio da aba. */}
       <Msg msg={msg} />
     </div>
   )
