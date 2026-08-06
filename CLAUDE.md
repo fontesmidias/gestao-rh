@@ -88,6 +88,61 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Módulo que GERA documento entra no catálogo de documentos na MESMA leva**
+  (v2.67, cobrado pelo Bruno: *"a cada documento novo gerado, ele deve compor o
+  módulo de documentos também e todas as funcionalidades herdadas. bem como os
+  templates de email"*). É a regra da v2.21 — e a v2.66 a cumpriu **pela
+  metade**: pôs os 3 e-mails do Módulo de Entrevistas no `CATALOGO` de
+  `email_templates.py` e deixou `grep -c "entrevista"
+  services/documentos_catalogo.py` em **ZERO**, com o módulo gerando documento.
+  Ninguém percebeu até ele cobrar, porque metade cumprida *parece* cumprida.
+  Ao fechar módulo que produz PDF: entrada no `documentos_catalogo.py`, amostra
+  com dados fictícios e download — não só o gerador.
+  **Mas NÃO resolva isso acrescentando valor ao `DocumentoAssinavel`**: aquele
+  enum é a lista do que o CANDIDATO assina. `api/rh_ficha.py:38` faz
+  `_TODOS = list(DocumentoAssinavel)` e usa em `DOCS_POR_SECAO`, então editar os
+  dados pessoais de alguém passaria a **invalidar a ficha de entrevista**; e
+  `_docs_exigidos` faria a ficha virar pendência de assinatura no wizard. O
+  catálogo tem `Origem` (famílias `admissao` × `entrevista`), e
+  `_conferir_catalogo` reprova **no import** se um documento de entrevista virar
+  valor do enum.
+- **O DOSSIÊ varre `SolicitacaoAssinatura` SEM filtrar `origem`** (v2.67,
+  `services/dossie.py`): qualquer roteiro multi-signatário `concluida` com
+  `pdf_final_key` entra no dossiê do candidato, automaticamente. A ficha de
+  entrevista assinada por ali teria ido junto — com as notas e as justificativas
+  da seleção — para o documento que **circula** (cliente, pasta física). O
+  § 15.4 proíbe explicitamente (*"não não. no dossiê de admissão não."*), pelo
+  mesmo motivo que manteve resultado de teste fora do dossiê na v2.21. Por isso
+  a assinatura da ficha mora em tabela PRÓPRIA (`assinatura_entrevista`), fora
+  das três fontes que o dossiê lê (`Assinatura.pdf_key`,
+  `SlotDocumento.arquivo_pdf_key`, `SolicitacaoAssinatura.pdf_final_key`).
+  **Ao criar fluxo de assinatura novo, pergunte antes se ele deve aparecer no
+  dossiê** — o default do código é "aparece", e o vazamento é silencioso: uma
+  página a mais que ninguém confere. Coberto por mutação (0 → 2 páginas).
+- **Teste que não EXECUTA a linha mutada não protege nada** (v2.67, duas vezes na
+  mesma leva): (1) a asserção do `.ics` chamava `calendario.gerar_ics` DIRETO,
+  com `duracao_min=e.duracao_min` escrito no teste — testava a biblioteca, não a
+  LIGAÇÃO, e a mutação que chumbava `duracao_min=DURACAO_MIN` dentro do
+  `_anexo_ics` passava verde; (2) o teste do "um padrão por tipo" só conferia
+  listagens e nunca chamava `tornar-padrao`, então a mutação que fazia a rota
+  desmarcar o padrão de qualquer tipo também passava. É a família da tautologia
+  da v2.54/v2.64 numa variação nova: **a asserção tem que percorrer o caminho de
+  produção**, não reproduzir a lógica dele ao lado.
+- **Mutação suja o BANCO, e o estado sobrevive à restauração do código** (v2.67):
+  a mutação do `tornar_padrao` desmarcou o `padrao` do roteiro de triagem
+  semeado; depois de `cp backup` o teste continuou reprovando — reprovando
+  **código correto**. Já tinha mordido na v2.66 (`resolver_roteiro`). Duas
+  defesas: conferir o ESTADO do banco depois de rodar mutação, e escrever o teste
+  para **consertar o piso antes de afirmar sobre ele**, em vez de depender de
+  banco limpo.
+- **Título de seção órfão no PDF: o `auto_page_break` do fpdf quebra por
+  ELEMENTO** (v2.67, `entrevista_pdf._secao_junta`): ele garante que a FAIXA
+  caiba na página, não que caiba a faixa **mais a primeira linha do que vem
+  depois** — o título de uma competência ficava sozinho no pé da página 1 com a
+  tabela dele abrindo na página 2. A extração de texto passava; só apareceu
+  convertendo o PDF em IMAGEM e olhando (regra da v2.55). Reserve a altura do
+  BLOCO antes de desenhar a faixa, como o `campo()` das fichas já faz.
+
 - **Worker que não está nos DOIS arquivos de deploy simplesmente NÃO RODA em
   produção** (v2.66, achado ao pendurar o lembrete de entrevista): o
   `deploy/docker-compose.base.yml` rodava `avisar_vencimentos`, e o
@@ -1356,6 +1411,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   - **Ao concluir, escreve `Anotacao` no mini-CRM** — a entrevista não *é* uma
     anotação (o valor está na nota ancorada comparável), mas o histórico da
     pessoa fica num lugar só (padrão de `talentos.py::mudar_status`).
+  - **Documentos (v2.67)**: os três — ficha de entrevista, ficha de triagem e
+    roteiro publicado — vivem em `services/entrevista_pdf.py` e entram no
+    `documentos_catalogo.py` como família `Origem.entrevista`. A ficha é
+    ASSINÁVEL pelo RH que conduziu (`senha_sessao_rh`), em tabela própria
+    (`models/assinatura_entrevista.py`) **para não vazar no dossiê** — ver a
+    armadilha do `dossie.py` acima. Ficha incompleta e roteiro em rascunho não
+    geram documento; entrevista ARQUIVADA continua gerando (arquivar não apaga).
+  - **Triagem editável (v2.67)**: entra no mesmo catálogo com `tipo=triagem` e
+    **continua sem nota, competência ou âncora** — `validar_roteiro_triagem`
+    recusa NOMEANDO o campo proibido. **Um padrão por TIPO**: listagem,
+    métricas, `tornar_padrao` e `resolver_roteiro` são todos recortados por
+    tipo, senão eleger padrão de entrevista apagaria o fundo de herança da
+    triagem, em silêncio.
   - **Roteiro FIXO, sem campo de "outras perguntas"** (Lei 9.029/95): campo de
     pergunta livre é risco jurídico; roteiro pré-aprovado é defesa da empresa. O
     `observacao` é livre; o ROTEIRO não. **Seguro-desemprego** entra na triagem

@@ -1388,9 +1388,15 @@ export const rh = {
   // ---- Roteiros de entrevista (v2.66, § 14.1) ----
   // O catálogo do instrumento. Rascunho → publicado: só publicado se usa, e é
   // isso que sustenta "o roteiro foi aprovado ANTES de ser usado".
-  roteirosEntrevista: (incluirArquivados = false) =>
-    req(`/rh/roteiros-entrevista${incluirArquivados ? '?incluir_arquivados=true' : ''}`,
-        { headers: authRH() }),
+  // `tipo`: 'entrevista' (padrão) ou 'triagem' — são catálogos SEPARADOS, cada
+  // um com o seu roteiro padrão (v2.67). Misturá-los mostraria dois padrões.
+  roteirosEntrevista: (incluirArquivados = false, tipo = null) => {
+    const q = new URLSearchParams()
+    if (incluirArquivados) q.set('incluir_arquivados', 'true')
+    if (tipo) q.set('tipo', tipo)
+    const s = q.toString()
+    return req(`/rh/roteiros-entrevista${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
   roteiroEntrevista: (id) =>
     req(`/rh/roteiros-entrevista/${id}`, { headers: authRH() }),
   criarRoteiroEntrevista: (dados) =>
@@ -1413,6 +1419,34 @@ export const rh = {
         { method: 'POST', headers: authRH() }),
   excluirRoteiroEntrevista: (id) =>
     req(`/rh/roteiros-entrevista/${id}`, { method: 'DELETE', headers: authRH() }),
+
+  // ---- Documentos do módulo (v2.67, § 15.2-15.4) ----
+  // A ficha VIVE no Arquivo e na ficha da pessoa. NÃO vai ao dossiê de
+  // admissão: o dossiê circula, e nota de seleção é dado sensível.
+  urlDocumentoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/documento`,
+  // Baixa o PDF como BLOB para renderizar na tela (regra da v2.33: documento
+  // renderiza, não se baixa). `buscar` direto, sem o `req`, porque a resposta é
+  // binária — e o 422 da ficha incompleta precisa chegar com o motivo.
+  documentoEntrevista: async (id) => {
+    const r = await buscar(`${BASE}/rh/entrevistas/${id}/documento`,
+                           { headers: authRH() })
+    if (!r.ok) await lancarErro(r)
+    return r.blob()
+  },
+  documentoRoteiro: async (id) => {
+    const r = await buscar(`${BASE}/rh/roteiros-entrevista/${id}/documento`,
+                           { headers: authRH() })
+    if (!r.ok) await lancarErro(r)
+    return r.blob()
+  },
+  assinaturasEntrevista: (id) =>
+    req(`/rh/entrevistas/${id}/assinaturas`, { headers: authRH() }),
+  // Assinar = o RH que conduziu, com a senha da PRÓPRIA sessão
+  // (`prova_metodo="senha_sessao_rh"`). O entrevistado não assina.
+  assinarFichaEntrevista: (id, senha) =>
+    req(`/rh/entrevistas/${id}/assinar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ senha }) }),
+  urlDocumentoRoteiro: (id) => `${BASE}/rh/roteiros-entrevista/${id}/documento`,
 
   // ---- Reaproveitamento (§ 14.3) ----
   // Quem foi entrevistado para a vaga + aplicar a tag do mini-CRM em lote.

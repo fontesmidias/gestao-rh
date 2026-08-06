@@ -243,6 +243,9 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
   const [modalidade, setModalidade] = useState('')
   const [linkReuniao, setLinkReuniao] = useState('')
   const [enviarConvite, setEnviarConvite] = useState(false)
+  // --- v2.67 (§ 15.5 item 4): a duração vai para o `DTEND` do convite.
+  // Nasce em 60, que era a constante até a v2.66 — o RH ajusta quando precisa.
+  const [duracao, setDuracao] = useState(60)
   const [talentos, setTalentos] = useState([])
   const [candidatos, setCandidatos] = useState([])
   const [vagas, setVagas] = useState([])
@@ -274,6 +277,8 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
         local: local || null,
         modalidade: modalidade || null,
         link_reuniao: linkReuniao || null,
+        // Só acompanha quando há data: sem compromisso não há o que durar.
+        duracao_min: quando ? Number(duracao) || 60 : null,
         enviar_convite: enviarConvite,
       })
       aoCriar(criada)
@@ -338,6 +343,18 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
           <input type="datetime-local" value={quando}
                  onChange={(e) => setQuando(e.target.value)} />
         </label>
+        {/* Duração (v2.67, § 15.5 item 4) — só aparece com data marcada, porque
+            é ela que vira o `DTEND` do convite. Zero é recusado no servidor
+            (fim antes do começo faz o calendário descartar o evento). */}
+        {quando && (
+          <label className="campo">
+            <span className="rotulo">Duração (minutos)
+              <span className="dica-inline"> — é o que o convite reserva na
+                agenda da pessoa</span></span>
+            <input type="number" min="1" max="1440" value={duracao}
+                   onChange={(e) => setDuracao(e.target.value)} />
+          </label>
+        )}
         <div className="campo">
           <span className="rotulo">Modalidade</span>
           <SelectBusca valor={modalidade} aoEscolher={setModalidade}>

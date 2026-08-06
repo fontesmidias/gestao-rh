@@ -33,7 +33,7 @@ from app.api.auth_rh import requer_rh
 from app.core.db import get_db
 from app.models.entrevista import Entrevista
 from app.models.roteiro_entrevista import (SENIORIDADES, RoteiroEntrevista,
-                                           StatusRoteiro)
+                                           StatusRoteiro, TipoRoteiro)
 from app.models.usuario_rh import UsuarioRH
 from app.services import entrevistas as inst
 from app.services.auditoria import registrar
@@ -47,10 +47,32 @@ class RoteiroIn(BaseModel):
     cargo: str | None = None
     senioridade: str | None = None
     competencias: list | None = None
+    # v2.67 (§ 15.5 item 3): `entrevista` (padrão) ou `triagem`. A triagem usa
+    # `perguntas` e continua SEM nota, competência ou âncora.
+    tipo: str | None = None
+    perguntas: list | None = None
 
 
 class ArquivarRoteiroIn(BaseModel):
     motivo: str | None = None
+
+
+def _tipo_ou_422(valor: str | None) -> str:
+    """`entrevista` | `triagem`, com o padrão em `entrevista` (v2.67)."""
+    v = (valor or "").strip().lower() or TipoRoteiro.entrevista.value
+    if v not in {t.value for t in TipoRoteiro}:
+        raise HTTPException(status_code=422, detail={
+            "erro": "tipo_invalido",
+            "erros": [f"Tipo '{valor}': use entrevista ou triagem."]})
+    return v
+
+
+def _validar_por_tipo(tipo: str, nome, competencias, perguntas) -> list[str]:
+    """Cada natureza tem a sua validação — e é isso que impede a triagem
+    editável de virar avaliação (§ 4.1)."""
+    if tipo == TipoRoteiro.triagem.value:
+        return inst.validar_roteiro_triagem(nome, perguntas)
+    return inst.validar_roteiro(nome, competencias)
 
 
 def _senioridade_ou_422(valor: str | None) -> str | None:
@@ -75,9 +97,20 @@ def _senioridade_ou_422(valor: str | None) -> str | None:
 
 @router.get("/rh/roteiros-entrevista")
 def listar(db: Session = Depends(get_db),
-           incluir_arquivados: bool = False) -> dict:
-    """Lista + métricas para os cards. Arquivados ficam fora por padrão."""
-    consulta = select(RoteiroEntrevista)
+           incluir_arquivados: bool = False,
+           tipo: str | None = None) -> dict:
+    """Lista + métricas para os cards. Arquivados ficam fora por padrão.
+
+    **Filtra por TIPO, com `entrevista` como padrão** (v2.67). Não é preferência
+    de tela: cada natureza tem o SEU roteiro-raiz (`padrao=True`), porque cada
+    uma tem a sua herança — a entrevista cai no roteiro padrão de competências,
+    a triagem no de perguntas. Listar as duas juntas mostraria **dois** padrões
+    na mesma tela, e "qual é o padrão?" deixaria de ter resposta única. A
+    invariante que vale é *um padrão por tipo*.
+    """
+    tipo_filtro = _tipo_ou_422(tipo) if tipo else TipoRoteiro.entrevista.value
+    consulta = select(RoteiroEntrevista).where(
+        RoteiroEntrevista.tipo == tipo_filtro)
     if not incluir_arquivados:
         consulta = consulta.where(
             RoteiroEntrevista.status != StatusRoteiro.arquivado.value)
@@ -99,11 +132,15 @@ def listar(db: Session = Depends(get_db),
         d["entrevistas"] = usos.get(r.id, 0)
         itens.append(d)
 
+    # As métricas contam o MESMO recorte da lista — cards que somam os dois
+    # tipos diriam "3 publicados" numa tela que mostra 2.
     contagem = dict(db.execute(
         select(RoteiroEntrevista.status, func.count())
+        .where(RoteiroEntrevista.tipo == tipo_filtro)
         .group_by(RoteiroEntrevista.status)).all())
     return {
         "itens": itens,
+        "tipo": tipo_filtro,
         "senioridades": SENIORIDADES,
         "metricas": {
             "publicados": contagem.get(StatusRoteiro.publicado.value, 0),
@@ -118,18 +155,27 @@ def listar(db: Session = Depends(get_db),
 def criar(payload: RoteiroIn, db: Session = Depends(get_db),
           rh: UsuarioRH = Depends(requer_rh)) -> dict:
     """Cria um roteiro. Nasce **rascunho**, sempre — e rascunho não se usa."""
-    erros = inst.validar_roteiro(payload.nome, payload.competencias)
+    tipo = _tipo_ou_422(payload.tipo)
+    erros = _validar_por_tipo(tipo, payload.nome, payload.competencias,
+                              payload.perguntas)
     if erros:
         raise HTTPException(status_code=422,
                             detail={"erro": "roteiro_invalido", "erros": erros})
     sen = _senioridade_ou_422(payload.senioridade)
     cargo = (payload.cargo or "").strip() or None
+    e_triagem = tipo == TipoRoteiro.triagem.value
     r = RoteiroEntrevista(
         nome=payload.nome.strip()[:120], cargo=cargo,
         cargo_norm=normalizar_cargo(cargo) if cargo else None,
-        senioridade=sen,
+        senioridade=sen, tipo=tipo,
         status=StatusRoteiro.rascunho.value, versao=1,
-        competencias=inst.normalizar_competencias(payload.competencias),
+        # Cada natureza grava no SEU campo, e o outro fica nulo. Guardar
+        # competência num roteiro de triagem deixaria a âncora latente ali,
+        # esperando alguém "aproveitar".
+        competencias=(None if e_triagem
+                      else inst.normalizar_competencias(payload.competencias)),
+        perguntas=(inst.normalizar_perguntas(payload.perguntas)
+                   if e_triagem else None),
         padrao=False, criado_por=rh.email)
     db.add(r)
     # A ação principal é validada ANTES da auditoria: `registrar()` faz flush e
@@ -154,6 +200,38 @@ def ver(roteiro_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     return inst.dump_roteiro(r)
 
 
+@router.get("/rh/roteiros-entrevista/{roteiro_id}/documento")
+def documento_do_roteiro(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """O roteiro publicado em PDF (§ 15.2) — a peça que se anexa a uma defesa.
+
+    **Rascunho não gera documento** (cenário 33), e arquivado também não: um PDF
+    timbrado dizendo "roteiro de entrevista" sem o ato de aprovação datado é
+    exatamente o oposto do que o § 6 precisa provar — pareceria documento
+    aprovado sem ter sido. O 409 diz o motivo, para o RH saber que falta
+    publicar.
+    """
+    from app.services import entrevista_pdf as epdf
+    from app.services.export_planilha import slug
+
+    r = db.get(RoteiroEntrevista, roteiro_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="roteiro_nao_encontrado")
+    if r.status != StatusRoteiro.publicado.value:
+        raise HTTPException(status_code=409, detail={
+            "erro": "roteiro_nao_publicado",
+            "mensagem": "Só roteiro PUBLICADO vira documento. O documento serve "
+                        "para provar que o roteiro foi aprovado antes de ser "
+                        "usado — um rascunho não prova isso."})
+    pdf = epdf.gerar_roteiro(db, r)
+    registrar(db, "roteiro_entrevista_documento", ator="rh", ator_detalhe=rh.email,
+              detalhe={"roteiro": str(r.id), "versao": r.versao})
+    db.commit()
+    nome = slug(f"roteiro-{r.nome}-v{r.versao}", fallback="roteiro")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{nome}.pdf"'})
+
+
 @router.put("/rh/roteiros-entrevista/{roteiro_id}")
 def editar(roteiro_id: uuid.UUID, payload: RoteiroIn,
            db: Session = Depends(get_db),
@@ -175,7 +253,17 @@ def editar(roteiro_id: uuid.UUID, payload: RoteiroIn,
 
     nome = payload.nome if payload.nome is not None else r.nome
     comps = payload.competencias if payload.competencias is not None else r.competencias
-    erros = inst.validar_roteiro(nome, comps)
+    perg = payload.perguntas if payload.perguntas is not None else r.perguntas
+    # O TIPO não se troca por edição: um roteiro de triagem que virasse de
+    # entrevista carregaria as respostas já gravadas para dentro de uma ficha com
+    # nota. Quem quer a outra natureza cria outro roteiro.
+    tipo = getattr(r, "tipo", None) or TipoRoteiro.entrevista.value
+    if payload.tipo is not None and _tipo_ou_422(payload.tipo) != tipo:
+        raise HTTPException(status_code=422, detail={
+            "erro": "tipo_imutavel",
+            "erros": ["O tipo do roteiro não muda depois de criado — crie um "
+                      "roteiro novo com a outra natureza."]})
+    erros = _validar_por_tipo(tipo, nome, comps, perg)
     if erros:
         raise HTTPException(status_code=422,
                             detail={"erro": "roteiro_invalido", "erros": erros})
@@ -183,8 +271,10 @@ def editar(roteiro_id: uuid.UUID, payload: RoteiroIn,
     era_publicado = r.status == StatusRoteiro.publicado.value
     if payload.nome is not None:
         r.nome = payload.nome.strip()[:120]
-    if payload.competencias is not None:
+    if payload.competencias is not None and tipo != TipoRoteiro.triagem.value:
         r.competencias = inst.normalizar_competencias(payload.competencias)
+    if payload.perguntas is not None and tipo == TipoRoteiro.triagem.value:
+        r.perguntas = inst.normalizar_perguntas(payload.perguntas)
     if payload.cargo is not None:
         # O roteiro PADRÃO não tem cargo — ele é o fundo da herança. Deixar
         # alguém amarrá-lo a um cargo tiraria o piso do sistema sem aviso.
@@ -227,7 +317,8 @@ def publicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="roteiro_nao_encontrado")
     if r.status == StatusRoteiro.arquivado.value:
         raise HTTPException(status_code=409, detail="roteiro_arquivado")
-    erros = inst.validar_roteiro(r.nome, r.competencias)
+    erros = _validar_por_tipo(getattr(r, "tipo", None) or TipoRoteiro.entrevista.value,
+                              r.nome, r.competencias, r.perguntas)
     if erros:
         # Publicar é o que autoriza o uso: aqui a exigência é INTEIRA. Rascunho
         # pela metade se salva (para não perder o texto no meio da digitação);
@@ -257,8 +348,10 @@ def duplicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
     novo = RoteiroEntrevista(
         nome=f"{r.nome} (cópia)"[:120],
         cargo=r.cargo, cargo_norm=r.cargo_norm, senioridade=r.senioridade,
+        tipo=getattr(r, "tipo", None) or TipoRoteiro.entrevista.value,
         status=StatusRoteiro.rascunho.value, versao=1,
         competencias=inst.normalizar_competencias(r.competencias),
+        perguntas=inst.normalizar_perguntas(r.perguntas),
         # A cópia NUNCA nasce padrão: haveria dois fundos de herança e a
         # resolução escolheria um deles por ordem de versão, em silêncio.
         padrao=False, criado_por=rh.email)
@@ -321,8 +414,14 @@ def tornar_padrao(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
                     "erros": ["Publique o roteiro antes de torná-lo padrão — o "
                               "padrão é usado sem escolha do RH, então ele "
                               "precisa ter passado pela aprovação."]})
+    # **Só desmarca o padrão DO MESMO TIPO** (v2.67). Sem o recorte, eleger um
+    # roteiro de entrevista tiraria a marca do padrão de TRIAGEM — e a triagem
+    # ficaria sem fundo de herança, abrindo sem pergunta nenhuma. Cada natureza
+    # tem o seu piso; são heranças independentes.
+    tipo_dele = getattr(r, "tipo", None) or TipoRoteiro.entrevista.value
     anteriores = list(db.scalars(
-        select(RoteiroEntrevista).where(RoteiroEntrevista.padrao.is_(True))))
+        select(RoteiroEntrevista).where(RoteiroEntrevista.padrao.is_(True),
+                                        RoteiroEntrevista.tipo == tipo_dele)))
     for a in anteriores:
         if a.id != r.id:
             a.padrao = False

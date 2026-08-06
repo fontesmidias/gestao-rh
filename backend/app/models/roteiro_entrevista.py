@@ -53,6 +53,25 @@ class StatusRoteiro(str, Enum):
     arquivado = "arquivado"    # aposentado; entrevistas antigas seguem legíveis
 
 
+class TipoRoteiro(str, Enum):
+    """A NATUREZA do roteiro (v2.67, § 15.5 item 3).
+
+    O Bruno pediu que as perguntas de triagem também fossem editáveis. Elas
+    entram no MESMO catálogo, com a mesma mecânica rascunho→publicado — o que
+    muda é o conteúdo, e a diferença é de natureza, não de grau:
+
+    - `entrevista` usa `competencias` (com âncoras, escala 1–4 e as duas
+      variantes de pergunta);
+    - `triagem` usa `perguntas` e **continua sem nota, sem competência e sem
+      âncora**. Isso é o § 4.1 do documento e não é detalhe de implementação:
+      triagem é checagem de viabilidade, não entrevista curta. `validar_roteiro`
+      RECUSA âncora ou nota dentro de um roteiro de triagem, para que a
+      editabilidade não vire a porta pela qual a triagem vira avaliação.
+    """
+    entrevista = "entrevista"
+    triagem = "triagem"
+
+
 # Senioridades aceitas. Lista FIXA de propósito (mesma escolha do `SENIORIDADES`
 # do banco de itens de provas): senioridade como texto livre viraria
 # "pleno"/"Pleno"/"plena" e a herança pararia de casar em silêncio.
@@ -66,6 +85,12 @@ class RoteiroEntrevista(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     nome: Mapped[str] = mapped_column(String(120))
+
+    # entrevista | triagem (v2.67). Indexado porque a listagem e a resolução
+    # por herança filtram por ele em toda consulta — sem o índice, o catálogo
+    # de triagem varreria a tabela inteira dos roteiros de entrevista junto.
+    tipo: Mapped[str] = mapped_column(
+        String(20), default=TipoRoteiro.entrevista.value, index=True)
 
     # Cargo é TEXTO LIVRE em todo o sistema; `cargo_norm` é a chave de
     # casamento (minúsculo, sem acento, espaços colapsados). None = o roteiro
@@ -85,6 +110,13 @@ class RoteiroEntrevista(Base):
     # JSON e não tabela por item, pelo mesmo motivo de `Avaliacao.competencias`:
     # o conteúdo é lido e escrito inteiro, nunca consultado por item.
     competencias: Mapped[list | None] = mapped_column(JSONB)
+
+    # As perguntas do roteiro de TRIAGEM: [{chave, pergunta, nunca_exclui?}].
+    # Coluna separada de `competencias` de propósito — guardar as duas naturezas
+    # no mesmo campo faria "a triagem tem âncora?" virar uma pergunta sobre o
+    # conteúdo do JSON em vez de uma sobre o schema, e a separação é justamente
+    # o que o § 4.1 protege.
+    perguntas: Mapped[list | None] = mapped_column(JSONB)
 
     # O roteiro-raiz. Semeado pela migration a partir da constante que era a
     # fonte até a v2.65. Não se apaga (cenário 25).

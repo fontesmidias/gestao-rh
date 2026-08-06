@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
+import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 import { fmtDataHora } from '../fmt.js'
 
 // Catálogo de roteiros de entrevista (v2.66, § 14.1) — Configurações.
@@ -40,14 +41,32 @@ export default function RoteirosEntrevista() {
   const [editando, setEditando] = useState(null)   // id em edição, ou 'novo'
   const [incluirArquivados, setIncluirArquivados] = useState(false)
   const [msg, setMsg] = useState(null)
+  // v2.67 (§ 15.5 item 3): dois catálogos, um por natureza. Cada um tem o SEU
+  // roteiro padrão — juntos, a tela mostraria dois padrões e "qual é o padrão?"
+  // deixaria de ter resposta.
+  const [tipo, setTipo] = useState('entrevista')
+  const [doc, setDoc] = useState(null)
 
   const carregar = () => {
     setErroCarga(null)
-    return api.roteirosEntrevista(incluirArquivados)
+    return api.roteirosEntrevista(incluirArquivados, tipo)
       .then(setDados)
       .catch((e) => setErroCarga(e.detail || e.message || 'Falha ao carregar.'))
   }
-  useEffect(() => { carregar() }, [incluirArquivados])
+  useEffect(() => { carregar() }, [incluirArquivados, tipo])
+
+  // O documento RENDERIZA na tela (regra da v2.33) — nada de abrir aba nova
+  // para a API, que no Chrome do Android baixa em vez de exibir.
+  const verDocumento = async (r) => {
+    setMsg(null)
+    try {
+      const blob = await api.documentoRoteiro(r.id)
+      setDoc({ blob, nome: `roteiro-${r.nome}.pdf` })
+    } catch (e) {
+      const d = e.detail
+      setMsg({ erro: true, texto: d?.mensagem || d?.erro || d || e.message })
+    }
+  }
 
   const acao = async (fn, textoOk) => {
     setMsg(null)
@@ -85,13 +104,41 @@ export default function RoteirosEntrevista() {
         aprovado <em>antes</em> de ser usado, que é a defesa da empresa se
         alguém questionar o que foi perguntado.
       </p>
-      <p className="explica">
-        A escolha é por <strong>cargo</strong>, com exceção por senioridade: o
-        mais específico vence. Cargo sem roteiro próprio usa o padrão — nunca
-        fica sem.
-      </p>
+      {/* A herança por cargo é da ENTREVISTA. A triagem não herda: "aceita a
+          escala?" vale para qualquer posto — o que muda entre cargos é a
+          resposta, não a pergunta. Repetir o texto na aba errada ensinaria uma
+          regra que não existe. */}
+      {tipo === 'entrevista' ? (
+        <p className="explica">
+          A escolha é por <strong>cargo</strong>, com exceção por senioridade: o
+          mais específico vence. Cargo sem roteiro próprio usa o padrão — nunca
+          fica sem.
+        </p>
+      ) : (
+        <p className="explica">
+          A triagem é <strong>checagem de viabilidade</strong>: perguntas de
+          sim/não que decidem se vale gastar uma hora presencial. Ela não tem
+          nota, competência nem âncora — e continua assim, mesmo sendo editável.
+          O seguro-desemprego é registrado como contexto e <strong>nunca</strong>
+          {' '}é critério de exclusão.
+        </p>
+      )}
 
       {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
+
+      {/* Duas naturezas, dois catálogos (v2.67). A triagem é checagem de
+          viabilidade: perguntas de sim/não, SEM nota, competência ou âncora —
+          e é assim que ela continua sendo, mesmo agora que é editável. */}
+      <div className="rh-abas">
+        <button className={tipo === 'entrevista' ? 'ativa' : ''}
+                onClick={() => { setTipo('entrevista'); setEditando(null) }}>
+          Entrevista — avaliação ancorada
+        </button>
+        <button className={tipo === 'triagem' ? 'ativa' : ''}
+                onClick={() => { setTipo('triagem'); setEditando(null) }}>
+          Triagem — checagem de viabilidade
+        </button>
+      </div>
 
       <div className="rh-metricas">
         <div className="rh-metrica"><strong>{dados.metricas.publicados}</strong><span>Publicados</span></div>
@@ -113,7 +160,7 @@ export default function RoteirosEntrevista() {
       </div>
 
       {editando === 'novo' && (
-        <FormRoteiro senioridades={dados.senioridades}
+        <FormRoteiro senioridades={dados.senioridades} tipo={tipo}
                      aoFechar={() => { setEditando(null); carregar() }}
                      aoErro={(t) => setMsg({ erro: true, texto: t })} />
       )}
@@ -125,6 +172,7 @@ export default function RoteirosEntrevista() {
       {dados.itens.map((r) => (
         editando === r.id ? (
           <FormRoteiro key={r.id} roteiro={r} senioridades={dados.senioridades}
+                       tipo={tipo}
                        aoFechar={() => { setEditando(null); carregar() }}
                        aoErro={(t) => setMsg({ erro: true, texto: t })} />
         ) : (
@@ -135,7 +183,9 @@ export default function RoteirosEntrevista() {
                 <span className="explica">
                   {r.cargo ? `cargo: ${r.cargo}` : 'vale para os cargos sem roteiro próprio'}
                   {r.senioridade && ` · ${r.senioridade}`}
-                  {` · ${r.competencias.length} competência(s)`}
+                  {r.tipo === 'triagem'
+                    ? ` · ${(r.perguntas || []).length} pergunta(s)`
+                    : ` · ${(r.competencias || []).length} competência(s)`}
                   {r.entrevistas > 0 && ` · usado em ${r.entrevistas} entrevista(s)`}
                 </span>
                 <div>
@@ -156,23 +206,44 @@ export default function RoteirosEntrevista() {
               </div>
             </div>
 
-            <details>
-              <summary>ver as competências e âncoras deste roteiro</summary>
-              {r.competencias.map((cmp) => (
-                <div className="campo" key={cmp.chave}>
-                  <span className="rotulo">{cmp.nome}</span>
-                  <ul>
-                    {['4', '3', '2', '1'].map((n) => (
-                      <li key={n}><strong>{n}</strong> — {cmp.ancoras[n]}</li>
-                    ))}
-                  </ul>
-                  <span className="explica">
-                    Comportamental: {cmp.perguntas.comportamental}<br />
-                    Situacional: {cmp.perguntas.situacional}
-                  </span>
-                </div>
-              ))}
-            </details>
+            {/* O conteúdo depende da NATUREZA (v2.67). O rótulo antigo dizia
+                "competências e âncoras" em todo roteiro — num de TRIAGEM isso
+                é falso duas vezes: ela não tem nem uma nem outra, e a lista
+                abriria VAZIA. Defeito visível só na tela renderizada; o código
+                parecia certo, porque `r.competencias` simplesmente vem vazio.
+                É a regra da v2.47: conferir a tela, não só o código. */}
+            {r.tipo === 'triagem' ? (
+              <details>
+                <summary>ver as perguntas deste roteiro</summary>
+                <ul>
+                  {(r.perguntas || []).map((p) => (
+                    <li key={p.chave}>{p.pergunta}</li>
+                  ))}
+                </ul>
+                <span className="explica">
+                  Todas se respondem com sim / não / não sei. A triagem não
+                  atribui nota nem avalia competência.
+                </span>
+              </details>
+            ) : (
+              <details>
+                <summary>ver as competências e âncoras deste roteiro</summary>
+                {(r.competencias || []).map((cmp) => (
+                  <div className="campo" key={cmp.chave}>
+                    <span className="rotulo">{cmp.nome}</span>
+                    <ul>
+                      {['4', '3', '2', '1'].map((n) => (
+                        <li key={n}><strong>{n}</strong> — {cmp.ancoras[n]}</li>
+                      ))}
+                    </ul>
+                    <span className="explica">
+                      Comportamental: {cmp.perguntas.comportamental}<br />
+                      Situacional: {cmp.perguntas.situacional}
+                    </span>
+                  </div>
+                ))}
+              </details>
+            )}
 
             <div className="rh-conferencia-acoes">
               {r.status !== 'arquivado' && (
@@ -191,6 +262,17 @@ export default function RoteirosEntrevista() {
                                           'Cópia criada como rascunho.')}>
                 Duplicar
               </button>
+              {/* O documento do roteiro (v2.67, § 15.2) — só do PUBLICADO. É a
+                  peça que se anexa a uma defesa: prova que o roteiro foi
+                  aprovado ANTES de ser usado, com data e autor. O botão nem
+                  aparece no rascunho, em vez de aparecer e dar 409. */}
+              {r.tem_documento && (
+                <button className="btn-secundario btn-mini"
+                        title="PDF do roteiro aprovado, com versão, quem publicou e quando."
+                        onClick={() => verDocumento(r)}>
+                  Ver documento
+                </button>
+              )}
               {r.status === 'publicado' && !r.padrao && (
                 <button className="btn-secundario btn-mini"
                         title="Passa a ser o roteiro usado quando o cargo não tem um próprio."
@@ -231,6 +313,11 @@ export default function RoteirosEntrevista() {
           </div>
         )
       ))}
+
+      {doc && (
+        <VisualizadorArquivo blob={doc.blob} nome={doc.nome}
+                             aoFechar={() => setDoc(null)} />
+      )}
     </div>
   )
 }
@@ -239,12 +326,20 @@ export default function RoteirosEntrevista() {
 // O formulário do roteiro — abre NA LINHA do item, nunca no topo da tela.
 // --------------------------------------------------------------------------
 
-function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
+function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro, tipo = 'entrevista' }) {
+  // O tipo do roteiro EXISTENTE manda; só o novo herda a aba aberta. Trocar o
+  // tipo por edição é recusado no servidor (as respostas já gravadas iriam para
+  // uma ficha com nota), e a tela não deve oferecer o que o servidor recusa.
+  const eTriagem = (roteiro?.tipo || tipo) === 'triagem'
   const [nome, setNome] = useState(roteiro?.nome || '')
   const [cargo, setCargo] = useState(roteiro?.cargo || '')
   const [senioridade, setSenioridade] = useState(roteiro?.senioridade || '')
   const [comps, setComps] = useState(
     roteiro?.competencias?.length ? roteiro.competencias : [COMPETENCIA_VAZIA()])
+  // As perguntas da TRIAGEM: só texto. Sem nota, sem âncora, sem competência —
+  // é o § 4.1, e o servidor recusa com 422 se algum desses campos aparecer.
+  const [perguntas, setPerguntas] = useState(
+    roteiro?.perguntas?.length ? roteiro.perguntas : [{ pergunta: '' }])
   const [salvando, setSalvando] = useState(false)
   // Mensagem LOCAL: o formulário abre no meio da lista, longe do topo — a
   // confirmação nasce perto do botão que a gerou (regra da v1.96/v2.47).
@@ -263,8 +358,18 @@ function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
     setSalvando(true)
     setMsg(null)
     try {
-      const corpo = {
+      const corpo = eTriagem ? {
         nome,
+        tipo: 'triagem',
+        // Só o TEXTO da pergunta vai — a chave é derivada no servidor. Nada de
+        // nota, âncora ou competência: a triagem editável não pode virar a
+        // porta pela qual ela vira entrevista curta.
+        perguntas: perguntas
+          .map((p) => ({ pergunta: (p.pergunta || '').trim() }))
+          .filter((p) => p.pergunta),
+      } : {
+        nome,
+        tipo: 'entrevista',
         cargo: cargo || null,
         senioridade: senioridade || null,
         // A chave é derivada do nome quando o RH não a escreveu: é chave
@@ -319,6 +424,11 @@ function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
             <input value={nome} onChange={(e) => setNome(e.target.value)}
                    placeholder="Vigia — operacional" />
           </label>
+          {/* Cargo e senioridade só existem na ENTREVISTA: a triagem não herda
+              por cargo, porque "aceita a escala?" e "consegue chegar?" valem
+              para qualquer posto — o que muda entre cargos é a RESPOSTA, não a
+              pergunta. Campos que não fazem nada seriam pior que ausentes. */}
+          {!eTriagem && (
           <label className="campo">
             <span className="rotulo">Cargo
               <span className="dica-inline"> — em branco, vale para todos os
@@ -327,6 +437,8 @@ function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
                    onChange={(e) => setCargo(e.target.value)}
                    placeholder="Vigia" />
           </label>
+          )}
+          {!eTriagem && (
           <div className="campo">
             <span className="rotulo">Senioridade
               <span className="dica-inline"> — em branco, vale para todas</span></span>
@@ -345,9 +457,41 @@ function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
               ))}
             </SelectBusca>
           </div>
+          )}
         </div>
       </div>
 
+      {eTriagem ? (
+        <div>
+          <span className="rh-conferencia-bloco-titulo">Perguntas de viabilidade</span>
+          <p className="explica">
+            Cada pergunta se responde com <strong>sim / não / não sei</strong>,
+            por telefone, em segundos. A triagem <strong>não tem nota, nem
+            competência, nem âncora</strong> — ela decide se vale gastar uma hora
+            presencial, não se a pessoa é boa. Pergunta que exige julgamento é
+            competência, e o lugar dela é a entrevista.
+          </p>
+          {perguntas.map((p, i) => (
+            <div className="campo" key={i}>
+              <span className="rotulo">Pergunta {i + 1}</span>
+              <input value={p.pergunta || ''}
+                     onChange={(e) => setPerguntas(perguntas.map((q, j) => (
+                       j === i ? { ...q, pergunta: e.target.value } : q)))}
+                     placeholder="A escala é 12x36 noturno. Isso cabe na sua rotina?" />
+              {perguntas.length > 1 && (
+                <button className="btn-remover btn-mini"
+                        onClick={() => setPerguntas(perguntas.filter((_, j) => j !== i))}>
+                  Remover
+                </button>
+              )}
+            </div>
+          ))}
+          <button className="btn-secundario btn-mini"
+                  onClick={() => setPerguntas([...perguntas, { pergunta: '' }])}>
+            ＋ Outra pergunta
+          </button>
+        </div>
+      ) : (
       <div>
         <div>
           <span className="rh-conferencia-bloco-titulo">Competências avaliadas</span>
@@ -418,6 +562,7 @@ function FormRoteiro({ roteiro, senioridades, aoFechar, aoErro }) {
           </p>
         </div>
       </div>
+      )}
 
       {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
 

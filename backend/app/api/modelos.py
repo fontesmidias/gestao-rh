@@ -170,11 +170,37 @@ def previa_documento_sistema(chave: str, db: Session = Depends(get_db),
     porque a amostra não tem ficha — e é isso mesmo que o RH precisa ver: o
     layout e o texto fixo.
     """
-    from app.services.documentos_catalogo import CATALOGO_POR_CHAVE, documento
+    from app.services.documentos_catalogo import (CATALOGO_POR_CHAVE, da_entrevista,
+                                                  documento)
     from app.services.export_planilha import slug
     from app.services.fichas import GERADORES
     if chave not in CATALOGO_POR_CHAVE:
         raise HTTPException(status_code=404, detail="documento_desconhecido")
+
+    # Família ENTREVISTA (v2.67): os geradores recebem uma entrevista ou um
+    # roteiro, não um candidato — por isso a amostra é outra. Ver o docstring de
+    # `documentos_catalogo.Origem` para por que estes documentos NÃO entraram no
+    # `DocumentoAssinavel` (entrariam como pendência de assinatura do candidato
+    # no wizard e seriam invalidados ao editar a ficha dele).
+    if da_entrevista(chave):
+        from app.services import entrevista_pdf as epdf
+        try:
+            if chave == "entrevista_ficha":
+                pdf = epdf.gerar_ficha_entrevista(
+                    db, epdf.entrevista_de_amostra("entrevista"), epdf.PESSOA_AMOSTRA)
+            elif chave == "entrevista_triagem":
+                pdf = epdf.gerar_ficha_triagem(
+                    db, epdf.entrevista_de_amostra("triagem"), epdf.PESSOA_AMOSTRA)
+            else:
+                pdf = epdf.gerar_roteiro(db, epdf.roteiro_de_amostra("entrevista"))
+        except Exception as exc:
+            raise HTTPException(status_code=422,
+                                detail=f"falha_ao_gerar_previa: {exc}") from exc
+        nome = slug(documento(chave).rotulo, fallback=chave)
+        return StreamingResponse(
+            io.BytesIO(pdf), media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="amostra-{nome}.pdf"'})
+
     gerador = GERADORES.get(chave)
     if gerador is None:  # pragma: no cover — o catálogo cobre o enum inteiro
         raise HTTPException(status_code=404, detail="documento_sem_gerador")

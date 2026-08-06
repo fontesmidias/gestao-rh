@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
+import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 import { fmtDataHora } from '../fmt.js'
 
 // A ficha da entrevista — DUAS naturezas, um componente.
@@ -216,6 +217,11 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
           </button>
         </div>
       )}
+
+      {/* O DOCUMENTO da ficha (v2.67, § 15.2-15.4). Fica no fim porque só
+          existe depois de a entrevista estar concluída — mostrá-lo antes seria
+          oferecer um botão que responde 422. */}
+      <DocumentoDaFicha entrevistaId={entrevistaId} status={e.status} />
     </div>
   )
 }
@@ -405,5 +411,159 @@ function Avaliacao({ form, campos, marcar, setCampos, desabilitado }) {
         )}
       </div>
     </>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
+// O DOCUMENTO da ficha (v2.67, § 15.2-15.4)
+//
+// **Onde a ficha VIVE**: no Arquivo e aqui, na ficha da pessoa. E **onde NÃO
+// vive**: no dossiê de admissão. O Bruno chegou a incluir e corrigiu na mesma
+// sessão — o dossiê CIRCULA (cliente, pasta física, quem pedir) e nota de
+// seleção com justificativa escrita é dado sensível sobre a pessoa. A garantia
+// é estrutural no backend (tabela própria, fora das três fontes que o
+// `services/dossie.py` lê) e há teste por mutação; o texto abaixo existe para
+// que quem OPERA a tela também saiba disso.
+//
+// O documento RENDERIZA na tela (regra da v2.33) — nada de `window.open` para a
+// API, que no Chrome do Android baixa em vez de exibir.
+// ---------------------------------------------------------------------------
+function DocumentoDaFicha({ entrevistaId, status }) {
+  const [dados, setDados] = useState(null)
+  const [erroCarga, setErroCarga] = useState(null)
+  const [doc, setDoc] = useState(null)
+  const [senha, setSenha] = useState('')
+  const [assinando, setAssinando] = useState(false)
+  // Mensagem local: este bloco fica no PÉ de uma ficha longa; uma confirmação
+  // no topo da tela seria invisível para quem clicou aqui (regra da v2.47).
+  const [msg, setMsg] = useState(null)
+
+  const carregar = () => {
+    setErroCarga(null)
+    return api.assinaturasEntrevista(entrevistaId)
+      .then(setDados)
+      .catch((err) => setErroCarga(err.detail?.erro || err.detail || err.message
+                                   || 'Falha ao carregar.'))
+  }
+  useEffect(() => { carregar() }, [entrevistaId, status])
+
+  // Falha de carga vira ERRO com botão de tentar de novo, nunca `null` silencioso
+  // (regra da v2.46) — e o guard vem ANTES do primeiro uso do estado nulo.
+  if (erroCarga) {
+    return (
+      <div className="rh-card">
+        <p className="alerta">Não foi possível carregar as assinaturas: {erroCarga}</p>
+        <button className="btn-secundario btn-mini" onClick={carregar}>Tentar de novo</button>
+      </div>
+    )
+  }
+  if (dados === null) return <p className="explica">Carregando o documento…</p>
+
+  const impedimentos = dados.impedimentos || []
+  const vias = dados.itens || []
+  const viva = vias.filter((v) => !v.substituida_em)
+
+  const abrir = async () => {
+    setMsg(null)
+    try {
+      const blob = await api.documentoEntrevista(entrevistaId)
+      setDoc({ blob, nome: 'ficha-de-entrevista.pdf' })
+    } catch (err) {
+      const d = err.detail
+      setMsg({ erro: true,
+               texto: d?.faltando ? d.faltando.join(' · ') : (d?.erro || d || err.message) })
+    }
+  }
+
+  const assinar = async () => {
+    setAssinando(true)
+    setMsg(null)
+    try {
+      const r = await api.assinarFichaEntrevista(entrevistaId, senha)
+      setSenha('')
+      await carregar()
+      setMsg({ texto: `Ficha assinada (via ${r.via}).` })
+    } catch (err) {
+      const d = err.detail
+      setMsg({ erro: true,
+               texto: d === 'senha_invalida'
+                 ? 'Senha incorreta — é a senha do seu login no painel.'
+                 : (d?.faltando ? d.faltando.join(' · ') : (d?.erro || d || err.message)) })
+    } finally { setAssinando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      <span className="rh-conferencia-bloco-titulo">Documento da ficha</span>
+      <p className="explica">
+        Fica no Arquivo e aqui, na ficha da pessoa. <strong>Não entra no dossiê
+        de admissão</strong> — o dossiê circula, e a nota da seleção é dado
+        sensível sobre a pessoa.
+      </p>
+
+      {impedimentos.length > 0 ? (
+        // Diz ANTES o que impede, em vez de deixar o botão ligado para dar 422
+        // no clique.
+        <p className="alerta">{impedimentos.join(' · ')}</p>
+      ) : (
+        <>
+          <div className="rh-conferencia-acoes">
+            <button className="btn-secundario btn-mini" onClick={abrir}>
+              Ver o documento
+            </button>
+          </div>
+
+          {viva.length > 0 ? (
+            <p className="explica">
+              Assinada por {viva[viva.length - 1].assinante} em{' '}
+              {fmtDataHora(viva[viva.length - 1].assinado_em)}.
+            </p>
+          ) : (
+            <label className="campo">
+              <span className="rotulo">Assinar como quem conduziu
+                <span className="dica-inline"> — confirme com a senha do seu
+                  login. O entrevistado não assina.</span></span>
+              <input type="password" value={senha} autoComplete="off"
+                     onChange={(ev) => setSenha(ev.target.value)}
+                     placeholder="Sua senha do painel" />
+            </label>
+          )}
+
+          {viva.length === 0 && (
+            <div className="rh-conferencia-acoes">
+              <button className="btn-principal btn-mini" onClick={assinar}
+                      disabled={assinando || !senha}>
+                {assinando ? 'Assinando…' : 'Assinar a ficha'}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {vias.length > 1 && (
+        // As vias ANTERIORES continuam listadas: alterar a entrevista depois de
+        // assinar gera uma via NOVA, e a anterior permanece com o hash dela —
+        // ato assinado não se edita retroativamente.
+        <details>
+          <summary>vias anteriores ({vias.length - viva.length})</summary>
+          <ul>
+            {vias.filter((v) => v.substituida_em).map((v) => (
+              <li key={v.id}>
+                via {v.via} — {v.assinante}, {fmtDataHora(v.assinado_em)}
+                {' '}(substituída em {fmtDataHora(v.substituida_em)})
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
+
+      {doc && (
+        <VisualizadorArquivo blob={doc.blob} nome={doc.nome}
+                             aoFechar={() => setDoc(null)} />
+      )}
+    </div>
   )
 }

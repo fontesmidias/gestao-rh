@@ -11,6 +11,109 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.67.0] — 2026-08-05 — Documento gerado que não entra no catálogo não existe
+
+Fase 4 do Módulo de Entrevistas (§ 15 de
+`docs/planejamento/12-modulo-de-entrevistas.md`). O Bruno respondeu as 5
+perguntas em aberto da v2.66 e cravou uma **regra geral**, que é o item mais
+importante desta leva:
+
+> *"a cada documento novo gerado, ele deve compor o módulo de documentos também
+> e todas as funcionalidades herdadas. bem como os templates de email"*
+
+### Por que isso é uma cobrança, e não um pedido novo
+
+É a regra da v2.21 (*"e-mail novo e documento novo NASCEM na sua página"*)
+sendo cobrada — e ela estava sendo cumprida **pela metade**: a v2.66 pôs os 3
+e-mails do módulo no `CATALOGO` de `email_templates.py` e
+`grep -c "entrevista" services/documentos_catalogo.py` devolvia **zero**,
+enquanto o módulo gerava documentos. Documento gerado sem entrada no catálogo é
+documento que o RH não consegue ver, conferir nem versionar.
+
+### Os três documentos (§ 15.2)
+
+`entrevista_ficha` (híbrido), `entrevista_triagem` (formulário) e
+`entrevista_roteiro` (híbrido), com amostra em PDF a partir de dados
+**fictícios que nunca vão ao banco** (id `…0000e7`, o marcador que denuncia
+vazamento — há teste).
+
+**O catálogo ganhou DUAS famílias em vez de valores novos no enum.** A
+alternativa óbvia — acrescentar `entrevista_ficha` ao `DocumentoAssinavel` —
+seria destrutiva por dois caminhos que só aparecem lendo o código:
+`api/rh_ficha.py:38` faz `_TODOS = list(DocumentoAssinavel)` e usa a lista em
+`DOCS_POR_SECAO`, então **editar os dados pessoais de alguém passaria a
+invalidar a ficha de entrevista dele**; e `_docs_exigidos` faria a ficha virar
+pendência de assinatura do candidato no wizard. `_conferir_catalogo` agora
+cobra a cobertura exata do enum para a família `admissao` e **reprova no import
+se um documento de entrevista virar valor do enum**.
+
+Nenhum gerador existente foi substituído (regra da v2.19): o hash do ato de
+assinatura é calculado sobre o PDF gerado.
+
+### A ficha é assinável pelo RH que conduziu (§ 15.3)
+
+Logado, com a senha da própria sessão (`prova_metodo="senha_sessao_rh"`, o
+método de `solicitacoes_assinatura.py:400`). O entrevistado **não** assina —
+exigiria mandar link a quem talvez não seja contratado, e o link lhe daria
+acesso às notas escritas a seu respeito. Assinar de novo cria a via SEGUINTE; a
+anterior permanece com o hash dela (regra de 2026-07-15).
+
+### E NÃO entra no dossiê de admissão (§ 15.4)
+
+O Bruno incluiu e corrigiu na mesma sessão: *"não não. no dossiê de admissão
+não."* Mesma regra que manteve resultado de teste fora do dossiê na v2.21 — **o
+dossiê circula** (cliente, pasta física) e nota de seleção com justificativa é
+dado sensível.
+
+**A garantia é ESTRUTURAL, não uma lembrança.** `services/dossie.py` varre toda
+`SolicitacaoAssinatura` concluída com `pdf_final_key` **sem filtrar `origem`**:
+assinar a ficha por ali a colocaria no dossiê automaticamente, com uma página a
+mais que ninguém veria. Por isso a assinatura mora em tabela PRÓPRIA
+(`assinatura_entrevista`), fora das três fontes que o dossiê lê. Coberto por
+mutação: incluir a ficha no `gerar_dossie` faz o teste falhar (o dossiê medido
+foi de 0 para 2 páginas).
+
+### As outras quatro respostas (§ 15.5)
+
+1. **Vaga passa pela lixeira** — `DELETE /rh/vagas/{id}` era a única exclusão do
+   painel que era delete FÍSICO. O `ondelete=SET NULL` + `vaga_titulo`
+   **continuam**: a lixeira guarda a vaga, o snapshot mantém a entrevista
+   legível — e se um dia a lixeira for expurgada (o prazo é configurável), a
+   entrevista continua dizendo para qual vaga a conversa foi.
+3. **Triagem editável** — entra no mesmo catálogo como `tipo=triagem`, mesma
+   mecânica rascunho→publicado, e **continua sem nota, sem competência e sem
+   âncora**: `validar_roteiro_triagem` recusa com 422 que NOMEIA o campo
+   proibido. Triagem publicada sem pergunta nenhuma também é recusada (cenário
+   35) — checagem vazia não é checagem.
+4. **`duracao_min`** na entrevista, padrão 60, alimentando o `DTEND` do `.ics`.
+   Zero ou negativo é recusado (cenário 37): `DTEND` anterior ao `DTSTART` faz o
+   calendário de quem recebe descartar o evento.
+5. **`email_recrutamento`** na config dinâmica, usada no `ORGANIZER` do `.ics` e
+   nos e-mails de entrevista, **caindo no `smtp_from` quando vazia** (cenário
+   36) — nunca falha por estar em branco. Limite registrado com honestidade: o
+   override de remetente vale no caminho SMTP; nos caminhos M365/Google/webhook
+   a mensagem sai da caixa conectada por construção, e forjar o `From` ali daria
+   e-mail rejeitado — pior que sair do endereço de sempre.
+
+### Um padrão por TIPO — defeito achado pela suíte antiga
+
+A semente da triagem nasce `padrao=True`, e a listagem mostrava os dois tipos
+juntos: apareciam **dois** padrões, e "qual é o padrão?" deixava de ter
+resposta. Pior, o `tornar-padrao` desmarcava o padrão do OUTRO tipo, deixando a
+triagem sem fundo de herança — a ficha abriria sem pergunta nenhuma, **sem erro
+na tela**. Hoje a listagem, as métricas, o `tornar_padrao` e o
+`resolver_roteiro` são todos recortados por tipo.
+
+### O que foi conferido na TELA, não só no código
+
+- **Título de seção órfão no PDF do roteiro**: a faixa "COMPETÊNCIA: CUMPRIMENTO
+  DE NORMA E PROCEDIMENTO" caía na última linha da página 1 e a tabela dela
+  abria na página 2. O `set_auto_page_break` do fpdf garante que a FAIXA caiba,
+  não que caiba a faixa mais o que vem depois. A extração de texto passava.
+- **Rótulo mentindo na tela de roteiros**: o `<details>` dizia "ver as
+  competências e âncoras deste roteiro" **em roteiro de triagem**, que não tem
+  nem uma nem outra — e a lista abria vazia.
+
 ## [2.66.0] — 2026-08-05 — O roteiro tem que ser aprovado antes de ser usado
 
 Fase 3 do Módulo de Entrevistas — os quatro pedidos do Bruno depois de ver a

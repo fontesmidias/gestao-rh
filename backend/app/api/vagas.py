@@ -111,11 +111,29 @@ def editar_vaga(vaga_id: uuid.UUID, payload: VagaIn, db: Session = Depends(get_d
 @router.delete("/rh/vagas/{vaga_id}", status_code=204)
 def excluir_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+    """Exclui a vaga — **pela LIXEIRA** (v2.67, § 15.5 item 1).
+
+    Até a v2.66 este era um delete FÍSICO, a única exclusão do painel que não
+    passava pela lixeira; a pendência estava registrada desde a v2.64 e o Bruno
+    respondeu "sim". Agora segue o padrão das provas
+    (`api/provas.py::excluir_prova`): snapshot antes do delete, retenção
+    configurável, restaurável.
+
+    **O `ondelete=SET NULL` e o snapshot `vaga_titulo` da entrevista CONTINUAM**
+    — são defesa em profundidade, não redundância que a lixeira torne inútil.
+    A lixeira guarda a VAGA; o snapshot mantém a ENTREVISTA legível enquanto a
+    vaga não existir. Se um dia alguém expurgar a lixeira (o prazo é
+    configurável e roda sozinho), a entrevista continua dizendo para qual vaga a
+    conversa foi — que é o cenário 4.
+    """
     v = db.get(Vaga, vaga_id)
     if v is None:
         raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
+    from app.services.lixeira import mandar_para_lixeira
+    mandar_para_lixeira(db, v, "vaga", v.titulo, rh.email)
     db.delete(v)
-    registrar(db, "vaga_excluida", ator="rh", ator_detalhe=rh.email, detalhe={"vaga": str(vaga_id)})
+    registrar(db, "vaga_excluida", ator="rh", ator_detalhe=rh.email,
+              detalhe={"vaga": str(vaga_id), "titulo": v.titulo})
     db.commit()
 
 

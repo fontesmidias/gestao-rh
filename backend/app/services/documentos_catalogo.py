@@ -52,9 +52,34 @@ class Formato(str, enum.Enum):
     hibrido = "hibrido"
 
 
+class Origem(str, enum.Enum):
+    """De onde o documento vem — e, portanto, o que a amostra precisa (v2.67).
+
+    Existe porque o catálogo nasceu candidato-cêntrico: todo gerador tem a
+    assinatura `(db, candidato)` e a prévia monta um `Candidato` fictício. Os
+    documentos do Módulo de Entrevistas não recebem candidato — recebem uma
+    ENTREVISTA ou um ROTEIRO —, e forçá-los naquele molde exigiria uma das duas
+    saídas ruins:
+
+    - **acrescentar valores ao `DocumentoAssinavel`**, que é pior do que parece:
+      `api/rh_ficha.py:38` faz `_TODOS = list(DocumentoAssinavel)` e usa a lista
+      em `DOCS_POR_SECAO`, então editar os dados pessoais de alguém passaria a
+      **invalidar a ficha de entrevista**; e `_docs_exigidos` faria a ficha
+      virar pendência de assinatura do candidato no wizard;
+    - **deixar os documentos fora do catálogo**, que é justamente o que o Bruno
+      cobrou (*"a cada documento novo gerado, ele deve compor o módulo de
+      documentos também"*).
+
+    Então o catálogo passou a ter DUAS famílias. `_conferir_catalogo` continua
+    cobrando a cobertura EXATA do enum — só que da família `admissao`.
+    """
+    admissao = "admissao"        # os 11 que o enum `DocumentoAssinavel` cobre
+    entrevista = "entrevista"    # v2.67: ficha, triagem e roteiro
+
+
 @dataclass(frozen=True)
 class DocumentoSistema:
-    chave: str                 # valor do DocumentoAssinavel
+    chave: str                 # valor do DocumentoAssinavel (família admissão)
     rotulo: str                # nome legível (espelha NOMES_DOC)
     quando: str                # em que situação o sistema gera este documento
     grupo: str                 # agrupa os cards na tela
@@ -62,6 +87,11 @@ class DocumentoSistema:
     # Por que não é duplicável (só para formulario/hibrido) — a tela mostra.
     porque_nao_duplica: str = ""
     base: bool = False         # exigido de todo candidato
+    origem: Origem = Origem.admissao
+    # Só para a família entrevista: onde o documento VIVE (§ 15.4). A tela
+    # mostra este texto, e ele diz explicitamente que a ficha não vai ao dossiê
+    # — quem lê a tela precisa saber disso sem abrir o código.
+    onde_vive: str = ""
 
 
 def _d(**kw) -> DocumentoSistema:
@@ -157,7 +187,67 @@ CATALOGO: tuple[DocumentoSistema, ...] = (
                           "perderia justamente o que dá função ao documento."),
 )
 
-CATALOGO_POR_CHAVE = {d.chave: d for d in CATALOGO}
+# ---------------------------------------------------------------------------
+# Família ENTREVISTA (v2.67, § 15.2)
+#
+# O Bruno cobrou a regra da v2.21 — *"a cada documento novo gerado, ele deve
+# compor o módulo de documentos também e todas as funcionalidades herdadas"* —
+# e ela estava sendo cumprida pela metade: a v2.66 pôs os três E-MAILS do módulo
+# no catálogo de e-mails e **nenhum** dos documentos aqui. Documento gerado sem
+# entrada no catálogo é documento que o RH não consegue ver nem conferir.
+#
+# Nenhum deles é duplicável: os três montam estrutura (notas com âncora,
+# perguntas em tabela, escala) a partir de dados que não existem em
+# `VARIAVEIS_MODELO` — uma cópia em texto sairia sem justamente o que dá função
+# ao documento. É a mesma razão da `autodeclaracao_residencia`.
+# ---------------------------------------------------------------------------
+
+CATALOGO_ENTREVISTAS: tuple[DocumentoSistema, ...] = (
+    _d(chave="entrevista_ficha", grupo="Entrevistas", origem=Origem.entrevista,
+       rotulo="Ficha de Entrevista preenchida",
+       quando="Gerada a partir de uma entrevista REALIZADA e completa. "
+              "Assinável pelo RH que conduziu, com a senha da própria sessão.",
+       formato=Formato.hibrido,
+       onde_vive="Fica no Arquivo e na ficha da pessoa. NÃO entra no dossiê de "
+                 "admissão: o dossiê circula (cliente, pasta física), e nota de "
+                 "seleção com justificativa é dado sensível sobre a pessoa.",
+       porque_nao_duplica="Cada competência imprime a nota, a âncora exata "
+                          "daquela nota e a justificativa escrita — estrutura "
+                          "que varia por roteiro e por entrevista. Um texto com "
+                          "variáveis perderia a âncora, que é o que faz a nota "
+                          "significar algo."),
+
+    _d(chave="entrevista_triagem", grupo="Entrevistas", origem=Origem.entrevista,
+       rotulo="Ficha de Triagem preenchida",
+       quando="Gerada a partir de uma triagem realizada, com desfecho "
+              "registrado. Fecha o histórico da pessoa.",
+       formato=Formato.formulario,
+       onde_vive="Fica no Arquivo e na ficha da pessoa. NÃO entra no dossiê de "
+                 "admissão.",
+       porque_nao_duplica="É um formulário: uma linha por pergunta do roteiro "
+                          "de triagem vigente, e o roteiro é editável pelo RH. "
+                          "Um texto fixo congelaria as perguntas de hoje."),
+
+    _d(chave="entrevista_roteiro", grupo="Entrevistas", origem=Origem.entrevista,
+       rotulo="Roteiro de Entrevista publicado",
+       quando="Gerado a partir de um roteiro PUBLICADO (rascunho não gera). "
+              "É a prova de que o roteiro foi aprovado ANTES de ser usado.",
+       formato=Formato.hibrido,
+       onde_vive="Fica em Configurações → Roteiros de entrevista e no Arquivo. "
+                 "É documento da EMPRESA, não da pessoa — não se anexa a "
+                 "ninguém.",
+       porque_nao_duplica="Traz a escala e, por competência, as quatro âncoras "
+                          "e as duas variantes de pergunta, em tabela. Quem "
+                          "quiser um roteiro diferente duplica o ROTEIRO na "
+                          "tela de roteiros, que é editável — copiar o texto do "
+                          "PDF não criaria um roteiro utilizável."),
+)
+
+# Tudo junto, para a tela. A ORDEM importa: admissão primeiro, entrevistas
+# depois — o RH abre esta tela procurando os documentos da admissão.
+TODOS: tuple[DocumentoSistema, ...] = CATALOGO + CATALOGO_ENTREVISTAS
+
+CATALOGO_POR_CHAVE = {d.chave: d for d in TODOS}
 
 
 def documento(chave: str) -> DocumentoSistema:
@@ -172,6 +262,11 @@ def duplicavel(chave: str) -> bool:
     return documento(chave).formato is Formato.texto
 
 
+def da_entrevista(chave: str) -> bool:
+    """A prévia deste documento precisa de entrevista/roteiro, não de candidato."""
+    return documento(chave).origem is Origem.entrevista
+
+
 def listar() -> list[dict]:
     """Catálogo para a tela do RH."""
     return [{
@@ -179,7 +274,8 @@ def listar() -> list[dict]:
         "quando": d.quando, "formato": d.formato.value,
         "base": d.base, "duplicavel": d.formato is Formato.texto,
         "porque_nao_duplica": d.porque_nao_duplica,
-    } for d in CATALOGO]
+        "origem": d.origem.value, "onde_vive": d.onde_vive,
+    } for d in TODOS]
 
 
 def _conferir_catalogo() -> None:
@@ -188,19 +284,49 @@ def _conferir_catalogo() -> None:
     Documento novo no `DocumentoAssinavel` sem entrada aqui sumiria da tela do
     RH sem ninguém perceber; entrada aqui sem enum correspondente geraria 404
     ao pedir o preview.
+
+    A cobrança do ENUM vale para a família `admissao`, que é a que ele descreve.
+    A família `entrevista` (v2.67) não tem — e não deve ter — valor no
+    `DocumentoAssinavel`: ver o docstring de `Origem` para o estrago que isso
+    causaria em `rh_ficha.py` e no wizard. Ela é cobrada pelas regras próprias
+    logo abaixo.
     """
     do_enum = {d.value for d in DocumentoAssinavel}
-    do_catalogo = set(CATALOGO_POR_CHAVE)
-    if faltando := do_enum - do_catalogo:
+    da_admissao = {d.chave for d in CATALOGO}
+    if faltando := do_enum - da_admissao:
         raise RuntimeError(f"documentos fora do catálogo: {sorted(faltando)}")
-    if sobrando := do_catalogo - do_enum:
+    if sobrando := da_admissao - do_enum:
         raise RuntimeError(f"catálogo cita documento inexistente: {sorted(sobrando)}")
     for d in CATALOGO:
         esperado = DocumentoAssinavel(d.chave) in FICHAS_BASE
         if d.base != esperado:
             raise RuntimeError(f"'{d.chave}': `base` diverge de FICHAS_BASE")
+    for d in TODOS:
         if d.formato is not Formato.texto and not d.porque_nao_duplica:
             raise RuntimeError(f"'{d.chave}': precisa explicar por que não duplica")
+
+    # A família entrevista NÃO pode encostar no enum das assinaturas do
+    # candidato. Se alguém "resolver" um 404 acrescentando `entrevista_ficha` ao
+    # `DocumentoAssinavel`, o sistema para AQUI, no import — em vez de o defeito
+    # aparecer como uma ficha de entrevista cobrada do candidato no wizard.
+    for d in CATALOGO_ENTREVISTAS:
+        if d.origem is not Origem.entrevista:
+            raise RuntimeError(f"'{d.chave}': família entrevista com origem errada")
+        if d.chave in do_enum:
+            raise RuntimeError(
+                f"'{d.chave}' virou valor de DocumentoAssinavel — isso o tornaria "
+                "documento exigível do candidato no wizard e faria a edição da "
+                "ficha invalidá-lo (rh_ficha.py::DOCS_POR_SECAO). Ver Origem.")
+        if d.base:
+            raise RuntimeError(f"'{d.chave}': documento de entrevista não é ficha base")
+        # Chave repetida entre as famílias faria uma sombrear a outra no
+        # `CATALOGO_POR_CHAVE`, servindo a prévia errada em silêncio.
+        if d.chave in da_admissao:
+            raise RuntimeError(f"'{d.chave}': chave duplicada entre as famílias")
+        if not d.onde_vive:
+            raise RuntimeError(
+                f"'{d.chave}': precisa dizer ONDE VIVE — o § 15.4 depende de a "
+                "tela afirmar que a ficha não vai ao dossiê")
 
 
 _conferir_catalogo()

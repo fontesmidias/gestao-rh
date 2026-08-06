@@ -34,10 +34,27 @@ from app.services.entrevistas import LEMBRETE_HORAS_ANTES
 
 log = logging.getLogger(__name__)
 
-# Duração declarada no convite. Não é campo: o alvo de preenchimento da
-# entrevista é 5 minutos e o da conversa ~20-40 — uma hora cobre com folga, e
-# mais um campo obrigatório na tela custaria mais do que a precisão vale.
+# Duração PADRÃO do convite. Até a v2.66 era a duração, ponto — não havia campo.
+# Na v2.67 o Bruno pediu que virasse campo (`Entrevista.duracao_min`, § 15.5
+# item 4), e esta constante passou a ser só o valor inicial: entrevista antiga,
+# gravada antes da coluna existir, continua valendo uma hora.
 DURACAO_MIN = 60
+
+
+def duracao_de(e) -> int:
+    """A duração daquela entrevista, com piso de 1 minuto.
+
+    O piso é rede, não validação: quem recusa duração zero é a rota, com 422 que
+    explica (cenário 37). Se ela chegasse aqui como 0 — registro antigo, acerto
+    no banco —, o `DTEND` sairia igual ao `DTSTART` e o compromisso apareceria
+    como um instante sem duração na agenda. Preferimos um minuto visível a um
+    evento que o cliente de agenda descarta calado.
+    """
+    try:
+        valor = int(getattr(e, "duracao_min", None) or DURACAO_MIN)
+    except (TypeError, ValueError):
+        return DURACAO_MIN
+    return max(1, valor)
 
 
 def _brasilia(dt: datetime) -> datetime:
@@ -123,25 +140,31 @@ def _contexto(pessoa_nome: str, e) -> dict:
     }
 
 
-def _anexo_ics(e, pessoa_email: str | None, cancelar: bool) -> list[tuple]:
+def _anexo_ics(db, e, pessoa_email: str | None, cancelar: bool) -> list[tuple]:
     """O `.ics`, com o UID ESTÁVEL da entrevista e a sequência atual.
 
     Sem data marcada não há convite — e é o único caso em que o e-mail sai sem
     anexo (uma entrevista registrada como já realizada não tem o que agendar).
+
+    O `ORGANIZER` passou a sair do **remetente de recrutamento** (v2.67, § 15.5
+    item 5), que cai no `smtp_from` quando a chave está vazia. Ele importa mais
+    do que parece: é o endereço para o qual o cliente de agenda manda o
+    "aceito/recusado" da pessoa, e era o `smtp_from` chumbado do `.env` — que
+    em produção é a caixa de LOGIN, não a de recrutamento.
     """
     if e.marcada_para is None:
         return []
-    from app.core.config import get_settings
+    from app.services.config_dinamica import email_recrutamento
     resumo = f"Entrevista — Green House{f' · {e.vaga_titulo}' if e.vaga_titulo else ''}"
     dados = calendario.gerar_ics(
         entrevista_id=e.id, inicio=e.marcada_para, resumo=resumo,
         descricao=onde_e(e.modalidade, e.local, e.link_reuniao),
         local=((e.link_reuniao or "") if e.modalidade == "online"
                else (e.local or "")),
-        organizador_email=getattr(get_settings(), "smtp_from", None) or None,
+        organizador_email=email_recrutamento(db),
         convidado_email=pessoa_email or None,
         sequencia=e.sequencia_convite or 0, cancelar=cancelar,
-        duracao_min=DURACAO_MIN)
+        duracao_min=duracao_de(e))
     return [(calendario.nome_do_arquivo(e.id), dados)]
 
 
@@ -168,9 +191,11 @@ def enviar_convite(db, e, pessoa_nome: str, pessoa_email: str | None, *,
 
     chave = "entrevista_cancelada" if cancelar else "entrevista_marcada"
     try:
+        from app.services.config_dinamica import email_recrutamento
         from app.services.email_templates import enviar_modelo
         ok = enviar_modelo(db, chave, pessoa_email, _contexto(pessoa_nome, e),
-                           anexos=_anexo_ics(e, pessoa_email, cancelar))
+                           anexos=_anexo_ics(db, e, pessoa_email, cancelar),
+                           remetente=email_recrutamento(db))
     except Exception:
         log.exception("Falha ao enviar convite da entrevista %s", e.id)
         return {"enviado": False,
@@ -218,9 +243,11 @@ def enviar_lembrete(db, e, pessoa_nome: str, pessoa_email: str | None) -> bool:
     if motivo_sem_envio(pessoa_email, e.marcada_para):
         return False
     try:
+        from app.services.config_dinamica import email_recrutamento
         from app.services.email_templates import enviar_modelo
         ok = enviar_modelo(db, "entrevista_lembrete", pessoa_email,
-                           _contexto(pessoa_nome, e))
+                           _contexto(pessoa_nome, e),
+                           remetente=email_recrutamento(db))
     except Exception:
         log.exception("Falha ao enviar lembrete da entrevista %s", e.id)
         return False
