@@ -29,8 +29,8 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        INSERT INTO assinatura (id, candidato_id, documento, aguardando_liberacao)
-        SELECT gen_random_uuid(), c.id, 'informativo_efetivo', TRUE
+        INSERT INTO assinatura (id, candidato_id, documento, aguardando_liberacao, otp_tentativas)
+        SELECT gen_random_uuid(), c.id, 'informativo_efetivo', TRUE, 0
           FROM candidato c
          WHERE c.regime = 'efetivo'
            AND c.situacao IS NULL
