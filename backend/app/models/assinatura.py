@@ -19,8 +19,11 @@ class DocumentoAssinavel(str, enum.Enum):
     oficio_cartao_cidadao = "oficio_cartao_cidadao"
     informacoes_trabalhador = "informacoes_trabalhador"
     termo_lgpd_infraero = "termo_lgpd_infraero"
-    # Ficha de integração do intermitente (só quando o regime é intermitente)
+    # Ficha de integração, uma por REGIME (o candidato recebe exatamente uma).
+    # Diferem nos períodos de pagamento dos benefícios: o efetivo apura de 1 a 30
+    # do mês; o intermitente, semanalmente.
     informativo_intermitente = "informativo_intermitente"
+    informativo_efetivo = "informativo_efetivo"
     # Kit específico da Presidência da República
     ficha_cadastral_terceirizado = "ficha_cadastral_terceirizado"
     oficio_apresentacao_presidencia = "oficio_apresentacao_presidencia"

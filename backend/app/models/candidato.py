@@ -222,7 +222,11 @@ class Candidato(Base):
         ForeignKey("jornada.id"), nullable=True)
     registra_ponto: Mapped[bool | None] = mapped_column(nullable=True)
     # Regime de contratação: "efetivo" (padrão) ou "intermitente". Decide qual
-    # ficha de integração o colaborador assina.
+    # ficha de integração o colaborador assina — `INFORMATIVO_POR_REGIME`, em
+    # `api/postos.py`. As duas diferem no CICLO DE PAGAMENTO dos benefícios
+    # (efetivo: do dia 1 ao 30; intermitente: semanal). Até a v2.69 este
+    # comentário descrevia uma intenção que o código só cumpria para o
+    # intermitente: o efetivo não recebia ficha nenhuma.
     regime: Mapped[str] = mapped_column(String(20), default="efetivo")
     # Remuneração digitada pelo RH (texto livre: "R$ 1.500,00" ou "1500").
     # adicionais: lista de {"nome": str, "valor": str, "tipo": "reais"|"percentual"}.

@@ -1359,12 +1359,56 @@ NOMES_DOC_FALLBACK = {
 }
 
 
-def gerar_informativo_intermitente(db: Session, candidato: Candidato,
-                                   assinatura: Assinatura | None = None,
-                                   base_url: str | None = None) -> bytes:
-    """Informativo de Integração do intermitente (GHS - INTERMITENTE): difere do
-    efetivo nos períodos de pagamento de VT/VA (semanal), ponto pelo Tirvu+,
-    prazos de assinatura e declaração de normativos. O colaborador lê e assina."""
+def _posto_do_informativo(db: Session, candidato: Candidato, regime: str) -> str | None:
+    """Local de trabalho impresso no Informativo de Integração. O intermitente
+    não é alocado a posto fixo — sai o rótulo do regime. O efetivo sai com o
+    posto REAL do cadastro; sem posto definido devolve None, que o `campo()`
+    imprime como '-', igual aos demais campos ainda não preenchidos da ficha."""
+    if regime == "intermitente":
+        return "GHS - INTERMITENTE"
+    from app.models.candidato import PostoServico
+    posto = (db.get(PostoServico, candidato.posto_servico_id)
+             if candidato.posto_servico_id else None)
+    return posto.nome if posto else None
+
+
+# Períodos de apuração/pagamento dos benefícios, por REGIME (feedback do Bruno,
+# 2026-08-05). É a ÚNICA diferença de conteúdo entre as duas fichas de
+# integração: o efetivo apura de 1 a 30 do mês; o intermitente, semanalmente.
+# Texto separado do gerador de propósito — quando o RH mudar um ciclo de
+# pagamento, muda aqui, e a outra ficha não é tocada por acidente.
+_CICLO_VT = {
+    "efetivo":
+        "A partir de então, o benefício passará a ser pago mensalmente, considerando o "
+        "período de apuração do dia 1 ao dia 30 de cada mês, por meio do cartão de "
+        "vale-transporte, destinado à mobilidade no Distrito Federal ou, no caso de "
+        "colaboradores residentes no Entorno, por meio dos cartões das respectivas "
+        "empresas de transporte coletivo.",
+    "intermitente":
+        "A partir de então, o benefício passará a ser pago semanalmente, até a quarta-feira "
+        "da semana seguinte, por meio do cartão de vale-transporte, destinado à mobilidade "
+        "no Distrito Federal ou, no caso de colaboradores residentes no Entorno, por meio "
+        "dos cartões das respectivas empresas de transporte coletivo.",
+}
+
+_CICLO_VA = {
+    "efetivo":
+        "Os valores serão disponibilizados considerando o período de apuração do dia 1 ao "
+        "dia 30 de cada mês.",
+    "intermitente":
+        "Os valores serão disponibilizados considerando o período de apuração semanal, sendo "
+        "pago até a quarta-feira da semana seguinte.",
+}
+
+
+def _gerar_informativo_integracao(db: Session, candidato: Candidato,
+                                  regime: str,
+                                  assinatura: Assinatura | None = None,
+                                  base_url: str | None = None) -> bytes:
+    """Informativo de Integração — o documento de boas-vindas que o colaborador
+    lê e assina. Há UM por regime e o candidato recebe exatamente um; o corpo é
+    o mesmo, e o que muda são os PERÍODOS DE PAGAMENTO dos benefícios (efetivo:
+    de 1 a 30; intermitente: semanal) e o posto exibido."""
     p = db.get(DadosPessoais, candidato.id)
     d = db.get(DocumentosIdentificacao, candidato.id)
     b = db.get(DadosProfissionaisBancarios, candidato.id)
@@ -1388,7 +1432,7 @@ def gerar_informativo_intermitente(db: Session, candidato: Candidato,
     pdf.campo("Telefone (WhatsApp)", candidato.celular_whatsapp)
     pdf.campo("E-mail", candidato.email)
     pdf.campo("Cargo", candidato.cargo_funcao)
-    pdf.campo("Local de Trabalho (Posto)", "GHS - INTERMITENTE")
+    pdf.campo("Local de Trabalho (Posto)", _posto_do_informativo(db, candidato, regime))
 
     pdf.secao("VALE TRANSPORTE")
     pdf.set_font("helvetica", "", 9.5)
@@ -1397,10 +1441,7 @@ def gerar_informativo_intermitente(db: Session, candidato: Candidato,
         "(cinco) dias úteis, a partir da data da assinatura do contrato de trabalho, por meio "
         "de pix. Neste primeiro momento, o valor será calculado de forma proporcional, da data "
         "de admissão até o dia 19 do respectivo mês.\n"
-        "A partir de então, o benefício passará a ser pago semanalmente, até a quarta-feira da "
-        "semana seguinte, por meio do cartão de vale-transporte, destinado à mobilidade no "
-        "Distrito Federal ou, no caso de colaboradores residentes no Entorno, por meio dos "
-        "cartões das respectivas empresas de transporte coletivo.")
+        + _CICLO_VT[regime])
 
     pdf.secao("VALE ALIMENTAÇÃO")
     pdf.set_font("helvetica", "", 9.5)
@@ -1410,8 +1451,7 @@ def gerar_informativo_intermitente(db: Session, candidato: Candidato,
         "assinatura do respectivo recibo. Após o envio do recibo devidamente assinado ao "
         "Departamento Pessoal (e-mail: departamentopessoal@greenhousedf.com.br ou WhatsApp: "
         "61-99834-2311), será realizado o crédito do benefício no cartão.\n"
-        "Os valores serão disponibilizados considerando o período de apuração semanal, sendo "
-        "pago até a quarta-feira da semana seguinte.")
+        + _CICLO_VA[regime])
 
     pdf.secao("CONTA SALÁRIO")
     pdf.campo("Banco", b.banco if b else None)
@@ -1454,7 +1494,26 @@ def gerar_informativo_intermitente(db: Session, candidato: Candidato,
         "Em caso de divergências, inconsistências ou dúvidas, contate imediatamente o setor "
         "responsável pelo telefone (61) 3346-8812.")
 
+    if assinatura:
+        pdf.bloco_assinatura(assinatura, candidato.nome_completo)
+        pdf.pagina_manifesto(assinatura, candidato, d.cpf if d else None, base_url)
     return bytes(pdf.output())
+
+
+def gerar_informativo_intermitente(db: Session, candidato: Candidato,
+                                   assinatura: Assinatura | None = None,
+                                   base_url: str | None = None) -> bytes:
+    """Informativo de Integração do intermitente (benefícios apurados por semana)."""
+    return _gerar_informativo_integracao(db, candidato, "intermitente",
+                                         assinatura, base_url)
+
+
+def gerar_informativo_efetivo(db: Session, candidato: Candidato,
+                              assinatura: Assinatura | None = None,
+                              base_url: str | None = None) -> bytes:
+    """Informativo de Integração do efetivo (benefícios apurados do dia 1 ao 30)."""
+    return _gerar_informativo_integracao(db, candidato, "efetivo",
+                                         assinatura, base_url)
 
 
 def gerar_ficha_cadastral_terceirizado(db: Session, candidato: Candidato,
@@ -1602,6 +1661,7 @@ GERADORES = {
         "informacoes_trabalhador": gerar_informacoes_trabalhador,
         "termo_lgpd_infraero": gerar_termo_lgpd_infraero,
         "informativo_intermitente": gerar_informativo_intermitente,
+        "informativo_efetivo": gerar_informativo_efetivo,
         "ficha_cadastral_terceirizado": gerar_ficha_cadastral_terceirizado,
         "oficio_apresentacao_presidencia": gerar_oficio_apresentacao_presidencia,
     }.items()

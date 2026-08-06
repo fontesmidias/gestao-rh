@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.models.assinatura import DocumentoAssinavel
 
 
 class StatusSolicitacao(str, enum.Enum):
@@ -43,12 +44,11 @@ class SolicitacaoAssinatura(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     candidato_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("candidato.id"), index=True)
     # documento fixo do enum OU documento de modelo (snapshot em titulo/corpo)
+    # Os valores são os do enum `DocumentoAssinavel` (mesmo tipo no Postgres,
+    # `create_type=False`). Reescrevê-los à mão aqui já deixou a lista atrasada
+    # duas vezes — `autodeclaracao_residencia` e `informativo_efetivo` faltavam.
     documento: Mapped[str | None] = mapped_column(
-        Enum("ficha_cadastro", "ficha_emergencia", "termo_vt",
-             "acordo_confidencialidade", "oficio_cartao_cidadao",
-             "informacoes_trabalhador", "termo_lgpd_infraero",
-             "informativo_intermitente", "ficha_cadastral_terceirizado",
-             "oficio_apresentacao_presidencia",
+        Enum(*[d.value for d in DocumentoAssinavel],
              name="documento_assinavel", create_type=False), nullable=True)
     modelo_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("modelo_documento.id"), nullable=True)

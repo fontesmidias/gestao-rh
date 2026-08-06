@@ -5,6 +5,7 @@ import io
 import re
 import unicodedata
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -27,10 +28,21 @@ DOCS_INFRAERO = (DocumentoAssinavel.oficio_cartao_cidadao,
                  DocumentoAssinavel.informacoes_trabalhador,
                  DocumentoAssinavel.termo_lgpd_infraero)
 
-# Informativos de integração — só vão ao candidato assinar após o RH disparar
-# (efetivo/INFRAERO = informacoes_trabalhador; intermitente = informativo_intermitente).
+# Ficha de integração POR REGIME: todo candidato recebe exatamente uma, e ela
+# não depende de posto. Até 2026-08-05 só o intermitente tinha a sua — o efetivo
+# ficava sem nenhuma, e o que ocupava esse lugar na lista abaixo
+# (`informacoes_trabalhador`) é outra coisa: um ofício de direitos do kit
+# INFRAERO, que só nasce em posto INFRAERO e não é ficha de integração.
+INFORMATIVO_POR_REGIME = {
+    "intermitente": DocumentoAssinavel.informativo_intermitente,
+    "efetivo": DocumentoAssinavel.informativo_efetivo,
+}
+
+# Documentos que só vão ao candidato assinar após o RH disparar (v1.92). As duas
+# fichas de integração + o ofício de direitos do INFRAERO.
 DOCS_INFORMATIVO = (DocumentoAssinavel.informacoes_trabalhador,
-                    DocumentoAssinavel.informativo_intermitente)
+                    DocumentoAssinavel.informativo_intermitente,
+                    DocumentoAssinavel.informativo_efetivo)
 
 # Catálogo de documentos ESPECÍFICOS de posto que o RH pode marcar no CRUD.
 # (Bruno: só Presidência e INFRAERO têm kit próprio; os demais usam o padrão.)
@@ -45,11 +57,30 @@ DOCS_ESPECIFICOS_DISPONIVEIS = {
 }
 
 
+def _invalidar_informativo_de_outro_regime(db: Session, candidato: Candidato,
+                                           atual: DocumentoAssinavel) -> None:
+    """Ao trocar o regime, tira de cena a ficha de integração do regime anterior.
+
+    Só mexe no que AINDA NÃO FOI ASSINADO: informativo já assinado é peça de
+    prova e continua no dossiê (mesma regra da invalidação por edição de ficha,
+    que registra a invalidação em vez de apagar o ato)."""
+    outros = [d for d in INFORMATIVO_POR_REGIME.values() if d != atual]
+    for assinatura in db.scalars(
+        select(Assinatura).where(Assinatura.candidato_id == candidato.id,
+                                 Assinatura.documento.in_(outros),
+                                 Assinatura.assinado_em.is_(None),
+                                 Assinatura.invalidada_em.is_(None))).all():
+        assinatura.invalidada_em = datetime.now(timezone.utc)
+        assinatura.invalidada_motivo = (
+            f"Regime alterado para '{candidato.regime}': a ficha de integração "
+            "deste regime substitui a anterior.")[:300]
+
+
 def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[DocumentoAssinavel]:
     """Cria os registros de Assinatura extras exigidos pelo POSTO (kit marcado no
-    CRUD + o legado exige_docs_infraero) e pelo REGIME (Informativo do
-    Intermitente) deste candidato, que ainda não existam. Fonte única usada pelo
-    convite e pela (re)definição de posto."""
+    CRUD + o legado exige_docs_infraero) e pelo REGIME (a ficha de integração —
+    uma por regime, efetivo ou intermitente) deste candidato, que ainda não
+    existam. Fonte única usada pelo convite e pela (re)definição de posto."""
     existentes = {
         a.documento for a in db.scalars(
             select(Assinatura).where(Assinatura.candidato_id == candidato.id,
@@ -66,8 +97,15 @@ def gerar_docs_do_posto_e_regime(db: Session, candidato: Candidato) -> list[Docu
                 exigidos.append(DocumentoAssinavel(chave))
             except ValueError:
                 pass  # chave desconhecida (ex.: enum removido): ignora
-    if candidato.regime == "intermitente":
-        exigidos.append(DocumentoAssinavel.informativo_intermitente)
+    # Ficha de integração do REGIME — todo candidato tem uma (efetivo inclusive).
+    informativo = INFORMATIVO_POR_REGIME.get(candidato.regime or "efetivo")
+    if informativo:
+        exigidos.append(informativo)
+        # Trocar o regime troca a ficha: a do regime ANTERIOR, se ainda não
+        # assinada, é invalidada. Sem isso o candidato passaria a dever as duas e
+        # assinaria a ficha de um regime que não é o dele — com os períodos de
+        # pagamento errados, que é justamente o que distingue as duas.
+        _invalidar_informativo_de_outro_regime(db, candidato, informativo)
     novos = []
     for doc in exigidos:
         if doc not in existentes and doc not in novos:
