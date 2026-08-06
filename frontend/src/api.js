@@ -1325,8 +1325,20 @@ export const rh = {
   // O INSTRUMENTO (4 competências, âncoras, escalas, perguntas de triagem) vem
   // daqui e o front NÃO duplica nenhum texto — mudar uma âncora é mexer só em
   // `services/entrevistas.py`, e a tela acompanha sozinha.
-  formularioEntrevista: () =>
-    req('/rh/entrevistas/formulario', { headers: authRH() }),
+  // ⚠️ A FONTE mudou na v2.66 (o instrumento saiu da constante e virou o
+  // ROTEIRO no banco); o CONTRATO não: continua sendo daqui que o front lê, e
+  // continua sem duplicar texto. Os parâmetros resolvem o roteiro por herança
+  // — cargo+senioridade → cargo → padrão.
+  formularioEntrevista: ({ roteiroId, cargo, senioridade } = {}) => {
+    const q = new URLSearchParams()
+    if (roteiroId) q.set('roteiro_id', roteiroId)
+    if (cargo) q.set('cargo', cargo)
+    if (senioridade) q.set('senioridade', senioridade)
+    const s = q.toString()
+    return req(`/rh/entrevistas/formulario${s ? `?${s}` : ''}`, { headers: authRH() })
+  },
+  modalidadesEntrevista: () =>
+    req('/rh/entrevistas/modalidades', { headers: authRH() }),
   entrevistas: (filtros = {}) => {
     const q = new URLSearchParams()
     for (const [k, v] of Object.entries(filtros)) if (v) q.set(k, v)
@@ -1372,4 +1384,43 @@ export const rh = {
     return r.json()
   },
   urlAnexoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/anexo`,
+
+  // ---- Roteiros de entrevista (v2.66, § 14.1) ----
+  // O catálogo do instrumento. Rascunho → publicado: só publicado se usa, e é
+  // isso que sustenta "o roteiro foi aprovado ANTES de ser usado".
+  roteirosEntrevista: (incluirArquivados = false) =>
+    req(`/rh/roteiros-entrevista${incluirArquivados ? '?incluir_arquivados=true' : ''}`,
+        { headers: authRH() }),
+  roteiroEntrevista: (id) =>
+    req(`/rh/roteiros-entrevista/${id}`, { headers: authRH() }),
+  criarRoteiroEntrevista: (dados) =>
+    req('/rh/roteiros-entrevista',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarRoteiroEntrevista: (id, dados) =>
+    req(`/rh/roteiros-entrevista/${id}`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  publicarRoteiroEntrevista: (id) =>
+    req(`/rh/roteiros-entrevista/${id}/publicar`,
+        { method: 'POST', headers: authRH() }),
+  duplicarRoteiroEntrevista: (id) =>
+    req(`/rh/roteiros-entrevista/${id}/duplicar`,
+        { method: 'POST', headers: authRH() }),
+  arquivarRoteiroEntrevista: (id, motivo) =>
+    req(`/rh/roteiros-entrevista/${id}/arquivar`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
+  tornarPadraoRoteiroEntrevista: (id) =>
+    req(`/rh/roteiros-entrevista/${id}/tornar-padrao`,
+        { method: 'POST', headers: authRH() }),
+  excluirRoteiroEntrevista: (id) =>
+    req(`/rh/roteiros-entrevista/${id}`, { method: 'DELETE', headers: authRH() }),
+
+  // ---- Reaproveitamento (§ 14.3) ----
+  // Quem foi entrevistado para a vaga + aplicar a tag do mini-CRM em lote.
+  // PROPOSTA, nunca automática: tag aplicada sozinha vira ruído e o RH deixa
+  // de confiar na tag.
+  entrevistadosDaVaga: (vagaId) =>
+    req(`/rh/vagas/${vagaId}/entrevistados`, { headers: authRH() }),
+  reaproveitarEntrevistados: (dados) =>
+    req('/rh/entrevistas/reaproveitar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
 }

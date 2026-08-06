@@ -123,6 +123,17 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
           <div>
             <span className="chip">{e.status}</span>{' '}
             {e.marcada_para && <span className="chip">marcada {fmtDataHora(e.marcada_para)}</span>}{' '}
+            {/* O ROTEIRO com que ESTA entrevista foi feita — vem do snapshot,
+                não do roteiro vivo. Editar o roteiro depois não reescreve o que
+                a nota significava, e a tela mostra qual versão sustentou a
+                avaliação. */}
+            {e.roteiro_nome && (
+              <span className="chip"
+                    title="O roteiro com que esta entrevista foi feita. Editar o roteiro depois não altera este registro.">
+                roteiro: {e.roteiro_nome} v{e.roteiro_versao}
+              </span>
+            )}{' '}
+            {e.modalidade && <span className="chip">{e.modalidade}</span>}{' '}
             {e.defasagem_dias > 0 && (
               <span className="chip" style={{ '--chip-cor': 'var(--ambar)' }}
                     title="Memória decai: quanto maior a distância entre a conversa e o preenchimento, mais o relato é reconstrução.">
@@ -154,11 +165,33 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
         </div>
       )}
 
+      {/* Convite e lembrete (v2.66, § 14.4). Quando NÃO podem sair, a tela diz
+          POR QUÊ — "desligado" sem motivo faria o RH tentar de novo achando
+          que foi falha de rede, quando o que falta é o e-mail no cadastro
+          (cenário 26). Nunca falha calada. */}
+      {e.marcada_para && (
+        <p className="explica">
+          {e.motivo_sem_lembrete
+            ? `Lembrete desligado: ${e.motivo_sem_lembrete}`
+            : e.convite_enviado_em
+              ? `Convite enviado em ${fmtDataHora(e.convite_enviado_em)}.`
+                + (e.lembrete_enviado_em
+                    ? ` Lembrete enviado em ${fmtDataHora(e.lembrete_enviado_em)}.`
+                    : ' O lembrete sai na véspera.')
+              : 'Nenhum convite enviado ainda.'}
+        </p>
+      )}
+
       {eTriagem ? (
         <Triagem form={form} campos={campos} marcar={marcar} setCampos={setCampos}
                  desabilitado={encerrada} />
       ) : (
-        <Avaliacao form={form} campos={campos} marcar={marcar} setCampos={setCampos}
+        // O instrumento da AVALIAÇÃO é o do SNAPSHOT desta entrevista — não o
+        // roteiro de hoje. Sem isso, uma entrevista feita com um roteiro
+        // customizado mostraria as competências de outro, e as notas gravadas
+        // não teriam onde aparecer.
+        <Avaliacao form={{ ...form, competencias: e.roteiro_competencias || form.competencias }}
+                   campos={campos} marcar={marcar} setCampos={setCampos}
                    desabilitado={encerrada} />
       )}
 

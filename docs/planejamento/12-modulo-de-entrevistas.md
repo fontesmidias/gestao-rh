@@ -597,15 +597,24 @@ Comparação na tela da vaga (§ 8.4) · histórico na ficha da pessoa (§ 8.5) 
 carimbo de defasagem · arquivamento automático aos 180 dias no
 `workers/expurgo.py` · exclusão de vaga passando pela lixeira (cenário 4).
 
-### Fase 3 — PEDIDA pelo Bruno em 2026-08-05
+### Fase 3 — PEDIDA pelo Bruno em 2026-08-05 — **ENTREGUE na v2.66**
 
-Deixou de ser "se for pedido". Ver § 14 — o desenho mudou de forma com quatro
-pedidos dele, e o maior deles (roteiros múltiplos) **tira as competências do
-código e as leva para o banco**, o que resolve a pendência nº 1 por outro
-caminho.
+Ver § 14 — o desenho mudou de forma com quatro pedidos dele, e o maior deles
+(roteiros múltiplos) **tirou as competências do código e as levou para o
+banco**, o que resolveu a pendência nº 1 por outro caminho.
+
+Os quatro entregues: roteiros múltiplos com rascunho→publicado e snapshot por
+entrevista (§ 14.1) · quatro perguntas novas de triagem (§ 14.2) · tag de
+reaproveitamento reusando o `PessoaTag` do mini-CRM (§ 14.3) · lembrete por
+e-mail e convite `.ics` com UID estável, SEQUENCE e cancelamento (§ 14.4).
+Cenários 21–30 cobertos por teste, com 9 mutações validadas. Execução em
+`12b-entrevistas-relatorio-execucao.md`.
 
 Continua **fora**: segundo avaliador com a trava anti-peeking (§ 2.6), porque
-só o RH entrevista (decisão 1) e não há colega cuja nota espiar.
+só o RH entrevista (decisão 1) e não há colega cuja nota espiar. E a exclusão
+de vaga **continua sendo delete físico** — a entrevista sobrevive e a pessoa é
+tagueada, mas se a vaga em si vai para a lixeira continua sendo decisão dele
+(pendência nº 3).
 
 ---
 
@@ -630,12 +639,16 @@ defeito e confirma-se que o teste falha.
 
 ## 12. Pendências com o Bruno
 
-1. ~~**Aprovar as 4 competências e as âncoras**~~ — **RESOLVIDA por outro
-   caminho** (2026-08-05). Com roteiros múltiplos (§ 14.1) as competências saem
-   do código e viram o **roteiro padrão no banco, editável pela tela**. Ele
-   ajusta âncora, pergunta e competência sem deploy e sem esperar ninguém.
+1. ~~**Aprovar as 4 competências e as âncoras**~~ — **RESOLVIDA e ENTREGUE na
+   v2.66**. Com roteiros múltiplos (§ 14.1) as competências saíram do código e
+   viraram o **roteiro padrão no banco, editável pela tela** (Configurações →
+   Roteiros de entrevista). Ele ajusta âncora, pergunta e competência sem deploy
+   e sem esperar ninguém.
 2. ~~**Confirmar as perguntas de triagem**~~ — **RESPONDIDA**: *"pode colocar
-   mais, mas desde que sejam coerentes e coesas"* (§ 14.2).
+   mais, mas desde que sejam coerentes e coesas"* (§ 14.2). As 4 novas foram
+   entregues na v2.66. **Nota:** elas continuam em CONSTANTE (só as
+   competências viraram roteiro editável) — se ele quiser a triagem editável
+   pela tela também, é pedido novo.
 3. **Exclusão de vaga pela lixeira** — hoje é delete físico. Ele respondeu o
    que importava (§ 14.3: a entrevista sobrevive **e** a pessoa é tagueada para
    reaproveitamento), mas não disse se a vaga em si deve ir para a lixeira.

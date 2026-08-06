@@ -89,8 +89,22 @@ checar(all(len(comp["ancoras"]) == 4 for comp in f["competencias"]),
 checar(all(comp["perguntas"].get("comportamental") and comp["perguntas"].get("situacional")
            for comp in f["competencias"]),
        "toda competência tem as DUAS variantes de pergunta")
-checar(len(f["triagem"]["perguntas"]) == 5, "a triagem tem as 5 perguntas do documento")
-checar(any(p["chave"] == "recebe_seguro_desemprego" for p in f["triagem"]["perguntas"]),
+# ⚠️ NÃO se trava a CONTAGEM de perguntas (lição da v2.25: teste que afirma
+# `len(...) == 5` quebra a cada acréscimo legítimo, sem apontar defeito — e a
+# correção óbvia, incrementar o número, faz o teste não proteger nada). Este
+# assert era `== 5` e quebrou na v2.66, quando o § 14.2 acrescentou 4 perguntas
+# a PEDIDO do Bruno. O que importa é a NATUREZA da triagem, não quantas são:
+# todas se respondem sim/não/não sei, e nenhuma tem nota, âncora ou competência.
+perguntas_triagem = f["triagem"]["perguntas"]
+checar(len(perguntas_triagem) >= 5,
+       f"a triagem tem ao menos as 5 perguntas do documento ({len(perguntas_triagem)})")
+checar(all("ancoras" not in p and "nota" not in p and "competencia" not in p
+           for p in perguntas_triagem),
+       "e NENHUMA delas tem nota, âncora ou competência — triagem é checagem de "
+       "viabilidade, não entrevista curta (§ 4.1)")
+checar(set(f["triagem"]["respostas"]) == {"sim", "nao", "nao_sei"},
+       f"as respostas continuam sendo sim/nao/nao_sei ({f['triagem']['respostas']})")
+checar(any(p["chave"] == "recebe_seguro_desemprego" for p in perguntas_triagem),
        "seguro-desemprego está na triagem (decisão 4 do Bruno)")
 
 # O front NÃO pode duplicar o texto do instrumento (estrutural, como o

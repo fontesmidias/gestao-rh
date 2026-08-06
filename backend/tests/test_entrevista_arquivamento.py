@@ -29,10 +29,16 @@ from app.core.db import SessionLocal  # noqa: E402
 from app.models.candidato import Candidato  # noqa: E402
 from app.models.entrevista import Entrevista, StatusEntrevista  # noqa: E402
 from app.models.talento import Talento  # noqa: E402
-# `Entrevista` tem FK para `usuario_rh` e `vaga`; sem importar esses modelos, as
-# tabelas nao entram no metadata e o SQLAlchemy nao resolve a FK
-# (NoReferencedTableError no primeiro flush). Importar modelo que so aparece
-# como ALVO de FK e requisito, nao enfeite.
+# `Entrevista` tem FK para `usuario_rh`, `vaga` e (v2.66) `roteiro_entrevista`;
+# sem importar esses modelos, as tabelas nao entram no metadata e o SQLAlchemy
+# nao resolve a FK (NoReferencedTableError no primeiro flush). Importar modelo
+# que so aparece como ALVO de FK e requisito, nao enfeite.
+#
+# Este comentario PREVIU o que aconteceu: ao acrescentar `roteiro_id` na v2.66,
+# este teste quebrou com "could not find table 'roteiro_entrevista'" — o erro
+# nao fala do seu modelo, fala do vizinho. Ao criar FK nova na `Entrevista`,
+# acrescente o alvo AQUI.
+from app.models.roteiro_entrevista import RoteiroEntrevista  # noqa: E402,F401
 from app.models.usuario_rh import UsuarioRH  # noqa: E402,F401
 from app.models.vaga import Vaga  # noqa: E402,F401
 from app.workers.expurgo import arquivar_entrevistas  # noqa: E402

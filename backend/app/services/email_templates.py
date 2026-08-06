@@ -300,6 +300,85 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                 "quando": "vence em 30 dias", "validade": "30/08/2026",
                 "link": "https://exemplo/meu"}),
 
+    # ----------------------------------------------------------- entrevistas
+    # v2.66, § 14.4. Pedido do Bruno: *"lembrete por email, sim. convite de
+    # calendário, sim. considere que pode ser entrevista online (pelo teams) ou
+    # presencial"*.
+    #
+    # **`{{onde}}` é uma variável PRONTA, montada em Python** conforme a
+    # modalidade — endereço no presencial, link no online. É a regra da v2.06:
+    # o template é APRESENTAÇÃO, nunca decisão. Se `local` e `link_reuniao`
+    # fossem duas variáveis soltas no corpo, o RH teria que escrever um texto
+    # que serve aos dois casos e um deles sairia vazio — "Endereço:" seguido de
+    # nada, num e-mail que a pessoa usa para saber aonde ir.
+    _m(chave="entrevista_marcada", grupo="Entrevistas",
+       rotulo="Entrevista marcada",
+       quando="O RH marca a entrevista (e a cada remarcação). Leva o convite "
+              "de calendário (.ics) anexado.",
+       assunto="Green House — sua entrevista em {{data_hora}}",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Sua entrevista com a Green House está marcada para "
+             "{{data_hora}}.\n\n"
+             "{{onde}}\n\n"
+             "Leve um documento com foto. Se não puder comparecer, responda "
+             "este e-mail — remarcar é tranquilo, faltar sem avisar atrapalha "
+             "quem está esperando.\n\n"
+             "O convite em anexo entra direto na sua agenda.",
+       variaveis={"primeiro_nome": "primeiro nome da pessoa",
+                  "nome": "nome completo",
+                  "data_hora": "data e hora da entrevista (dd/mm/aaaa às HH:MM)",
+                  "onde": "onde é: o endereço (presencial) ou o link da reunião "
+                          "(online) — montado pelo sistema conforme a modalidade",
+                  "vaga": "título da vaga, quando houver"},
+       # `data_hora` e `onde` são o e-mail INTEIRO: sem eles a pessoa recebe um
+       # aviso que não diz quando nem aonde ir.
+       obrigatorias=("data_hora", "onde"),
+       exemplo={"primeiro_nome": "Maria", "nome": "Maria Souza",
+                "data_hora": "12/08/2026 às 14:00",
+                "onde": "É presencial, em: SIA Trecho 3, Lote 625 — Brasília/DF",
+                "vaga": "Vigia noturno"}),
+
+    _m(chave="entrevista_lembrete", grupo="Entrevistas",
+       rotulo="Lembrete da entrevista (véspera)",
+       quando="O worker diário avisa cerca de 24h antes da entrevista marcada. "
+              "Uma vez só por entrevista.",
+       assunto="Green House — lembrete: sua entrevista é {{data_hora}}",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "Passando para lembrar da sua entrevista: {{data_hora}}.\n\n"
+             "{{onde}}\n\n"
+             "Leve um documento com foto. Se algo mudou e você não puder vir, "
+             "responda este e-mail.",
+       variaveis={"primeiro_nome": "primeiro nome da pessoa",
+                  "nome": "nome completo",
+                  "data_hora": "data e hora da entrevista (dd/mm/aaaa às HH:MM)",
+                  "onde": "onde é: o endereço (presencial) ou o link da reunião "
+                          "(online) — montado pelo sistema conforme a modalidade",
+                  "vaga": "título da vaga, quando houver"},
+       obrigatorias=("data_hora", "onde"),
+       exemplo={"primeiro_nome": "Maria", "nome": "Maria Souza",
+                "data_hora": "12/08/2026 às 14:00",
+                "onde": "É online. Link da reunião: https://teams.exemplo/abc",
+                "vaga": "Vigia noturno"}),
+
+    _m(chave="entrevista_cancelada", grupo="Entrevistas",
+       rotulo="Entrevista cancelada",
+       quando="O RH cancela uma entrevista que já tinha convite enviado. Leva o "
+              "cancelamento de calendário (.ics) anexado.",
+       assunto="Green House — sua entrevista de {{data_hora}} foi cancelada",
+       corpo="Olá, {{primeiro_nome}}!\n\n"
+             "A entrevista que estava marcada para {{data_hora}} foi "
+             "cancelada.\n\n"
+             "Isso não encerra o seu cadastro conosco: seu currículo continua "
+             "na nossa base e podemos procurá-lo para outras oportunidades.\n\n"
+             "O anexo remove o compromisso da sua agenda.",
+       variaveis={"primeiro_nome": "primeiro nome da pessoa",
+                  "nome": "nome completo",
+                  "data_hora": "data e hora que estava marcada",
+                  "vaga": "título da vaga, quando houver"},
+       obrigatorias=("data_hora",),
+       exemplo={"primeiro_nome": "Maria", "nome": "Maria Souza",
+                "data_hora": "12/08/2026 às 14:00", "vaga": "Vigia noturno"}),
+
     _m(chave="desenvolvimento_devolvido", grupo="Colaborador",
        rotulo="Curso/certificado devolvido para ajuste",
        quando="O RH devolve um documento do colaborador para correção.",

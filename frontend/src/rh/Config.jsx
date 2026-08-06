@@ -8,6 +8,7 @@ import Importacoes from './Importacoes.jsx'
 import EmailsConfig from './EmailsConfig.jsx'
 import LogsRH from './LogsRH.jsx'
 import TelemetriaRH from './TelemetriaRH.jsx'
+import RoteirosEntrevista from './RoteirosEntrevista.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -322,6 +323,10 @@ const SUBMENUS = [
   ['organizacao', '🏢 Empresas e jornadas'],
   ['importacoes', '📥 Importações'],
   ['tags', '🏷️ Tags'],
+  // O catálogo do instrumento da entrevista mora aqui, junto dos outros
+  // catálogos (Tags, Modelos): o RH monta o roteiro uma vez e depois só o
+  // escolhe na ficha — não é tela de uso diário (§ 14.1).
+  ['roteiros', '🗣️ Roteiros de entrevista'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['emails', '✉️ Textos dos e-mails'],
   ['telemetria', '📈 Telemetria'],
@@ -356,6 +361,7 @@ export default function Config({ aoVoltar }) {
       </>}
       {aba === 'importacoes' && <Importacoes />}
       {aba === 'tags' && <TagsConfig />}
+      {aba === 'roteiros' && <RoteirosEntrevista />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>

@@ -29,13 +29,14 @@ from sqlalchemy.orm import Session
 from app.api.auth_rh import requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato
-from app.models.crm import Anotacao
+from app.models.crm import Anotacao, PessoaTag, Tag
 from app.models.entrevista import (STATUS_TERMINAIS, Entrevista,
                                    StatusEntrevista, TipoEntrevista)
 from app.models.talento import Talento
 from app.models.usuario_rh import UsuarioRH
 from app.models.vaga import Vaga
-from app.services import crm, entrevistas as inst, storage
+from app.services import (crm, entrevista_convite as convite,
+                          entrevistas as inst, storage)
 from app.services.auditoria import registrar
 from app.services.lixeira import mandar_para_lixeira
 
@@ -68,6 +69,17 @@ class EntrevistaIn(BaseModel):
     marcada_para: datetime | None = None
     local: str | None = None
     entrevistador_nome: str | None = None
+    # --- v2.66 ---
+    modalidade: str | None = None          # presencial | online
+    link_reuniao: str | None = None
+    # Roteiro escolhido na hora. None = o sistema resolve por herança
+    # (cargo+senioridade → cargo → padrão). Sugerido, nunca imposto.
+    roteiro_id: uuid.UUID | None = None
+    cargo: str | None = None               # dica para a herança, quando não há vaga
+    senioridade: str | None = None
+    # O RH decide se o convite sai. Sem e-mail da pessoa, não sai — e a
+    # resposta diz POR QUÊ (cenário 26), nunca falha calada.
+    enviar_convite: bool = False
 
 
 class PreencherIn(BaseModel):
@@ -83,6 +95,11 @@ class PreencherIn(BaseModel):
     observacao: str | None = None
     realizada_em: datetime | None = None
     local: str | None = None
+    # --- v2.66: remarcar pela própria ficha ---
+    marcada_para: datetime | None = None
+    modalidade: str | None = None
+    link_reuniao: str | None = None
+    reenviar_convite: bool = False
     # True = fechar a avaliação (exige tudo). False/omitido = salvar rascunho.
     concluir: bool = False
 
@@ -90,6 +107,10 @@ class PreencherIn(BaseModel):
 class DesfechoIn(BaseModel):
     status: str                 # nao_veio | remarcada | cancelada
     motivo: str | None = None
+    # Cancelar/remarcar com convite já enviado avisa a pessoa e manda o
+    # cancelamento de calendário — senão o compromisso fica na agenda dela
+    # depois de cancelado, e ela vem (cenário 28).
+    avisar_pessoa: bool = True
 
 
 class ArquivarIn(BaseModel):
@@ -100,22 +121,42 @@ class ExcluirIn(BaseModel):
     motivo: str | None = None
 
 
+class PessoaRef(BaseModel):
+    talento_id: uuid.UUID | None = None
+    candidato_id: uuid.UUID | None = None
+
+
+class ReaproveitarIn(BaseModel):
+    """Tag de reaproveitamento em lote (§ 14.3). A tag vem do RH — o sistema
+    SUGERE a partir do cargo da vaga, mas quem confirma é ele."""
+    tag: str
+    pessoas: list[PessoaRef] = []
+    vaga_titulo: str | None = None
+
+
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
 
 def _pessoa_de(db: Session, e: Entrevista) -> dict:
-    """Nome e ids da pessoa entrevistada, de qualquer um dos dois lados."""
+    """Nome, e-mail e ids da pessoa entrevistada, de qualquer um dos dois lados.
+
+    O e-mail entra aqui (v2.66) porque é ele que decide se o convite e o
+    lembrete podem sair — e a tela precisa dizer o MOTIVO quando não podem
+    (cenário 26), em vez de mostrar um interruptor que não faz nada.
+    """
     if e.talento_id:
         t = db.get(Talento, e.talento_id)
         if t is not None:
-            return {"nome": t.nome, "talento_id": t.id, "candidato_id": t.candidato_id}
+            return {"nome": t.nome, "email": t.email,
+                    "talento_id": t.id, "candidato_id": t.candidato_id}
     if e.candidato_id:
         c = db.get(Candidato, e.candidato_id)
         if c is not None:
-            return {"nome": c.nome_completo, "talento_id": None, "candidato_id": c.id}
-    return {"nome": "(pessoa removida)", "talento_id": e.talento_id,
-            "candidato_id": e.candidato_id}
+            return {"nome": c.nome_completo, "email": c.email,
+                    "talento_id": None, "candidato_id": c.id}
+    return {"nome": "(pessoa removida)", "email": None,
+            "talento_id": e.talento_id, "candidato_id": e.candidato_id}
 
 
 def _aguardando_desfecho(e: Entrevista, agora: datetime | None = None) -> bool:
@@ -154,6 +195,24 @@ def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None) -> dict:
         "aguardando_desfecho": _aguardando_desfecho(e, agora),
         "tem_anexo": bool(e.anexo_key), "anexo_nome": e.anexo_nome,
         "criada_em": e.criada_em, "arquivada_em": e.arquivada_em,
+        # --- v2.66 ---
+        "modalidade": e.modalidade, "link_reuniao": e.link_reuniao,
+        "convite_enviado_em": e.convite_enviado_em,
+        "lembrete_enviado_em": e.lembrete_enviado_em,
+        "sequencia_convite": e.sequencia_convite or 0,
+        # POR QUE o convite/lembrete não pode sair — a tela mostra este texto ao
+        # lado do interruptor. "Desligado" sem motivo faria o RH tentar de novo
+        # achando que foi falha de rede (cenário 26).
+        "motivo_sem_lembrete": convite.motivo_sem_envio(
+            pessoa.get("email"), e.marcada_para),
+        "roteiro_id": e.roteiro_id,
+        # O instrumento COM QUE A ENTREVISTA FOI FEITA. Vem do snapshot, nunca
+        # do roteiro vivo: editar o roteiro depois não pode reescrever o que a
+        # nota significava (cenários 21 e 24).
+        "roteiro_nome": (e.roteiro_snapshot or {}).get("nome"),
+        "roteiro_versao": (e.roteiro_snapshot or {}).get("versao"),
+        "roteiro_competencias": inst.normalizar_competencias(
+            (e.roteiro_snapshot or {}).get("competencias")) or None,
     }
 
 
@@ -174,14 +233,15 @@ def _pessoas_em_lote(db: Session, linhas: list[Entrevista]) -> dict:
     for e in linhas:
         if e.talento_id and e.talento_id in talentos:
             t = talentos[e.talento_id]
-            saida[e.id] = {"nome": t.nome, "talento_id": t.id,
+            saida[e.id] = {"nome": t.nome, "email": t.email, "talento_id": t.id,
                            "candidato_id": t.candidato_id}
         elif e.candidato_id and e.candidato_id in candidatos:
             c = candidatos[e.candidato_id]
-            saida[e.id] = {"nome": c.nome_completo, "talento_id": None,
-                           "candidato_id": c.id}
+            saida[e.id] = {"nome": c.nome_completo, "email": c.email,
+                           "talento_id": None, "candidato_id": c.id}
         else:
-            saida[e.id] = {"nome": "(pessoa removida)", "talento_id": e.talento_id,
+            saida[e.id] = {"nome": "(pessoa removida)", "email": None,
+                           "talento_id": e.talento_id,
                            "candidato_id": e.candidato_id}
     return saida
 
@@ -203,11 +263,44 @@ def _exigir_pessoa(db: Session, talento_id, candidato_id) -> tuple:
 # --------------------------------------------------------------------------
 
 @router.get("/rh/entrevistas/formulario")
-def ver_formulario() -> dict:
-    """O instrumento: 4 competências com âncoras, escala, variantes,
-    recomendações e as perguntas de triagem. O front desenha as duas fichas a
-    partir daqui e NÃO duplica nenhum texto. Não toca o banco."""
-    return inst.formulario()
+def ver_formulario(db: Session = Depends(get_db),
+                   roteiro_id: uuid.UUID | None = None,
+                   cargo: str | None = None,
+                   senioridade: str | None = None) -> dict:
+    """O instrumento: competências com âncoras, escala, variantes, recomendações
+    e as perguntas de triagem. O front desenha as duas fichas a partir daqui e
+    **NÃO duplica nenhum texto** (`test_entrevistas.py` varre o JSX e reprova).
+
+    **O CONTRATO não mudou na v2.66 — a FONTE mudou.** Até a v2.65 isto devolvia
+    uma constante de módulo; agora resolve o ROTEIRO no banco por herança
+    (`roteiro_id` explícito → cargo+senioridade → cargo → padrão) e devolve as
+    competências dele. O front continua lendo daqui e continua não sabendo nada
+    do texto.
+
+    Cargo sem roteiro **cai no padrão, nunca em erro** (cenário 23), e roteiro
+    em rascunho **não é servido** (cenário 22) — `resolver_roteiro` só considera
+    publicado.
+    """
+    r = inst.resolver_roteiro(db, cargo=cargo, senioridade=senioridade,
+                              roteiro_id=roteiro_id)
+    saida = inst.formulario(r.competencias if r is not None else None)
+    saida["roteiro"] = ({"id": r.id, "nome": r.nome, "versao": r.versao,
+                         "cargo": r.cargo, "senioridade": r.senioridade,
+                         "padrao": r.padrao} if r is not None else None)
+    # Se o `roteiro_id` pedido não foi o servido, quem pediu escolheu um
+    # rascunho ou um arquivado. Dizer isso evita a tela mostrar um instrumento
+    # e o RH acreditar que é outro — nada é filtrado em silêncio.
+    if roteiro_id and (r is None or r.id != roteiro_id):
+        saida["aviso_roteiro"] = (
+            "O roteiro escolhido não está publicado (ou não existe mais). "
+            "A ficha está usando o roteiro resolvido pelo cargo.")
+    return saida
+
+
+@router.get("/rh/entrevistas/modalidades")
+def ver_modalidades() -> dict:
+    """Modalidades e qual campo cada uma exige — o front não duplica o rótulo."""
+    return {"itens": inst.MODALIDADES}
 
 
 @router.get("/rh/entrevistas")
@@ -317,6 +410,107 @@ def entrevistas_da_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> di
             "total": len(linhas)}
 
 
+@router.get("/rh/vagas/{vaga_id}/entrevistados")
+def entrevistados_para_reaproveitar(vaga_id: uuid.UUID,
+                                    db: Session = Depends(get_db)) -> dict:
+    """Quem foi entrevistado para esta vaga — a PRÉVIA do reaproveitamento
+    (§ 14.3, cenário 30).
+
+    O Bruno resolveu o cenário 4 melhor do que a sala tinha resolvido: a
+    entrevista já sobrevivia à exclusão da vaga (com `vaga_titulo`), mas isso
+    preservava **o registro**; o que ele quer é preservar **a pessoa como
+    oportunidade**:
+
+    > *"quando excluir uma vaga, a entrevista sobrevive, pois posso poder
+    > taguear a pessoa, de modo que ela possa ser reaproveitada para outro
+    > cargo"*
+
+    E o sistema já tinha a peça: `PessoaTag` do mini-CRM, com catálogo, CRUD e
+    as MESMAS duas FKs opcionais. **Nenhum campo novo.**
+
+    Esta rota só MOSTRA e SUGERE. Aplicar é outro ato (`/reaproveitar`), porque
+    tag aplicada sozinha vira ruído e o RH deixa de confiar na tag — o sistema
+    propõe, o RH confirma.
+    """
+    v = db.get(Vaga, vaga_id)
+    linhas = list(db.scalars(
+        select(Entrevista).where(Entrevista.vaga_id == vaga_id)))
+    pessoas = _pessoas_em_lote(db, linhas)
+    # Uma pessoa entrevistada duas vezes (triagem + presencial) é UMA pessoa a
+    # taguear, não duas — a chave é o par de FKs, não a entrevista.
+    vistos, itens = set(), []
+    for e in linhas:
+        p = pessoas[e.id]
+        chave = (p["talento_id"], p["candidato_id"])
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        itens.append({"nome": p["nome"], "talento_id": p["talento_id"],
+                      "candidato_id": p["candidato_id"],
+                      "recomendacao": e.recomendacao})
+    cargo = (v.cargo if v is not None else None) or (v.titulo if v is not None else None)
+    return {
+        "itens": itens, "total": len(itens),
+        "vaga_titulo": v.titulo if v is not None else None,
+        # SUGESTÃO de nome de tag, editável — nunca aplicada sozinha.
+        "tag_sugerida": f"reaproveitar: {cargo}" if cargo else "reaproveitar",
+    }
+
+
+@router.post("/rh/entrevistas/reaproveitar")
+def reaproveitar(payload: ReaproveitarIn, db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Aplica a tag de reaproveitamento em lote (§ 14.3).
+
+    **Reusa `PessoaTag` do mini-CRM — nenhum campo novo.** As tags já aparecem e
+    filtram no dash de Talentos, então o reaproveitamento funciona sem tela
+    nova: o RH filtra por "reaproveitar: vigia" e acha quem já conversou com a
+    empresa.
+
+    O catálogo (`Tag`) é reusado: cria-se a tag se ela não existir, para o RH
+    não ter que ir a Configurações antes. Idempotente — marcar de novo não
+    duplica, mesma mecânica de `crm.marcar_tag`.
+
+    **Nada é automático** e nada é silencioso: a resposta diz quantas pessoas
+    foram marcadas e quais não deram (`ignoradas`), pela regra da casa de que
+    lote presta contas de quem ficou de fora.
+    """
+    nome = (payload.tag or "").strip()
+    if not nome:
+        raise HTTPException(status_code=422, detail="tag_obrigatoria")
+    if not payload.pessoas:
+        raise HTTPException(status_code=422, detail="nenhuma_pessoa")
+
+    tag = db.scalar(select(Tag).where(Tag.nome == nome[:60]))
+    if tag is None:
+        tag = Tag(nome=nome[:60], ativo=True)
+        db.add(tag)
+        db.flush()
+
+    marcadas, ignoradas = 0, []
+    for p in payload.pessoas:
+        tid, cid = p.talento_id, p.candidato_id
+        if bool(tid) == bool(cid):
+            ignoradas.append({"talento_id": tid, "candidato_id": cid,
+                              "motivo": "informe exatamente talento ou candidato"})
+            continue
+        existe = db.scalar(select(PessoaTag).where(
+            PessoaTag.tag_id == tag.id, PessoaTag.talento_id == tid,
+            PessoaTag.candidato_id == cid))
+        if existe is None:
+            db.add(PessoaTag(tag_id=tag.id, talento_id=tid, candidato_id=cid,
+                             aplicado_por=rh.email))
+            marcadas += 1
+    db.flush()
+    registrar(db, "entrevista_reaproveitamento", ator="rh", ator_detalhe=rh.email,
+              detalhe={"tag": tag.nome, "marcadas": marcadas,
+                       "ignoradas": len(ignoradas),
+                       "vaga": payload.vaga_titulo})
+    db.commit()
+    return {"tag": crm.dump_tag(tag), "marcadas": marcadas,
+            "ignoradas": ignoradas}
+
+
 @router.post("/rh/entrevistas", status_code=201)
 def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
           rh: UsuarioRH = Depends(requer_rh)) -> dict:
@@ -329,12 +523,36 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
     if payload.tipo not in {t.value for t in TipoEntrevista}:
         raise HTTPException(status_code=422, detail="tipo_invalido")
 
-    vaga_titulo = None
+    vaga_titulo, cargo_da_vaga = None, None
     if payload.vaga_id:
         v = db.get(Vaga, payload.vaga_id)
         if v is None:
             raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
         vaga_titulo = v.titulo      # snapshot desde o nascimento (cenário 4)
+        cargo_da_vaga = v.cargo
+
+    modalidade = (payload.modalidade or "").strip() or None
+    if modalidade is not None and modalidade not in inst.CHAVES_MODALIDADE:
+        raise HTTPException(status_code=422, detail="modalidade_invalida")
+    link = (payload.link_reuniao or "").strip() or None
+    local = (payload.local or "").strip() or None
+    # Online sem link não se marca (cenário 29): o convite sairia dizendo
+    # "online" sem dizer por onde entrar. Recusa-se na GRAVAÇÃO, não no envio —
+    # recusar só no e-mail deixaria a entrevista marcada e a pessoa sem acesso.
+    erros = convite.erros_de_modalidade(modalidade, local, link)
+    if erros:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "modalidade_incompleta", "erros": erros})
+
+    # O ROTEIRO (§ 14.1). Resolvido por herança quando o RH não escolhe:
+    # cargo+senioridade → cargo → padrão. Cargo sem roteiro cai no padrão,
+    # NUNCA em erro (cenário 23). A triagem não usa roteiro — ela não tem
+    # competência nem âncora, é outra natureza (§ 4.1).
+    roteiro = None
+    if payload.tipo == TipoEntrevista.entrevista.value:
+        roteiro = inst.resolver_roteiro(
+            db, cargo=(payload.cargo or cargo_da_vaga),
+            senioridade=payload.senioridade, roteiro_id=payload.roteiro_id)
 
     ja_realizada = payload.marcada_para is None
     e = Entrevista(
@@ -344,7 +562,12 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
         status=StatusEntrevista.realizada if ja_realizada else StatusEntrevista.marcada,
         marcada_para=payload.marcada_para,
         realizada_em=datetime.now(timezone.utc) if ja_realizada else None,
-        local=(payload.local or "").strip() or None,
+        local=local, modalidade=modalidade, link_reuniao=link,
+        roteiro_id=roteiro.id if roteiro is not None else None,
+        # SNAPSHOT do instrumento, não só a FK: o roteiro pode ganhar versão ou
+        # ser arquivado, e a entrevista tem que continuar legível com as
+        # perguntas e âncoras de quando a nota foi dada (cenários 21 e 24).
+        roteiro_snapshot=inst.snapshot_do_roteiro(roteiro),
         entrevistador_id=rh.id,
         entrevistador_nome=(payload.entrevistador_nome or "").strip()
                            or rh.nome or rh.email,
@@ -355,13 +578,27 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
     # pendente e o erro real apareceria como PendingRollbackError na próxima
     # operação, apontando para o lugar errado.
     db.flush()
+
+    # O convite sai DEPOIS de a entrevista existir — e nunca derruba a criação:
+    # SMTP fora do ar não pode impedir o RH de registrar o compromisso. O
+    # resultado é ANUNCIADO na resposta, não engolido.
+    pessoa = _pessoa_de(db, e)
+    envio = None
+    if payload.enviar_convite:
+        envio = convite.enviar_convite(db, e, pessoa["nome"], pessoa.get("email"))
+
     registrar(db, "entrevista_criada", ator="rh", ator_detalhe=rh.email,
               candidato_id=cid,
               detalhe={"entrevista": str(e.id), "tipo": e.tipo.value,
-                       "ja_realizada": ja_realizada,
-                       "vaga": vaga_titulo})
+                       "ja_realizada": ja_realizada, "vaga": vaga_titulo,
+                       "modalidade": modalidade,
+                       "roteiro": str(roteiro.id) if roteiro is not None else None,
+                       "convite_enviado": bool(envio and envio.get("enviado"))})
     db.commit()
-    return _dump(e, _pessoa_de(db, e))
+    saida = _dump(e, pessoa)
+    if envio is not None:
+        saida["convite"] = envio
+    return saida
 
 
 # --------------------------------------------------------------------------
@@ -403,9 +640,15 @@ def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
         if payload.triagem_desfecho is not None:
             e.triagem_desfecho = payload.triagem_desfecho
     else:
+        # Valida contra o instrumento COM QUE A FICHA FOI ABERTA (o snapshot),
+        # não contra a constante: um roteiro customizado de 6 competências teria
+        # as 2 extras recusadas como "competência desconhecida", e o roteiro do
+        # RH seria cadastrável e não preenchível.
+        instrumento = (e.roteiro_snapshot or {}).get("competencias")
         erros = inst.validar_entrevista(
             payload.competencias, payload.justificativas,
-            payload.recomendacao, payload.recomendacao_motivo)
+            payload.recomendacao, payload.recomendacao_motivo,
+            instrumento=instrumento)
         if erros:
             raise HTTPException(status_code=422,
                                 detail={"erro": "preenchimento_invalido", "erros": erros})
@@ -427,10 +670,28 @@ def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
     if payload.realizada_em is not None:
         e.realizada_em = payload.realizada_em
 
+    # --- Remarcação / modalidade pela própria ficha (v2.66) ---
+    if payload.modalidade is not None:
+        m = payload.modalidade.strip() or None
+        if m is not None and m not in inst.CHAVES_MODALIDADE:
+            raise HTTPException(status_code=422, detail="modalidade_invalida")
+        e.modalidade = m
+    if payload.link_reuniao is not None:
+        e.link_reuniao = payload.link_reuniao.strip() or None
+    if payload.marcada_para is not None:
+        e.marcada_para = payload.marcada_para
+    erros_mod = convite.erros_de_modalidade(e.modalidade, e.local, e.link_reuniao)
+    if erros_mod:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "modalidade_incompleta",
+                                    "erros": erros_mod})
+
     concluiu = False
     if payload.concluir:
         if tipo == TipoEntrevista.entrevista.value:
-            faltando = inst.completa_entrevista(e.competencias, e.recomendacao)
+            faltando = inst.completa_entrevista(
+                e.competencias, e.recomendacao,
+                instrumento=(e.roteiro_snapshot or {}).get("competencias"))
             if faltando:
                 raise HTTPException(
                     status_code=422,
@@ -453,13 +714,25 @@ def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
     if concluiu:
         _anotar_no_crm(db, e, rh)
 
+    pessoa = _pessoa_de(db, e)
+    envio = None
+    if payload.reenviar_convite:
+        # Reenvio = remarcação: `enviar_convite` INCREMENTA a sequência quando
+        # já houve convite, e é isso que faz o Outlook atualizar o compromisso
+        # em vez de ignorar a mudança em silêncio (cenário 27).
+        envio = convite.enviar_convite(db, e, pessoa["nome"], pessoa.get("email"))
+
     registrar(db, "entrevista_preenchida", ator="rh", ator_detalhe=rh.email,
               candidato_id=e.candidato_id,
               detalhe={"entrevista": str(e.id), "concluida": concluiu,
                        "recomendacao": e.recomendacao,
-                       "triagem_desfecho": e.triagem_desfecho})
+                       "triagem_desfecho": e.triagem_desfecho,
+                       "convite_reenviado": bool(envio and envio.get("enviado"))})
     db.commit()
-    return _dump(e, _pessoa_de(db, e))
+    saida = _dump(e, pessoa)
+    if envio is not None:
+        saida["convite"] = envio
+    return saida
 
 
 def _anotar_no_crm(db: Session, e: Entrevista, rh: UsuarioRH) -> None:
@@ -519,12 +792,29 @@ def desfecho(entrevista_id: uuid.UUID, payload: DesfechoIn,
     if motivo:
         e.observacao = ((e.observacao or "") + f"\n{motivo}").strip()
     db.flush()
+
+    # Cancelou/remarcou com convite já enviado? Manda o CANCELAMENTO com o
+    # mesmo UID (cenário 28) — sem isso o compromisso fica na agenda da pessoa
+    # depois de cancelado, e ela vem. Só faz sentido para quem recebeu convite:
+    # avisar do cancelamento de algo que nunca foi comunicado é ruído.
+    pessoa = _pessoa_de(db, e)
+    envio = None
+    encerra = payload.status in (StatusEntrevista.cancelada.value,
+                                 StatusEntrevista.remarcada.value)
+    if payload.avisar_pessoa and encerra and e.convite_enviado_em is not None:
+        envio = convite.enviar_convite(db, e, pessoa["nome"], pessoa.get("email"),
+                                       cancelar=True)
+
     registrar(db, "entrevista_desfecho", ator="rh", ator_detalhe=rh.email,
               candidato_id=e.candidato_id,
               detalhe={"entrevista": str(e.id), "status": payload.status,
-                       "motivo": motivo or None})
+                       "motivo": motivo or None,
+                       "cancelamento_enviado": bool(envio and envio.get("enviado"))})
     db.commit()
-    return _dump(e, _pessoa_de(db, e))
+    saida = _dump(e, pessoa)
+    if envio is not None:
+        saida["convite"] = envio
+    return saida
 
 
 @router.post("/rh/entrevistas/{entrevista_id}/arquivar")

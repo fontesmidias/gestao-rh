@@ -88,6 +88,47 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Worker que não está nos DOIS arquivos de deploy simplesmente NÃO RODA em
+  produção** (v2.66, achado ao pendurar o lembrete de entrevista): o
+  `deploy/docker-compose.base.yml` rodava `avisar_vencimentos`, e o
+  `deploy/portainer-stack.yml` — **o que sobe na VPS** — não. Ou seja, o aviso
+  de certificação vencendo (Onda B, v1.83) nunca saiu em produção, e ninguém
+  soube: worker que não roda não gera erro, gera SILÊNCIO, e silêncio se
+  confunde com "não havia nada a avisar". É a terceira vez que este par de
+  arquivos cobra (v2.25 alertas, v2.29 logs). **Ao criar ou mexer em worker,
+  confira os DOIS** — e desconfie de qualquer worker cujo efeito você nunca viu
+  acontecer na VPS.
+- **Janela de varredura tem que ser MAIOR que a cadência do worker** (v2.66): o
+  lembrete de entrevista nasceu com janela de 24h num worker que dorme 24h — a
+  entrevista marcada para daqui a 23h ficaria invisível entre duas passadas e o
+  lembrete nunca sairia, sem erro nenhum. Ficou em 36h. O anti-spam é o CARIMBO
+  (`lembrete_enviado_em`), não a janela; então a janela pode ser generosa sem
+  virar repetição. Vale para qualquer varredura com prazo.
+- **Guard de rota não garante INVARIANTE de dado** (v2.66, achado rodando as
+  próprias mutações): as rotas recusam arquivar e excluir o roteiro `padrao`,
+  mas a mutação que removeu o guard deixou o padrão `arquivado` NO BANCO — e o
+  estado sobreviveu à restauração do código. A partir dali `resolver_roteiro`
+  devolvia `None` e **toda ficha de entrevista abriria vazia, sem erro**: a tela
+  parece funcionar e a entrevista é conduzida sem roteiro, que é o oposto do que
+  o módulo existe para garantir. Quando um dado é PISO de uma resolução em
+  cascata, a última etapa precisa de rede de segurança própria — "as rotas não
+  deixam" não é garantia, porque migration, acerto no banco e teste destrutivo
+  não passam por rota.
+- **Teste destrutivo deixa estrago para a próxima execução** (v2.66): o bloco de
+  mutação arquivou o roteiro padrão e as falhas seguintes não tinham nada a ver
+  com o que estava sendo testado — diagnóstico caro. Teste que MEXE em invariante
+  do banco tem que (1) conferir a pré-condição e ANUNCIAR quando ela está
+  quebrada, e (2) devolver o estado ao final. É a armadilha do "só passa em banco
+  limpo" (v2.14) de cabeça para baixo: aqui o teste é que sujava.
+- **A primitiva de 2 colunas serve conteúdo EMPARELHADO, não bloco curto ao lado
+  de bloco longo** (v2.66, visto na tela, invisível no código): o formulário de
+  roteiro pôs "quando o roteiro vale" (3 campos) ao lado das competências (7
+  campos cada) num `.rh-conferencia-corpo`, e a coluna esquerda ficou **vazia por
+  ~1.100px**. Na `FichaEntrevista` as 2 colunas funcionam porque os lados são
+  PARES (a nota ao lado da justificativa que a sustenta). Ao reusar a
+  composição, confira se os dois lados têm massa parecida — e confira
+  RENDERIZADO: no código as duas versões parecem igualmente razoáveis.
+
 - **Passar no teste estrutural NÃO é seguir o padrão — ele cobre VOCABULÁRIO,
   não COMPOSIÇÃO** (v2.65, reprovação do Bruno: *"você fugiu do padrão visual
   da página de entrevistas. NÃO INVENTE NADA QUANTO A ISSO. Siga padrões já
@@ -1269,9 +1310,33 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
     entrevista = avaliação ancorada (4 competências, escala 1–4 **sem ponto
     médio**, justificativa obrigatória por nota). O 422 **NOMEIA** a competência
     que falta.
-  - **O instrumento vive em CONSTANTE de módulo, nunca no banco** (mesma regra
-    da cartilha de desempenho): o front lê `GET /rh/entrevistas/formulario` e
-    NÃO duplica texto. `test_entrevistas.py` varre o JSX e reprova a duplicação.
+  - **⚠️ O instrumento MUDOU DE FONTE na v2.66** (§ 14.1): até a v2.65 vivia em
+    constante de módulo; agora é o **ROTEIRO no banco** (`roteiro_entrevista`),
+    semeado pela migration `a1c3e5b7d9f2` a partir daquela constante. Editar
+    `COMPETENCIAS` em `services/entrevistas.py` **não muda mais nada em
+    produção** — muda só o que um banco novo recebe. Quem edita o instrumento é
+    o RH, pela tela (Configurações → Roteiros de entrevista). **O CONTRATO não
+    mudou**: o front lê `GET /rh/entrevistas/formulario` e NÃO duplica texto —
+    `test_entrevistas.py` e `test_roteiros_entrevista.py` varrem o JSX e
+    reprovam a duplicação.
+  - **Roteiro nasce RASCUNHO e só publicado se usa** (v2.66): é o que sustenta o
+    argumento do § 6 — a defesa não é "existe um roteiro", é *"o roteiro foi
+    aprovado ANTES de ser usado"*. Editar publicado gera a versão SEGUINTE e o
+    devolve a rascunho. A `Entrevista` guarda `roteiro_id` **e**
+    `roteiro_snapshot` (mesma razão do `vaga_titulo`): ler do roteiro vivo
+    mostraria o texto de HOJE numa avaliação de meses atrás. Herança
+    `cargo+senioridade → cargo → padrão`, por `normalizar_cargo`; cargo sem
+    roteiro cai no padrão, **nunca em erro**. O `padrao=True` não se apaga nem
+    se arquiva — e `resolver_roteiro` ainda tem rede de segurança se ele sumir.
+  - **Convite e lembrete** (v2.66, § 14.4, `services/calendario.py` +
+    `services/entrevista_convite.py`): `modalidade` decide `local` ×
+    `link_reuniao`; **online sem link não se marca**. O `.ics` tem UID ESTÁVEL
+    por entrevista + `SEQUENCE` que cresce (é o que faz o Outlook ATUALIZAR em
+    vez de criar um segundo), `METHOD:CANCEL` no cancelamento e
+    `TZID=America/Sao_Paulo` (o container roda em UTC). Sem e-mail da pessoa, o
+    lembrete fica desligado **com o motivo na tela**. O worker mora dentro do
+    `avisar_vencimentos` — que precisou ser acrescentado ao
+    `portainer-stack.yml`, onde faltava.
   - **DUAS FKs de pessoa** (`talento_id`/`candidato_id`), padrão do mini-CRM.
     Com FK única a entrevista feita com o talento SUMIRIA da ficha do candidato
     após o `converter()` — que é quando ela mais importa. Coberto por mutação.

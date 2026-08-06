@@ -109,6 +109,121 @@ export default function EntrevistasDaVaga({ vagaId }) {
           </tbody>
         </table>
       </div>
+
+      <Reaproveitar vagaId={vagaId} />
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// Tag de reaproveitamento (v2.66, § 14.3) — cenário 30.
+// --------------------------------------------------------------------------
+// Pedido do Bruno: *"quando excluir uma vaga, a entrevista sobrevive, pois
+// posso poder taguear a pessoa, de modo que ela possa ser reaproveitada para
+// outro cargo"*. A entrevista já sobrevivia (com `vaga_titulo`), mas isso
+// preservava o REGISTRO; o que ele quer é preservar a PESSOA como oportunidade.
+//
+// Reusa `PessoaTag` do mini-CRM — nenhum campo novo, e as tags já filtram no
+// dash de Talentos, então o reaproveitamento funciona sem tela nova.
+//
+// **PROPOSTA, nunca automática.** O sistema sugere o nome da tag a partir do
+// cargo; quem confirma é o RH. Tag aplicada sozinha vira ruído, e aí o RH deixa
+// de confiar na tag — que é o oposto do que ela existe para fazer.
+
+function Reaproveitar({ vagaId }) {
+  const [prev, setPrev] = useState(null)
+  const [tag, setTag] = useState('')
+  const [aberto, setAberto] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  // Mensagem LOCAL: este bloco fica no fim de uma tabela que pode ser longa —
+  // a confirmação nasce perto do botão que a gerou (regra da v1.96/v2.47).
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    if (!aberto || !vagaId) return
+    api.entrevistadosDaVaga(vagaId)
+      .then((r) => { setPrev(r); setTag(r.tag_sugerida || '') })
+      .catch((e) => setMsg({ erro: true, texto: e.detail || e.message }))
+  }, [aberto, vagaId])
+
+  const aplicar = async () => {
+    setSalvando(true)
+    setMsg(null)
+    try {
+      const r = await api.reaproveitarEntrevistados({
+        tag, vaga_titulo: prev?.vaga_titulo,
+        pessoas: (prev?.itens || []).map((p) => ({
+          talento_id: p.talento_id, candidato_id: p.candidato_id,
+        })),
+      })
+      // O lote presta contas de quem NÃO foi — dizer só "pronto" esconderia
+      // quem ficou de fora (regra da casa desde o lote de arquivamento).
+      const sobra = (r.ignoradas || []).length
+      setMsg({
+        texto: `${r.marcadas} pessoa(s) marcada(s) com "${r.tag.nome}".`
+          + (sobra ? ` ${sobra} não deram — confira o cadastro delas.` : '')
+          + (r.marcadas === 0 && !sobra ? ' (já estavam marcadas)' : ''),
+      })
+    } catch (e) {
+      setMsg({ erro: true, texto: e.detail?.erros?.join(' · ') || e.detail || e.message })
+    } finally { setSalvando(false) }
+  }
+
+  if (!aberto) {
+    return (
+      <div className="rh-conferencia-acoes">
+        <button className="btn-secundario btn-mini" onClick={() => setAberto(true)}>
+          🏷️ Marcar entrevistados para reaproveitamento
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="rh-conferencia">
+      <div className="rh-conferencia-topo">
+        <div>
+          <h3>Reaproveitar quem já foi entrevistado</h3>
+          <span className="explica">
+            Uma tag no mini-CRM guarda estas pessoas como oportunidade para
+            outras vagas — e continua valendo depois que esta vaga sumir. As
+            tags filtram no Banco de Talentos.
+          </span>
+        </div>
+        <button className="btn-secundario btn-mini" onClick={() => setAberto(false)}>
+          ✕ fechar
+        </button>
+      </div>
+
+      {/* "Carregando" e "vazio" são estados diferentes e não podem cair na
+          mesma condição. */}
+      {prev === null && !msg && <p>Carregando quem foi entrevistado…</p>}
+      {prev !== null && prev.total === 0 && (
+        <p className="explica">Ninguém foi entrevistado para esta vaga.</p>
+      )}
+      {prev !== null && prev.total > 0 && (
+        <>
+          <p className="explica">
+            {prev.total} pessoa(s): {prev.itens.map((p) => p.nome).join(', ')}
+          </p>
+          <label className="campo">
+            <span className="rotulo">Tag
+              <span className="dica-inline"> — sugerida a partir do cargo da vaga;
+                edite à vontade</span></span>
+            <input value={tag} onChange={(e) => setTag(e.target.value)} />
+          </label>
+        </>
+      )}
+
+      {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
+
+      {prev !== null && prev.total > 0 && (
+        <div className="rh-conferencia-acoes">
+          <button className="btn-principal btn-mini" onClick={aplicar}
+                  disabled={salvando || !tag.trim()}>
+            {salvando ? 'Marcando…' : 'Marcar estas pessoas'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

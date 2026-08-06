@@ -80,7 +80,13 @@ services:
   expurgo:
     image: ghcr.io/fontesmidias/gestao-rh-api:latest
     entrypoint: ["/bin/sh", "-c"]
-    command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; sleep 86400; done"]
+    # ⚠️ `avisar_vencimentos` FALTAVA aqui (achado da v2.66): o compose local o
+    # rodava e o stack de PRODUÇÃO não, então o aviso de certificação vencendo
+    # (Onda B, v1.83) nunca saiu na VPS — worker que não é declarado nos DOIS
+    # arquivos simplesmente não roda, e nada avisa. É o mesmo par de arquivos
+    # que a v2.25 e a v2.29 já cobraram, aqui esquecido numa terceira vez.
+    # O lembrete de entrevista (v2.66) mora dentro deste mesmo módulo.
+    command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; python -m app.workers.avisar_vencimentos; sleep 86400; done"]
     environment:
       SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}

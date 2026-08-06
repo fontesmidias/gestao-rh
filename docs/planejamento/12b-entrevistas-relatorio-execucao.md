@@ -313,3 +313,201 @@ sozinho seria inventar produto no seu lugar.
    anti-peeking antes** de qualquer outro item da fase 3, e **nunca calcular
    média entre avaliadores** — a média apaga o desacordo, que é o dado mais
    informativo (cenário 8).
+
+---
+---
+
+# Fase 3 — relatório de execução (v2.66, 2026-08-05)
+
+Segunda leva do módulo, escrita depois do relatório acima (v2.64/v2.65) e sem
+sobrescrevê-lo. Contrato: **§ 14** do
+`docs/planejamento/12-modulo-de-entrevistas.md` (commit `63fead7`).
+
+## 1. O que foi entregue
+
+### 14.1 — Roteiros múltiplos (o item que reorganiza o módulo)
+
+| Onde | O quê |
+|---|---|
+| `backend/app/models/roteiro_entrevista.py` | `RoteiroEntrevista` + `StatusRoteiro` (rascunho/publicado/arquivado) + `SENIORIDADES` (lista fixa) |
+| `backend/migrations/versions/a1c3e5b7d9f2_roteiros_entrevista.py` | tabela, colunas novas da `entrevista` e a **SEMENTE** do roteiro padrão |
+| `backend/app/services/entrevistas.py` | `normalizar_competencias`, `validar_roteiro`, `resolver_roteiro`, `dump_roteiro`, `snapshot_do_roteiro`, `formulario(competencias)` |
+| `backend/app/api/roteiros_entrevista.py` | 9 rotas (`GET/POST` lista, `GET/PUT/DELETE {id}`, `/publicar`, `/duplicar`, `/arquivar`, `/tornar-padrao`) |
+| `backend/app/models/entrevista.py` | `roteiro_id` (FK SET NULL) + `roteiro_snapshot` (JSONB) |
+| `frontend/src/rh/RoteirosEntrevista.jsx` | tela em Configurações |
+| `frontend/src/rh/Config.jsx` | aba `🗣️ Roteiros de entrevista` |
+
+**A constante virou SEMENTE, não fonte.** A migration importa
+`COMPETENCIAS_PADRAO` de `services/entrevistas.py` e grava — nunca copia o texto
+à mão (cópia diverge da origem na primeira revisão e ninguém percebe: lição do
+`test_export_dexion`). O docstring do serviço agora abre com o aviso de que
+editar a constante não muda mais nada em produção.
+
+**`GET /rh/entrevistas/formulario` aceita `?roteiro_id=`, `?cargo=`,
+`?senioridade=`** e devolve o roteiro resolvido. O contrato com o front é o
+mesmo; mudou a fonte. Quando o `roteiro_id` pedido não é o servido (rascunho ou
+arquivado), a resposta traz `aviso_roteiro` — **nada é filtrado em silêncio**.
+
+### 14.2 — Mais perguntas de triagem
+
+Quatro acréscimos em `PERGUNTAS_TRIAGEM`: `tem_disponibilidade_imediata`,
+`tem_documentacao`, `ja_trabalhou_no_cliente`, `aceita_uniforme_epi`. Total: 9.
+**Sem nota, sem competência, sem âncora.**
+
+### 14.3 — Tag de reaproveitamento
+
+| Onde | O quê |
+|---|---|
+| `backend/app/api/entrevistas.py` | `GET /rh/vagas/{id}/entrevistados` (prévia + tag sugerida) e `POST /rh/entrevistas/reaproveitar` (lote) |
+| `frontend/src/rh/EntrevistasDaVaga.jsx` | bloco `Reaproveitar`, aberto sob demanda |
+
+**Zero campo novo**: reusa `Tag`/`PessoaTag` do mini-CRM. Pessoa entrevistada
+duas vezes conta **uma**. Idempotente. O lote presta contas de quem não deu.
+**Proposta, nunca automática.**
+
+### 14.4 — Lembrete por e-mail e convite de calendário
+
+| Onde | O quê |
+|---|---|
+| `backend/app/services/calendario.py` | `.ics` sem biblioteca: UID estável, SEQUENCE, METHOD:CANCEL, TZID+VTIMEZONE, dobra de linha, CRLF |
+| `backend/app/services/entrevista_convite.py` | porta única de envio: `erros_de_modalidade`, `onde_e`, `motivo_sem_envio`, `enviar_convite`, `deve_lembrar`, `enviar_lembrete` |
+| `backend/app/services/email_templates.py` | `entrevista_marcada`, `entrevista_lembrete`, `entrevista_cancelada` no `CATALOGO` |
+| `backend/app/workers/avisar_vencimentos.py` | `lembrar_entrevistas()` — **junto do cron que já existe**, sem cron novo |
+| `backend/app/models/entrevista.py` | `modalidade`, `link_reuniao`, `sequencia_convite`, `convite_enviado_em`, `lembrete_enviado_em` |
+| `frontend/src/rh/EntrevistasRH.jsx` / `FichaEntrevista.jsx` | modalidade condicional, interruptor do convite, estado do lembrete com o MOTIVO |
+
+## 2. O que eu REPROVEI no caminho
+
+Sete reprovações. Nenhuma veio de fora — todas do meu próprio trabalho, e duas
+delas apontaram defeitos que já estavam no repositório.
+
+1. **REPROVADO — o worker do lembrete ia para um worker que não roda em
+   produção.** `avisar_vencimentos` estava no compose local e **faltava no
+   `deploy/portainer-stack.yml`**. Consequência que não era desta leva: o aviso
+   de certificação vencendo (v1.83) **nunca saiu na VPS**. Corrigido no mesmo
+   commit, com o porquê no arquivo.
+2. **REPROVADO — janela do lembrete igual à cadência do worker.** 24h de janela
+   num worker que dorme 24h: entrevista marcada para daqui a 23h ficaria
+   invisível entre passadas e o lembrete nunca sairia, em silêncio. Foi para
+   36h.
+3. **REPROVADO — o roteiro padrão podia ficar sem fundo.** Descoberto rodando as
+   próprias mutações: a mutação que removeu o guard arquivou o padrão, o estado
+   sobreviveu à restauração do código, e `resolver_roteiro` passou a devolver
+   `None` — **toda ficha abriria vazia, sem erro nenhum**. Ganhou rede de
+   segurança (qualquer publicado sem cargo serve de fundo; na falta, a
+   constante-semente) + teste próprio (bloco 19) validado por mutação.
+4. **REPROVADO — o teste destrutivo sujava o banco para a execução seguinte.**
+   As falhas que apareceram depois da mutação 4 não tinham relação com o que
+   estava sendo testado. Ganhou bloco 0 (confere a pré-condição e **anuncia**) e
+   o bloco 19 devolve o estado ao final.
+5. **REPROVADO — prop errada no `SelectBusca`** (a armadilha da v2.64, que eu
+   mesmo documentei): passei `value`/`onChange`/`disabled` onde a assinatura é
+   `valor`/`aoEscolher`/`desabilitado`. React ignora prop desconhecida em
+   silêncio — o campo renderizaria vazio e nunca gravaria, com o código
+   parecendo certo. Corrigido abrindo a assinatura antes.
+6. **REPROVADO — `<select>` no JSX** (pego pelo `test_design_system.py`): era um
+   comentário meu contendo o literal. **Não afrouxei o teste** — reescrevi o
+   comentário.
+7. **REPROVADO — layout: coluna esquerda vazia por ~1.100px.** Só apareceu na
+   tela renderizada. A primitiva de 2 colunas serve conteúdo EMPARELHADO;
+   "quando o roteiro vale" (3 campos) ao lado das competências (7 por
+   competência) não é par. Refeito: cabeçalho em largura cheia, e as 2 colunas
+   onde fazem sentido (âncoras ao lado das perguntas).
+
+Além disso, **um teste da v2.64 quebrou legitimamente** e foi corrigido:
+`test_entrevistas.py` cobrava `len(perguntas_triagem) == 5`. Não incrementei o
+número (isso faria o teste não proteger nada — v2.25); derivei a garantia da
+NATUREZA da triagem: todas sim/não/não sei, nenhuma com âncora ou nota.
+
+## 3. Portões — resultado real
+
+| Portão | Resultado |
+|---|---|
+| `alembic upgrade head` | **OK** — `f8a9b0c1d2e3 → a1c3e5b7d9f2` |
+| Migration up → **down** → up | **OK**, executada de verdade (não só escrita) |
+| `tests/test_roteiros_entrevista.py` | **OK** — 19 blocos, banco recriado limpo |
+| `tests/test_entrevistas.py` (v2.64) | **OK** após a correção do assert de contagem |
+| `tests/test_entrevista_arquivamento.py` | **OK** após acrescentar o import do modelo-alvo da FK nova |
+| `tests/test_design_system.py` | **OK** (6/6) |
+| `tests/test_email_templates.py` | **OK** |
+| `tests/test_versao.py` | **OK** — 2.66.0 bate com o topo do CHANGELOG |
+| `tests/smoke_test.py` | **OK — 15/15** |
+| `npm run build` | **OK** |
+| Tela renderizada (Playwright, 1440px) | **OK** — `overflowH: 0`, sem erro de JS |
+
+**O que NÃO passou, e não é desta leva:**
+
+- `pytest tests/ -q` termina com **2 INTERNALERROR** de coleção. Confirmei com
+  `git stash` que **acontece igual no `main` limpo**: são testes em estilo
+  script que chamam `SystemExit`, e o coletor do pytest rejeita. O projeto os
+  roda direto (`python tests/x.py`), que é como foram executados aqui.
+- `test_match_persistencia.py` continua **VERMELHO**, pelo mesmo motivo já
+  registrado no relatório da v2.64: assume banco limpo (`sem_curriculo == 1`,
+  veio 200). Não toquei.
+- Os 404 de `/api/marca/logo` no navegador são pré-existentes (logo não
+  cadastrada nesta base local).
+
+## 4. Cenários 21–30
+
+| # | Cenário | Como está |
+|---|---|---|
+| 21 | Roteiro editado depois de usado | **Teste** (bloco 6) + **mutação** (ler do roteiro vivo → falha) |
+| 22 | Roteiro em rascunho não aparece | **Teste** (bloco 2) + **mutação** (aceitar rascunho → falha) |
+| 23 | Cargo sem roteiro cai no padrão | **Teste** (bloco 4) |
+| 24 | Roteiro arquivado, entrevistas legíveis | **Teste** (bloco 7) |
+| 25 | Apagar o roteiro padrão | **Teste** (bloco 8) + **mutação** (remover guard → falha) |
+| 26 | Pessoa sem e-mail | **Teste** (bloco 12) + **mutação** (motivo sempre None → falha) |
+| 27 | Remarcada depois do convite | **Teste** (blocos 13 e 14) + **mutação** (UID aleatório → falha; sequência fixa → falha) |
+| 28 | Cancelada depois do convite | **Teste** (bloco 13: METHOD:CANCEL + mesmo UID) |
+| 29 | Online sem link | **Teste** (bloco 11) + **mutação** (remover checagem → falha) |
+| 30 | Vaga excluída com 5 entrevistados | **Teste** (bloco 10) + **mutação** (tag automática → falha) |
+
+**Mutações executadas: 9. Todas reprovaram o código defeituoso.** Cada uma está
+anotada no bloco correspondente do teste.
+
+## 5. O que ficou de fora, e por quê
+
+1. **Segundo avaliador + trava anti-peeking** — fora por decisão do documento
+   (§ 2.6) e do Bruno (decisão 1): só o RH entrevista, não há nota de colega
+   para espiar. Continua **datado, não descartado**.
+2. **Exclusão de vaga pela lixeira** — **NÃO implementado de propósito**. O
+   Bruno respondeu o que importava (a pessoa é tagueada) e não disse se a vaga
+   em si vai para a lixeira. Mudar a exclusão de outro módulo é escopo que ele
+   não pediu. Fiz o mínimo: a entrevista já sobrevive (SET NULL + snapshot) e
+   agora a pessoa é preservada como oportunidade.
+3. **Integração com a API do Teams** — o link é colado pelo RH, como o `wa.me`
+   do Minutário. Integrar exigiria app registrado no tenant e OAuth próprio.
+4. **Escolha do roteiro numa entrevista já preenchida** — a entrevista adota o
+   roteiro no NASCIMENTO (resolvido ou escolhido). Trocar depois invalidaria as
+   notas já dadas; se ele quiser isso, é decisão de produto dele, não minha.
+5. **Perguntas de triagem editáveis pela tela** — só as COMPETÊNCIAS viraram
+   roteiro no banco. A triagem continua em constante, porque o § 14.1 fala de
+   roteiro de entrevista, não de triagem. Se ele quiser as duas editáveis, é
+   pedido novo.
+
+## 6. Perguntas em aberto para o Bruno (não respondi por ele)
+
+1. **A vaga em si passa a ir para a lixeira?** (pendência nº 3 do documento,
+   continua aberta — respondi só a parte que ele já tinha decidido).
+2. **`.rh-painel` vs `.pagina`**: devolvida na v2.65 e ainda sem resposta.
+   Segui `.rh-painel`, que é a prática do painel. Registrada de novo.
+3. **As 4 perguntas novas de triagem servem?** Estão dentro do critério dele
+   ("coerentes e coesas"), mas quem faz a ligação é ele. **Elas não são
+   editáveis pela tela** — se quiser que sejam, é pedido novo (item 5 acima).
+4. **Duração da entrevista no convite** está chumbada em 60 min. Vira campo?
+5. **A quem responde o e-mail da entrevista?** Hoje o `ORGANIZER` do `.ics` é o
+   `smtp_from`. Se houver um endereço de recrutamento próprio, qual é?
+6. **`test_match_persistencia.py`** continua vermelho desde antes da v2.64.
+   Conserto numa próxima?
+
+## 7. Recomendações registradas (além das da v2.64)
+
+1. **Confira se o aviso de certificação vencendo passou a chegar** depois deste
+   deploy — ele estava sem rodar em produção por falta da linha no
+   `portainer-stack.yml`. Se alguém tinha certificado vencendo nos últimos
+   meses, o aviso não saiu.
+2. **Ao criar worker novo, conferir os DOIS arquivos de deploy** (regra
+   acrescentada ao `CLAUDE.md`).
+3. **O roteiro padrão é o piso do sistema**: se um dia for preciso mexer nele
+   pelo banco, garanta que sobre um publicado sem cargo — há rede de segurança,
+   mas ela é a última linha, não a primeira.

@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -87,6 +87,38 @@ class Entrevista(Base):
     marcada_para: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     realizada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     local: Mapped[str | None] = mapped_column(String(120))
+
+    # --- Modalidade (v2.66, § 14.4). É ela que decide o resto: presencial usa
+    # `local` (endereço), online usa `link_reuniao` (URL colada pelo RH — não há
+    # integração com a API do Teams, e integrar exigiria app no tenant e OAuth
+    # próprio, pelo mesmo raciocínio do `wa.me` do Minutário).
+    #
+    # **Online sem link não se marca** (cenário 29): o e-mail sairia dizendo
+    # "entrevista online" sem dizer por onde, e a pessoa não teria como entrar.
+    modalidade: Mapped[str | None] = mapped_column(String(20))    # presencial | online
+    link_reuniao: Mapped[str | None] = mapped_column(String(500))
+
+    # --- Convite de calendário (§ 14.4). `SEQUENCE` do RFC 5545: o cliente de
+    # agenda só ACEITA a atualização se o número for maior que o que ele já tem
+    # — com o mesmo UID e sequência igual, a remarcação é ignorada em silêncio e
+    # a pessoa vem no horário velho. Incrementa a cada convite reenviado.
+    sequencia_convite: Mapped[int] = mapped_column(Integer, default=0)
+    convite_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Carimbo do lembrete da véspera: o worker roda a cada 24h e não pode mandar
+    # o mesmo lembrete duas vezes (a pessoa aprende a ignorar — mesma razão do
+    # anti-spam do `avisar_vencimentos`).
+    lembrete_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- O ROTEIRO com que a avaliação foi feita (v2.66, § 14.1).
+    #
+    # FK **e** snapshot, pelo mesmo motivo de `vaga_titulo`: o roteiro pode
+    # ganhar versão nova ou ser arquivado, e a entrevista tem que continuar
+    # legível com as perguntas e âncoras de quando a nota foi dada. Ler do
+    # roteiro vivo mostraria o texto de HOJE numa avaliação de meses atrás
+    # (cenários 21 e 24) — e a nota deixaria de significar o que significava.
+    roteiro_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("roteiro_entrevista.id", ondelete="SET NULL"), nullable=True)
+    roteiro_snapshot: Mapped[dict | None] = mapped_column(JSONB)
 
     # --- Quem conduziu: FK + SNAPSHOT (o nome não some se o usuário for
     # removido) — padrão do mini-CRM e do Desempenho. ---

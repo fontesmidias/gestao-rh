@@ -239,6 +239,10 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
   const [vagaId, setVagaId] = useState('')
   const [quando, setQuando] = useState('')
   const [local, setLocal] = useState('')
+  // --- v2.66 (§ 14.4) ---
+  const [modalidade, setModalidade] = useState('')
+  const [linkReuniao, setLinkReuniao] = useState('')
+  const [enviarConvite, setEnviarConvite] = useState(false)
   const [talentos, setTalentos] = useState([])
   const [candidatos, setCandidatos] = useState([])
   const [vagas, setVagas] = useState([])
@@ -268,8 +272,18 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
         // prévio mataria o módulo — pessoa que aparece na porta é rotina.
         marcada_para: quando ? new Date(quando).toISOString() : null,
         local: local || null,
+        modalidade: modalidade || null,
+        link_reuniao: linkReuniao || null,
+        enviar_convite: enviarConvite,
       })
       aoCriar(criada)
+      // O convite é ANUNCIADO, nunca engolido: quando não sai (pessoa sem
+      // e-mail, SMTP fora do ar), a resposta traz o motivo e a tela o mostra.
+      // Silêncio faria o RH acreditar que a pessoa foi avisada.
+      if (criada?.convite && !criada.convite.enviado && criada.convite.motivo) {
+        setErro(`Entrevista registrada, mas o convite não saiu: ${criada.convite.motivo}`)
+        return
+      }
     } catch (e) {
       setErro(e.detail?.erro || e.detail || e.message || 'Não foi possível registrar.')
     } finally { setSalvando(false) }
@@ -324,12 +338,45 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
           <input type="datetime-local" value={quando}
                  onChange={(e) => setQuando(e.target.value)} />
         </label>
-        <label className="campo">
-          <span className="rotulo">Local</span>
-          <input value={local} onChange={(e) => setLocal(e.target.value)}
-                 placeholder="telefone, sede, vídeo…" />
-        </label>
+        <div className="campo">
+          <span className="rotulo">Modalidade</span>
+          <SelectBusca valor={modalidade} aoEscolher={setModalidade}>
+            <option value="">— não informada —</option>
+            <option value="presencial">Presencial</option>
+            <option value="online">Online (Teams)</option>
+          </SelectBusca>
+        </div>
+        {/* A modalidade decide qual campo aparece: endereço no presencial,
+            link no online. Os dois ao mesmo tempo fariam o RH preencher o que
+            não vale, e o e-mail sairia com a informação errada. */}
+        {modalidade === 'online' ? (
+          <label className="campo">
+            <span className="rotulo">Link da reunião
+              <span className="dica-inline"> — obrigatório no online: sem ele o
+                convite chega sem dizer por onde entrar</span></span>
+            <input value={linkReuniao} onChange={(e) => setLinkReuniao(e.target.value)}
+                   placeholder="https://teams.microsoft.com/…" />
+          </label>
+        ) : (
+          <label className="campo">
+            <span className="rotulo">Local</span>
+            <input value={local} onChange={(e) => setLocal(e.target.value)}
+                   placeholder="telefone, sede, vídeo…" />
+          </label>
+        )}
       </div>
+
+      {/* O convite só faz sentido com data marcada: entrevista registrada como
+          já realizada não tem o que agendar. */}
+      {quando && (
+        <label className="campo-sem-margem">
+          <input type="checkbox" checked={enviarConvite}
+                 onChange={(e) => setEnviarConvite(e.target.checked)} />
+          {' '}Avisar a pessoa por e-mail e mandar o convite de calendário
+          <span className="dica-inline"> — se ela não tiver e-mail no cadastro,
+            o sistema avisa aqui em vez de falhar calado</span>
+        </label>
+      )}
 
       {erro && <p className="alerta">{erro}</p>}
       <div className="rh-conferencia-acoes">
