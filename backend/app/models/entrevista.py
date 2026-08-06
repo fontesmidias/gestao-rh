@@ -132,6 +132,19 @@ class Entrevista(Base):
     triagem: Mapped[dict | None] = mapped_column(JSONB)
     triagem_desfecho: Mapped[str | None] = mapped_column(String(20))
 
+    # --- Duração do compromisso (v2.67, § 15.5 item 4) ---
+    #
+    # Era a constante `DURACAO_MIN` de `entrevista_convite.py`; virou campo a
+    # pedido do Bruno. Alimenta o `DTEND` do `.ics`.
+    #
+    # **Zero ou negativo é RECUSADO na entrada** (cenário 37): o `DTEND` sairia
+    # anterior ao `DTSTART`, e um VEVENT com fim antes do começo é descartado
+    # por cliente rígido e desenhado como faixa vazia pelos tolerantes — em
+    # ambos os casos a pessoa não vê a entrevista na agenda. O `gerar_ics` tem
+    # `max(1, ...)` como rede, mas a rede não pode ser a única defesa: ela
+    # silenciaria a duração errada em vez de dizer ao RH que ele digitou 0.
+    duracao_min: Mapped[int] = mapped_column(Integer, default=60)
+
     # --- ENTREVISTA (tipo == entrevista) ---
     # Mesmo padrão de Avaliacao.competencias: dict JSON, sem tabela por item.
     competencias: Mapped[dict | None] = mapped_column(JSONB)      # {chave: 1..4}

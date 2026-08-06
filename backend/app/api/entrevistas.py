@@ -18,16 +18,20 @@ Duas regras de produto que o código sustenta e que não devem ser afrouxadas:
 - **Nota sem justificativa não salva** (cenário 15) e ressalva sem motivo não
   salva (cenário 16) — 422 NOMEANDO o que falta.
 """
+import hashlib
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
+                     UploadFile)
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
+from app.core.config import ip_do_cliente
 from app.core.db import get_db
+from app.models.assinatura_entrevista import AssinaturaEntrevista
 from app.models.candidato import Candidato
 from app.models.crm import Anotacao, PessoaTag, Tag
 from app.models.entrevista import (STATUS_TERMINAIS, Entrevista,
@@ -72,6 +76,10 @@ class EntrevistaIn(BaseModel):
     # --- v2.66 ---
     modalidade: str | None = None          # presencial | online
     link_reuniao: str | None = None
+    # --- v2.67 ---
+    # Duração do compromisso, em minutos (§ 15.5 item 4). Alimenta o `DTEND` do
+    # `.ics`. Zero/negativo é recusado com 422 (cenário 37).
+    duracao_min: int | None = None
     # Roteiro escolhido na hora. None = o sistema resolve por herança
     # (cargo+senioridade → cargo → padrão). Sugerido, nunca imposto.
     roteiro_id: uuid.UUID | None = None
@@ -99,6 +107,7 @@ class PreencherIn(BaseModel):
     marcada_para: datetime | None = None
     modalidade: str | None = None
     link_reuniao: str | None = None
+    duracao_min: int | None = None
     reenviar_convite: bool = False
     # True = fechar a avaliação (exige tudo). False/omitido = salvar rascunho.
     concluir: bool = False
@@ -197,6 +206,7 @@ def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None) -> dict:
         "criada_em": e.criada_em, "arquivada_em": e.arquivada_em,
         # --- v2.66 ---
         "modalidade": e.modalidade, "link_reuniao": e.link_reuniao,
+        "duracao_min": e.duracao_min or convite.DURACAO_MIN,
         "convite_enviado_em": e.convite_enviado_em,
         "lembrete_enviado_em": e.lembrete_enviado_em,
         "sequencia_convite": e.sequencia_convite or 0,
@@ -244,6 +254,33 @@ def _pessoas_em_lote(db: Session, linhas: list[Entrevista]) -> dict:
                            "talento_id": e.talento_id,
                            "candidato_id": e.candidato_id}
     return saida
+
+
+def _exigir_duracao(valor: int | None) -> int | None:
+    """Duração válida, ou 422 que explica (cenário 37).
+
+    Zero ou negativo produziria `DTEND` anterior (ou igual) ao `DTSTART`: o
+    cliente de agenda descarta o evento ou desenha uma faixa vazia, e a pessoa
+    simplesmente não vê a entrevista. O `gerar_ics` tem `max(1, ...)` como rede,
+    mas rede não é validação — ela ESCONDERIA o erro de digitação em vez de
+    dizer ao RH que ele digitou 0.
+
+    O teto de 24h existe pelo mesmo motivo, na outra ponta: `duracao_min=100000`
+    ocuparia dez semanas da agenda de alguém.
+    """
+    if valor is None:
+        return None
+    if valor <= 0:
+        raise HTTPException(status_code=422, detail={
+            "erro": "duracao_invalida",
+            "mensagem": "A duração precisa ser de pelo menos 1 minuto — com "
+                        "zero, o convite chega com fim antes do começo e o "
+                        "calendário da pessoa o descarta."})
+    if valor > 24 * 60:
+        raise HTTPException(status_code=422, detail={
+            "erro": "duracao_invalida",
+            "mensagem": "A duração não pode passar de 24 horas."})
+    return valor
 
 
 def _exigir_pessoa(db: Session, talento_id, candidato_id) -> tuple:
@@ -543,6 +580,7 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
     if erros:
         raise HTTPException(status_code=422,
                             detail={"erro": "modalidade_incompleta", "erros": erros})
+    duracao = _exigir_duracao(payload.duracao_min)
 
     # O ROTEIRO (§ 14.1). Resolvido por herança quando o RH não escolhe:
     # cargo+senioridade → cargo → padrão. Cargo sem roteiro cai no padrão,
@@ -563,6 +601,7 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
         marcada_para=payload.marcada_para,
         realizada_em=datetime.now(timezone.utc) if ja_realizada else None,
         local=local, modalidade=modalidade, link_reuniao=link,
+        duracao_min=duracao if duracao is not None else convite.DURACAO_MIN,
         roteiro_id=roteiro.id if roteiro is not None else None,
         # SNAPSHOT do instrumento, não só a FK: o roteiro pode ganhar versão ou
         # ser arquivado, e a entrevista tem que continuar legível com as
@@ -631,7 +670,14 @@ def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
     tipo = e.tipo.value if hasattr(e.tipo, "value") else e.tipo
     if tipo == TipoEntrevista.triagem.value:
         # Triagem NÃO tem nota, competência nem âncora — é outra coisa (§ 4.1).
-        erros = inst.validar_triagem(payload.triagem, payload.triagem_desfecho)
+        # As perguntas VÁLIDAS vêm do roteiro de triagem publicado (v2.67): com
+        # as perguntas editáveis, validar contra a constante recusaria a resposta
+        # de uma pergunta criada pelo RH como "desconhecida", e o catálogo seria
+        # cadastrável e não preenchível.
+        r_tri = inst.resolver_triagem(db)
+        erros = inst.validar_triagem(
+            payload.triagem, payload.triagem_desfecho,
+            perguntas=(r_tri.perguntas if r_tri is not None else None))
         if erros:
             raise HTTPException(status_code=422,
                                 detail={"erro": "preenchimento_invalido", "erros": erros})
@@ -680,6 +726,8 @@ def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
         e.link_reuniao = payload.link_reuniao.strip() or None
     if payload.marcada_para is not None:
         e.marcada_para = payload.marcada_para
+    if payload.duracao_min is not None:
+        e.duracao_min = _exigir_duracao(payload.duracao_min)
     erros_mod = convite.erros_de_modalidade(e.modalidade, e.local, e.link_reuniao)
     if erros_mod:
         raise HTTPException(status_code=422,
@@ -887,6 +935,199 @@ def baixar_anexo(entrevista_id: uuid.UUID, db: Session = Depends(get_db)) -> Res
                     media_type=e.anexo_tipo or "application/octet-stream",
                     headers={"Content-Disposition":
                              f'inline; filename="{e.anexo_nome or "anexo"}"'})
+
+
+# ==========================================================================
+# DOCUMENTO da entrevista (v2.67, § 15.2-15.4)
+#
+# ⚠️ **NADA DAQUI ENTRA NO DOSSIÊ DE ADMISSÃO.** Decisão do Bruno, que chegou a
+# incluir e corrigiu na mesma sessão: *"não não. no dossiê de admissão não."*
+# O dossiê CIRCULA (cliente, pasta física, quem pedir) e nota de seleção com
+# justificativa escrita é dado sensível sobre a pessoa — mesma regra que manteve
+# resultado de teste fora do dossiê na v2.21.
+#
+# A garantia é ESTRUTURAL, não uma lembrança: o PDF é gravado com prefixo
+# `entrevistas/`, e o `services/dossie.py` só lê `Assinatura.pdf_key`,
+# `SlotDocumento.arquivo_pdf_key` e `SolicitacaoAssinatura.pdf_final_key` — três
+# tabelas que este módulo deliberadamente NÃO usa (ver o docstring de
+# `models/assinatura_entrevista.py`, que explica por que a
+# `SolicitacaoAssinatura` foi descartada: o dossiê a varre sem filtrar origem).
+# Há teste por mutação cobrindo isto.
+# ==========================================================================
+
+
+def _instrumento_da(e: Entrevista):
+    """As competências COM QUE a entrevista foi feita — do snapshot, nunca do
+    roteiro vivo (cenários 21 e 24)."""
+    return (e.roteiro_snapshot or {}).get("competencias")
+
+
+def _exigir_documentavel(db: Session, e: Entrevista) -> None:
+    """422 com o que falta, quando a ficha ainda não pode virar documento."""
+    from app.services import entrevista_pdf as epdf
+
+    erros = epdf.erros_para_documento(e, _instrumento_da(e))
+    if erros:
+        raise HTTPException(status_code=422, detail={
+            "erro": "entrevista_incompleta", "faltando": erros})
+
+
+def _gerar_pdf_da(db: Session, e: Entrevista, assinaturas=None) -> bytes:
+    from app.models.entrevista import TipoEntrevista
+    from app.services import entrevista_pdf as epdf
+
+    pessoa = _pessoa_de(db, e)
+    tipo = e.tipo.value if hasattr(e.tipo, "value") else e.tipo
+    if tipo == TipoEntrevista.triagem.value:
+        r = inst.resolver_triagem(db)
+        return epdf.gerar_ficha_triagem(
+            db, e, pessoa["nome"], r.perguntas if r is not None else None)
+    return epdf.gerar_ficha_entrevista(db, e, pessoa["nome"], assinaturas)
+
+
+def _assinaturas_vivas(db: Session, entrevista_id) -> list:
+    """As vias NÃO substituídas, da mais antiga para a mais nova."""
+    return list(db.scalars(
+        select(AssinaturaEntrevista)
+        .where(AssinaturaEntrevista.entrevista_id == entrevista_id,
+               AssinaturaEntrevista.substituida_em.is_(None))
+        .order_by(AssinaturaEntrevista.via)))
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/documento")
+def baixar_documento(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+    """A ficha em PDF. Assinada, serve o PDF GRAVADO; senão, gera na hora.
+
+    Servir o arquivo gravado (e não regerar) é o que faz o hash continuar
+    válido: o SHA-256 do manifesto descreve BYTES, e um PDF regerado teria
+    outro carimbo de data interno.
+    """
+    from app.services.export_planilha import slug
+
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    _exigir_documentavel(db, e)
+
+    pessoa = _pessoa_de(db, e)
+    assinadas = _assinaturas_vivas(db, e.id)
+    com_pdf = [a for a in assinadas if a.pdf_key]
+    if com_pdf:
+        try:
+            dados = storage.ler(com_pdf[-1].pdf_key)
+        except Exception:
+            # Arquivo sumiu do storage: regera SEM os blocos de assinatura. Um
+            # PDF regerado não reproduz o hash, então afirmar que ele é a via
+            # assinada seria mentira — melhor entregar o documento não assinado
+            # do que uma via cuja integridade não se confere.
+            dados = _gerar_pdf_da(db, e)
+    else:
+        dados = _gerar_pdf_da(db, e)
+
+    registrar(db, "entrevista_documento_baixado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=e.candidato_id,
+              detalhe={"entrevista": str(e.id), "pessoa": pessoa["nome"]})
+    db.commit()
+    nome = slug(f"entrevista-{pessoa['nome']}", fallback="entrevista")
+    return Response(content=dados, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{nome}.pdf"'})
+
+
+class AssinarFichaIn(BaseModel):
+    # A senha da PRÓPRIA sessão do RH logado — o mesmo método de
+    # `solicitacoes_assinatura.py:400` (`prova_metodo="senha_sessao_rh"`).
+    senha: str
+
+
+@router.post("/rh/entrevistas/{entrevista_id}/assinar")
+def assinar_ficha(entrevista_id: uuid.UUID, payload: AssinarFichaIn,
+                  request: Request, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Assina a ficha de entrevista — **o RH que conduziu** (§ 15.3).
+
+    O entrevistado NÃO assina: exigiria mandar link a quem talvez não seja
+    contratado, e o link lhe daria acesso às notas e às justificativas escritas
+    a seu respeito.
+
+    Alterar a entrevista depois NÃO reescreve esta via (cenário 31): assinar de
+    novo cria a via SEGUINTE e marca a anterior como substituída — que continua
+    existindo, com o hash dela. É a regra da casa desde 2026-07-15: assinatura é
+    prova de um ato, e ato não se edita retroativamente.
+    """
+    from app.api.auth_rh import verificar_senha
+
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    # A recusa da ficha incompleta vem ANTES da conferência de senha: negar por
+    # senha uma ficha que nem poderia virar documento mandaria o RH procurar o
+    # problema no lugar errado.
+    _exigir_documentavel(db, e)
+    if not verificar_senha(payload.senha, rh.senha_hash):
+        raise HTTPException(status_code=401, detail="senha_invalida")
+
+    agora = datetime.now(timezone.utc)
+    anteriores = _assinaturas_vivas(db, e.id)
+    for a in anteriores:
+        a.substituida_em = agora
+
+    # O hash descreve o documento SEM o bloco de assinatura — mesma convenção do
+    # `Assinatura.hash_sha256`: confere-se a integridade regerando o base.
+    base = _gerar_pdf_da(db, e)
+    registro = AssinaturaEntrevista(
+        entrevista_id=e.id, usuario_rh_id=rh.id,
+        assinante_nome=rh.nome, assinante_email=rh.email,
+        hash_sha256=hashlib.sha256(base).hexdigest(),
+        prova_metodo="senha_sessao_rh",
+        ip=ip_do_cliente(request),
+        user_agent=(request.headers.get("user-agent") or "")[:400],
+        via=(max((a.via for a in anteriores), default=0) + 1),
+        assinado_em=agora)
+    db.add(registro)
+    db.flush()
+
+    assinado = _gerar_pdf_da(db, e, [registro])
+    # Prefixo `entrevistas/` — o dossiê não olha para cá (ver o aviso no topo
+    # deste bloco).
+    key = f"entrevistas/{e.id}/ficha-assinada-v{registro.via}.pdf"
+    storage.salvar(key, assinado, "application/pdf")
+    registro.pdf_key = key
+
+    registrar(db, "entrevista_ficha_assinada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=e.candidato_id,
+              detalhe={"entrevista": str(e.id), "via": registro.via,
+                       "metodo": "senha_sessao_rh"})
+    db.commit()
+    return {"assinado": True, "via": registro.via,
+            "hash": registro.hash_sha256, "assinado_em": registro.assinado_em,
+            "assinante": registro.assinante_nome}
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/assinaturas")
+def listar_assinaturas(entrevista_id: uuid.UUID,
+                       db: Session = Depends(get_db)) -> dict:
+    """As vias da ficha, inclusive as SUBSTITUÍDAS — a via antiga some da vista,
+    nunca do registro."""
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    linhas = db.scalars(
+        select(AssinaturaEntrevista)
+        .where(AssinaturaEntrevista.entrevista_id == entrevista_id)
+        .order_by(AssinaturaEntrevista.via)).all()
+    from app.services import entrevista_pdf as epdf
+    return {
+        "itens": [{
+            "id": a.id, "via": a.via, "assinante": a.assinante_nome,
+            "assinante_email": a.assinante_email, "assinado_em": a.assinado_em,
+            "hash": a.hash_sha256, "metodo": a.prova_metodo,
+            "substituida_em": a.substituida_em,
+        } for a in linhas],
+        # O que impede de assinar AGORA — a tela mostra em vez de deixar o botão
+        # ligado para dar 422 no clique.
+        "impedimentos": epdf.erros_para_documento(e, _instrumento_da(e)),
+    }
 
 
 @router.delete("/rh/entrevistas/{entrevista_id}", status_code=204)

@@ -37,7 +37,8 @@ def _tipo_do_anexo(nome: str) -> tuple[str, str]:
 
 def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
                  levantar_erro: bool = False,
-                 anexos: list[tuple[str, bytes]] | None = None) -> bool:
+                 anexos: list[tuple[str, bytes]] | None = None,
+                 remetente: str | None = None) -> bool:
     """Envia e REGISTRA o resultado — saiu, por onde, e por que não saiu.
 
     O registro existe porque "o e-mail não chegou" é a pergunta mais frequente
@@ -54,7 +55,7 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
     ok = False
     try:
         ok = _enviar_email(destinatario, assunto, corpo_texto, corpo_html,
-                           levantar_erro, anexos)
+                           levantar_erro, anexos, remetente)
         return ok
     finally:
         try:
@@ -71,8 +72,19 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
 
 def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: str | None = None,
                   levantar_erro: bool = False,
-                  anexos: list[tuple[str, bytes]] | None = None) -> bool:
-    """anexos: lista de (nome_do_arquivo.pdf, bytes)."""
+                  anexos: list[tuple[str, bytes]] | None = None,
+                  remetente: str | None = None) -> bool:
+    """anexos: lista de (nome_do_arquivo.pdf, bytes).
+
+    `remetente` (v2.67) sobrepõe o `From` **no caminho SMTP**, e só nele. É
+    honesto dizer o limite: nos caminhos M365, Google e webhook a mensagem sai
+    da CAIXA CONECTADA por construção — o Graph recusa `From` de terceiro sem
+    permissão de aplicação (`SendAs`), e forjar o cabeçalho ali resultaria em
+    e-mail rejeitado ou marcado como spam, que é pior do que sair do endereço
+    de sempre. Nesses casos o remetente pedido é ignorado em vez de derrubar o
+    envio: o convite de entrevista sair do endereço padrão é um detalhe de
+    apresentação; não sair é uma entrevista perdida.
+    """
     if not destinatario:
         # Candidato cadastrado sem e-mail (convite copiado para o WhatsApp):
         # não há para onde enviar — quem chama trata email_enviado=False.
@@ -115,7 +127,7 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
         return False
 
     msg = EmailMessage()
-    msg["From"] = cfg["from_"]
+    msg["From"] = (remetente or "").strip() or cfg["from_"]
     msg["To"] = destinatario
     msg["Subject"] = assunto
     msg.set_content(corpo_texto)

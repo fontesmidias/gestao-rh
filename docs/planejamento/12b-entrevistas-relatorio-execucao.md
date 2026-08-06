@@ -511,3 +511,166 @@ anotada no bloco correspondente do teste.
 3. **O roteiro padrão é o piso do sistema**: se um dia for preciso mexer nele
    pelo banco, garanta que sobre um publicado sem cargo — há rede de segurança,
    mas ela é a última linha, não a primeira.
+
+---
+
+# Fase 4 (v2.67) — os documentos e as 5 respostas
+
+Executada em 2026-08-05, contra o § 15 do documento (commit `4dd034f`).
+
+## 1. O que foi entregue
+
+### 1.1 Os três documentos no catálogo (§ 15.2)
+
+| Arquivo | O que tem |
+|---|---|
+| `backend/app/services/entrevista_pdf.py` | Os três geradores (`gerar_ficha_entrevista`, `gerar_ficha_triagem`, `gerar_roteiro`), a amostra fictícia e `erros_para_documento` |
+| `backend/app/services/documentos_catalogo.py` | `Origem` (famílias `admissao` × `entrevista`) e `CATALOGO_ENTREVISTAS` |
+| `backend/app/api/modelos.py:173` | A prévia da família entrevista |
+
+**A decisão que mais pesou**: o catálogo era candidato-cêntrico
+(`GERADORES[chave](db, candidato)`) e validado contra o `DocumentoAssinavel`
+inteiro. A saída óbvia — acrescentar valores ao enum — seria destrutiva por dois
+caminhos verificados no código, não supostos:
+
+- `api/rh_ficha.py:38` faz `_TODOS = list(DocumentoAssinavel)` e usa a lista em
+  `DOCS_POR_SECAO` → **editar os dados pessoais de alguém invalidaria a ficha de
+  entrevista dele**;
+- `_docs_exigidos` faria a ficha virar **pendência de assinatura do candidato no
+  wizard**.
+
+Por isso: duas famílias. `_conferir_catalogo` continua cobrando cobertura EXATA
+do enum para a família `admissao` e **reprova no import** se um documento de
+entrevista virar valor do enum — o erro diz por quê.
+
+### 1.2 A ficha assinável (§ 15.3)
+
+- `backend/app/models/assinatura_entrevista.py` — tabela própria
+- `backend/app/api/entrevistas.py` — `POST /rh/entrevistas/{id}/assinar`,
+  `GET /{id}/assinaturas`, `GET /{id}/documento`
+- `frontend/src/rh/FichaEntrevista.jsx` — o bloco `DocumentoDaFicha`
+
+`prova_metodo = "senha_sessao_rh"`, o mesmo de
+`api/solicitacoes_assinatura.py:400`. O entrevistado não assina. Assinar de novo
+cria a via SEGUINTE; a anterior fica com o hash dela.
+
+### 1.3 Onde vive, e onde NÃO vive (§ 15.4)
+
+**Não usei `SolicitacaoAssinatura`, e essa é a razão de existir a tabela
+própria.** `services/dossie.py` percorre toda solicitação `concluida` com
+`pdf_final_key` **sem filtrar `origem`** — assinar por ali colocaria a ficha no
+dossiê automaticamente, com uma página a mais que ninguém veria. Filtrar por
+origem no `dossie.py` resolveria o sintoma e deixaria a porta encostada para o
+próximo módulo.
+
+### 1.4 As quatro outras respostas (§ 15.5)
+
+1. **Vaga pela lixeira** — `backend/app/api/vagas.py:111`. `SET NULL` +
+   `vaga_titulo` continuam (defesa em profundidade).
+3. **Triagem editável** — `tipo` e `perguntas` no `RoteiroEntrevista`;
+   `validar_roteiro_triagem` em `services/entrevistas.py`.
+4. **`duracao_min`** — campo na `Entrevista`, `_exigir_duracao` na rota,
+   `duracao_de` no convite.
+5. **`email_recrutamento`** — `services/config_dinamica.py`, usada no `ORGANIZER`
+   e no remetente.
+
+### 1.5 Migration
+
+`b2d4f6a8c1e3` (down_revision `a1c3e5b7d9f2`, head conferido antes de gravar).
+Executada **up → down → up** de verdade. Semeia o roteiro de triagem padrão a
+partir da constante (importada, não copiada) e de forma idempotente.
+
+## 2. O que REPROVEI no caminho
+
+Reprovei quatro coisas — três minhas, uma da leva anterior.
+
+1. **REPROVADO: a assinatura pela `SolicitacaoAssinatura`.** Era o caminho
+   natural (reusa roteiro, manifesto, consolidação) e teria colocado a ficha no
+   dossiê. Refeito com tabela própria + teste por mutação.
+2. **REPROVADO: meu próprio teste do `.ics`.** A 1ª versão chamava
+   `calendario.gerar_ics` direto, com a duração escrita no teste. A mutação que
+   chumbava a duração no `_anexo_ics` passou **verde**. Refeito para passar pelo
+   `_anexo_ics`; aí a mutação foi pega (1:00 em vez de 1:30).
+3. **REPROVADO: meu teste do "um padrão por tipo".** Conferia listagens e nunca
+   chamava `tornar-padrao` — a mutação da rota passou verde. Refeito para
+   exercitar a rota.
+4. **REPROVADO: o rótulo do `<details>` na tela de roteiros** (defeito que a
+   minha própria mudança expôs): dizia "ver as competências e âncoras deste
+   roteiro" **em roteiro de triagem**, que não tem nem uma nem outra, e a lista
+   abria vazia. Só apareceu no screenshot.
+
+Também **encontrei um defeito real que a suíte antiga pegou**: a semente da
+triagem nasce `padrao=True`, e sem recorte por tipo apareciam DOIS padrões;
+pior, `tornar_padrao` desmarcava o padrão do outro tipo, deixando a triagem sem
+fundo de herança **sem erro na tela**. Corrigido em quatro pontos (listagem,
+métricas, `tornar_padrao`, `resolver_roteiro`).
+
+## 3. Portões (resultado real)
+
+| Portão | Resultado |
+|---|---|
+| `alembic upgrade head` | OK — e `up → down → up` executado |
+| `test_entrevista_documentos.py` (novo) | **OK**, rodado 2x seguidas (idempotente) |
+| `test_entrevistas.py` | OK |
+| `test_roteiros_entrevista.py` | OK (reprovou antes; o defeito era meu) |
+| `test_entrevista_arquivamento.py` | OK |
+| `test_documentos_catalogo.py` | OK (reprovou antes; contagem chumbada, derivada agora) |
+| `test_email_templates.py`, `test_design_system.py`, `test_versao.py`, `test_upload_multipart.py`, `test_nomes.py` | OK |
+| `smoke_test.py` | **15/15** |
+| `npm run build` | OK |
+| Tela renderizada (Playwright, 1440px) | 4 telas, **estouro horizontal = 0** em todas |
+| PDF renderizado em imagem | os 3 documentos conferidos; 1 defeito de layout achado e corrigido |
+
+`pytest tests/ -q` **não roda** neste projeto: os testes são scripts (dois deles
+fazem `raise SystemExit(0)` no import e o pytest aborta com INTERNALERROR).
+Rodei cada um como script, que é o que o CI faz.
+
+## 4. Cenários 31–38
+
+| # | Como está |
+|---|---|
+| 31 | **Coberto por teste** — assinar de novo cria a via 2; a via 1 mantém o hash |
+| 32 | **Coberto por teste** — 422 com o que falta; assinar também recusa |
+| 33 | **Coberto por teste** — rascunho dá 409; publicado gera |
+| 34 | **Coberto por teste** — vaga vai à lixeira, `vaga_id` a NULL, `vaga_titulo` mantém o nome |
+| 35 | **Coberto por teste** — triagem sem pergunta é recusada |
+| 36 | **Coberto por teste** — chave vazia cai no `smtp_from` efetivo |
+| 37 | **Coberto por teste** — 0 e -30 recusados; 90 chega ao `DTEND` |
+| 38 | **Coberto por teste** — entrevista arquivada continua gerando documento |
+
+## 5. O que ficou de fora, e por quê
+
+1. **Restaurar a vaga pela tela da lixeira** — a vaga passa a ir para a lixeira e
+   o snapshot é completo, mas **não conferi o fluxo de restauração** dela na tela
+   de lixeira. É código genérico que já existe; não o exercitei.
+2. **O `remetente` no M365/Google/webhook** — implementado só no caminho SMTP, e
+   está dito no docstring. O Graph recusa `From` de terceiro sem permissão de
+   aplicação; forjar daria e-mail rejeitado, pior que sair do endereço de
+   sempre. **Se o Bruno quiser o remetente próprio valendo no M365, é
+   configuração no tenant (SendAs), não código.**
+3. **`test_match_persistencia.py`** — continua vermelho desde antes da v2.64.
+   Não toquei: é de outro módulo e não foi pedido.
+
+## 6. Perguntas em aberto para o Bruno (não respondi por ele)
+
+1. **O remetente de recrutamento precisa valer no M365?** Hoje o envio real sai
+   pela caixa conectada; a chave muda o `ORGANIZER` do `.ics` e o `From` no
+   SMTP. Se ele quiser o endereço próprio nos e-mails de verdade, é liberar
+   `SendAs` no tenant — decisão dele, com custo de administração.
+2. **A ficha deve aparecer no Arquivo como coluna/filtro próprio?** Hoje ela é
+   acessível pela ficha da pessoa e pela rota; o § 15.4 diz "no Arquivo", e o
+   Arquivo é candidato-cêntrico (`Assinatura`/`SlotDocumento`). Entrevista de
+   TALENTO que nunca virou candidato não tem lugar lá — **não inventei um**.
+3. **Quantas perguntas de triagem ele quer de fato?** As 9 seguem semeadas e
+   agora editáveis; ele pode ter outras que pergunta hoje ao telefone.
+4. **`.rh-painel` vs `.pagina`** — devolvida na v2.65 e na v2.66, ainda sem
+   resposta. Segui `.rh-painel`.
+
+## 7. Recomendações registradas
+
+1. **Ao criar fluxo de assinatura novo, decidir explicitamente se ele entra no
+   dossiê** — o default do `dossie.py` é "entra", e o vazamento é silencioso.
+   Acrescentado ao `CLAUDE.md`.
+2. **Conferir a restauração de uma vaga pela lixeira** na próxima leva.
+3. **A tela do catálogo de documentos ganhou `origem`/`onde_vive`** — se o RH
+   achar a lista longa com 14 itens, o agrupamento por família já está no dado.

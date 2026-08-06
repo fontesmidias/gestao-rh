@@ -298,6 +298,116 @@ COMPETENCIAS_PADRAO = normalizar_competencias(COMPETENCIAS)
 NOME_ROTEIRO_PADRAO = "Roteiro padrão — cargos operacionais"
 
 
+def normalizar_perguntas(bruto) -> list[dict]:
+    """As perguntas do roteiro de TRIAGEM, no formato canônico (v2.67).
+
+    Aceita `{chave, pergunta, nunca_exclui?}`. A chave é gerada a partir do
+    texto quando não vem — o RH escreve a pergunta, não um identificador.
+
+    **Nota, âncora e competência são DESCARTADAS aqui, em silêncio deliberado**:
+    o que recusa com mensagem é `validar_roteiro`, na gravação. Este normalizador
+    é usado também na LEITURA (dado antigo, dado editado à mão no banco), e
+    deixar passar um campo de nota na leitura faria a tela desenhar um seletor de
+    nota numa triagem — que é a fronteira do § 4.1.
+    """
+    saida, vistas = [], set()
+    for p in (bruto or []):
+        if isinstance(p, str):
+            p = {"pergunta": p}
+        if not isinstance(p, dict):
+            continue
+        texto = str(p.get("pergunta") or "").strip()
+        if not texto:
+            continue
+        chave = str(p.get("chave") or "").strip()
+        if not chave:
+            from app.services.export_tirvu import normalizar_cargo
+            base = normalizar_cargo(texto)[:40].replace(" ", "_").strip("_")
+            chave = base or f"pergunta_{len(saida) + 1}"
+        # Chave repetida sobrescreveria a resposta da anterior no JSON da
+        # triagem — duas perguntas, uma resposta, sem erro nenhum na tela.
+        if chave in vistas:
+            sufixo = 2
+            while f"{chave}_{sufixo}" in vistas:
+                sufixo += 1
+            chave = f"{chave}_{sufixo}"
+        vistas.add(chave)
+        item = {"chave": chave, "pergunta": texto}
+        if p.get("nunca_exclui"):
+            item["nunca_exclui"] = True
+        saida.append(item)
+    return saida
+
+
+# A semente do roteiro de triagem padrão: as 9 perguntas de hoje.
+PERGUNTAS_PADRAO = normalizar_perguntas(PERGUNTAS_TRIAGEM)
+
+NOME_TRIAGEM_PADRAO = "Triagem padrão — checagem de viabilidade"
+
+# Campos que denunciam uma triagem virando avaliação. Ficam numa constante
+# porque a mesma lista é cobrada na validação E no teste estrutural — escrita
+# duas vezes, divergiriam na primeira alteração.
+CAMPOS_PROIBIDOS_TRIAGEM = ("ancoras", "nota", "notas", "escala", "competencia",
+                            "competencias", "peso")
+
+
+def validar_roteiro_triagem(nome: str | None, perguntas) -> list[str]:
+    """Erros do roteiro de TRIAGEM, em linguagem de tela (v2.67, § 15.5 item 3).
+
+    Duas regras, e as duas são de natureza, não de forma:
+
+    - **Triagem publicada precisa de ao menos uma pergunta** (cenário 35):
+      checagem vazia não é checagem — seria um registro que afirma ter havido
+      triagem sem nada perguntado.
+    - **Nada de âncora, nota, escala, peso ou competência.** É o § 4.1 e a
+      decisão 3 do Bruno. Tornar as perguntas editáveis não pode ser a porta
+      pela qual a triagem vira entrevista curta; o erro NOMEIA o campo que
+      apareceu, porque "roteiro inválido" faria o RH procurar no escuro.
+    """
+    erros = []
+    if not (nome or "").strip():
+        erros.append("Dê um nome ao roteiro de triagem.")
+    for p in (perguntas or []):
+        if not isinstance(p, dict):
+            continue
+        achados = sorted(c for c in CAMPOS_PROIBIDOS_TRIAGEM if p.get(c))
+        if achados:
+            erros.append(
+                f"'{str(p.get('pergunta') or '')[:40]}': triagem não tem "
+                f"{', '.join(achados)}. Ela é checagem de viabilidade — quem "
+                "avalia com nota e âncora é a entrevista.")
+    if not normalizar_perguntas(perguntas):
+        erros.append("A triagem precisa de ao menos uma pergunta — checagem "
+                     "sem pergunta não é checagem.")
+    return erros
+
+
+def resolver_triagem(db, roteiro_id=None):
+    """O roteiro de triagem que vale. Só PUBLICADO; None cai nas perguntas-semente.
+
+    Mais simples que `resolver_roteiro` de propósito: triagem não herda por
+    cargo. As perguntas ("aceita a escala?", "consegue chegar?") valem para
+    qualquer posto — o que muda entre cargos é a RESPOSTA, não a pergunta.
+    Herança aqui seria complexidade sem caso de uso.
+    """
+    from sqlalchemy import select
+
+    from app.models.roteiro_entrevista import (RoteiroEntrevista, StatusRoteiro,
+                                               TipoRoteiro)
+
+    pub = RoteiroEntrevista.status == StatusRoteiro.publicado.value
+    tri = RoteiroEntrevista.tipo == TipoRoteiro.triagem.value
+
+    if roteiro_id:
+        r = db.get(RoteiroEntrevista, roteiro_id)
+        if (r is not None and r.status == StatusRoteiro.publicado.value
+                and r.tipo == TipoRoteiro.triagem.value):
+            return r
+    return db.scalar(select(RoteiroEntrevista).where(pub, tri)
+                     .order_by(RoteiroEntrevista.padrao.desc(),
+                               RoteiroEntrevista.versao.desc()))
+
+
 def validar_roteiro(nome: str | None, competencias) -> list[str]:
     """Erros de cadastro do roteiro, em linguagem de tela.
 
@@ -355,13 +465,21 @@ def resolver_roteiro(db, *, cargo: str | None = None,
     """
     from sqlalchemy import select
 
-    from app.models.roteiro_entrevista import RoteiroEntrevista, StatusRoteiro
+    from app.models.roteiro_entrevista import (RoteiroEntrevista, StatusRoteiro,
+                                               TipoRoteiro)
 
-    pub = RoteiroEntrevista.status == StatusRoteiro.publicado.value
+    # **Só roteiro de ENTREVISTA** (v2.67): com a triagem no mesmo catálogo, um
+    # roteiro de triagem publicado poderia virar o fundo da herança e a ficha de
+    # entrevista abriria com perguntas de viabilidade e nenhuma competência —
+    # sem erro nenhum na tela, que é o pior desfecho.
+    pub = ((RoteiroEntrevista.status == StatusRoteiro.publicado.value)
+           & (RoteiroEntrevista.tipo == TipoRoteiro.entrevista.value))
 
     if roteiro_id:
         r = db.get(RoteiroEntrevista, roteiro_id)
-        if r is not None and r.status == StatusRoteiro.publicado.value:
+        if (r is not None and r.status == StatusRoteiro.publicado.value
+                and (getattr(r, "tipo", None)
+                     or TipoRoteiro.entrevista.value) == TipoRoteiro.entrevista.value):
             return r
 
     from app.services.export_tirvu import normalizar_cargo
@@ -418,11 +536,20 @@ def resolver_roteiro(db, *, cargo: str | None = None,
 
 
 def dump_roteiro(r) -> dict:
+    from app.models.roteiro_entrevista import StatusRoteiro, TipoRoteiro
+
+    tipo = getattr(r, "tipo", None) or TipoRoteiro.entrevista.value
     return {
         "id": r.id, "nome": r.nome,
         "cargo": r.cargo, "senioridade": r.senioridade,
         "status": r.status, "versao": r.versao,
+        "tipo": tipo,
         "competencias": normalizar_competencias(r.competencias),
+        "perguntas": normalizar_perguntas(r.perguntas),
+        # Só o PUBLICADO vira documento (cenário 33). A tela usa isto para não
+        # oferecer um botão que responderia 409 — dizer antes é melhor que
+        # recusar depois.
+        "tem_documento": r.status == StatusRoteiro.publicado.value,
         "padrao": r.padrao,
         "publicado_em": r.publicado_em, "publicado_por": r.publicado_por,
         "criado_em": r.criado_em, "criado_por": r.criado_por,
@@ -446,35 +573,46 @@ def snapshot_do_roteiro(r) -> dict | None:
             "competencias": normalizar_competencias(r.competencias)}
 
 
-def formulario(competencias=None) -> dict:
+def formulario(competencias=None, perguntas=None) -> dict:
     """Tudo que o front precisa para desenhar as duas fichas.
 
-    `competencias` vem do ROTEIRO resolvido (v2.66). Sem ele — banco novo antes
-    da semente, ou roteiro sem competência — cai na constante, para a tela nunca
-    abrir vazia. O front NÃO duplica competência, âncora nem pergunta; é o que
-    `test_entrevista_instrumento` cobra estruturalmente varrendo o JSX.
+    `competencias` vem do ROTEIRO resolvido (v2.66) e `perguntas` do roteiro de
+    TRIAGEM (v2.67). Sem eles — banco novo antes da semente, ou roteiro vazio —
+    caem nas constantes-semente, para a tela nunca abrir vazia. O front NÃO
+    duplica competência, âncora nem pergunta; é o que `test_entrevista_instrumento`
+    cobra estruturalmente varrendo o JSX.
     """
     itens = normalizar_competencias(competencias) or COMPETENCIAS_PADRAO
+    da_triagem = normalizar_perguntas(perguntas) or PERGUNTAS_PADRAO
     return {
         "escala": ESCALA,
         "competencias": itens,
         "variantes": VARIANTES,
         "recomendacoes": RECOMENDACOES,
         "triagem": {
-            "perguntas": PERGUNTAS_TRIAGEM,
+            "perguntas": da_triagem,
             "respostas": sorted(RESPOSTAS_TRIAGEM),
             "desfechos": DESFECHOS_TRIAGEM,
         },
     }
 
 
-def validar_triagem(triagem: dict | None, desfecho: str | None) -> list[str]:
+def validar_triagem(triagem: dict | None, desfecho: str | None,
+                    perguntas=None) -> list[str]:
     """Erros de preenchimento da triagem, em linguagem de tela. Vazio = pode
     salvar. A triagem é deliberadamente permissiva: "não sei" é resposta
-    legítima, e a linha livre é opcional."""
+    legítima, e a linha livre é opcional.
+
+    `perguntas` é o roteiro de triagem daquela ficha (v2.67): valida-se contra o
+    que a tela mostrou. Validar sempre contra a constante faria a resposta de uma
+    pergunta CRIADA pelo RH ser recusada como "pergunta desconhecida" — o
+    catálogo seria editável e não preenchível, que é o mesmo defeito que a
+    validação por constante já tinha causado nas competências.
+    """
     erros = []
+    validas = {p["chave"] for p in normalizar_perguntas(perguntas)} or set(CHAVES_TRIAGEM)
     for chave, valor in (triagem or {}).items():
-        if chave not in CHAVES_TRIAGEM:
+        if chave not in validas:
             erros.append(f"Pergunta de triagem desconhecida: '{chave}'.")
         elif valor not in RESPOSTAS_TRIAGEM:
             erros.append(

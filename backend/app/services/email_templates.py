@@ -891,10 +891,16 @@ def renderizar(db: Session, chave: str, contexto: dict) -> tuple[str, str, str]:
 
 
 def enviar_modelo(db: Session, chave: str, destinatario: str | None,
-                  contexto: dict, anexos=None) -> bool:
-    """Renderiza e envia. Sem destinatário, `enviar_email` já devolve False."""
+                  contexto: dict, anexos=None, remetente: str | None = None) -> bool:
+    """Renderiza e envia. Sem destinatário, `enviar_email` já devolve False.
+
+    `remetente` (v2.67) serve o endereço próprio de recrutamento; vazio mantém
+    o remetente padrão do sistema, que é o comportamento de todos os demais
+    e-mails.
+    """
     assunto, texto, html = renderizar(db, chave, contexto)
-    return enviar_email(destinatario or "", assunto, texto, html, anexos=anexos)
+    return enviar_email(destinatario or "", assunto, texto, html, anexos=anexos,
+                        remetente=remetente)
 
 
 def listar(db: Session) -> list[dict]:

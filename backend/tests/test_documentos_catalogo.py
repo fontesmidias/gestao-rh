@@ -37,8 +37,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
 from app.models.assinatura import DocumentoAssinavel  # noqa: E402
-from app.services.documentos_catalogo import (CATALOGO, Formato,  # noqa: E402
-                                              duplicavel)
+from app.services.documentos_catalogo import (CATALOGO, TODOS,  # noqa: E402
+                                              Formato, duplicavel)
 from app.services.documentos_texto import corpo_editavel, tem_corpo  # noqa: E402
 from app.services.fichas import GERADORES  # noqa: E402
 
@@ -132,7 +132,15 @@ for d in CATALOGO:
 assert c.get("/api/rh/documentos-sistema").status_code == 401
 
 lista = c.get("/api/rh/documentos-sistema", headers=rh).json()
-assert len(lista) == 11, lista
+# A rota serve o catálogo INTEIRO — desde a v2.67 ele tem duas famílias
+# (admissão + entrevista). A garantia se DERIVA do catálogo, não de um número
+# escrito à mão: `== 11` quebrava a cada documento novo e legítimo sem apontar
+# defeito, e a correção óbvia (incrementar) faz o teste não proteger nada
+# (lição da v2.25).
+assert len(lista) == len(TODOS), (len(lista), len(TODOS))
+# Os 11 da admissão continuam servidos, e continuam sendo os do enum.
+_admissao = [x for x in lista if x["origem"] == "admissao"]
+assert {x["chave"] for x in _admissao} == {d.value for d in DocumentoAssinavel}, _admissao
 _um = next(x for x in lista if x["chave"] == "acordo_confidencialidade")
 assert _um["duplicavel"] is True and _um["formato"] == "texto", _um
 _ficha = next(x for x in lista if x["chave"] == "ficha_cadastro")
