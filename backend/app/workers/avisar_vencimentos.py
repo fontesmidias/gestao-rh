@@ -123,7 +123,76 @@ def _enviar(db, destinos: list[str], col: Candidato, registro, dias: int) -> Non
             log.warning("Falha ao avisar %s sobre vencimento", destino, exc_info=True)
 
 
+def lembrar_entrevistas(agora=None) -> int:
+    """Lembrete da véspera das entrevistas marcadas (v2.66, § 14.4).
+
+    **Mora AQUI de propósito, e não em cron próprio.** Este worker já roda uma
+    vez por dia, já tem anti-spam e já está declarado no compose E no
+    `portainer-stack.yml` — um cron novo seria mais uma peça para esquecer de
+    subir em produção, que é exatamente como um worker deixa de rodar sem
+    ninguém notar.
+
+    Regras que sustentam o comportamento:
+
+    - **Uma vez por entrevista** (`lembrete_enviado_em`). Lembrete repetido
+      ensina a pessoa a ignorar o e-mail, e aí o lembrete deixa de existir na
+      prática. Remarcar ZERA o carimbo (em `enviar_convite`), porque a data nova
+      merece o seu aviso.
+    - **Só o que ainda vai acontecer.** Entrevista cuja hora já passou não
+      recebe lembrete: quem cobra essa é a fila de PENDÊNCIAS, que fala com o
+      RH, não com a pessoa.
+    - **Sem e-mail, não sai** — e isso não é falha: é o estado que a tela já
+      anuncia com o motivo (cenário 26).
+    - Falha de envio **nunca derruba a varredura**: uma pessoa sem e-mail ou um
+      SMTP intermitente não podem impedir o lembrete das outras.
+    """
+    from sqlalchemy import select
+
+    from app.models.entrevista import Entrevista, StatusEntrevista
+    from app.services import entrevista_convite as convite
+
+    enviados = 0
+    with SessionLocal() as db:
+        candidatas = db.scalars(
+            select(Entrevista).where(
+                Entrevista.status == StatusEntrevista.marcada.value,
+                Entrevista.marcada_para.is_not(None),
+                Entrevista.lembrete_enviado_em.is_(None))).all()
+        for e in candidatas:
+            if not convite.deve_lembrar(e, agora):
+                continue
+            nome, email = _pessoa_da_entrevista(db, e)
+            if not email:
+                continue        # estado conhecido e anunciado na tela, não erro
+            try:
+                if convite.enviar_lembrete(db, e, nome, email):
+                    enviados += 1
+                    db.commit()
+            except Exception:   # pragma: no cover - uma falha não para as outras
+                log.warning("Falha ao lembrar da entrevista %s", e.id, exc_info=True)
+                db.rollback()
+    if enviados:
+        log.info("Lembretes de entrevista enviados: %s", enviados)
+    return enviados
+
+
+def _pessoa_da_entrevista(db, e) -> tuple[str, str | None]:
+    """(nome, e-mail) de qualquer um dos dois lados do par talento/candidato."""
+    from app.models.talento import Talento
+
+    if e.talento_id:
+        t = db.get(Talento, e.talento_id)
+        if t is not None:
+            return t.nome or "", t.email
+    if e.candidato_id:
+        col = db.get(Candidato, e.candidato_id)
+        if col is not None:
+            return col.nome_completo or "", col.email
+    return "", None
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     total = avisar()
     log.info("Avisos de vencimento enviados: %s", total)
+    log.info("Lembretes de entrevista enviados: %s", lembrar_entrevistas())

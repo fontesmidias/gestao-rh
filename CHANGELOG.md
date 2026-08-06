@@ -11,6 +11,141 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.66.0] — 2026-08-05 — O roteiro tem que ser aprovado antes de ser usado
+
+Fase 3 do Módulo de Entrevistas — os quatro pedidos do Bruno depois de ver a
+v2.64 rodando (§ 14 de `docs/planejamento/12-modulo-de-entrevistas.md`). Um
+deles reorganiza o módulo; três são encaixes.
+
+### Roteiros múltiplos — o instrumento saiu do código e virou dado (§ 14.1)
+
+Até a v2.65 as 4 competências eram uma constante em `services/entrevistas.py`.
+Agora são um **catálogo no banco** (`roteiro_entrevista`), e a migration
+**semeia o roteiro padrão a partir da própria constante** — importada, nunca
+copiada à mão: cópia passa a divergir da origem na primeira revisão dela e
+ninguém percebe (a lição do `test_export_dexion`).
+
+**Isso resolve a pendência nº 1 do documento por outro caminho.** Em vez de
+esperar o Bruno aprovar as âncoras que a sala escreveu, ele passa a editá-las
+pela tela, sem deploy.
+
+Três decisões que sustentam o resto:
+
+- **Rascunho → publicado, e só publicado se usa.** Não é burocracia: é o que
+  sustenta o argumento jurídico do § 6. A defesa perante a Lei 9.029/95 não é
+  "existe um roteiro", é **"o roteiro foi aprovado ANTES de ser usado"**. Sem a
+  trava, o argumento cai. Publicar é ato separado, com autor e data na
+  auditoria.
+- **Versão congelada por SNAPSHOT.** A `Entrevista` guarda `roteiro_id` **e**
+  `roteiro_snapshot` (JSON), pelo mesmo motivo do `vaga_titulo`. Editar um
+  roteiro publicado gera a versão seguinte e o devolve a rascunho; a entrevista
+  já feita continua mostrando o instrumento com que foi feita. Ler do roteiro
+  vivo mostraria o texto de HOJE numa avaliação de meses atrás — e a nota
+  deixaria de significar o que significava. **Coberto por mutação.**
+- **Herança cargo → senioridade → padrão**, casando por `normalizar_cargo` (a
+  mesma função do de-para do Tirvu, porque cargo é texto livre). Cargo sem
+  roteiro **cai no padrão, nunca em erro**.
+
+**O contrato com o front não mudou — a FONTE mudou.** `GET /rh/entrevistas/formulario`
+continua sendo de onde a tela lê, e o teste estrutural que varre o JSX
+procurando texto duplicado continua valendo (agora inclui as perguntas novas).
+
+**Achado durante as mutações, e o defeito é real:** a mutação que removia o
+guard de arquivar deixou o roteiro padrão `arquivado` — e a partir dali
+`resolver_roteiro` devolvia `None`, ou seja, **toda ficha abriria vazia, sem
+erro nenhum**. A tela pareceria funcionar e a entrevista seria conduzida sem
+roteiro, que é exatamente o que o § 6 existe para impedir. Ganhou rede de
+segurança: qualquer roteiro publicado sem cargo serve de fundo, e na falta de
+todos vale a constante-semente. O guard das rotas continua (o padrão não se
+arquiva nem se apaga), mas "não deveria acontecer" não é garantia.
+
+### Mais perguntas de triagem (§ 14.2)
+
+Quatro acréscimos — disponibilidade imediata, documentação em mãos, já
+trabalhou no cliente, aceita uniforme/EPI. Todas passam nos três filtros do
+critério do Bruno (*"desde que sejam coerentes e coesas"*): responde-se
+sim/não/não sei, responde-se por telefone em segundos, e prediz **desistência**,
+não desempenho. **Continua sem nota, sem competência e sem âncora** — triagem
+não é entrevista curta.
+
+O `test_entrevistas.py` cobrava `len(perguntas) == 5` e quebrou. O assert virou
+derivação da NATUREZA (todas sim/não/não sei, nenhuma com âncora) em vez da
+contagem — a lição da v2.25: teste que trava contagem de catálogo quebra a cada
+acréscimo legítimo, e incrementar o número faz o teste não proteger nada.
+
+### Tag de reaproveitamento (§ 14.3)
+
+> *"quando excluir uma vaga, a entrevista sobrevive, pois posso poder taguear a
+> pessoa, de modo que ela possa ser reaproveitada para outro cargo"*
+
+Ele resolveu o cenário 4 melhor do que a sala: a entrevista já sobrevivia (com
+`vaga_titulo`), mas isso preservava **o registro**; o que ele quer é preservar
+**a pessoa como oportunidade**. E o sistema já tinha a peça — `PessoaTag` do
+mini-CRM, com catálogo, CRUD e as mesmas duas FKs opcionais. **Nenhum campo
+novo, nenhuma tela nova** (as tags já filtram no dash de Talentos).
+
+**Proposta, nunca automática**: o sistema sugere o nome da tag a partir do cargo
+da vaga e mostra quem foi entrevistado; o RH confirma. Tag aplicada sozinha vira
+ruído e o RH deixa de confiar na tag. Pessoa entrevistada duas vezes conta uma
+vez, e o lote presta contas de quem não deu.
+
+### Lembrete por e-mail e convite de calendário (§ 14.4)
+
+`modalidade` (`presencial` | `online`) decide o resto: endereço × link da
+reunião. **Online sem link não se marca** — o convite sairia sem dizer por onde
+entrar. Três entradas novas no `CATALOGO` de e-mails (marcada, lembrete,
+cancelada), editáveis com preview e histórico pela regra da v2.21;
+`{{data_hora}}` e `{{onde}}` são obrigatórias, e `{{onde}}` é montada em Python
+conforme a modalidade — o template é apresentação, nunca decisão.
+
+O `.ics` é gerado sem biblioteca, com os três cuidados que o documento cravou:
+
+1. **UID estável por entrevista + SEQUENCE que cresce.** É o par que faz o
+   Outlook ATUALIZAR o compromisso em vez de criar um segundo. UID novo a cada
+   remarcação encheria a agenda da pessoa de entrevistas fantasma no horário
+   antigo — o defeito mais caro possível num convite. Coberto por mutação.
+2. **Cancelar manda `METHOD:CANCEL` com o mesmo UID**, senão o compromisso fica
+   na agenda depois de cancelado e a pessoa vem.
+3. **`TZID=America/Sao_Paulo`**, com `VTIMEZONE` declarado. O container roda em
+   UTC (armadilha da v2.41) e o convite chegaria três horas adiantado.
+
+**Sem e-mail, o lembrete fica desligado COM o motivo na tela** — nunca falha
+calada. Falha de envio nunca derruba a ação: marcar a entrevista é o ato
+principal, e SMTP fora do ar não pode impedir o RH de registrar o compromisso; o
+resultado é anunciado, não engolido.
+
+**O worker do lembrete mora dentro do `avisar_vencimentos`** (já é cron, já tem
+anti-spam) — e aí veio o segundo achado: **`avisar_vencimentos` NÃO ESTAVA no
+`deploy/portainer-stack.yml`**. O compose local o rodava; produção, não. Ou
+seja, o aviso de certificação vencendo (Onda B, v1.83) **nunca saiu na VPS**, e
+o lembrete de entrevista teria herdado o mesmo silêncio. Corrigido no mesmo
+commit. Worker que não está nos DOIS arquivos simplesmente não roda, e nada
+avisa.
+
+A janela do lembrete é de **36h, não 24h**: o worker dorme 86400s, e com janela
+de 24h exatos a entrevista marcada para daqui a 23h ficaria invisível entre duas
+passadas — o lembrete nunca sairia, em silêncio. A janela precisa ser maior que
+a cadência; o anti-spam é o carimbo, não a janela.
+
+### Tela
+
+`Configurações → 🗣️ Roteiros de entrevista`, junto dos outros catálogos — não é
+tela de uso diário. Segue a composição corrigida na v2.65 (`.rh-conferencia`,
+`.chips-escolha`, `.rh-conferencia-acoes`), e a conferência foi feita na tela
+RENDERIZADA: a primeira versão punha o formulário inteiro em duas colunas e
+deixava a coluna esquerda **vazia por ~1.100px** enquanto a direita esticava. A
+primitiva de 2 colunas serve conteúdo EMPARELHADO (âncora ao lado da pergunta),
+não bloco curto ao lado de bloco longo. Só aparece na tela; no código as duas
+versões parecem igualmente razoáveis.
+
+### Fora, e por quê
+
+**Segundo avaliador com trava anti-peeking** continua fora: só o RH entrevista
+(decisão 1), e não há colega cuja nota espiar. **A exclusão de vaga continua
+sendo delete físico** — o Bruno respondeu o que importava (a pessoa é tagueada),
+mas não disse se a vaga em si vai para a lixeira; mudar exclusão de outro módulo
+é escopo que ele não pediu. Registrado como recomendação.
+
 ## [2.65.0] — 2026-08-05 — Passar no teste não é seguir o padrão
 
 Correção **só visual** da tela de Entrevistas. Nenhuma mudança de backend,
