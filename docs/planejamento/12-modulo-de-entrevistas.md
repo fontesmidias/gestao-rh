@@ -886,6 +886,91 @@ para esquecer de subir no Portainer.
 
 ---
 
+## 15. Fase 4 — documentos, e as 5 respostas pendentes (2026-08-06)
+
+O Bruno respondeu as 5 perguntas em aberto da v2.66 e acrescentou uma **regra
+geral**, que é o item mais importante desta seção:
+
+> *"a cada documento novo gerado, ele deve compor o módulo de documentos também
+> e todas as funcionalidades herdadas. bem como os templates de email"*
+
+### 15.1 A regra, e por que meia dela já estava sendo cumprida
+
+Isto **não é um pedido** — é a regra da v2.21 (*"e-mail novo e documento novo
+NASCEM na sua página"*) sendo cobrada, e ela estava sendo cumprida pela metade:
+
+| | v2.66 |
+|---|---|
+| **E-mails** | ✅ 3 entradas no `CATALOGO` (`entrevista_marcada`, `entrevista_lembrete`, `entrevista_cancelada`) — editáveis com preview e histórico |
+| **Documentos** | ❌ **zero** ocorrências de entrevista em `services/documentos_catalogo.py` |
+
+O módulo **gera** documentos e nenhum deles entrou no catálogo. A regra vale
+daqui em diante para qualquer módulo: **documento gerado sem entrada no
+catálogo é documento que o RH não consegue ver, versionar nem duplicar.**
+
+### 15.2 Três documentos novos
+
+| Documento | `Formato` | Por quê |
+|---|---|---|
+| **Ficha de entrevista preenchida** | `hibrido` | Pessoa, vaga, roteiro usado **com a versão**, as 4 notas com justificativa, recomendação e quem conduziu. É a peça que sustenta o § 6: sem ela, "o roteiro foi aprovado antes de ser usado" é afirmação sem prova. |
+| **Ficha de triagem preenchida** | `formulario` | As 9 respostas + desfecho. Fecha o histórico da pessoa. |
+| **Roteiro publicado** | `hibrido` | Competências, âncoras e perguntas, com versão, quem publicou e quando. **Hoje o roteiro pré-aprovado só existe na tela** — o documento é o que se anexa a uma defesa. |
+
+Todos entram em `documentos_catalogo.py` com amostra em PDF a partir de dados
+fictícios (nunca gravados), download e — nos de texto — "criar modelo a partir
+deste", exatamente como os 11 documentos que já existem.
+
+**Cuidado herdado da v2.19:** nenhum gerador existente é substituído. O hash do
+ato de assinatura é calculado sobre o PDF gerado; trocar um gerador por template
+faria manifestos já emitidos apontarem para um hash que não se reproduz.
+
+### 15.3 A ficha de entrevista é ASSINÁVEL — pelo RH que conduziu
+
+Decisão do Bruno. Entra no fluxo que já existe: o RH assina **logado, com senha
+da própria sessão** (`prova_metodo = "senha_sessao_rh"`), como já faz ao
+contra-assinar em `api/solicitacoes_assinatura.py:400`.
+
+Ganha hash e manifesto como qualquer documento assinado. O entrevistado **não**
+assina — exigiria mandar link para quem talvez não seja contratado e exporia as
+notas a ele.
+
+### 15.4 Onde a ficha vive — e onde NÃO vive
+
+**Vive:** no **Arquivo** (menu Documentos), pesquisável e filtrável; e na
+**ficha da pessoa**, ao lado do registro da entrevista.
+
+**NÃO vive no dossiê de admissão.** O Bruno chegou a incluir e corrigiu na
+mesma sessão: *"não não. no dossiê de admissão não."*
+
+> É a mesma regra que manteve resultado de teste fora do dossiê na v2.21: **o
+> dossiê circula** — vai ao cliente, à pasta física, a quem pedir — e nota de
+> seleção com justificativa ("relata faltas sem avisar") é dado sensível sobre
+> a pessoa. Os dois lugares onde a ficha vive são de acesso exclusivo do RH.
+
+### 15.5 As outras quatro respostas
+
+| # | Pergunta | Resposta | O que muda |
+|---|---|---|---|
+| 1 | A vaga passa a ir para a lixeira? | **Sim** | `DELETE /rh/vagas/{id}` deixa de ser delete físico e passa por `services/lixeira.mandar_para_lixeira`, como provas já fazem. O `ondelete=SET NULL` + `vaga_titulo` continuam — são defesa em profundidade, não redundância. |
+| 3 | Perguntas de triagem editáveis? | **Sim** | A triagem entra no mesmo catálogo de roteiros, como `tipo=triagem`. Mesma mecânica rascunho→publicado. Continua **sem nota, sem competência, sem âncora** — o que é editável é o conjunto de perguntas, não a natureza da ficha. |
+| 4 | Duração do convite vira campo? | **Sim** | `duracao_min` na entrevista, padrão 60. Vai para o `DTEND` do `.ics`. |
+| 5 | Remetente próprio de recrutamento? | **Sim** | Chave nova na config dinâmica (ex.: `email_recrutamento`); o `ORGANIZER` do `.ics` e o remetente dos e-mails de entrevista passam a usá-la, caindo no `smtp_from` quando vazia. **Nunca falha por estar vazia.** |
+
+### 15.6 Cenários novos (31–38)
+
+| # | Cenário | Tratamento |
+|---|---|---|
+| 31 | Entrevista alterada depois da ficha assinada | A assinatura vale para o PDF daquele momento. Alterar gera **nova via**; a anterior permanece com seu hash. Regra da casa desde 2026-07-15. |
+| 32 | Ficha gerada antes de concluída | Recusa. Só entrevista `realizada` e completa vira documento — PDF com nota faltando é prova contra a empresa, não a favor. |
+| 33 | Roteiro em rascunho | Não gera documento. Só o publicado. |
+| 34 | Vaga na lixeira e depois restaurada | A entrevista volta a mostrar o vínculo vivo; o snapshot `vaga_titulo` continua como está. |
+| 35 | Triagem publicada sem nenhuma pergunta | Recusa — checagem vazia não é checagem. |
+| 36 | `email_recrutamento` vazio | Cai no `smtp_from`, silenciosamente e por desenho. |
+| 37 | Duração zero ou negativa | Recusa; `DTEND` anterior ao `DTSTART` quebra o calendário do destinatário. |
+| 38 | Ficha de entrevista de pessoa arquivada (180 dias) | O documento **permanece** — arquivar tira da vista, nunca apaga (decisão 5). |
+
+---
+
 ## Fontes
 
 - [Sackett et al. (2022) — revisão dos validity coefficients](https://pubmed.ncbi.nlm.nih.gov/34968080/)
