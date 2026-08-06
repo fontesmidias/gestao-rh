@@ -210,6 +210,8 @@ NOMES_DOC = {
         "Termo de Consentimento LGPD — Credenciamento (INFRAERO)",
     DocumentoAssinavel.informativo_intermitente:
         "Informativo de Integração — Intermitente",
+    DocumentoAssinavel.informativo_efetivo:
+        "Informativo de Integração — Efetivo",
     DocumentoAssinavel.ficha_cadastral_terceirizado:
         "Ficha Cadastral de Terceirizado (Presidência)",
     DocumentoAssinavel.oficio_apresentacao_presidencia:

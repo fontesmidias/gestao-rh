@@ -128,9 +128,14 @@ onde = (por_chave.get("entrevista_ficha") or {}).get("onde_vive", "")
 checar("dossiê" in onde.lower(),
        f"a tela DIZ onde a ficha vive e que não vai ao dossiê (onde_vive={onde[:50]!r})")
 
-# Os 11 da admissão continuam lá — a família nova não pode ter deslocado nada.
-checar(len([d for d in lista if d["origem"] == "admissao"]) == 11,
-       "os 11 documentos da admissão continuam no catálogo")
+# A família de admissão continua inteira — a de entrevista não pode ter
+# deslocado nada. A referência é o ENUM, não um número escrito aqui: contagem
+# chumbada quebra a cada documento novo e legítimo sem apontar defeito (v2.25).
+from app.models.assinatura import DocumentoAssinavel  # noqa: E402
+da_admissao = {d["chave"] for d in lista if d["origem"] == "admissao"}
+checar(da_admissao == {d.value for d in DocumentoAssinavel},
+       "os documentos da admissão continuam todos no catálogo (faltando: "
+       f"{ {d.value for d in DocumentoAssinavel} - da_admissao })")
 
 # A prévia dos três gera PDF de verdade, com dados FICTÍCIOS.
 for chave in ESPERADOS:

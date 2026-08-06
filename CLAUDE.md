@@ -88,6 +88,39 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Documento com nome PARECIDO não é o documento — e a ausência não dá erro**
+  (v2.69, feedback do Bruno: *"Ficha de integração não está sendo gerada para os
+  efetivos"*): `gerar_docs_do_posto_e_regime` fazia `if candidato.regime ==
+  "intermitente"` e mais nada, então o EFETIVO — a maioria dos admitidos — nunca
+  recebeu ficha de integração. O que sustentou o engano por tantas versões foi o
+  vizinho de nome: `informacoes_trabalhador` **parece** a ficha do efetivo e é
+  outra coisa (ofício de direitos do kit INFRAERO, só em posto INFRAERO). A
+  tupla `DOCS_INFORMATIVO` estava comentada como *"efetivo/INFRAERO = ..."*, e o
+  comentário do modelo (`candidato.py`: *"Decide qual ficha de integração o
+  colaborador assina"*) descrevia uma intenção que o código nunca cumpriu de um
+  dos lados. **Documento que não nasce não gera erro em lugar nenhum**: ninguém
+  abre uma tela e vê o que está faltando — é a família do worker que não roda
+  (v2.66), onde o silêncio se confunde com "não havia nada a fazer". Hoje a
+  fonte é `INFORMATIVO_POR_REGIME` (um mapa regime→documento, exaustivo por
+  construção) e as duas fichas saem do MESMO `_gerar_informativo_integracao`, com
+  a diferença isolada em `_CICLO_VT`/`_CICLO_VA`: variante nova não pode
+  "esquecer" uma seção que a outra tem. Ao ver dois documentos com nomes
+  próximos, confira o CONTEÚDO de cada um antes de assumir que cobrem um par.
+- **Ficha de integração: o que muda por regime é o CICLO DE PAGAMENTO** (v2.69):
+  efetivo apura **do dia 1 ao dia 30**; intermitente, **semanalmente** (pago até
+  a quarta-feira da semana seguinte). É o único conteúdo que difere entre
+  `informativo_efetivo` e `informativo_intermitente`, e sai num documento que a
+  pessoa ASSINA — prometer o ciclo errado é errar sobre dinheiro. Os textos ficam
+  em constantes fora do gerador de propósito: mudar um ciclo não deve tocar o
+  outro por acidente. Trocar o regime invalida a ficha do regime anterior **se
+  ainda não assinada** (assinada é peça de prova e permanece).
+- **Enum reescrito à mão num segundo lugar ATRASA em silêncio** (v2.69):
+  `solicitacao_assinatura.documento` listava os valores de `DocumentoAssinavel`
+  literalmente, e já estava desatualizado — faltava `autodeclaracao_residencia`
+  desde a v1.92. É o mesmo tipo do Postgres (`create_type=False`), então nada
+  reclama: o valor só não existe para o SQLAlchemy daquele modelo. Derive de
+  `[d.value for d in DocumentoAssinavel]`.
+
 - **O FALLBACK serve para PREENCHER um campo, nunca para PEDIR uma permissão**
   (v2.68, pego pelo próprio teste): `config_dinamica.email_recrutamento()` cai
   no `smtp_from` quando a chave está vazia — certo para o `ORGANIZER` do `.ics`,
@@ -1706,8 +1739,10 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   persistido no MinIO com hash do ato, então reformatar seções não quebra vias
   antigas.
 - **Informativo de integração só após disparo do RH** (v1.92): o informativo
-  (efetivo `informacoes_trabalhador` INFRAERO e intermitente
-  `informativo_intermitente` — conjunto `DOCS_INFORMATIVO` em `postos.py`) NASCE
+  (ficha de integração do regime — `informativo_efetivo` OU
+  `informativo_intermitente`, mapeados em `INFORMATIVO_POR_REGIME`; mais o
+  ofício `informacoes_trabalhador` do kit INFRAERO, que NÃO é ficha de
+  integração — conjunto `DOCS_INFORMATIVO` em `postos.py`) NASCE
   com `Assinatura.aguardando_liberacao=True` no `gerar_docs_do_posto_e_regime` e
   fica OCULTO em `_docs_exigidos` (filtra `aguardando_liberacao IS False`) até o
   RH chamar `/rh/candidatos/{id}/liberar-informativo`. Todos os DEMAIS docs

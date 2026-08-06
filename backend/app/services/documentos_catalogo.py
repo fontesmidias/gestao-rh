@@ -167,13 +167,26 @@ CATALOGO: tuple[DocumentoSistema, ...] = (
                           "credenciamento."),
 
     # ------------------------------------------------------------- por regime
-    _d(chave="informativo_intermitente", grupo="Regime intermitente",
+    # Uma ficha de integração por regime; o candidato recebe exatamente uma. O
+    # corpo é o mesmo e o que muda são os PERÍODOS DE PAGAMENTO dos benefícios.
+    _d(chave="informativo_intermitente", grupo="Ficha de integração",
        rotulo="Informativo de Integração — Intermitente",
        quando="Gerado quando o regime é intermitente; só vai ao candidato "
-              "depois que o RH libera o informativo.",
+              "depois que o RH libera o informativo. Benefícios apurados "
+              "SEMANALMENTE.",
        formato=Formato.hibrido,
        porque_nao_duplica="Começa com um bloco de dados em tabela (banco, PIX, "
                           "posto) e só depois vem o texto das orientações."),
+
+    _d(chave="informativo_efetivo", grupo="Ficha de integração",
+       rotulo="Informativo de Integração — Efetivo",
+       quando="Gerado quando o regime é efetivo (o padrão); só vai ao candidato "
+              "depois que o RH libera o informativo. Benefícios apurados do dia "
+              "1 ao dia 30 do mês.",
+       formato=Formato.hibrido,
+       porque_nao_duplica="Mesma estrutura da versão do intermitente: bloco de "
+                          "dados em tabela (banco, PIX, posto) antes do texto "
+                          "das orientações."),
 
     # ------------------------------------------------------------ condicional
     _d(chave="autodeclaracao_residencia", grupo="Conforme a ficha",

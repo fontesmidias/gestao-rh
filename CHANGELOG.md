@@ -11,6 +11,93 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.69.0] — 2026-08-05 — O efetivo também recebe a ficha de integração
+
+Primeiro item dos feedbacks de 2026-08-05. O Bruno: *"Ficha de integração não
+está sendo gerada para os efetivos, aos moldes das que são geradas para os
+intermitentes"*. E, junto: *"o intervalo para o pagamento dos benefícios para
+eles é de 1 a 30 e dos intermitentes é semanalmente"*.
+
+### O defeito: um `if` que só olhava um lado
+
+`gerar_docs_do_posto_e_regime` fazia `if candidato.regime == "intermitente"` e
+mais nada. O efetivo — a MAIORIA dos admitidos — não recebia ficha de integração
+nenhuma.
+
+O que enganava: existe um `informacoes_trabalhador` que **parece** ser a ficha do
+efetivo e não é. É um ofício de direitos do kit INFRAERO (CF, CLT, canal de
+ouvidoria), só nasce em posto INFRAERO e serve a outro propósito. Quem lesse a
+tupla `DOCS_INFORMATIVO` — comentada como *"efetivo/INFRAERO = ..."* — concluiria
+que o efetivo estava coberto.
+
+E o comentário do modelo (`candidato.py`: *"Decide qual ficha de integração o
+colaborador assina"*) descrevia uma intenção que o código nunca cumpriu para o
+lado efetivo. **Ausência de documento não gera erro**: ninguém abre uma tela e vê
+"está faltando algo que deveria existir". Por isso durou.
+
+### O que passa a existir
+
+`informativo_efetivo`, ficha de integração espelho da do intermitente — mesmas
+seções (boas-vindas, dados, VT, VA, conta salário, ponto Tirvu+, prazos de
+assinatura, normativos), nascendo por REGIME e independente de posto, como a do
+intermitente sempre nasceu.
+
+**A única diferença de conteúdo é o ciclo de pagamento dos benefícios**, que é o
+que o Bruno pediu:
+
+| | Vale-transporte | Vale-alimentação |
+|---|---|---|
+| **Efetivo** | pago mensalmente, apuração **do dia 1 ao dia 30** | apuração **do dia 1 ao dia 30** |
+| **Intermitente** | **semanalmente**, até a quarta-feira da semana seguinte | apuração **semanal**, paga até a quarta-feira seguinte |
+
+Os textos moram em `_CICLO_VT`/`_CICLO_VA`, fora do gerador: quando o RH mudar um
+ciclo, muda ali, e a outra ficha não é tocada por acidente. As duas fichas saem
+de `_gerar_informativo_integracao` — o corpo é um só, então nenhuma delas
+"esquece" uma seção que a outra recebeu.
+
+**Local de trabalho**: o intermitente não é alocado a posto fixo e continua com o
+rótulo `GHS - INTERMITENTE`; o efetivo imprime o posto REAL do cadastro.
+
+### Dois defeitos vizinhos, achados no caminho
+
+- **O informativo do intermitente nunca teve bloco de assinatura nem manifesto.**
+  É documento assinável, e o PDF saía sem a prova do ato — o `if assinatura:`
+  final que todos os outros geradores têm faltava só nele. Agora as duas fichas
+  o têm.
+- **`solicitacao_assinatura` reescrevia os valores do enum à mão** e já estava
+  atrasado: faltava `autodeclaracao_residencia` (desde a v1.92) e faltaria
+  `informativo_efetivo`. Passou a derivar de `DocumentoAssinavel`, que é a fonte.
+
+### Backfill: só quem está com a admissão ABERTA
+
+A migration cria a assinatura pendente para `status` anterior a `aprovado`. Quem
+já foi aprovado teve o dossiê gerado e muitas vezes já foi efetivado — criar
+pendência ali faria o sistema cobrar, de quem concluiu, um documento que não
+existia quando aquilo aconteceu. Duas revisões separadas porque o Postgres
+proíbe usar valor de enum recém-criado na mesma transação.
+
+### Trocar o regime troca a ficha
+
+Se o regime mudar, a ficha do regime anterior **ainda não assinada** é
+invalidada. Sem isso a pessoa deveria as duas e poderia assinar a de um regime
+que não é o dela — com os períodos de pagamento errados, que é justamente o que
+distingue as duas. Já assinada nunca é tocada: é peça de prova.
+
+### Testes
+
+`tests/test_informativo_integracao.py`, validado por **3 mutações** (reverter ao
+defeito original; dar o ciclo semanal ao efetivo; chumbar o posto) — as três
+reprovaram. As asserções percorrem a ROTA de convite, não a função interna
+(v2.68), e as âncoras dos ciclos são constantes do teste, nunca valores lidos do
+sistema sob teste (v2.64). Cobre também o painel de liberação do RH: ficha que
+não aparece ali nunca seria disparada ao candidato.
+
+Duas contagens chumbadas em testes de catálogo (`== 11`) passaram a derivar do
+enum — número mágico quebra a cada documento novo e legítimo sem apontar defeito,
+e incrementá-lo faz o teste deixar de proteger (v2.25).
+
+Smoke 15/15, suíte completa (52 testes) e `npm run build` verdes.
+
 ## [2.68.0] — 2026-08-06 — O e-mail sai, mesmo quando o tenant não colabora
 
 § 16.1 de `docs/planejamento/12-modulo-de-entrevistas.md`. Das 4 respostas que o

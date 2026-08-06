@@ -49,7 +49,12 @@ rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh
 # (o próprio módulo já valida isso no import; aqui é a rede de segurança)
 assert {d.chave for d in CATALOGO} == {d.value for d in DocumentoAssinavel}, (
     "catálogo e enum divergiram — documento novo sumiria da tela do RH")
-assert len(CATALOGO) == 11, f"esperava 11 documentos, achei {len(CATALOGO)}"
+# A contagem é DERIVADA do enum, nunca escrita à mão: número chumbado quebra a
+# cada documento novo e legítimo sem apontar defeito nenhum, e a correção óbvia
+# (incrementar a constante) faz o teste deixar de proteger (v2.25).
+assert len(CATALOGO) == len(DocumentoAssinavel), (
+    f"catálogo com {len(CATALOGO)} entradas para {len(DocumentoAssinavel)} "
+    "valores do enum — há documento repetido ou faltando")
 
 # ------------------------------------- os geradores continuam sendo os mesmos
 # Se alguém trocar um gerador por template, o hash do ato de assinatura muda e
