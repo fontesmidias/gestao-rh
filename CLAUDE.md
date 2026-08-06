@@ -88,6 +88,51 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **O FALLBACK serve para PREENCHER um campo, nunca para PEDIR uma permissão**
+  (v2.68, pego pelo próprio teste): `config_dinamica.email_recrutamento()` cai
+  no `smtp_from` quando a chave está vazia — certo para o `ORGANIZER` do `.ics`,
+  que só precisa de um endereço qualquer. Usar a MESMA função para o `From` do
+  Microsoft 365 pedia ao Graph permissão para enviar como a caixa **que já se
+  é**: ele recusa igual (`ErrorSendAsDenied`), e o sistema avisava o RH que
+  faltava liberar `Send As` de um endereço **que ninguém configurou** — ruído
+  mandando mexer no tenant sem motivo. Por isso existem DUAS funções:
+  `email_recrutamento()` (com fallback, para preencher) e
+  `email_recrutamento_escolhido()` (sem, para pedir permissão). Ao reusar um
+  getter "com padrão", pergunte se o consumidor vai PREENCHER ou vai PEDIR — no
+  segundo caso o padrão mente.
+- **Recusa por PERMISSÃO ≠ falha de ENVIO — e a carta tem que sair mesmo assim**
+  (v2.68, `m365.enviar_via_graph`): é a regra da v2.00 na terceira variação. O
+  Graph responde 403 `ErrorSendAsDenied` quando o `From` pedido não tem `Send
+  As` liberado no tenant — erro PERMANENTE, que nenhuma retentativa resolve e
+  que se conserta no admin do M365. Um 500 ou um timeout é transitório. Tratar
+  os dois igual faria o RH achar que o sistema quebrou quando falta um clique no
+  tenant, e mexer no lugar errado. O desenho: tenta com o remetente; **se e só
+  se** a recusa for de permissão, reenvia da caixa conectada e devolve um
+  `aviso` que a tela mostra. O convite SEMPRE sai — uma entrevista não se perde
+  porque o tenant não foi configurado. Na tela o aviso é `.aviso-inline`
+  (âmbar), **nunca** `.alerta` (vermelho): o e-mail saiu, e pintar de erro faria
+  o RH reenviar, o que não muda nada. `enviar_email` continua devolvendo
+  BOOLEANO (são ~40 call-sites); quem precisa do aviso usa `enviar_com_aviso`.
+- **Chave de configuração sem ROTA e sem TELA não é configurável** (v2.68): a
+  `email_recrutamento` nasceu na v2.67 lida pelo código, documentada no
+  CHANGELOG… e **só preenchível escrevendo direto no banco** — não havia
+  `GET/PUT` nem campo em lugar nenhum. Parece entregue em toda revisão de
+  código, porque o consumo existe e funciona. Ao criar chave na config
+  dinâmica, confira o par: `grep` pela chave em `app/api/` E em
+  `frontend/src/`. **Vazio tem que ser valor VÁLIDO** na rota (é como se volta
+  ao padrão) — `EmailStr` recusaria a string vazia e deixaria o RH sem como
+  desfazer o que configurou.
+- **Teste que exercita a função interna NÃO prova que o caminho real a usa**
+  (v2.68, 2ª reincidência): a asserção do anexo do convite afirmava
+  `_tipo_grafo("convite.ics") == "text/calendar"` e passava VERDE com a mutação
+  que chumba `"application/pdf"` na mensagem entregue ao Graph — a função estava
+  certa, e nada ligava uma coisa à outra. Mesma família do teste do `.ics` na
+  v2.67 (chamava `_anexo_ics` em vez da rota) e do "comparar a resposta com ela
+  mesma" da v2.64. **Substitua o LIMITE EXTERNO (o `httpx.post`), não as suas
+  próprias funções**, e afirme sobre o objeto que o sistema realmente montou.
+  Foi só isso que revelou que o caminho do Graph mandava TODO anexo como
+  `application/pdf` — o defeito que a v2.41 consertou no SMTP, vivo aqui.
+  (O `webhook_email.py:56` ainda tem o mesmo chumbo; fica registrado.)
 - **Módulo que GERA documento entra no catálogo de documentos na MESMA leva**
   (v2.67, cobrado pelo Bruno: *"a cada documento novo gerado, ele deve compor o
   módulo de documentos também e todas as funcionalidades herdadas. bem como os
@@ -1424,6 +1469,11 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
     métricas, `tornar_padrao` e `resolver_roteiro` são todos recortados por
     tipo, senão eleger padrão de entrevista apagaria o fundo de herança da
     triagem, em silêncio.
+  - **O remetente de recrutamento vale no M365, com a metade do tenant**
+    (v2.68, § 16.1): `email_recrutamento` é editável em Configurações → E-mail e
+    integrações e vai ao `From` do Graph. O M365 só o aceita com **`Send As`**
+    liberado no admin do tenant; sem isso o convite **sai da caixa conectada e a
+    tela avisa** o que falta. O e-mail nunca deixa de sair.
   - **Roteiro FIXO, sem campo de "outras perguntas"** (Lei 9.029/95): campo de
     pergunta livre é risco jurídico; roteiro pré-aprovado é defesa da empresa. O
     `observacao` é livre; o ROTEIRO não. **Seguro-desemprego** entra na triagem

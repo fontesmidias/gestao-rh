@@ -674,3 +674,167 @@ Rodei cada um como script, que é o que o CI faz.
 2. **Conferir a restauração de uma vaga pela lixeira** na próxima leva.
 3. **A tela do catálogo de documentos ganhou `origem`/`onde_vive`** — se o RH
    achar a lista longa com 14 itens, o agrupamento por família já está no dado.
+
+---
+
+# Leva v2.68 — o remetente de recrutamento no Microsoft 365 (§ 16.1)
+
+Leva **pequena e de propósito**: das 4 respostas do Bruno de 2026-08-06, só uma
+vira código. As outras três eram *não* (filtro no Arquivo), *como está*
+(perguntas de triagem) e *corrigir o doc* (`.pagina`/`.rh-painel`, encerrado no
+commit `969bd2b` — **não se reabre**).
+
+## ⚠️ O PASSO QUE DEPENDE DO BRUNO — no admin do Microsoft 365
+
+**Sem este passo, os convites continuam saindo do endereço de sempre.** Nada
+quebra, nada se perde — só não sai do endereço de recrutamento.
+
+**O que é:** hoje o sistema manda os e-mails pela conta do Microsoft 365 que
+você conectou no painel. Para ele mandar por um endereço DIFERENTE (por exemplo
+`recrutamento@greenhousedf.com.br`), a Microsoft exige que alguém autorize essa
+conta a "assinar" pelo outro endereço. Essa autorização chama-se
+**"Enviar como"** — em inglês, **`Send As`**.
+
+**Onde se faz:**
+
+1. Entre em **admin.microsoft.com** com uma conta de administrador.
+2. Vá em **Equipes e grupos → Caixas de correio compartilhadas** (ou
+   **Usuários → Usuários ativos**, se o endereço de recrutamento for uma conta
+   de pessoa).
+3. Clique no endereço de recrutamento.
+4. Procure **"Permissões de caixa de correio"** e depois **"Enviar como"**
+   (*Send As*).
+5. Acrescente ali a conta que está conectada no painel.
+6. Salve. A Microsoft costuma levar **até uma hora** para a permissão valer.
+
+**Se você não fizer:** nada para de funcionar. O convite e o lembrete continuam
+chegando à pessoa normalmente, só que pelo endereço de sempre — e o sistema
+mostra um aviso amarelo na tela dizendo exatamente isso. **Nenhuma entrevista se
+perde por causa disso.**
+
+**Como saber que deu certo:** depois de liberar, marque uma entrevista de teste.
+Se o aviso amarelo não aparecer mais, está valendo.
+
+> Se preferir não mexer no tenant, é legítimo: deixe o campo **em branco** em
+> Configurações → E-mail e integrações. Aí os e-mails saem do endereço padrão
+> **em silêncio**, sem aviso nenhum — é o cenário 40, e é por desenho.
+
+## 1. O que foi entregue
+
+| Onde | O quê |
+|---|---|
+| `backend/app/services/m365.py:91-116` | `recusou_por_permissao` — classifica a recusa do Graph. Só 400/403 com assinatura conhecida (`ErrorSendAsDenied` etc.); rede e 500 **não** são permissão |
+| `backend/app/services/m365.py:119-181` | `enviar_via_graph` aceita `remetente`, devolve `{ok, aviso}` e faz o **reenvio da caixa conectada** quando a recusa é de permissão |
+| `backend/app/services/m365.py:184-197` | `_postar` — o POST isolado, para as duas tentativas usarem o mesmo caminho. Erro de rede vira status 0 |
+| `backend/app/services/m365.py:200-222` | `aviso_send_as` — o texto que **nomeia a permissão e a conta**, e diz que os convites continuam saindo |
+| `backend/app/services/m365.py:225-236` | `_tipo_grafo` — MIME do anexo pela extensão (**defeito achado no caminho**, ver § 2) |
+| `backend/app/services/email.py:38-56` | `enviar_com_aviso` — a porta que devolve `{ok, aviso}`. **`enviar_email` continua booleano** |
+| `backend/app/services/email_templates.py:907-921` | `enviar_modelo_com_aviso` |
+| `backend/app/services/config_dinamica.py:66-84` | `email_recrutamento_escolhido` — sem fallback (ver § 2, a reprovação) |
+| `backend/app/services/entrevista_convite.py:196-214` | o convite usa `_escolhido` e devolve `aviso` à tela |
+| `backend/app/api/configuracoes.py:404-451` | `GET/PUT /rh/config/recrutamento` — **a chave da v2.67 não tinha rota nenhuma** |
+| `frontend/src/rh/Config.jsx` | card **Endereço de recrutamento**, com o aviso do `Send As` que só aparece com o M365 conectado |
+| `frontend/src/rh/EntrevistasRH.jsx` | o aviso em `.aviso-inline` (âmbar), separado do `erro` |
+| `backend/tests/test_remetente_recrutamento.py` | 30 asserções, cenários 39–41 |
+
+**Sem migration**: a chave vive na config dinâmica. O head continua
+`b2d4f6a8c1e3`.
+
+## 2. O que REPROVEI no caminho
+
+**Reprovei duas coisas, as duas minhas.**
+
+### REPROVADO 1 — o código: o fallback pedindo permissão
+
+A primeira versão passava `email_recrutamento(db)` ao `From` do Graph. Como essa
+função **cai no `smtp_from`** quando a chave está vazia, o sistema pedia ao
+Graph permissão para enviar como a caixa **que já é a dele** — recusa igual, e
+aviso ao RH sobre uma configuração que ninguém fez. Isso **quebrava o cenário
+40**, que exige silêncio com a chave vazia.
+
+Quem reprovou foi o teste, na primeira execução (3 asserções vermelhas). Nasceu
+daí `email_recrutamento_escolhido()` e a regra que foi para o `CLAUDE.md`:
+
+> **O fallback serve para PREENCHER um campo, nunca para PEDIR uma permissão.**
+
+### REPROVADO 2 — o teste: asserção que passava com o defeito presente
+
+A asserção do anexo dizia `_tipo_grafo("convite.ics") == "text/calendar"`. A
+mutação que chumba `"application/pdf"` **na mensagem** passou VERDE: a função
+estava certa, e nada provava que a mensagem a usava. É a mesma falha do meu
+teste do `.ics` na v2.67, que o Bruno já havia apontado.
+
+Reescrita para ler o `contentType` da mensagem **real** que `enviar_via_graph`
+entrega ao limite HTTP (um espião no `httpx.post`). Só então a mutação reprovou.
+
+**E foi essa reescrita que revelou um defeito de verdade**: o caminho do Graph
+mandava **todo anexo como `application/pdf`**, chumbado — o mesmo defeito que a
+v2.41 consertou no SMTP. O `.ics` do convite passa por ali: com o tipo errado, o
+Outlook mostra um anexo em vez de oferecer "adicionar à agenda". Corrigido.
+
+## 3. Mutações (todas conferidas)
+
+| # | Mutação | Resultado |
+|---|---|---|
+| 1 | a recusa por permissão **aborta** o envio (não reenvia) | **REPROVOU** — 6 asserções |
+| 2 | `recusou_por_permissao` devolve `True` para qualquer status | **REPROVOU** — 4 asserções |
+| 3 | voltar `email_recrutamento` (com fallback) no `From` | **REPROVOU** — 3 asserções |
+| 4 | `"contentType": "application/pdf"` chumbado | **PASSOU na 1ª versão** → teste reescrito → **REPROVOU** |
+
+## 4. Portões (resultado real)
+
+| Portão | Resultado |
+|---|---|
+| `alembic upgrade head` | OK — head `b2d4f6a8c1e3`, sem migration nova |
+| `test_remetente_recrutamento.py` | **OK** — 30 asserções |
+| `test_entrevistas` · `_arquivamento` · `_documentos` · `test_roteiros_entrevista` | **OK** — sem regressão |
+| `test_design_system` · `test_upload_multipart` · `test_versao` · `test_nomes` · `test_email_templates` | **OK** |
+| `smoke_test.py` | **15/15** |
+| `npm run build` | OK — 3,60s |
+| Tela renderizada (Playwright, 1440px) | card 424×524px, **estouro horizontal 0px**, conferido nos temas **claro e escuro** |
+
+**`pytest tests/ -q` não roda como suíte** neste projeto: os testes são scripts
+que terminam em `raise SystemExit`, e a coleta do pytest dá `INTERNALERROR`.
+**Isso é anterior a esta leva** e é o motivo de o CI rodá-los um a um. Rodei-os
+um a um, como o CI faz.
+
+## 5. Cenários 39–41
+
+| # | Cenário | Cobertura |
+|---|---|---|
+| 39 | `Send As` não liberado → reenvia, avisa, o e-mail sai | **teste** (bloco 1) + mutações 1 e 2 |
+| 40 | remetente vazio → `smtp_from`, em silêncio | **teste** (bloco 2) + mutação 3 |
+| 41 | provedor sem suporte → caixa conectada; `ORGANIZER` respeita a chave | **teste** (bloco 4) |
+
+## 6. O que ficou de fora, e por quê
+
+1. **Google e webhook continuam ignorando o `remetente`** — por desenho, e está
+   no docstring. O cenário 41 é exatamente isto: usar a caixa conectada. O
+   Bruno usa M365.
+2. **`webhook_email.py:56` tem o MESMO `application/pdf` chumbado.** Não mexi:
+   é outro caminho de envio, não é o que ele usa, e alargar escopo sem pedido é
+   o que esta casa evita. **Fica como recomendação.**
+3. **Não testei contra o M365 real** — o teste substitui o limite HTTP. A
+   resposta `ErrorSendAsDenied` usada é a que a Microsoft documenta; a prova
+   final é o Bruno marcar uma entrevista depois de liberar o `Send As`.
+4. **`test_match_persistencia.py`** continua vermelho desde antes da v2.64.
+   Outro módulo, não pedido.
+
+## 7. Perguntas em aberto para o Bruno (não respondi por ele)
+
+1. **Qual é o endereço de recrutamento?** O campo está pronto e **vazio** — não
+   inventei um endereço. Enquanto estiver vazio, tudo sai do padrão, em
+   silêncio.
+2. **Vale a pena o `Send As`?** Se ele achar o passo do tenant caro demais para
+   o ganho, deixar em branco é uma escolha legítima e sem custo — não é
+   pendência, é decisão.
+3. **O `application/pdf` chumbado do webhook deve ser corrigido?** Só importa se
+   um dia ele usar o Power Automate como caminho de envio.
+
+## 8. Recomendações registradas
+
+1. **Ao criar chave na config dinâmica, criar rota e tela na MESMA leva** — a
+   `email_recrutamento` passou uma versão inteira sem nenhuma das duas.
+2. **Corrigir o `application/pdf` do `webhook_email.py`** quando alguém tocar
+   naquele caminho.
+3. **Conferir a restauração de uma vaga pela lixeira** — pendente desde a v2.67.

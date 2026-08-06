@@ -781,6 +781,10 @@ export const rh = {
   salvarSmtp: (dados) =>
     req('/rh/config/smtp', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   testarSmtp: () => req('/rh/config/smtp/testar', { method: 'POST', headers: authRH() }),
+  // Remetente próprio do recrutamento (v2.68, § 16.1)
+  verRecrutamento: () => req('/rh/config/recrutamento', { headers: authRH() }),
+  salvarRecrutamento: (dados) =>
+    req('/rh/config/recrutamento', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   // Modelos de documento (CRUD + geração)
   modelos: () => req('/rh/modelos-documento', { headers: authRH() }),
   criarModelo: (dados) =>

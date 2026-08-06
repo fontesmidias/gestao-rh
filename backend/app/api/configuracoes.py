@@ -399,6 +399,59 @@ def salvar_smtp(payload: SmtpIn, db: Session = Depends(get_db),
     return ver_smtp(db, rh)
 
 
+# ---------- Remetente de recrutamento (v2.68, § 16.1) ----------
+
+
+class RecrutamentoIn(BaseModel):
+    # Vazio é um valor VÁLIDO — é como se volta ao remetente padrão. Por isso
+    # `str` com validação à mão, e não `EmailStr`, que recusaria a string vazia
+    # e deixaria o RH sem como desfazer a configuração.
+    email_recrutamento: str = ""
+
+
+@router.get("/rh/config/recrutamento")
+def ver_recrutamento(db: Session = Depends(get_db),
+                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """O endereço de recrutamento e o estado da metade que NÃO é código.
+
+    `depende_de_send_as` existe para a tela poder dizer a coisa certa: com o
+    M365 conectado, o endereço só vale nos e-mails depois que o administrador
+    liberar `Send As`. Sem ele, a tela prometeria algo que o tenant não cumpre
+    — e o RH descobriria pelo endereço errado num convite já enviado.
+    """
+    from app.services.config_dinamica import CHAVE_EMAIL_RECRUTAMENTO, ler_config
+    from app.services.m365 import config_m365
+
+    bruto = (ler_config(db, (CHAVE_EMAIL_RECRUTAMENTO,))
+             .get(CHAVE_EMAIL_RECRUTAMENTO) or "").strip()
+    m365 = config_m365(db)
+    return {
+        "email_recrutamento": bruto,
+        "padrao": smtp_config(db)["from_"],
+        "depende_de_send_as": bool(m365.get("m365_refresh_token")),
+        "conta_conectada": m365.get("m365_conta") or "",
+    }
+
+
+@router.put("/rh/config/recrutamento")
+def salvar_recrutamento(payload: RecrutamentoIn, db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    from app.services.config_dinamica import CHAVE_EMAIL_RECRUTAMENTO
+
+    valor = (payload.email_recrutamento or "").strip()
+    if valor and ("@" not in valor or valor.startswith("@") or valor.endswith("@")):
+        raise HTTPException(status_code=422,
+                            detail="Informe um endereço de e-mail válido "
+                                   "(ou deixe em branco para usar o padrão).")
+    gravar_config(db, {CHAVE_EMAIL_RECRUTAMENTO: valor})
+    # Auditoria DEPOIS de validar a ação principal — nunca antes (a regra do
+    # `registrar()`, que faz flush e engole exceção).
+    registrar(db, "email_recrutamento_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"endereco": valor or "(padrão do sistema)"})
+    db.commit()
+    return ver_recrutamento(db, rh)
+
+
 @router.post("/rh/config/smtp/testar")
 def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
     try:
