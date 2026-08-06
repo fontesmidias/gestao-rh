@@ -67,13 +67,27 @@ envolve. Um módulo do RH que renderiza `<section>` cru dentro do `.rh-conteudo`
 fica colado na borda porque o `.rh-conteudo` não tem padding lateral no desktop.
 Foi exatamente o que aconteceu com Desenvolvimento/Desempenho/Avaliações.
 
-### `.rh-painel` / `.pagina` — o wrapper de página do RH
+### `.rh-painel` — o wrapper de página do RH
 
 Todo módulo do painel do RH deve renderizar dentro de um wrapper de página, que
 carrega **max-width (não deixa a linha ficar quilométrica), centragem e o padding
-de respiro**. As telas antigas (Admissões) já usam `<main className="rh-painel">`.
-As novas devem usar `.pagina` (o mesmo respiro, nome semântico de página de
-módulo).
+de respiro**. Use **`<main className="rh-painel">`**.
+
+> **Decisão do Bruno, 2026-08-06.** Este doc mandava usar `.pagina` em tela
+> nova, e a prática eram **17 telas com `.rh-painel` contra 4 com `.pagina`** —
+> incluindo as três que todo mundo abre como referência (Colaboradores,
+> Talentos, Creche). A divergência voltou como pergunta em aberto em **três
+> levas seguidas** (v2.65, v2.66, v2.67), e a cada vez alguém teria que escolher
+> sozinho: é assim que padrão vira bagunça.
+>
+> Ele escolheu **corrigir o doc, não as 17 telas** — mexer em tela que hoje
+> funciona é exatamente o tipo de leva que introduz regressão visual (a v2.65
+> acabara de consertar uma). `.pagina` continua existindo e as 4 telas que a
+> usam **ficam como estão**: as duas carregam o mesmo respiro, então não há
+> defeito a corrigir, só um nome a padronizar daqui para a frente.
+>
+> **Regra que fica:** quando doc e prática divergirem, **meça a prática antes
+> de escolher**. Doc que descreve o que ninguém faz não é padrão — é intenção.
 
 ```jsx
 // CERTO — a página nasce com respiro
