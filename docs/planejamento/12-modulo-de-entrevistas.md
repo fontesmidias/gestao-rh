@@ -971,6 +971,69 @@ mesma sessão: *"não não. no dossiê de admissão não."*
 
 ---
 
+## 16. As 4 respostas de 2026-08-06 — e o fim das pendências
+
+### 16.1 O remetente de recrutamento vale no M365 — **sim**
+
+Hoje `email_recrutamento` muda o `ORGANIZER` do `.ics` e o `From` no SMTP, mas
+**o envio real sai da caixa conectada** (o M365 do Bruno, via OAuth). O Graph
+recusa `From` de terceiro sem permissão.
+
+**Para valer de verdade são duas metades, e uma não é código:**
+
+| Metade | Quem faz |
+|---|---|
+| Passar o remetente ao caminho do Graph e usá-lo quando houver permissão | o sistema |
+| **Liberar `Send As` (ou `Send on Behalf`) do endereço de recrutamento para a conta conectada, no admin do M365** | **o Bruno**, no tenant |
+
+**Sem a liberação, o Graph responde `ErrorSendAsDenied` e o e-mail NÃO SAI.**
+Por isso o desenho é: tenta com o remetente; se o provedor recusar por
+permissão, **reenvia da caixa conectada e avisa na tela** — nunca falha calada,
+nunca deixa de mandar a entrevista porque o tenant não foi configurado.
+
+> Isso é a regra da v2.00 outra vez: erro de **permissão** (permanente,
+> resolve-se no admin) ≠ erro de **envio** (transitório). Tratar os dois igual
+> faria o RH achar que o sistema quebrou quando falta um clique no M365.
+
+### 16.2 Filtro próprio da ficha no Arquivo — **não**
+
+Decisão do Bruno. O Arquivo é candidato-cêntrico e a ficha de entrevista
+continua acessível pela **ficha da pessoa** e pela **tela de Entrevistas**, que
+já filtra por vaga, tipo, situação e entrevistador.
+
+Entrevista de **talento** que nunca virou candidato não teria lugar no Arquivo
+de qualquer forma — criar coluna para um caso que não cabe seria inventar
+estrutura para justificar a estrutura.
+
+### 16.3 Perguntas de triagem — **as 9, como estão**
+
+Confirmado. As 9 seguem semeadas e agora **editáveis pela tela** (§ 15.5),
+então mudar de ideia não custa deploy.
+
+### 16.4 `.rh-painel` vs `.pagina` — **corrigir o doc**
+
+Terceira vez que a pergunta voltou. Ele escolheu **corrigir o documento**, não
+as 17 telas — registrado em `08-sistema-de-design.md`, com o motivo: mexer em
+tela que funciona é o tipo de leva que introduz regressão visual, e a v2.65
+acabara de consertar uma.
+
+`.pagina` continua existindo; as 4 telas que a usam ficam como estão. As duas
+carregam o mesmo respiro — não há defeito, só um nome a padronizar.
+
+**Regra que fica, e vale além deste módulo:** quando doc e prática divergirem,
+**meça a prática antes de escolher**. Doc que descreve o que ninguém faz não é
+padrão, é intenção.
+
+### 16.5 Cenários novos (39–41)
+
+| # | Cenário | Tratamento |
+|---|---|---|
+| 39 | `email_recrutamento` preenchido, `Send As` **não** liberado no tenant | Reenvia da caixa conectada **e avisa na tela** o que falta liberar. O e-mail sai. |
+| 40 | `email_recrutamento` vazio | Cai no `smtp_from`, em silêncio e por desenho (§ 15.5). |
+| 41 | Provedor sem suporte a remetente alternativo (webhook, Google) | Usa a caixa conectada; o `ORGANIZER` do `.ics` continua respeitando a chave. |
+
+---
+
 ## Fontes
 
 - [Sackett et al. (2022) — revisão dos validity coefficients](https://pubmed.ncbi.nlm.nih.gov/34968080/)
