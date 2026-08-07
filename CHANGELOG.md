@@ -11,6 +11,43 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.76.2] — 2026-08-07 — O `<details>` fechado não renderiza
+
+> *"Não voltaram os filtros de select com busca. Quero que volte para todos que
+> têm eles."*
+
+Terceira correção da mesma leva, e a mais direta: **os filtros sumiram do
+DESKTOP**. A v2.76.1 disse que "no desktop nada mudou" — estava errado, e o
+print provou.
+
+### A causa
+
+Um **`<details>` fechado não renderiza o conteúdo**. Isso é do navegador, não do
+estilo — e `display: contents` no CSS não muda. Eu neutralizei a caixa na folha
+(`.dash-filtros-caixa { display: contents }`, `.dash-filtros-resumo { display:
+none }`) achando que bastava para o desktop voltar ao que era. Os 9 filtros
+continuavam no DOM, com altura zero.
+
+O estado tem que nascer certo no JSX: `open={!ehCelular}`, com `matchMedia`
+acompanhando o giro do aparelho — sem o listener, quem abrisse no celular e
+girasse continuaria sem filtros num desktop.
+
+### Por que nenhuma régua pegou
+
+As três de layout mediam **celular**. O defeito era do desktop, e a suíte não
+tinha nada apontado para lá além da largura de tabela. O teste novo mede as 8
+telas em 1440px e cobra três coisas: a caixa **aberta**, filtros com altura
+**maior que zero** (estar no DOM não basta — foi exatamente o sintoma) e o card
+de ações visível.
+
+Validado por mutação: removendo o `open`, ele reprova nomeando as 5 telas.
+
+### Portões
+
+E2E **30/30**, backend verde, smoke **15/15**.
+
+---
+
 ## [2.76.1] — 2026-08-07 — O botão que sumiu junto com os filtros
 
 Correção de **duas regressões que a v2.76 causou** — as duas apontadas pelo
