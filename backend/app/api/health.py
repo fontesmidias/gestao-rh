@@ -51,6 +51,12 @@ def health() -> dict:
     `docker-entrypoint.sh` falhar ao rodar `alembic upgrade head`, a API sobe
     assim mesmo com o schema velho — e o defeito só aparece na cara do
     candidato, numa tela que não explica nada.
+
+    ⚠️ Isto passou a ser VERDADE só em 2026-08-06. Até ali o entrypoint tinha
+    `set -e` e ABORTAVA: a API não subia, e este campo — escrito justamente
+    para denunciar o schema atrasado — era inalcançável, porque sem API não há
+    /health para consultar. O comentário descrevia uma intenção que o código
+    não cumpria. Hoje o entrypoint segue em frente e o `em_dia` funciona.
     """
     esperada, aplicada = _revisao_esperada(), _revisao_aplicada()
     return {

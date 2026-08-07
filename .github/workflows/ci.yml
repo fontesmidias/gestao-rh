@@ -78,12 +78,13 @@ jobs:
       # STDLIB PURA: leem arquivos e conferem regras, sem instalar nada. Os
       # testes estruturais que importam `app.main` ficam de fora — exigiriam
       # FastAPI + todo o resto, trocando segundos por minutos de pipeline.
-      - name: Testes estruturais (design system, upload, versão, nomes)
+      - name: Testes estruturais (design system, upload, versão, nomes, migrations)
         working-directory: backend
         env:
           PYTHONPATH: .
         run: |
-          for t in test_design_system test_upload_multipart test_versao test_nomes; do
+          for t in test_design_system test_upload_multipart test_versao test_nomes \
+                   test_migration_insert_cru; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

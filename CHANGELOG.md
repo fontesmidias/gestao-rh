@@ -11,6 +11,97 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.70.0] — 2026-08-06 — A migration que derrubou a API
+
+Incidente de produção, entre 7h e 9h da manhã. O Bruno foi usar o sistema no
+meio do expediente e **não conseguia logar**. Foi ao log do banco, viu que "o
+backend não estava se comunicando com o banco", rodou uma atualização à mão,
+conseguiu entrar — e ficou sem saber se houve dano.
+
+Não houve dano de dado. Mas o que aconteceu merece registro, porque o sintoma
+apontava para o lugar errado e a causa é uma classe de erro, não um caso.
+
+### O banco estava bem. A API é que não existia.
+
+A migration `d6f8b2c4e5a7` (v2.69, backfill da ficha de integração do efetivo)
+inseria em `assinatura` por SQL cru listando quatro colunas:
+
+```sql
+INSERT INTO assinatura (id, candidato_id, documento, aguardando_liberacao)
+```
+
+`otp_tentativas` é `NOT NULL` e **não tem `server_default`** — nasceu assim em
+`66a5f1cd51a0`. O `default=0` mora no modelo Python, e **SQL cru não passa pelo
+ORM**: para aquela instrução, o default simplesmente não existe.
+
+O que escondeu isso até produção: em banco VAZIO o `INSERT ... SELECT` insere
+zero linhas e passa verde. É a armadilha do *"só passa em banco limpo"* (v2.14)
+**de cabeça para baixo** — aqui o banco limpo é que esconde o defeito. Todo
+teste local passou.
+
+E o estrago não ficou contido na migration. O `docker-entrypoint.sh` tinha
+`set -e` e roda `alembic upgrade head` **antes** do `exec uvicorn`: o alembic
+saindo com código 1 abortava o script e o uvicorn **nunca subia**. Cada restart
+repetia a falha. Por isso o sintoma foi "não loga" — não havia backend nenhum
+respondendo, e do lado de fora isso é indistinguível de um problema de banco.
+
+O banco ficou parado em `c5e7a9b1d3f4`, uma revisão antes do head, com o valor
+`informativo_efetivo` **já commitado** no enum (aquela revisão usa
+`autocommit_block`). Estado parcial permanente até a intervenção manual.
+
+Reproduzido em Postgres limpo migrado ao estado pré-v2.64 com candidatos
+semeados: `NotNullViolation`, exit 1, banco parado exatamente ali.
+
+### O que a intervenção manual deixou para trás
+
+O `alembic_version` foi para o head e as fichas passaram a existir — mas **as
+linhas do backfill nunca foram inseridas**. As 31 que havia vieram da própria
+aplicação, via `gerar_docs_do_posto_e_regime`, que usa o ORM e por isso
+funciona. Confirmado pelo `\d assinatura` da produção: a coluna segue `not null`
+sem default, então aquele INSERT não poderia ter rodado.
+
+Como o alembic já dá `d6f8b2c4e5a7` por aplicada, corrigir o arquivo não a faz
+rodar de novo naquele banco — corrige o futuro, não o presente. Daí a
+`e9c1a3f5b7d2`, que repete o MESMO recorte com a coluna certa. É idempotente
+(`NOT EXISTS`): quem já recebeu a ficha pela tela não ganha uma segunda.
+
+Validado nos dois cenários: banco limpo (3 fichas para os efetivos abertos,
+`aprovado` e `intermitente` de fora) e réplica do estado da produção (só os
+faltantes recebem, sem duplicar).
+
+### Falha de migration não derruba mais a API
+
+Decisão do Bruno. Schema velho com o sistema no ar é melhor que tela morta: o
+login continua, dá para diagnosticar com calma, e o `/api/health` **denuncia** o
+atraso (`migracoes.em_dia: false`).
+
+Vale notar o que isso conserta de tabela: aquele campo foi criado na v2.29 para
+exatamente este cenário e **nunca poderia ter funcionado** — sem API no ar, não
+há `/api/health` para consultar. O docstring da função afirmava, desde então,
+que "a API sobe assim mesmo com o schema velho". Descrevia uma intenção que o
+`set -e` contradizia. Agora o código faz o que o comentário sempre disse.
+
+### O guarda-corpo
+
+`tests/test_migration_insert_cru.py` — estrutural, stdlib pura, no CI. Percorre
+a cadeia de revisões **na ordem de execução**, acumula o DDL (`create_table` +
+`add_column`) e cobra que todo `INSERT INTO` liste as colunas `NOT NULL` sem
+default que existiam naquele ponto. Validado por mutação: com o INSERT original
+ele reprova nomeando `otp_tentativas`.
+
+A ordem cronológica não é detalhe — a primeira versão reprovava
+`roteiro_entrevista.tipo`, coluna acrescentada na v2.67 **depois** do INSERT da
+v2.66. Teste que reprova código correto é pior que teste nenhum.
+
+### Achado secundário: `env.py` com 8 modelos faltando
+
+`alerta`, `assinatura_entrevista`, `entrevista`, `roteiro_entrevista`,
+`solicitacao_assinatura`, `telemetria`, `testagem` e `vaga` não eram importados
+em `migrations/env.py`. Sem efeito em runtime (quem registra os modelos é a
+cadeia de imports da `app.main`), mas um `alembic revision --autogenerate`
+concluiria que essas tabelas "sobram" no banco e geraria um `drop_table` para
+cada uma. Dívida acumulada — 6 das 8 são anteriores a esta leva.
+
 ## [2.69.0] — 2026-08-05 — O efetivo também recebe a ficha de integração
 
 Primeiro item dos feedbacks de 2026-08-05. O Bruno: *"Ficha de integração não

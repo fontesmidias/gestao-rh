@@ -15,6 +15,11 @@ emitir para alguém já aprovado usa a tela normalmente.
 Nasce `aguardando_liberacao=True`, como o do intermitente: informativo de
 integração só vai ao candidato quando o RH dispara (v1.92).
 
+⚠️ `otp_tentativas` é NOT NULL **sem server_default** na `assinatura` (assim
+nasceu em `66a5f1cd51a0`; o default `0` mora só no modelo Python, e SQL cru não
+passa pelo ORM). Omiti-lo aqui derrubou o deploy de 2026-08-06 — ver a migration
+`e9c1a3f5b7d2`, que completa o backfill, e a armadilha no CLAUDE.md.
+
 Revision ID: d6f8b2c4e5a7
 Revises: c5e7a9b1d3f4
 Create Date: 2026-08-05
@@ -29,7 +34,8 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        INSERT INTO assinatura (id, candidato_id, documento, aguardando_liberacao, otp_tentativas)
+        INSERT INTO assinatura (id, candidato_id, documento, aguardando_liberacao,
+                                otp_tentativas)
         SELECT gen_random_uuid(), c.id, 'informativo_efetivo', TRUE, 0
           FROM candidato c
          WHERE c.regime = 'efetivo'
