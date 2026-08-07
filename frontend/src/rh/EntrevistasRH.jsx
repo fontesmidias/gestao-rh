@@ -262,11 +262,25 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
   // porque o que falta é uma liberação no admin do Microsoft 365.
   const [aviso, setAviso] = useState(null)
 
+  // ⚠️ `listarTalentos`, NÃO `api.talentos` (v2.73): a função `api.talentos`
+  // NUNCA existiu, e chamá-la derrubava a tela inteira no ErrorBoundary — "Algo
+  // deu errado ao abrir esta página" ao clicar em "+ Triagem" ou "+ Entrevista"
+  // (relatado pelo Bruno). O `.catch(() => {})` não protegia nada: `undefined()`
+  // é `TypeError` SÍNCRONO, estourado antes de existir promessa para capturar.
+  // É a família da `prop` inventada (v2.64) e da classe fantasma (v2.25) — o
+  // JSX fica plausível e o build passa, porque ninguém confere se o nome existe.
+  //
+  // E as TRÊS rotas devolvem LISTA PURA (`-> list[dict]`), não `{itens}` nem
+  // `{vagas}`: os `r.itens || r.vagas || []` do código antigo devolviam `[]`
+  // para sempre. Ou seja, mesmo sem o `TypeError` os três seletores do
+  // formulário — pessoa, vaga e candidato — abririam VAZIOS, sem erro nenhum.
+  // Corrigir só o nome da função deixaria dois terços do defeito de pé, e mais
+  // silenciosos: seletor vazio parece "não há dados cadastrados".
+  const _lista = (r) => (Array.isArray(r) ? r : (r?.itens || []))
   useEffect(() => {
-    api.talentos().then((r) => setTalentos(r.itens || r.talentos || [])).catch(() => {})
-    api.vagas().then((r) => setVagas(r.vagas || r.itens || [])).catch(() => {})
-    api.candidatos && api.candidatos({}).then((r) =>
-      setCandidatos(r.itens || r.candidatos || [])).catch(() => {})
+    api.listarTalentos().then((r) => setTalentos(_lista(r))).catch(() => {})
+    api.vagas().then((r) => setVagas(_lista(r))).catch(() => {})
+    api.candidatos && api.candidatos({}).then((r) => setCandidatos(_lista(r))).catch(() => {})
   }, [])
 
   const criar = async () => {

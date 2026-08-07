@@ -812,6 +812,13 @@ export const rh = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/talentos${q ? `?${q}` : ''}`, { headers: authRH() })
   },
+  // Cadastro à mão pelo RH (v2.73): a porta que não existia — só havia o
+  // formulário público e a importação de planilha. `forcar` é para o homônimo
+  // legítimo, depois do aviso de duplicata (409 com quem já existe).
+  cadastrarTalento: (dados) =>
+    req('/rh/talentos', { method: 'POST', headers: authRH(),
+        body: JSON.stringify(dados) }),
+  opcoesTalento: () => req('/talentos/opcoes'),
   // `motivo` vira anotação no mini-CRM (com autor e data) — v2.14
   statusTalento: (id, status, motivo) =>
     req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(),

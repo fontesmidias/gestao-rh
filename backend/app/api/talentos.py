@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, EmailStr, field_validator
-from sqlalchemy import String, cast, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import requer_rh
@@ -275,6 +275,10 @@ def _dump(t: Talento, teste: dict | None = None, tags: list | None = None,
         "ja_trabalhou_funcao": t.ja_trabalhou_funcao,
         "recebe_seguro_desemprego": t.recebe_seguro_desemprego,
         "consentimento_lgpd_em": t.consentimento_lgpd_em,
+        # Quem cadastrou à mão (v2.73). Vem junto do consentimento de propósito:
+        # é o par que a tela lê para dizer "cadastrado pelo RH — sem
+        # consentimento registrado" em vez de deixar o campo vazio sem explicar.
+        "cadastrado_por_nome": t.cadastrado_por_nome,
         "tem_curriculo": bool(t.curriculo_key), "curriculo_nome": t.curriculo_nome,
         "teste_status": (teste or {}).get("status"),  # None | enviado | em_andamento | concluido
         "tags": tags or [],   # tags do CRM (do talento E do candidato vinculado)
@@ -331,6 +335,112 @@ def marcar_em_analise(db: Session, talento: Talento) -> bool:
         return False
     talento.status = StatusTalento.em_analise
     return True
+
+
+class TalentoRHIn(TalentoIn):
+    """Cadastro FEITO PELO RH (v2.73).
+
+    Herda o schema do formulário público de propósito: os campos são os mesmos,
+    e duplicá-los faria as duas portas divergirem na primeira mudança. O que
+    muda é o que se faz com dois deles:
+
+    - **`consentimento_lgpd` não existe aqui.** A pessoa não está na tela para
+      marcar nada, então o `consentimento_lgpd_em` fica NULO e a ficha diz "sem
+      consentimento registrado". Gravar o carimbo seria registrar como aceite do
+      titular algo que ele não fez — a mesma regra do manifesto de admissão
+      assistida (v2.56) e da `AutorizacaoEquipe` (v1.42): o registro descreve o
+      ato REAL, nunca a versão conveniente. Quem assumiu o cadastro fica em
+      `cadastrado_por_*`.
+    - **`website` (honeypot) não existe aqui.** É defesa contra bot em rota
+      pública; nesta o `requer_rh` já resolve, e manter o campo faria parecer
+      que há proteção onde a proteção é outra.
+
+    `origem` continua sendo a PROCEDÊNCIA ("Currículo por e-mail", "Indicação")
+    — é o mesmo uso que a importação do Forms faz dele.
+    """
+    # `forcar`: o RH viu o aviso de duplicata e decidiu cadastrar assim mesmo
+    # (homônimo real existe — a base tem 1.171 pessoas). Não é o padrão.
+    forcar: bool = False
+
+
+@router.post("/rh/talentos", status_code=201, dependencies=[Depends(requer_rh)])
+def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Cadastra um talento à mão, pelo painel.
+
+    Por que esta rota existe: **não havia porta para o RH cadastrar uma pessoa**
+    — só o formulário público (`POST /talentos`) e a importação de planilha. O
+    currículo que chega por e-mail ou por indicação ficava fora do Banco de
+    Talentos, ou obrigava o RH a pedir para a pessoa preencher o formulário de
+    novo. O pedido do Bruno era sobre "currículo por e-mail"; a sala concluiu
+    que o problema real era a porta que não existia.
+
+    **Duplicata AVISA, não funde** (409 `talento_ja_existe`, com quem é): é a
+    regra da casa para equivalência assistida — jornadas, incidência de
+    benefícios e cargos do Tirvu todos PROPÕEM e deixam o humano confirmar,
+    porque merge cego cria associação errada que ninguém vê depois. O `forcar`
+    existe para o homônimo legítimo, e fica na auditoria.
+    """
+    dados = payload.model_dump()
+    forcar = dados.pop("forcar", False)
+    dados.pop("website", None)             # honeypot não se aplica a rota do RH
+    dados.pop("consentimento_lgpd", None)  # ver docstring: fica NULO, de propósito
+
+    nome = (dados.get("nome") or "").strip()
+    if not nome:
+        raise HTTPException(status_code=422, detail="nome_obrigatorio")
+    if dados.get("resumo") and len(dados["resumo"]) > 4000:
+        dados["resumo"] = dados["resumo"][:4000]
+
+    email = (dados.get("email") or "").strip().lower() or None
+    tel_digitos = _so_digitos_tel(dados.get("telefone"))
+
+    # Mesma regra de duplicidade da importação de planilha (e-mail; ou
+    # nome+telefone quando não há e-mail) — duas portas para o mesmo Banco de
+    # Talentos não podem discordar sobre o que é a mesma pessoa.
+    if not forcar:
+        ja = None
+        if email:
+            ja = db.scalar(select(Talento).where(func.lower(Talento.email) == email))
+        if ja is None and tel_digitos:
+            for t in db.scalars(select(Talento).where(
+                    func.lower(Talento.nome) == nome.lower())).all():
+                if _so_digitos_tel(t.telefone) == tel_digitos:
+                    ja = t
+                    break
+        if ja is not None:
+            # O `detail` estruturado diz QUEM já existe: "já existe" sem nome faz
+            # o RH procurar na lista (regra da v2.55). O `api.js` preserva isso
+            # em `e.dados`.
+            raise HTTPException(status_code=409, detail={
+                "erro": "talento_ja_existe",
+                "id": str(ja.id), "nome": ja.nome, "email": ja.email,
+                "status": ja.status.value,
+                "por": "email" if email and (ja.email or "").lower() == email else "nome_telefone",
+            })
+
+    cargos = [c.strip() for c in (dados.pop("cargos_interesse", None) or []) if c and c.strip()]
+    regioes = [r.strip() for r in (dados.pop("regioes", None) or []) if r and r.strip()]
+    if dados.get("tipo_contratacao") not in TIPOS_CONTRATACAO:
+        dados["tipo_contratacao"] = None
+
+    talento = Talento(**dados)
+    talento.cargos_interesse = cargos or None
+    talento.regioes = regioes or None
+    talento.cargo_interesse = cargos[0] if cargos else None
+    # consentimento_lgpd_em fica NULO — ver a docstring do schema.
+    talento.cadastrado_por_id = rh.id
+    talento.cadastrado_por_nome = rh.nome or rh.email
+    db.add(talento)
+    db.flush()
+    registrar(db, "talento_cadastrado_pelo_rh", ator="rh", ator_detalhe=rh.email,
+              detalhe={"talento": str(talento.id), "nome": talento.nome,
+                       "origem": talento.origem, "forcado": forcar})
+    db.commit()
+    # NÃO manda o e-mail de agradecimento do formulário público: ele diz "recebemos
+    # o seu cadastro" a quem não se cadastrou — a pessoa levaria um susto, e o
+    # e-mail pode nem ser dela (foi o RH que digitou).
+    return {"ok": True, "id": str(talento.id), **_dump(talento)}
 
 
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])

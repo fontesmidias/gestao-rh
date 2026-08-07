@@ -1112,3 +1112,66 @@ Pessoal (adiada por ele, desenho guardado no § 13), a rota para o RH cadastrar
 talento à mão (a sala achou que o pedido do "currículo por e-mail" era sobre
 essa porta que não existe) e o segundo avaliador com trava anti-peeking (datado,
 não descartado).
+
+---
+
+# Adendo v2.73 — a porta que não existia (2026-08-07)
+
+Fecha o item do § 13 registrado como *"currículo que chega por e-mail"*. A sala
+já tinha diagnosticado que **o pedido não era sobre e-mail**: era sobre a porta
+ausente — o Banco de Talentos tinha o formulário público e a importação de
+planilha, e nenhuma servia ao RH.
+
+## 1. As duas decisões que o Bruno tomou
+
+Perguntei antes de construir, porque as duas mudavam o que seria entregue.
+
+**Consentimento — registrar a ORIGEM, sem fingir aceite.** O
+`consentimento_lgpd_em` fica NULO; `cadastrado_por_id`/`_nome` (snapshot) dizem
+quem assumiu; a ficha mostra *"sem aceite — cadastrado por X"*. Precedente da
+`AutorizacaoEquipe` (v1.42) e do manifesto assistido (v2.56).
+
+Na ficha isso é **terceiro estado**, não travessão: travessão não distingue "não
+temos o dado" de "não houve aceite, e sabemos por quê" (lição do creche).
+
+**Duplicata — avisar e deixar o RH decidir.** 409 dizendo QUEM já existe, com
+botão para abrir a ficha. Mesma regra de duplicidade da importação de planilha
+(e-mail; ou nome+telefone por dígitos). `forcar` para o homônimo real.
+
+## 2. O defeito de produção que apareceu no meio
+
+O Bruno relatou, com a tela aberta:
+
+> *"a msg abaixo aparece, no módulo de entrevistas quando clico em triagem ou
+> entrevista — 😕 Algo deu errado ao abrir esta página"*
+
+Reproduzido no navegador em 2 minutos: **`TypeError: api.talentos is not a
+function`**. Uma função que nunca existiu. O `.catch(() => {})` ao lado não
+protegia — `undefined()` é `TypeError` síncrono.
+
+**E o defeito tinha uma segunda metade.** As três rotas daquele `useEffect`
+devolvem lista pura, e o código lia `r.itens || []`: mesmo sem o `TypeError`, os
+seletores de pessoa, vaga e candidato abririam VAZIOS, sem erro nenhum. Corrigir
+só o nome deixaria dois terços do defeito de pé, e mais silencioso. Medido
+depois: 18 pessoas e 3 vagas nos seletores.
+
+`test_api_front_existe.py` varre todo o JSX e reprova chamada a `api.x()`
+inexistente — a varredura não achou nenhuma outra no repositório.
+
+## 3. Portões
+
+| Portão | Resultado |
+|---|---|
+| `test_talento_cadastro_rh` (novo) | **OK** — 4 mutações reprovaram |
+| `test_api_front_existe` (novo) | **OK** — mutação reprovou nomeando o defeito |
+| Migration `f1a3c5e7b9d2` | up → **down** → up executado |
+| 15 testes de backend | **OK** |
+| `smoke_test` | **15/15** |
+| E2E | **26/26** |
+| Fluxo na tela renderizada | cadastro, duplicata e ficha conferidos |
+
+## 4. Estado do módulo
+
+Do § 13 restam **duas** coisas, ambas escopo novo e decisão do Bruno:
+Requisição de Pessoal (adiada por ele, desenho guardado) e o segundo avaliador
+com trava anti-peeking (datado, não descartado).

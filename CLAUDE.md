@@ -88,6 +88,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`api.x()` que não existe DERRUBA A TELA — e o `.catch` não salva** (v2.73,
+  defeito visto pelo Bruno em produção): `EntrevistasRH` chamava
+  `api.talentos()`, função que **nunca existiu** (a certa é `listarTalentos`), e
+  clicar em "+ Triagem" caía no ErrorBoundary. O `.catch(() => {})` ao lado não
+  protegia nada — `undefined()` é `TypeError` **SÍNCRONO**, estourado antes de
+  existir promessa, e exceção de render apaga a tela INTEIRA. Mesma família da
+  `prop` inventada (v2.64) e da classe fantasma (v2.25): o JSX fica plausível e
+  o build passa. Hoje o `test_api_front_existe.py` varre o JSX e reprova no CI.
+  **Corolário que quase escapou**: as rotas `/rh/talentos`, `/rh/vagas` e
+  `/rh/candidatos` devolvem **LISTA PURA** (`-> list[dict]`), e o código lia
+  `r.itens || []` — mesmo sem o `TypeError`, os três seletores abririam VAZIOS,
+  sem erro nenhum. Ao consertar chamada quebrada, confira também o FORMATO que a
+  rota devolve; seletor vazio parece "não há dados cadastrados".
+- **Cadastro FEITO PELO RH não carimba consentimento** (v2.73,
+  `talentos.py::cadastrar_pelo_rh`): no formulário público a pessoa marca "li e
+  concordo"; na importação o carimbo vem da planilha. Quando o RH cadastra à
+  mão, **ninguém marcou nada** — então `consentimento_lgpd_em` fica NULO e
+  `cadastrado_por_id`/`_nome` (SNAPSHOT) dizem quem assumiu. É o precedente da
+  `AutorizacaoEquipe` e do manifesto assistido (v2.56): **o registro descreve o
+  ato REAL, nunca a versão conveniente**. Carimbar ali passaria em qualquer
+  revisão de código — o cadastro funciona igual — e o que se perde é a verdade
+  de um registro de LGPD. Na ficha isso é TERCEIRO ESTADO ("sem aceite —
+  cadastrado por X"), nunca travessão: travessão não distingue "não temos o
+  dado" de "não houve aceite, e sabemos por quê" (lição do creche, v2.27/v2.54).
 - **`.chip` não quebra linha — em coluna de tabela ele estica tudo** (v2.72.3):
   `white-space: nowrap` é certo para status e contagem (partidos ficariam
   feios), mas a coluna Tags recebe a **tag de reaproveitamento**, que o sistema
