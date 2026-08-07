@@ -77,6 +77,23 @@ class Entrevista(Base):
     # Snapshot: a vaga pode ser excluída fisicamente (cenário 4).
     vaga_titulo: Mapped[str | None] = mapped_column(String(160))
 
+    # --- Cargo e posto SEM vaga cadastrada (v2.74, pedido do Bruno).
+    # Nem toda entrevista nasce de uma vaga aberta: o RH conversa para um posto
+    # que precisa repor gente, e cadastrar uma vaga só para marcar a conversa
+    # seria burocracia inventada. São ALTERNATIVA ao `vaga_id`, não substituto —
+    # havendo vaga, ela continua mandando (e o cargo dela alimenta o roteiro).
+    #
+    # `cargo` é STRING, não FK: é assim em todo o sistema (`Candidato.cargo_funcao`,
+    # `ModeloDocumento.cargo_alvo`, as provas por cargo) e virar tabela quebraria
+    # os três. É também o que `resolver_roteiro` casa por `normalizar_cargo`.
+    cargo: Mapped[str | None] = mapped_column(String(120))
+    # Posto é FK **com snapshot do nome**, mesma razão do `vaga_titulo`: o posto
+    # pode ser excluído (vai para a lixeira) e a entrevista tem que continuar
+    # legível — dizer para qual posto a conversa foi é metade do registro.
+    posto_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("posto_servico.id", ondelete="SET NULL"), nullable=True, index=True)
+    posto_nome: Mapped[str | None] = mapped_column(String(200))
+
     tipo: Mapped[TipoEntrevista] = mapped_column(
         String(20), default=TipoEntrevista.entrevista)
     status: Mapped[StatusEntrevista] = mapped_column(

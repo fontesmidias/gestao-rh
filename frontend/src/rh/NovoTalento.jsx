@@ -37,6 +37,10 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
   const [erro, setErro] = useState(null)
   const [duplicata, setDuplicata] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  // Currículo junto do cadastro (v2.74): é assim que ele chega — por e-mail,
+  // antes de qualquer conversa. A v2.73 dizia "anexe depois pela ficha" e não
+  // havia rota para isso; agora há (`POST /rh/talentos/{id}/curriculo`).
+  const [arquivo, setArquivo] = useState(null)
 
   // As mesmas listas do formulário público (rota pública, sem token): cargo
   // digitado à mão vira "Vigia"/"vigia"/"Vigía" — três cargos onde há um só.
@@ -56,6 +60,19 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
       const criado = await api.cadastrarTalento({
         ...f, cargos_interesse: cargos, regioes, forcar,
       })
+      // O currículo é anexado DEPOIS de existir o talento (a rota precisa do
+      // id). Falha aqui NÃO desfaz o cadastro — a pessoa já entrou, e o arquivo
+      // se anexa de novo pela ficha; perder o cadastro por causa de um upload
+      // seria trocar um problema pequeno por um maior.
+      if (arquivo) {
+        try {
+          await api.anexarCurriculoTalento(criado.id, arquivo)
+        } catch (e) {
+          aoCriar(criado, `Cadastro feito, mas o currículo não subiu `
+            + `(${e.detail || e.message}). Anexe pela ficha da pessoa.`)
+          return
+        }
+      }
       aoCriar(criado)
     } catch (e) {
       // O 409 traz quem já existe em `e.dados` (o `api.js` preserva o `detail`
@@ -176,6 +193,13 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
       </div>
 
       <label className="campo">
+        <span className="rotulo">Currículo
+          <span className="dica-inline"> — opcional; PDF, foto ou Word</span></span>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx"
+               onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+      </label>
+
+      <label className="campo">
         <span className="rotulo">Experiência / observações
           <span className="dica-inline"> — o que a pessoa contou, ou o que o currículo diz</span></span>
         <textarea rows={4} value={f.resumo} onChange={set('resumo')} />
@@ -190,7 +214,7 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
         <button className="btn-secundario" onClick={aoFechar}>Cancelar</button>
       </div>
       <p className="explica">
-        O currículo pode ser anexado depois, pela ficha da pessoa.
+        Dá para cadastrar só com o nome e completar o resto depois, pela ficha.
       </p>
     </div>
   )

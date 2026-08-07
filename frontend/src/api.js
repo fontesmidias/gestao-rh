@@ -819,6 +819,25 @@ export const rh = {
     req('/rh/talentos', { method: 'POST', headers: authRH(),
         body: JSON.stringify(dados) }),
   opcoesTalento: () => req('/talentos/opcoes'),
+  // Anexar/trocar o currículo pelo painel (v2.74). Faltava: o cadastro à mão
+  // dizia "anexe depois pela ficha" e não havia rota para isso — a única era a
+  // pública, autorizada por um token com TTL que o RH não tem.
+  // ⚠️ `buscar()` direto, NUNCA `req()`: o `_req` força
+  // `Content-Type: application/json`, e com FormData quem precisa escrever o
+  // cabeçalho (com o `boundary`) é o NAVEGADOR. Sobrescrito, o FastAPI não
+  // separa as partes e responde 422 `Field required` — o erro mais enganoso do
+  // projeto (v2.39.1). O `test_upload_multipart.py` cobra esta regra.
+  anexarCurriculoTalento: async (id, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    entrouRH()
+    try {
+      const r = await buscar(`${BASE}/rh/talentos/${id}/curriculo`,
+                             { method: 'POST', headers: authRH(), body: fd })
+      if (!r.ok) await lancarErro(r)
+      return r.json()
+    } finally { saiuRH() }
+  },
   // `motivo` vira anotação no mini-CRM (com autor e data) — v2.14
   statusTalento: (id, status, motivo) =>
     req(`/rh/talentos/${id}/status`, { method: 'PUT', headers: authRH(),
