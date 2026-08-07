@@ -11,6 +11,105 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.72.0] — 2026-08-06 — O teste que ninguém rodava
+
+Fecha a dívida do **Módulo de Entrevistas** — as quatro levas (v2.64 → v2.68)
+entregaram 41 cenários e 9 mutações, e os relatórios de execução registraram
+honestamente o que ficou faltando. Esta leva não acrescenta funcionalidade:
+**faz o que já existe passar a ser verificado**.
+
+### O módulo inteiro estava fora do CI
+
+Quatro levas, cinco arquivos de teste, **zero rodando no pipeline**. É a
+armadilha da v2.48 na segunda reincidência: lá foram os 38 testes Python que
+"só rodavam se alguém lembrasse".
+
+O que estava desprotegido não dá erro quando quebra — sai errado em silêncio:
+
+- **o roteiro padrão é o PISO da herança**: sem ele, `resolver_roteiro` devolve
+  `None` e **toda ficha de entrevista abre vazia, sem erro na tela** (defeito
+  real, achado por mutação na v2.66);
+- **a ficha assinada não pode entrar no dossiê**, que é o documento que CIRCULA
+  (cliente, pasta física). O default do `dossie.py` é *"entra"*, e o vazamento é
+  uma página a mais que ninguém confere;
+- justificativa obrigatória por nota, o snapshot da vaga, e o sistema nunca
+  concluindo `nao_veio` sozinho;
+- arquivar que **não apaga**.
+
+**Mas três deles não podiam entrar como estavam**: tinham a senha do admin
+LITERAL na linha do login. No CI o admin nasce com a senha do `.env` do job, e a
+literal devolve 401 → `KeyError: 'token'`, erro que não fala da causa. É
+*exatamente* a armadilha da v2.71, que impediu `test_documentos_catalogo` e
+`test_email_templates` de entrarem — e que se repetiu aqui sem ninguém notar.
+Provado antes de corrigir: com a senha do CI, `test_entrevistas` dava
+`login falhou: 401 credenciais_invalidas`.
+
+No `test_entrevista_documentos` a literal pesava duas vezes — a mesma senha
+assina a ficha (`prova_metodo = "senha_sessao_rh"`), então a assinatura seria
+recusada por *"senha errada"*, apontando para o lugar errado do sistema.
+
+### O anexo da entrevista ganhou teste (a dívida declarada da v2.64)
+
+O relatório da v2.64 dizia, sem maquiagem: *"o cenário 20 está coberto por
+código revisado, não por teste"*. Agora tem `test_entrevista_anexo.py`, com
+**cinco mutações verificadas** — allowlist, teto, `close()` do spool, o órfão no
+storage e o `Content-Type`.
+
+A asserção do tipo é sobre a **resposta do GET**, não sobre a constante
+`ANEXO_CT`: afirmar `ANEXO_CT["png"] == "image/png"` testaria o dicionário, não
+a LIGAÇÃO — e foi assim que o `application/pdf` chumbado do caminho do Graph
+sobreviveu até a v2.68 com um teste verde ao lado.
+
+### `test_match_persistencia.py` — vermelho desde antes da v2.64
+
+Três relatórios seguidos o registraram como pendência e perguntaram ao Bruno se
+deveria ser consertado. A causa: `executar_processamento` varre
+`select(Talento).where(status != "arquivado")` — **o banco inteiro** —, e as
+asserções eram `r1["analisados"] == 1`. A 2ª execução no mesmo banco via os
+talentos que a 1ª deixou (medido: 156 processados, 2 analisados) e falhava com
+uma mensagem que não fala da causa.
+
+A correção é de **RECORTE, não de garantia**: conta-se o resultado dos três
+talentos do teste, que é o que cada asserção sempre quis afirmar. O contador
+global virou contexto da mensagem de erro, nunca critério. Validado por duas
+mutações (reaproveitamento desligado; `sem_curriculo` virando `analisado`) e por
+três execuções seguidas no mesmo banco sujo.
+
+**Não se resolve apagando os talentos no fim**: o teste morre no meio numa falha
+legítima e deixa o banco sujo do mesmo jeito — o problema volta pela porta dos
+fundos, e ainda some com a evidência do que falhou.
+
+O `os.environ.update` do topo também foi para `setdefault`: ele SOBRESCREVIA a
+`DATABASE_URL` do ambiente, então o teste ignorava para onde o operador o
+apontava.
+
+### O smoke test estava quebrado desde a v2.71 — e ninguém viu
+
+Achado ao rodar os portões: **etapa 9, `formato_nao_suportado`**. Na v2.71 o
+`detail` do `upload_seguro._conferir` virou DICIONÁRIO (diz a extensão recebida
+e a lista de aceitos — a mensagem que a tela mostra a quem está com o celular na
+mão), e o smoke ainda comparava com a string antiga.
+
+**O comportamento estava certo; o teste é que ficou para trás.** Ficou invisível
+porque **o smoke não roda no CI** — é portão manual. Voltou a **15/15**.
+
+### Portões
+
+| Portão | Resultado |
+|---|---|
+| 5 testes de entrevistas | **OK**, cada um rodado 2× seguidas no mesmo banco |
+| `test_entrevista_anexo` (novo) | **OK** — 19 asserções, 5 mutações reprovaram |
+| `test_match_persistencia` | **OK** — 3 execuções seguidas em banco sujo |
+| Os 5 com a senha do CI, em banco novo | **OK** — a condição real do pipeline |
+| `smoke_test.py` | **15/15** (estava vermelho) |
+| Demais testes do CI | **OK** — 10 arquivos, sem regressão |
+| `npm run build` | **OK** — 6,21s |
+
+Nenhum arquivo de aplicação foi alterado: `git diff` de `app/` vazio ao final,
+resíduo de mutação zero.
+
+---
+
 ## [2.71.0] — 2026-08-06 — O documento do candidato não fica no disco
 
 Primeira leva de pendências levantadas depois do incidente da v2.70. Quatro

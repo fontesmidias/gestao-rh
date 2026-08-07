@@ -19,7 +19,13 @@ Rode: PYTHONPATH=. .venv/Scripts/python.exe tests/test_match_persistencia.py
 
 import os
 
-os.environ.update(
+# `setdefault`, não `update` (v2.72): o `update` SOBRESCREVIA a `DATABASE_URL`
+# do ambiente, então o teste ignorava para onde o operador o estava apontando e
+# ia sempre ao banco local — no CI (onde o Postgres é outro) isso o mandaria
+# para um host que não existe. Todos os outros testes do projeto usam
+# `setdefault` pelo mesmo motivo: o padrão serve a máquina de quem desenvolve,
+# nunca decide pelo ambiente.
+_PADROES = dict(
     DATABASE_URL="postgresql+psycopg://admissao:admissao@localhost:55432/admissao",
     MINIO_ENDPOINT="localhost:59000",
     MINIO_ACCESS_KEY="minio",
@@ -30,6 +36,8 @@ os.environ.update(
     SECRET_KEY="segredo-de-teste",
     BASE_URL="http://localhost:8090",
 )
+for _chave, _valor in _PADROES.items():
+    os.environ.setdefault(_chave, _valor)
 
 import uuid
 from unittest.mock import patch
@@ -100,6 +108,53 @@ def _analises():
             select(AnaliseTalento).where(AnaliseTalento.vaga_id == VAGA_ID))}
 
 
+# --------------------------------------------------------------------------
+# Por que os contadores da resposta NÃO servem de asserção (v2.72)
+#
+# `executar_processamento` varre `select(Talento).where(status != "arquivado")`
+# — o BANCO INTEIRO, não os três talentos deste teste. As asserções originais
+# eram `r1["analisados"] == 1`, que só valem em banco recém-criado: a 2ª
+# execução no mesmo banco via os talentos que a 1ª deixou (medido: 156
+# processados, 2 analisados) e falhava com uma mensagem que não fala da causa.
+#
+# Era a armadilha "só passa em banco limpo" (v2.14) num teste que a antecede, e
+# deixou este arquivo VERMELHO desde antes da v2.64 — três relatórios seguidos o
+# registraram como pendência.
+#
+# A correção é de RECORTE, não de garantia: conta-se o resultado dos três
+# talentos do teste (`_meus`), que é exatamente o que cada asserção queria
+# afirmar. O contador global vira contexto na mensagem de erro, nunca critério.
+#
+# ⚠️ NÃO troque isto por "apagar os talentos no fim": o teste morre no meio numa
+# falha legítima e deixa o banco sujo do mesmo jeito — o problema volta pela
+# porta dos fundos, e ainda por cima some com a evidência do que falhou.
+# --------------------------------------------------------------------------
+
+MEUS = {COM_CV, SEM_CV, ILEGIVEL}
+
+
+def _meus(resposta):
+    """Quantos dos MEUS três talentos caíram em cada resultado.
+
+    Devolve um dict com as mesmas chaves da resposta do processamento, para as
+    asserções permanecerem legíveis lado a lado com o que elas substituíram.
+    """
+    res = {t: r for t, r in _analises().items() if t in MEUS}
+    conta = {
+        "analisados": sum(1 for r in res.values() if r == ResultadoAnalise.analisado),
+        "sem_curriculo": sum(1 for r in res.values()
+                             if r == ResultadoAnalise.sem_curriculo),
+        "ilegiveis": sum(1 for r in res.values()
+                         if r == ResultadoAnalise.curriculo_ilegivel),
+        "ia_indisponivel": sum(1 for r in res.values()
+                               if r == ResultadoAnalise.ia_indisponivel),
+    }
+    # O total do banco entra só como CONTEXTO da mensagem de falha: ajuda a
+    # entender o cenário sem virar critério de aprovação.
+    conta["_global"] = resposta
+    return conta
+
+
 # ---------- 1ª rodada: analisa quem dá, e registra o MOTIVO dos demais ----------
 
 chamadas = {"n": 0}
@@ -111,10 +166,16 @@ def _contando(s, u, **kw):
 
 
 r1 = _rodar(gerar=_contando)
-assert r1["analisados"] == 1, r1
-assert r1["sem_curriculo"] == 1, r1
-assert r1["ilegiveis"] == 1, r1
-assert chamadas["n"] == 1, chamadas
+m1 = _meus(r1)
+assert m1["analisados"] == 1, m1
+assert m1["sem_curriculo"] == 1, m1
+assert m1["ilegiveis"] == 1, m1
+# A IA foi chamada UMA vez POR TALENTO MEU analisável. Outros talentos do banco
+# podem ter currículo indexado, então o total é `>= 1` — o que este teste
+# garante é que o meu foi analisado, e as rodadas seguintes travam a repetição
+# comparando com ESTE número, não com uma constante.
+chamadas_apos_r1 = chamadas["n"]
+assert chamadas_apos_r1 >= 1, chamadas
 
 res = _analises()
 assert res[COM_CV] == ResultadoAnalise.analisado
@@ -125,16 +186,23 @@ assert res[ILEGIVEL] == ResultadoAnalise.curriculo_ilegivel
 # ---------- 2ª rodada: REAPROVEITA — não chama a IA de novo ----------
 
 r2 = _rodar(gerar=_contando)
-assert r2["reaproveitados"] == 1, r2
-assert r2["analisados"] == 0, r2
-assert chamadas["n"] == 1, f"a IA foi chamada de novo: {chamadas}"
+m2 = _meus(r2)
+# O reaproveitamento é o coração deste teste (foi a repetição do custo que
+# estourou a cota em 2026-07-28): o meu talento continua `analisado` e a IA
+# NÃO é chamada de novo por ninguém — nem por ele, nem pelos demais.
+assert m2["analisados"] == 1, m2
+assert r2["reaproveitados"] >= 1, r2
+assert chamadas["n"] == chamadas_apos_r1, (
+    f"a IA foi chamada de novo numa rodada que deveria só reaproveitar: "
+    f"{chamadas_apos_r1} -> {chamadas['n']}")
 
 # ---------- reanalisar=True: refaz, ATUALIZANDO (não viola a unique) ----------
 
 r3 = _rodar(reanalisar=True, gerar=_contando)
-assert r3["analisados"] == 1, r3
-assert r3["reaproveitados"] == 0, r3
-assert chamadas["n"] == 2, chamadas
+m3 = _meus(r3)
+assert m3["analisados"] == 1, m3
+assert chamadas["n"] > chamadas_apos_r1, (
+    f"reanalisar=True não refez a análise: {chamadas}")
 
 with SessionLocal() as db:
     quantas = len(list(db.scalars(select(AnaliseTalento).where(
@@ -163,6 +231,9 @@ with SessionLocal() as db:
 # ---------- Depois da cota voltar, a próxima rodada retoma quem ficou ----------
 
 r5 = _rodar(gerar=_contando)
-assert r5["analisados"] == 1, f"não retomou quem ficou pendente: {r5}"
+m5 = _meus(r5)
+assert m5["analisados"] == 1, f"não retomou quem ficou pendente: {m5}"
+assert m5["ia_indisponivel"] == 0, (
+    f"quem ficou como ia_indisponivel continuou parado: {m5}")
 
 print("test_match_persistencia: OK")

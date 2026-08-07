@@ -838,3 +838,156 @@ um a um, como o CI faz.
 2. **Corrigir o `application/pdf` do `webhook_email.py`** quando alguém tocar
    naquele caminho.
 3. **Conferir a restauração de uma vaga pela lixeira** — pendente desde a v2.67.
+
+---
+
+# Leva v2.72 — o fechamento da dívida (2026-08-06)
+
+Leva **sem funcionalidade nova**. As quatro anteriores entregaram o módulo e os
+relatórios acima registraram, sem maquiagem, o que ficou faltando. Esta pega
+essa lista e a fecha.
+
+O ponto de partida foi a pergunta *"o que falta?"*. Conferindo o CÓDIGO (não os
+documentos), três pendências que os relatórios listavam como abertas **já
+estavam feitas** e foram descartadas em vez de reimplementadas: a vaga passando
+pela lixeira (`api/vagas.py:132`), a entrevista de quem virou colaborador fora
+do prazo de arquivamento (`workers/expurgo.py:174`) e o `application/pdf`
+chumbado do `webhook_email.py`. **Documento desatualizado geraria trabalho
+duplicado** — a conferência custou minutos.
+
+## 1. O que sobrou de verdade, e foi feito
+
+### 1.1 O módulo inteiro estava FORA do CI
+
+Quatro levas, cinco arquivos de teste, **zero rodando no pipeline**. Ninguém
+mentiu em relatório nenhum: cada leva rodou os testes à mão e viu verde. O que
+falta nesse ciclo é a próxima pessoa — que mexe no roteiro e **não roda nada**.
+
+O que estava desprotegido não dá erro quando quebra:
+
+| Teste | O que ele impede |
+|---|---|
+| `test_roteiros_entrevista` | o roteiro padrão é o PISO da herança; sem ele **toda ficha abre vazia, sem erro na tela** |
+| `test_entrevista_documentos` | a ficha assinada **não entra no dossiê**, que CIRCULA |
+| `test_entrevistas` | justificativa obrigatória, snapshot da vaga, nunca concluir `nao_veio` sozinho |
+| `test_entrevista_arquivamento` | arquiva, **nunca apaga** |
+| `test_entrevista_anexo` | allowlist, teto e `close()` do spool |
+
+**Três não podiam entrar como estavam**: tinham a senha do admin LITERAL na
+linha do login — a armadilha da v2.71, repetida aqui sem ninguém notar. Provado
+antes de corrigir, não presumido:
+
+```
+test_entrevistas -> AssertionError: login falhou: 401 credenciais_invalidas
+```
+
+No `test_entrevista_documentos` pesava duas vezes: a mesma senha ASSINA a ficha
+(`prova_metodo = "senha_sessao_rh"`), então a recusa apareceria como *"senha
+errada"* — sintoma apontando para o lugar errado do sistema.
+
+Depois de corrigidos, os cinco foram rodados **em banco NOVO com a senha do CI**
+(`senha-ci-12345678`), que é a condição real do pipeline. Os cinco passaram.
+
+### 1.2 O anexo ganhou teste — a dívida declarada no § 5.3 da v2.64
+
+`backend/tests/test_entrevista_anexo.py`, 19 asserções, **5 mutações
+verificadas**:
+
+| # | Mutação | Resultado |
+|---|---|---|
+| 1 | allowlist removida | **REPROVOU** — 3 asserções (`.exe`, `.svg`, sem extensão) |
+| 2 | teto de 10MB removido | **REPROVOU** |
+| 3 | `ct` chumbado em `application/pdf` | **REPROVOU** |
+| 4 | não remove o anexo anterior (órfão) | **REPROVOU** |
+| 5 | `close()` fora do `finally` | **REPROVOU** |
+
+A asserção do tipo é sobre a **resposta do GET**, não sobre a constante
+`ANEXO_CT`: afirmar `ANEXO_CT["png"] == "image/png"` testaria o dicionário, não
+a LIGAÇÃO — foi assim que o `application/pdf` chumbado do caminho do Graph
+sobreviveu até a v2.68 com um teste verde ao lado.
+
+Uma nota sobre a mutação 5: a primeira tentativa deixou um `try` sem
+`except`/`finally` e virou **SyntaxError** — o teste nem rodou, e a saída vazia
+*parecia* aprovação. Mutação tem que ser sintaticamente válida, senão ela não
+testa nada e engana quem a lê.
+
+### 1.3 `test_match_persistencia.py` — vermelho desde antes da v2.64
+
+Três relatórios seguidos o registraram e perguntaram ao Bruno se deveria ser
+consertado. Causa: `executar_processamento` varre
+`select(Talento).where(status != "arquivado")` — **o banco inteiro** — e as
+asserções eram `r1["analisados"] == 1`.
+
+Reproduzido antes de mexer:
+
+```
+1ª execução (banco limpo) -> OK
+2ª execução               -> AssertionError: {'processados': 156, 'analisados': 2, ...}
+```
+
+A correção é de **RECORTE, não de garantia**: `_meus()` conta o resultado dos
+três talentos do teste, que é o que cada asserção sempre quis afirmar. O
+contador global virou contexto da mensagem de erro, nunca critério. Validado por
+duas mutações (reaproveitamento desligado → reprovou; `sem_curriculo` virando
+`analisado` → reprovou) e por **três execuções seguidas no mesmo banco sujo**.
+
+O `os.environ.update` do topo virou `setdefault`: ele SOBRESCREVIA a
+`DATABASE_URL` do ambiente, então o teste ignorava para onde estava sendo
+apontado.
+
+## 2. O defeito que apareceu no caminho — o smoke estava quebrado
+
+Rodando os portões: **etapa 9 do `smoke_test.py`, `formato_nao_suportado`**.
+
+Não era regressão desta leva — confirmado com `git stash`, com a árvore no
+estado original: **falha idêntica**. A v2.71 fez o `detail` do
+`upload_seguro._conferir` virar DICIONÁRIO (diz a extensão recebida e a lista de
+aceitos), e o smoke comparava com a string antiga.
+
+**O comportamento estava certo; o teste ficou para trás** — e ficou invisível
+porque **o smoke também não roda no CI**. Corrigido: voltou a **15/15**.
+
+## 3. Portões (resultado real)
+
+| Portão | Resultado |
+|---|---|
+| 5 testes de entrevistas | **OK**, cada um 2× seguidas no mesmo banco |
+| `test_entrevista_anexo` (novo) | **OK** — 5 mutações reprovaram |
+| `test_match_persistencia` | **OK** — 3 execuções em banco sujo |
+| Os 5 com a senha do CI, banco novo | **OK** |
+| `smoke_test.py` | **15/15** (estava vermelho) |
+| 10 demais testes do CI | **OK**, sem regressão |
+| `npm run build` | **OK** — 6,21s |
+| YAML do `ci.yml` | **válido**, os 5 no loop |
+
+`git diff` de `app/` **vazio** ao final; resíduo de mutação **zero** nos dois
+arquivos mexidos.
+
+## 4. O que ficou de fora, e por quê
+
+1. **O `smoke_test` continua fora do CI.** Corrigi a asserção quebrada, mas não
+   o acrescentei ao pipeline: ele sobe a stack, leva minutos e depende de OCR —
+   incluí-lo é decisão de custo de pipeline, não de correção de teste. **Fica
+   como recomendação**, e é a razão de ele ter passado três versões vermelho.
+2. **Funcionalidade nova nenhuma.** O § 13 lista três coisas datadas e não
+   descartadas (Requisição de Pessoal, rota do RH para cadastrar talento à mão,
+   trava anti-peeking) — nenhuma foi tocada, porque o pedido foi fechar a
+   dívida.
+
+## 5. Perguntas em aberto para o Bruno
+
+1. **O `smoke_test` deve entrar no CI?** Ele é o portão mais completo do
+   projeto (15 etapas, ponta a ponta) e é justamente o que ninguém roda. Custa
+   minutos de pipeline; ficar de fora custou três versões de teste vermelho sem
+   ninguém saber.
+2. **A restauração de vaga pela lixeira** continua sem ser exercitada —
+   pendente desde a v2.67, registrada pela terceira vez.
+
+## 6. Recomendações registradas
+
+1. **Ao fechar módulo, a pergunta é *"o pipeline reprova quem quebrar isto
+   amanhã?"***, não *"escrevi teste?"*. Foi para o `CLAUDE.md`.
+2. **Teste novo que faz login: leia a credencial do ambiente** e afirme o login
+   com mensagem explícita. Três testes deste módulo repetiram a armadilha da
+   v2.71 — ela vai se repetir de novo se o padrão não for copiado.
+3. **Ao enriquecer um `detail` de erro**, `grep` pela string antiga nos testes.

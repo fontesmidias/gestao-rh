@@ -88,6 +88,43 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Teste ESCRITO e teste VERIFICADO são coisas diferentes — e o relatório que
+  diz "coberto" mede o primeiro** (v2.72): o Módulo de Entrevistas entregou 4
+  levas, 41 cenários e 9 mutações, com relatórios honestos… e **nenhum dos 5
+  arquivos rodava no CI**. Ninguém mentiu: cada leva rodou os testes à mão, viu
+  verde e seguiu. O que falta nesse ciclo é que a próxima pessoa a mexer no
+  roteiro **não roda nada** — e o que quebra ali não dá erro, abre a ficha
+  VAZIA. Ao fechar módulo, a pergunta não é *"escrevi teste?"* e sim *"o
+  pipeline vai reprovar quem quebrar isto amanhã?"*. É a v2.48 na segunda
+  reincidência. **Três defeitos concretos que só apareceram ao tentar
+  incluí-los**: (1) três testes tinham a senha do admin LITERAL no login e
+  dariam 401 no CI (a armadilha da v2.71, repetida sem ninguém notar) — no
+  `test_entrevista_documentos` a mesma senha ASSINA a ficha, então a recusa
+  apareceria como "senha errada", apontando para o lugar errado; (2)
+  `test_match_persistencia` estava VERMELHO desde antes da v2.64, perguntado a
+  cada relatório e nunca consertado; (3) o `smoke_test` estava quebrado desde a
+  v2.71 e ninguém viu, **porque o smoke também não roda no CI**. Ao acrescentar
+  teste ao `ci.yml`, rode-o antes com a senha do job (`RH_ADMIN_PASSWORD` do
+  `.env` do CI) num banco NOVO — passar na sua máquina não prova nada sobre lá.
+- **Asserção do CONTADOR GLOBAL amarra o teste ao tamanho do banco** (v2.72,
+  `test_match_persistencia`): `executar_processamento` varre
+  `select(Talento).where(status != "arquivado")` — a base inteira —, e o teste
+  afirmava `r1["analisados"] == 1`. Vale na 1ª execução e nunca mais: a 2ª via
+  os talentos que a 1ª deixou (156 processados, 2 analisados) e falhava com uma
+  mensagem que não fala da causa. Recorte a asserção aos REGISTROS QUE O TESTE
+  CRIOU e deixe o total como contexto da mensagem de erro, nunca como critério.
+  **Não resolva apagando no fim**: teste que morre no meio numa falha legítima
+  deixa o banco sujo do mesmo jeito, e ainda apaga a evidência do que falhou.
+  Mesma família do "só passa em banco limpo" (v2.14).
+- **Mudar `detail` de string para DICIONÁRIO quebra quem compara com a string**
+  (v2.72): a v2.71 enriqueceu o erro do `upload_seguro._conferir` (passou a
+  dizer a extensão recebida e a lista de aceitos — melhor para quem está com o
+  celular na mão), e o `smoke_test` seguiu comparando
+  `detail == "formato_nao_suportado"`. O comportamento estava CERTO e o teste
+  vermelho, **por três versões**, porque o smoke é portão manual e não roda no
+  CI. Ao enriquecer um `detail`, `grep` pela string antiga nos testes — e
+  prefira afirmar sobre `detail["erro"]` tolerando campo extra.
+
 - **Rota SÍNCRONA não pode virar `async` só para chamar função assíncrona**
   (v2.71): o `upload_seguro.ler_upload` é `async`, e as rotas de documento
   (`documentos.py`, `rh_ficha.py`) são `def`. A saída óbvia — pôr `async def` na
