@@ -19,7 +19,16 @@ from app.services.marca import dados_empresa, salvar_dados
 
 router = APIRouter(tags=["marca"])
 
-_TIPOS_IMG = {"image/png", "image/jpeg", "image/webp", "image/svg+xml",
+# SVG NÃO entra (v2.71). Ele é código, não imagem: um `<script>` dentro do
+# arquivo executa quando o navegador o abre, e o `_servir` devolve com
+# `media_type: image/svg+xml` numa rota PÚBLICA (`/marca/logo`,
+# `/marca/favicon`), no MESMO domínio da aplicação — logo, com acesso à sessão
+# de quem estiver logado no painel. É XSS armazenado, e o vetor de entrada é o
+# upload de logo, que qualquer usuário do RH faz.
+# O `upload_seguro.py` já excluía `.svg` pelo mesmo motivo ("aceitava .exe,
+# .svg (que carrega script)"); esta rota nasceu antes dele e ficou de fora.
+# PNG/JPG/WebP/ICO cobrem logo e favicon sem essa superfície.
+_TIPOS_IMG = {"image/png", "image/jpeg", "image/webp",
               "image/x-icon", "image/vnd.microsoft.icon"}
 _MAX_BYTES = 2 * 1024 * 1024  # 2 MB por imagem
 
@@ -51,11 +60,18 @@ def salvar_marca(payload: MarcaIn, db: Session = Depends(get_db),
 def _upload_img(db: Session, arquivo: UploadFile, chave_config: str, prefixo: str) -> str:
     if arquivo.content_type not in _TIPOS_IMG:
         raise HTTPException(status_code=422, detail="formato_invalido")
-    dados = arquivo.file.read()
+    # `close()` no `finally` (v2.71): o Starlette faz spool em disco acima de
+    # ~1MB e, sem fechar, o temporário fica no container. Mesma regra do
+    # `upload_seguro.py` — aqui não se usa o `ler_upload` porque o teto é
+    # próprio (2MB, imagem de marca) e a validação é por content_type.
+    try:
+        dados = arquivo.file.read()
+    finally:
+        arquivo.file.close()
     if len(dados) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail="arquivo_grande_demais")
     ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp",
-           "image/svg+xml": "svg", "image/x-icon": "ico",
+           "image/x-icon": "ico",
            "image/vnd.microsoft.icon": "ico"}.get(arquivo.content_type, "png")
     key = f"marca/{prefixo}-{uuid.uuid4().hex[:8]}.{ext}"
     storage.salvar(key, dados, arquivo.content_type)
@@ -102,8 +118,13 @@ def servir_favicon(db: Session = Depends(get_db)) -> Response:
 
 
 def _servir(key: str) -> Response:
+    # `svg` saiu do mapa (v2.71) — inclusive na SAÍDA. Tirar só da allowlist de
+    # upload não bastaria: logo enviada ANTES da correção continuaria no
+    # storage e seguiria sendo servida como `image/svg+xml` executável. Sem a
+    # entrada aqui, ela cai no `image/png` do padrão e o navegador não executa
+    # o script — a imagem some, o XSS também.
     tipo = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp",
-            "svg": "image/svg+xml", "ico": "image/x-icon"}.get(key.rsplit(".", 1)[-1], "image/png")
+            "ico": "image/x-icon"}.get(key.rsplit(".", 1)[-1], "image/png")
     try:
         dados = storage.ler(key)
     except Exception:

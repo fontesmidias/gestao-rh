@@ -88,6 +88,51 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Rota SÍNCRONA não pode virar `async` só para chamar função assíncrona**
+  (v2.71): o `upload_seguro.ler_upload` é `async`, e as rotas de documento
+  (`documentos.py`, `rh_ficha.py`) são `def`. A saída óbvia — pôr `async def` na
+  rota — seria a errada: elas fazem **OCR pela Mistral com timeout de até
+  120s**, e no FastAPI rota `def` roda no THREADPOOL enquanto `async def` roda
+  no EVENT LOOP. Convertê-las jogaria a chamada bloqueante dentro do loop e
+  **travaria a API inteira a cada envio** — trocaria um vazamento de arquivo
+  temporário por indisponibilidade. Por isso existe `ler_upload_sync`, com as
+  MESMAS garantias (o `close()` no `finally`) e a validação compartilhada em
+  `_conferir`. Antes de acrescentar `async` a uma rota que já existe, veja o que
+  ela faz de bloqueante — o teste `test_upload_fecha_spool.py` reprova se
+  alguém "simplificar" removendo a variante síncrona.
+- **Tirar formato perigoso da allowlist NÃO basta — a SAÍDA também serve o que
+  já está gravado** (v2.71, `marca.py`): o upload de logo aceitava
+  `image/svg+xml`, e o `_servir` devolvia com esse `media_type` em rota
+  PÚBLICA, no mesmo domínio do painel. SVG é código: `<script>` dentro dele
+  executa com acesso à sessão de quem está logado — XSS armazenado. Removê-lo
+  só da entrada deixaria a logo enviada ANTES ainda sendo servida como SVG
+  executável; foi preciso tirar também do mapa do `_servir`, para ela cair no
+  `image/png` do padrão. Ao remover formato por segurança, pergunte sempre o
+  que acontece com os arquivos que já entraram.
+- **Teste estrutural que busca no TEXTO acha o próprio comentário** (v2.71): a
+  primeira versão do `test_upload_fecha_spool` reprovava procurando
+  `up.file.read()` no arquivo — e casava com o comentário que EXPLICA a
+  correção. O mesmo com `"tipo": "application/pdf"`, que o docstring do
+  `webhook_email.py` mostra como exemplo CERTO de saída para um `.pdf`. Teste
+  assim reprova a documentação do próprio conserto, e o reflexo é apagar o
+  comentário. Use um filtro que ignore comentário e docstring (`_tem_no_codigo`)
+  quando a asserção for sobre AUSÊNCIA de um trecho.
+- **Senha literal em teste o amarra a UM banco** (v2.71): `test_documentos_catalogo`
+  e `test_email_templates` tinham `'senha': 'senha-teste-123'` escrita na linha
+  do login, embora o `os.environ.setdefault` logo acima já respeitasse o
+  ambiente. No CI o admin nasce com a senha do `.env` do job, então o login
+  devolvia 401 e o teste morria em `KeyError: 'token'` — erro que não diz nada
+  sobre a causa. **Foi o que impediu esses dois testes de entrarem no CI.**
+  Leia a credencial do ambiente e AFIRME o login com mensagem explícita; um 401
+  tem que dizer "confira RH_ADMIN_EMAIL/PASSWORD", não estourar num dict.
+  (Lembrete: `criar_admin_inicial` só cria **se a tabela estiver vazia** — num
+  banco de desenvolvimento com usuários antigos, o admin do `.env` não existe.)
+- **`docker cp dir container:/destino` com destino EXISTENTE aninha em silêncio**
+  (v2.71): vira `/destino/dir`, e o Python roda a cópia ANTIGA sem avisar —
+  passei duas rodadas depurando um teste que eu já tinha corrigido. Copie o
+  CONTEÚDO (`docker cp backend/tests/. container:/app/tests`), que é idempotente
+  entre execuções.
+
 - **Migration com INSERT cru NÃO herda default do modelo — e o `set -e` do
   entrypoint transforma isso em queda TOTAL** (v2.70, incidente de 2026-08-06
   entre 7h e 9h): a `d6f8b2c4e5a7` inseria em `assinatura` sem listar

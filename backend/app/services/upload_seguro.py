@@ -68,6 +68,51 @@ def extensao_de(arquivo: UploadFile) -> str:
     return nome.rsplit(".", 1)[-1].lower()[:5]
 
 
+def _conferir(conteudo: bytes, arquivo: UploadFile, limite: int,
+              extensoes: frozenset[str]) -> bytes:
+    """Validações comuns às duas portas (async e síncrona)."""
+    if not conteudo:
+        raise HTTPException(status_code=422, detail="arquivo_vazio")
+    if len(conteudo) > limite:
+        raise HTTPException(status_code=413, detail={
+            "erro": "arquivo_grande_demais",
+            "limite_mb": limite // (1024 * 1024),
+            "tamanho_mb": round(len(conteudo) / (1024 * 1024), 1),
+        })
+    ext = extensao_de(arquivo)
+    if ext not in extensoes:
+        raise HTTPException(status_code=422, detail={
+            "erro": "formato_nao_suportado",
+            "extensao": ext or "(sem extensão)",
+            "aceitos": sorted(extensoes),
+        })
+    return conteudo
+
+
+def ler_upload_sync(db: Session, arquivo: UploadFile,
+                    extensoes: frozenset[str] = EXTENSOES_DOCUMENTO) -> bytes:
+    """Versão SÍNCRONA do `ler_upload`, para rota declarada com `def`.
+
+    Existe por causa do fluxo de documentos do candidato (v2.71): aquelas rotas
+    fazem OCR pela Mistral com timeout de até 120s. No FastAPI, rota `def` roda
+    no THREADPOOL; rota `async def` roda no event loop. Convertê-las para
+    `async` só para poder usar o `ler_upload` assíncrono jogaria uma chamada
+    HTTP bloqueante dentro do loop e **travaria a API inteira** durante cada
+    envio — trocaria um vazamento de arquivo temporário por indisponibilidade.
+
+    Mesmas garantias da irmã assíncrona, inclusive o `close()` no `finally`:
+    o `UploadFile` do Starlette expõe o objeto de arquivo síncrono em `.file`,
+    e fechá-lo descarta o spool do mesmo jeito.
+    """
+    limite = teto_bytes(db)
+    try:
+        arquivo.file.seek(0)
+        conteudo = arquivo.file.read()
+    finally:
+        arquivo.file.close()
+    return _conferir(conteudo, arquivo, limite, extensoes)
+
+
 async def ler_upload(db: Session, arquivo: UploadFile,
                      extensoes: frozenset[str] = EXTENSOES_DOCUMENTO) -> bytes:
     """Lê o upload conferindo tamanho e extensão, e SEMPRE descarta o spool.
@@ -85,20 +130,4 @@ async def ler_upload(db: Session, arquivo: UploadFile,
         conteudo = await arquivo.read()
     finally:
         await arquivo.close()
-
-    if not conteudo:
-        raise HTTPException(status_code=422, detail="arquivo_vazio")
-    if len(conteudo) > limite:
-        raise HTTPException(status_code=413, detail={
-            "erro": "arquivo_grande_demais",
-            "limite_mb": limite // (1024 * 1024),
-            "tamanho_mb": round(len(conteudo) / (1024 * 1024), 1),
-        })
-    ext = extensao_de(arquivo)
-    if ext not in extensoes:
-        raise HTTPException(status_code=422, detail={
-            "erro": "formato_nao_suportado",
-            "extensao": ext or "(sem extensão)",
-            "aceitos": sorted(extensoes),
-        })
-    return conteudo
+    return _conferir(conteudo, arquivo, limite, extensoes)

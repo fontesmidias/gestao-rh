@@ -32,6 +32,7 @@ from app.services.email_templates import enviar_modelo
 from app.services.idempotencia import travar_por
 from app.services.magic_link import emitir_link
 from app.services.normalizacao import ArquivoInvalido, normalizar_para_pdf
+from app.services.upload_seguro import EXTENSOES_COM_WORD, ler_upload_sync
 
 router = APIRouter(tags=["rh-manual"], dependencies=[Depends(requer_rh)])
 
@@ -367,7 +368,10 @@ def inserir_arquivo_rh(
     try:
         partes = []  # (nome, content_type, dados, pdf)
         for up in lista:
-            dados = up.file.read()
+            # v2.71: o docstring acima sempre disse "passa pelas mesmas
+            # validações" — e passava também pela mesma FALHA, o spool sem
+            # `close()`. Agora passa pelas mesmas de verdade.
+            dados = ler_upload_sync(db, up, EXTENSOES_COM_WORD)
             pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
                                          rotulo=slot.tipo.value)
             partes.append((up.filename or "arquivo", up.content_type, dados, pdf))
