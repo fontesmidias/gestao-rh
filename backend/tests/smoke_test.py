@@ -241,7 +241,16 @@ assert r.json()["status"] == "enviado" and r.json()["paginas"] == 1
 
 r = c.post(f"/api/c/{token}/documentos/{slot_rg['id']}/arquivo",
            files={"arquivo": ("x.txt", b"oi", "text/plain")})
-assert r.status_code == 422 and r.json()["detail"] == "formato_nao_suportado"
+# O `detail` virou DICIONÁRIO na v2.71 (`upload_seguro._conferir`): além do
+# erro, ele diz a extensão recebida e a lista de aceitos — a mensagem que a
+# tela mostra a quem está com o celular na mão. Esta asserção comparava com a
+# string antiga e deixou o smoke VERMELHO desde então, sem ninguém ver: o smoke
+# não roda no CI. Afirmar sobre o `erro` mantém a garantia (o .txt é recusado) e
+# tolera o campo extra.
+assert r.status_code == 422, r.text
+_detalhe = r.json()["detail"]
+_erro = _detalhe.get("erro") if isinstance(_detalhe, dict) else _detalhe
+assert _erro == "formato_nao_suportado", _detalhe
 
 # 9b) foto borrada/ilegível é recusada na hora
 b = io.BytesIO(); Image.new("RGB", (900, 1200), "gray").save(b, "JPEG")

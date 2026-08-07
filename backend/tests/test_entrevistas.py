@@ -38,9 +38,19 @@ from app.models.entrevista import Entrevista, StatusEntrevista  # noqa: E402
 
 c = TestClient(app)
 
-r = c.post("/api/rh/auth/login", json={"email": "rh@greenhousedf.com.br",
-                                       "senha": "senha-teste-123"})
-assert r.status_code == 200, f"login falhou: {r.status_code} {r.text}"
+# Credencial do AMBIENTE, nunca literal na linha do login (v2.71): no CI o
+# admin nasce com a senha do `.env` do job, e a literal devolvia 401 -> o teste
+# morria em `KeyError: 'token'`, erro que não diz nada sobre a causa. Foi
+# exatamente o que impediu `test_documentos_catalogo` e `test_email_templates`
+# de entrarem no CI — e este teste tinha o mesmo defeito.
+EMAIL = os.environ["RH_ADMIN_EMAIL"]
+SENHA = os.environ["RH_ADMIN_PASSWORD"]
+
+r = c.post("/api/rh/auth/login", json={"email": EMAIL, "senha": SENHA})
+assert r.status_code == 200, (
+    f"login falhou ({r.status_code}): confira RH_ADMIN_EMAIL/RH_ADMIN_PASSWORD "
+    f"— `criar_admin_inicial` só cria o admin com a tabela VAZIA, então num "
+    f"banco com usuários antigos o admin do .env não existe. Resposta: {r.text}")
 RH = {"Authorization": f"Bearer {r.json()['token']}"}
 
 # Sufixo por EXECUÇÃO: o e-mail do talento e o título da vaga se repetiriam

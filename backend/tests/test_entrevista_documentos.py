@@ -44,10 +44,19 @@ from app.models.entrevista import Entrevista, StatusEntrevista  # noqa: E402
 
 c = TestClient(app)
 
-SENHA_RH = "senha-teste-123"
-r = c.post("/api/rh/auth/login", json={"email": "rh@greenhousedf.com.br",
-                                       "senha": SENHA_RH})
-assert r.status_code == 200, f"login falhou: {r.status_code} {r.text}"
+# Credencial do AMBIENTE, nunca literal (v2.71): no CI o admin nasce com a
+# senha do `.env` do job, e a literal devolvia 401 -> `KeyError: 'token'`.
+# Aqui pesa duas vezes: a `SENHA_RH` também assina a ficha de entrevista
+# (`prova_metodo = "senha_sessao_rh"`), então a literal errada faria a
+# assinatura ser recusada por "senha errada" — sintoma que aponta para o lugar
+# errado do sistema.
+EMAIL_RH = os.environ["RH_ADMIN_EMAIL"]
+SENHA_RH = os.environ["RH_ADMIN_PASSWORD"]
+r = c.post("/api/rh/auth/login", json={"email": EMAIL_RH, "senha": SENHA_RH})
+assert r.status_code == 200, (
+    f"login falhou ({r.status_code}): confira RH_ADMIN_EMAIL/RH_ADMIN_PASSWORD "
+    f"— `criar_admin_inicial` só cria o admin com a tabela VAZIA, então num "
+    f"banco com usuários antigos o admin do .env não existe. Resposta: {r.text}")
 RH = {"Authorization": f"Bearer {r.json()['token']}"}
 
 # Sufixo por EXECUÇÃO: e-mail de talento e título de vaga se repetiriam entre

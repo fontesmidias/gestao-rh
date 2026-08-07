@@ -168,6 +168,26 @@ jobs:
       #    pública;
       #  · export_tirvu       → o Tirvu recusa (ou aceita ERRADO) desvio de
       #    forma, mesmo argumento que já colocou o Dexion no CI.
+      #
+      # Os cinco de ENTREVISTAS entraram depois (dívida da v2.64→v2.68): o
+      # módulo inteiro — quatro levas, 41 cenários, 9 mutações — nunca rodou
+      # aqui. O que ele protege não dá erro quando quebra, só sai errado:
+      #  · roteiros_entrevista → o roteiro padrão é o PISO da herança; sem ele
+      #    `resolver_roteiro` devolve None e TODA ficha de entrevista abre
+      #    vazia, sem erro na tela (defeito real, achado por mutação na v2.66);
+      #  · entrevista_documentos → prova que a ficha assinada NÃO entra no
+      #    dossiê, que é o documento que CIRCULA (cliente, pasta física). O
+      #    default do `dossie.py` é "entra", e o vazamento é uma página a mais
+      #    que ninguém confere;
+      #  · entrevistas          → justificativa obrigatória por nota e o
+      #    snapshot da vaga; o sistema nunca conclui `nao_veio` sozinho;
+      #  · entrevista_arquivamento → arquiva, NUNCA apaga (e quem virou
+      #    colaborador fica fora do prazo);
+      #  · entrevista_anexo     → allowlist, teto e o `close()` do spool numa
+      #    rota que recebe currículo anotado.
+      # Três deles tinham a senha do admin LITERAL na linha do login e teriam
+      # dado 401 aqui (o admin nasce com a senha do `.env` deste job) — a mesma
+      # armadilha da v2.71, corrigida na mesma leva em que entraram.
       - name: Testes que precisam da aplicação (dentro do container da API)
         run: |
           # A imagem NÃO carrega `tests/` de propósito (o Dockerfile copia só
@@ -187,7 +207,10 @@ jobs:
           # e para isso precisa do Starlette.
           for t in test_documentos_catalogo test_email_templates \
                    test_retomada_acesso test_export_tirvu \
-                   test_upload_fecha_spool; do
+                   test_upload_fecha_spool \
+                   test_entrevistas test_roteiros_entrevista \
+                   test_entrevista_documentos test_entrevista_arquivamento \
+                   test_entrevista_anexo; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
