@@ -22,12 +22,48 @@ from app.services.lixeira import dias_retencao, expurgar_vencidos
 router = APIRouter(tags=["lixeira"], dependencies=[Depends(requer_rh)])
 
 
+def classes_restauraveis() -> dict:
+    """Mapa `entidade` → modelo, para o `_reconstruir`.
+
+    ⚠️ **Entrar na lixeira e VOLTAR dela são duas coisas** (v2.72.2): qualquer
+    `mandar_para_lixeira(db, obj, "x", ...)` guarda o snapshot e faz o registro
+    sumir da tela — mas se `"x"` não estiver AQUI, restaurar responde 422
+    `entidade_desconhecida`. A lixeira vira via de mão única, e o RH só descobre
+    no dia em que precisa desfazer, que é o único dia em que ela importa.
+
+    Estava assim para SEIS das oito entidades: este mapa tinha `posto` e
+    `modelo_documento`, enquanto vaga (v2.67), prova, item de banco, papel de
+    assinatura, roteiro de entrevista e teste de candidato já eram mandados para
+    cá. Ninguém percebeu porque a exclusão funciona: o item aparece listado, com
+    rótulo e data, exatamente como os que voltam.
+
+    `test_lixeira_restaura.py` varre as chamadas de `mandar_para_lixeira` em
+    `app/api/` e reprova se alguma entidade não estiver neste mapa — a lacuna
+    não volta em silêncio.
+    """
+    from app.models.candidato import PostoServico
+    from app.models.entrevista import Entrevista
+    from app.models.modelo_documento import ModeloDocumento, PapelAssinatura
+    from app.models.prova import ItemBanco, ProvaCargo
+    from app.models.roteiro_entrevista import RoteiroEntrevista
+    from app.models.teste import TesteCandidato
+    from app.models.vaga import Vaga
+    return {
+        "posto": PostoServico,
+        "modelo_documento": ModeloDocumento,
+        "papel_assinatura": PapelAssinatura,
+        "vaga": Vaga,
+        "prova_cargo": ProvaCargo,
+        "item_banco": ItemBanco,
+        "roteiro_entrevista": RoteiroEntrevista,
+        "teste_candidato": TesteCandidato,
+        "entrevista": Entrevista,
+    }
+
+
 def _reconstruir(item: ItemLixeira):
     """Reconstrói o registro original a partir do snapshot."""
-    from app.models.candidato import PostoServico
-    from app.models.modelo_documento import ModeloDocumento
-    classes = {"posto": PostoServico, "modelo_documento": ModeloDocumento}
-    cls = classes.get(item.entidade)
+    cls = classes_restauraveis().get(item.entidade)
     if cls is None:
         raise HTTPException(status_code=422, detail="entidade_desconhecida")
     dados = dict(item.dados)

@@ -88,6 +88,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Entrar na lixeira e VOLTAR dela são DUAS coisas** (v2.72.2,
+  `api/lixeira.py::classes_restauraveis`): `mandar_para_lixeira(db, obj, "x",
+  ...)` guarda o snapshot e faz o registro sumir da tela — mas restaurar usa um
+  MAPA `entidade → modelo`, e o que não está lá responde `422
+  entidade_desconhecida`. Estava assim para **SEIS das oito** entidades (vaga,
+  prova, item de banco, papel de assinatura, roteiro de entrevista, teste de
+  candidato): a lixeira era via de mão única. Ninguém percebeu porque **a
+  exclusão funciona** e o item aparece listado com rótulo e data, igualzinho aos
+  que voltam — o RH só descobriria no dia em que precisasse desfazer, o único
+  dia em que a lixeira importa. Aconteceu seis vezes porque nada liga as pontas:
+  quem escreve a exclusão num módulo novo não tem motivo para abrir o
+  `lixeira.py`. Hoje o `test_lixeira_restaura.py` varre as chamadas em
+  `app/api/` e reprova nomeando a órfã. **Ao mandar algo novo para a lixeira,
+  acrescente ao mapa na MESMA leva** — é o par `documentos_catalogo`/gerador da
+  v2.67 em outra roupa.
+- **Mutação que MATA o teste parece aprovação** (v2.72.2): a mutação que fazia o
+  `_reconstruir` aceitar qualquer entidade estourava no `INSERT`, e o
+  `TestClient` **repropaga a exceção do servidor** — o script morria no meio,
+  sem imprimir nenhum "FALHOU", e a saída vazia passava por sucesso. Em teste
+  que exercita CAMINHO DE ERRO de rota, use
+  `TestClient(app, raise_server_exceptions=False)`: aí o 500 vira resposta e a
+  asserção pode reprová-lo. Vale a regra geral: depois de aplicar mutação,
+  confira que o teste **imprimiu** o resultado — ausência de falha não é
+  aprovação (a mesma lição do `grep -c` que devolve 0 na v2.64).
 - **O `smoke_test` roda no CI (v2.72.1) — e o preço de ele NÃO rodar já foi
   pago**: são as 15 etapas ponta a ponta (cadastro → link mágico → autosave →
   declaração → upload com imagem virando PDF → conclusão → aprovação → dossiê),

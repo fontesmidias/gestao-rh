@@ -1036,3 +1036,79 @@ poupa os minutos de navegador.
 
 **A restauração de vaga pela lixeira** segue sem ser exercitada — registrada
 pela quarta vez (v2.67, v2.68, v2.72, aqui).
+
+---
+
+# Adendo v2.72.2 — a última pendência, e o que ela escondia (2026-08-06)
+
+Fecha a pendência aberta desde a v2.67 e repetida em quatro relatórios:
+*"conferir a restauração de uma vaga pela lixeira"*.
+
+## A pendência era estreita; o defeito, seis vezes maior
+
+Exercitando o fluxo na rota — não lendo o código —, a vaga **entrava na lixeira
+e não voltava**:
+
+```
+DELETE /rh/vagas/{id}     -> 204   (some da listagem)
+GET    /rh/lixeira        -> lá está ela, com rótulo e data
+POST   /{item}/restaurar  -> 422 {"detail":"entidade_desconhecida"}
+```
+
+A causa não era da vaga: `_reconstruir` tinha um mapa `entidade → modelo` com
+**duas** entradas (`posto`, `modelo_documento`) enquanto **oito** entidades já
+eram mandadas para a lixeira. Seis não tinham caminho de volta — vaga, prova,
+item de banco, papel de assinatura, roteiro de entrevista e teste de candidato.
+
+**A exclusão funciona, e é isso que sustentou o defeito**: o item aparece
+listado, com rótulo e data, exatamente como os que voltam. O RH só descobriria
+no dia em que precisasse desfazer — o único dia em que a lixeira importa.
+
+Aconteceu seis vezes seguidas porque nada liga as pontas: quem escreve
+`mandar_para_lixeira(...)` num módulo novo não tem motivo para abrir o
+`lixeira.py`. É o par `documentos_catalogo`/gerador da v2.67 em outra roupa.
+
+## O guarda-corpo importa mais que a correção
+
+`test_lixeira_restaura.py` varre as chamadas de `mandar_para_lixeira` em
+`app/api/` e cobra que toda entidade esteja no mapa, **nomeando a órfã**. Não
+chuta contagem (`assert len(mapa) == 9` quebraria na próxima entidade legítima e
+a "correção" óbvia faria o teste não proteger nada — v2.25): a garantia vem do
+código-fonte.
+
+**4 mutações, todas reprovaram.** Duas ensinaram algo novo:
+
+1. **O varredor casou com a MINHA própria documentação.** O docstring que
+   escrevi para explicar o defeito usa `mandar_para_lixeira(db, obj, "x", ...)`
+   como exemplo, e o `"x"` entrou como entidade órfã de verdade. O teste
+   reprovava o texto que explica a correção — e o reflexo seria apagar a
+   explicação. Armadilha da v2.71, resolvida com o filtro de comentário e
+   docstring.
+2. **A mutação que aceita entidade desconhecida MATAVA o teste em vez de
+   reprová-lo.** O `TestClient` repropaga a exceção do servidor: o script morria
+   no meio, sem imprimir nenhum "FALHOU", e a saída vazia **passava por
+   sucesso**. Com `raise_server_exceptions=False`, o 500 vira resposta e a
+   asserção o reprova.
+
+## Portões
+
+| Portão | Resultado |
+|---|---|
+| `test_lixeira_restaura` dentro do container, banco limpo, senha do job | **OK** |
+| `test_entrevista_anexo`, idem | **OK** |
+| `smoke_test` no container | **15/15** |
+| 17 testes locais | **OK** |
+| `npm run build` | **OK** — 5,20s |
+| Resíduo de mutação | **zero** |
+
+## Estado do módulo
+
+**Sem pendência técnica em aberto.** O contrato (`12-modulo-de-entrevistas.md`)
+está executado até o § 16, e as recomendações registradas ao longo das seis
+levas foram todas fechadas — a última era esta.
+
+O que resta é escopo NOVO, e é decisão do Bruno, não dívida: Requisição de
+Pessoal (adiada por ele, desenho guardado no § 13), a rota para o RH cadastrar
+talento à mão (a sala achou que o pedido do "currículo por e-mail" era sobre
+essa porta que não existe) e o segundo avaliador com trava anti-peeking (datado,
+não descartado).

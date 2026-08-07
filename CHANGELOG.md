@@ -11,6 +11,71 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.72.2] — 2026-08-06 — A lixeira devolve o que engoliu
+
+Fecha a última pendência do Módulo de Entrevistas, aberta desde a v2.67 e
+repetida em quatro relatórios: *"conferir a restauração de uma vaga pela
+lixeira"*. Ao exercitá-la, o defeito era **seis vezes maior que a pendência**.
+
+### Seis das oito entidades entravam na lixeira e não voltavam
+
+`api/lixeira.py::_reconstruir` tinha um mapa `entidade → modelo` com **duas**
+entradas (`posto`, `modelo_documento`). Enquanto isso, oito coisas já eram
+mandadas para lá: vaga (v2.67), prova, item de banco, papel de assinatura,
+roteiro de entrevista, teste de candidato e entrevista.
+
+Para as faltantes, a lixeira era **via de mão única**. Medido na rota, antes de
+corrigir:
+
+```
+DELETE /rh/vagas/{id}          -> 204   (some da listagem)
+GET    /rh/lixeira             -> lá está ela, com rótulo e data
+POST   /{item}/restaurar       -> 422 {"detail":"entidade_desconhecida"}
+```
+
+**O que torna isso pior que um erro barulhento: a exclusão funciona.** O item
+aparece listado, com rótulo e data, *exatamente igual* aos que voltam. Nada
+avisa. O RH só descobriria no dia em que precisasse desfazer — que é o único dia
+em que a lixeira importa. Mesma família do worker que não roda (v2.66) e do
+documento que não nasce (v2.69): o silêncio se confunde com "está tudo certo".
+
+Aconteceu **seis vezes seguidas** porque nada ligava uma ponta à outra: quem
+escreve `mandar_para_lixeira(...)` num módulo novo não tem motivo para abrir o
+`lixeira.py`.
+
+### O guarda-corpo importa mais que a correção
+
+`test_lixeira_restaura.py` varre as chamadas de `mandar_para_lixeira` em
+`app/api/` e **reprova se alguma entidade não estiver no mapa**, nomeando-a. O
+próximo módulo que mandar algo para a lixeira não repete o defeito.
+
+Ele **não chuta uma contagem** (`assert len(mapa) == 9` quebraria na próxima
+entidade legítima, e a "correção" óbvia — incrementar o número — faria o teste
+não proteger nada, lição da v2.25): a garantia é derivada do código-fonte.
+
+Quatro mutações verificadas. Duas coisas que elas ensinaram:
+
+- **o varredor casou com a própria documentação**: o docstring que escrevi para
+  explicar o defeito usa `mandar_para_lixeira(db, obj, "x", ...)` como exemplo,
+  e o `"x"` entrou na lista como entidade órfã de verdade. O teste reprovava o
+  texto que explica a correção — e o reflexo de quem o visse seria apagar a
+  explicação. É a armadilha da v2.71; resolvida com o filtro que ignora
+  comentário e docstring;
+- **a mutação que aceita entidade desconhecida MATAVA o teste** em vez de
+  reprová-lo: o `TestClient` repropaga a exceção do servidor, o script morre no
+  meio e a saída fica sem nenhum "FALHOU" — **parecendo aprovação**. Com
+  `raise_server_exceptions=False`, o 500 vira resposta e a asserção pode dizer
+  que ele é errado.
+
+### Portões
+
+Verificado **dentro do container da API**, com Postgres e MinIO limpos e a senha
+do job — não só na máquina de quem desenvolve: `test_lixeira_restaura` OK,
+`test_entrevista_anexo` OK, smoke **15/15**. Localmente, os 17 testes verdes,
+smoke 15/15, `npm run build` OK. Resíduo de mutação zero.
+
+---
+
 ## [2.72.1] — 2026-08-06 — O smoke entra no CI
 
 Resposta do Bruno à pergunta deixada em aberto na v2.72 (*"o `smoke_test` deve
