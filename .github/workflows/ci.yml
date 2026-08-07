@@ -184,7 +184,11 @@ jobs:
       #  · entrevista_arquivamento → arquiva, NUNCA apaga (e quem virou
       #    colaborador fica fora do prazo);
       #  · entrevista_anexo     → allowlist, teto e o `close()` do spool numa
-      #    rota que recebe currículo anotado.
+      #    rota que recebe currículo anotado;
+      #  · lixeira_restaura     → toda entidade que ENTRA na lixeira sabe
+      #    VOLTAR. Eram 6 de 8 sem caminho de volta (restaurar dava 422), e o
+      #    RH só descobriria no dia em que precisasse desfazer. O teste varre as
+      #    chamadas de `mandar_para_lixeira` e cobra o par — a lacuna não volta.
       # Três deles tinham a senha do admin LITERAL na linha do login e teriam
       # dado 401 aqui (o admin nasce com a senha do `.env` deste job) — a mesma
       # armadilha da v2.71, corrigida na mesma leva em que entraram.
@@ -210,7 +214,7 @@ jobs:
                    test_upload_fecha_spool \
                    test_entrevistas test_roteiros_entrevista \
                    test_entrevista_documentos test_entrevista_arquivamento \
-                   test_entrevista_anexo; do
+                   test_entrevista_anexo test_lixeira_restaura; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
