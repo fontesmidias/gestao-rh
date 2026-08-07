@@ -592,6 +592,76 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
                 padding: .75rem .95rem; margin-top: .8rem; font-size: .92rem;
                 border: 1px solid var(--aviso-borda); animation: surgir .25s ease-out; }
 
+/* AVISO FLUTUANTE (v2.75) — a resposta a uma AÇÃO, ancorada na JANELA.
+ *
+ * Feedback do Bruno: *"esses avisos tem lugares que ele aparece no topo enquanto
+ * estamos lá embaixo na tela, ou seja nem aparecem"*. É a regra da v1.96/v2.47
+ * ("a mensagem vai onde a PESSOA está olhando — o critério é DISTÂNCIA"), que
+ * vinha sendo corrigida tela a tela e voltava a cada tela nova. `position:
+ * fixed` resolve de uma vez: fora do fluxo do documento, a mensagem está sempre
+ * no campo de visão, qualquer que seja o scroll.
+ *
+ * Canto inferior direito de propósito: no topo ele cobriria o cabeçalho e o
+ * título da página; à esquerda, o menu. Ali embaixo é o espaço que nenhuma tela
+ * do painel usa para conteúdo.
+ *
+ * ⚠️ NÃO substitui `.alerta`/`.sucesso` inline, que continuam existindo para o
+ * texto que DESCREVE a tela (o banco atrasado em Config, os impedimentos da
+ * ficha). Aquilo se consulta enquanto se trabalha; flutuar e sumir esconderia o
+ * que a pessoa precisa ler. Um responde a clique, o outro explica um estado. */
+.aviso-flutuante {
+  position: fixed; right: var(--esp-4, 1.25rem); bottom: var(--esp-4, 1.25rem);
+  z-index: 90;            /* acima do conteúdo; abaixo do modal (que é 100+) */
+  display: flex; align-items: flex-start; gap: .6rem;
+  max-width: min(26rem, calc(100vw - 2.5rem));
+  padding: .8rem .9rem; padding-bottom: .95rem;
+  border-radius: var(--raio-input);
+  background: var(--verde-suave); color: var(--sucesso-txt);
+  border: 1px solid rgba(15, 178, 87, .28);
+  box-shadow: var(--sombra-cartao);
+  font-size: .92rem; line-height: 1.35;
+  overflow: hidden;       /* segura a barra de tempo nos cantos arredondados */
+  animation: aviso-entra .22s ease-out;
+}
+.aviso-flutuante.erro {
+  background: var(--erro-suave); color: var(--alerta-txt);
+  border-color: rgba(229, 72, 77, .3);
+}
+.aviso-flutuante.saindo { animation: aviso-sai .18s ease-in forwards; }
+.aviso-flutuante-texto { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.aviso-flutuante-fechar {
+  flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: inherit; opacity: .6; font-size: .95rem; line-height: 1;
+  padding: .15rem .2rem; border-radius: 6px;
+}
+.aviso-flutuante-fechar:hover { opacity: 1; }
+/* A barra mostra o tempo correndo: sem ela o sumiço parece aleatório, e a
+   pessoa não descobre que parar o mouse segura o aviso. */
+.aviso-flutuante-barra {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 100%;
+  transform-origin: left;
+  background: currentColor; opacity: .35;
+  animation: aviso-tempo linear forwards;
+}
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(12px); }
+                         to   { opacity: 1; transform: none; } }
+@keyframes aviso-sai   { from { opacity: 1; transform: none; }
+                         to   { opacity: 0; transform: translateY(8px); } }
+@keyframes aviso-tempo { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* Sem movimento: o aviso aparece e some direto, e a barra fica parada — mas o
+   FECHAMENTO automático continua (o `setTimeout` é do JS, não do CSS), senão o
+   aviso ficaria para sempre justamente para quem pediu menos animação. */
+@media (prefers-reduced-motion: reduce) {
+  .aviso-flutuante, .aviso-flutuante.saindo { animation: none; }
+  .aviso-flutuante-barra { animation: none; opacity: .2; }
+}
+@media (max-width: 600px) {
+  /* No celular ocupa a largura, colado embaixo: canto flutuante estreito ali
+     vira uma tira ilegível. */
+  .aviso-flutuante { left: var(--esp-3, .9rem); right: var(--esp-3, .9rem);
+                     bottom: var(--esp-3, .9rem); max-width: none; }
+}
+
 /* Lista de fichas a assinar (wizard do candidato): empilha os .ficha-item com
    respiro uniforme, em vez de deixar cada item resolver a própria margem. */
 .lista-fichas { display: flex; flex-direction: column; gap: var(--esp-2); }
@@ -846,6 +916,16 @@ details.rh-card[open] > summary { margin-bottom: var(--esp-3); }
         color: var(--chip-cor, var(--tinta-suave));
         background: color-mix(in srgb, var(--chip-cor, var(--tinta-suave)) 14%, transparent);
         border: 1px solid color-mix(in srgb, var(--chip-cor, var(--tinta-suave)) 28%, transparent); }
+
+/* Chip CLICÁVEL (v2.75): mesmo desenho do `.chip`, mas leva a algum lugar — o
+   chip do roteiro na ficha de entrevista abre o CRUD de roteiros. Existe como
+   classe porque `<button className="chip">` herda estilo de botão do navegador
+   (fonte e alinhamento próprios) e ficaria diferente dos chips ao lado. */
+button.chip-link {
+  font: inherit; font-weight: 700; font-size: var(--fs-mini);
+  cursor: pointer; text-align: inherit;
+}
+button.chip-link:hover { filter: brightness(1.08); }
 
 /* Mini-CRM: anotações + tags da pessoa (MemoriaPessoa.jsx). Tokens; legível nos
    dois temas (fundo --cartao/--input-bg, texto --tinta). */
@@ -1679,6 +1759,19 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
                           font-size: .72rem; letter-spacing: .04em; }
 .rh-escala .chips-escolha { margin: 0; flex: 0 1 auto; }
 .rh-escala .chip-escolha { font-size: .78rem; padding: .25rem .55rem; }
+/* Linha da escala que também carrega a JUSTIFICATIVA daquela nota (v2.75).
+   A ficha de entrevista tinha duas listas paralelas — as 4 competências à
+   esquerda, os 4 textos à direita — repetindo o nome de cada uma e, pior, sem
+   alinhamento: a pergunta de uma competência ocupa 2 linhas e a da outra 1,
+   então o textarea da 2ª aparecia na altura da 3ª e a pessoa escrevia no campo
+   errado. Aqui o par nota↔justificativa fica no MESMO bloco, que é o que a
+   primitiva de 2 colunas sempre exigiu (v2.66: ela serve conteúdo EMPARELHADO).
+   `flex-wrap` já vem da regra base; o textarea toma a largura inteira e cai
+   para a linha de baixo sozinho. */
+.rh-escala-linha-larga { align-items: flex-start; }
+.rh-escala-linha-larga textarea {
+  flex: 1 0 100%; margin: .15rem 0 0; font-size: .88rem;
+}
 /* PDI: 4 colunas que viram 1 no celular */
 .rh-pdi-linha { display: grid; grid-template-columns: 1.2fr 1.4fr auto auto;
                 gap: .4rem; margin-bottom: .4rem; }
