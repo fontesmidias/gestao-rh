@@ -43,7 +43,19 @@ from app.services.documentos_texto import corpo_editavel, tem_corpo  # noqa: E40
 from app.services.fichas import GERADORES  # noqa: E402
 
 c = TestClient(app)
-rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@greenhousedf.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
+# Credencial do AMBIENTE, não literal (v2.71): o `setdefault` acima já respeita
+# quem define as variáveis, mas a linha do login repetia a senha escrita à mão
+# — então o teste só passava num banco criado com aquela senha exata. No CI, o
+# admin nasce com a senha do `.env` do job, e o login falhava com um
+# `KeyError: 'token'` que não diz nada sobre a causa. Foi o que impediu este
+# teste de entrar no CI antes.
+_EMAIL = os.environ["RH_ADMIN_EMAIL"]
+_SENHA = os.environ["RH_ADMIN_PASSWORD"]
+_login = c.post("/api/rh/auth/login", json={"email": _EMAIL, "senha": _SENHA})
+assert _login.status_code == 200 and "token" in _login.json(), (
+    f"login do RH falhou ({_login.status_code}) — confira RH_ADMIN_EMAIL/"
+    f"RH_ADMIN_PASSWORD do ambiente: {_login.text[:200]}")
+rh = {"Authorization": f"Bearer {_login.json()['token']}"}
 
 # ------------------------------------------- o catálogo cobre o enum inteiro
 # (o próprio módulo já valida isso no import; aqui é a rede de segurança)

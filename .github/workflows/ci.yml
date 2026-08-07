@@ -78,13 +78,19 @@ jobs:
       # STDLIB PURA: leem arquivos e conferem regras, sem instalar nada. Os
       # testes estruturais que importam `app.main` ficam de fora — exigiriam
       # FastAPI + todo o resto, trocando segundos por minutos de pipeline.
-      - name: Testes estruturais (design system, upload, versão, nomes, migrations)
+      # `test_anti_prompt_injection` entrou na v2.70: o cabeçalho dele já dizia
+      # "sem banco, sem rede" e o módulo que ele exercita importa só `re` e
+      # `secrets` — cabia aqui desde sempre e nunca rodou. É a defesa contra
+      # currículo com instrução escondida ("white text resume injection"), num
+      # upload PÚBLICO de gente desconhecida: o tipo de regressão que não dá
+      # erro, só ranqueia errado.
+      - name: Testes estruturais (design system, upload, versão, nomes, migrations, injeção)
         working-directory: backend
         env:
           PYTHONPATH: .
         run: |
           for t in test_design_system test_upload_multipart test_versao test_nomes \
-                   test_migration_insert_cru; do
+                   test_migration_insert_cru test_anti_prompt_injection; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
@@ -147,6 +153,45 @@ jobs:
           docker compose --env-file .env \
             -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml logs api
           exit 1
+
+      # Testes que precisam da APLICAÇÃO (FastAPI, SQLAlchemy, banco) — rodam
+      # DENTRO do container `api`, que já subiu acima com tudo instalado.
+      # Acrescentado na v2.70: o comentário do bloco stdlib dizia que estes
+      # "trocariam segundos por minutos de pipeline" porque exigiriam instalar
+      # meia aplicação — o que deixou de valer no instante em que a stack passou
+      # a subir aqui para o Playwright. Custam segundos e cobrem o que mais dói:
+      #  · documentos_catalogo → divergência enum × catálogo levanta RuntimeError
+      #    NO BOOT: quebra o deploy inteiro, não um endpoint;
+      #  · email_templates    → variável obrigatória faltando manda `{{lista}}`
+      #    cru para o candidato;
+      #  · retomada_acesso    → "o link IDENTIFICA, nunca AUTENTICA" em rota
+      #    pública;
+      #  · export_tirvu       → o Tirvu recusa (ou aceita ERRADO) desvio de
+      #    forma, mesmo argumento que já colocou o Dexion no CI.
+      - name: Testes que precisam da aplicação (dentro do container da API)
+        run: |
+          # A imagem NÃO carrega `tests/` de propósito (o Dockerfile copia só
+          # `app`, `migrations` e o entrypoint) — código de teste em imagem de
+          # produção é superfície a mais sem benefício. Então os testes são
+          # copiados para o container só durante o CI.
+          api=$(docker compose --env-file .env \
+            -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml \
+            ps -q api)
+          # `docker cp dir container:/destino` com o destino JÁ EXISTENTE cria
+          # `/destino/dir` aninhado, em vez de substituir — e o Python roda a
+          # cópia antiga sem avisar. Copiar o CONTEÚDO (`/.`) evita isso e é
+          # idempotente entre execuções.
+          docker cp backend/tests/. "$api:/app/tests"
+          # `test_upload_fecha_spool` entra AQUI, não no bloco stdlib: ele
+          # monta um `UploadFile` de verdade para provar que o spool é fechado,
+          # e para isso precisa do Starlette.
+          for t in test_documentos_catalogo test_email_templates \
+                   test_retomada_acesso test_export_tirvu \
+                   test_upload_fecha_spool; do
+            echo "::group::$t"
+            docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
+            echo "::endgroup::"
+          done
 
       - uses: actions/setup-node@v4
         with:

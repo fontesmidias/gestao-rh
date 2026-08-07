@@ -118,7 +118,16 @@ assert faltando_obrigatorias("documentos_rejeitados_lote", "Assunto",
                              "Corpo com {{ lista }}") == []
 
 # --------------------------------------------------------------- rotas
-rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@greenhousedf.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
+# Credencial do AMBIENTE, não literal (v2.71) — mesma correção do
+# `test_documentos_catalogo`: a senha escrita à mão amarrava o teste a um banco
+# criado com aquela senha, e no CI o login falhava com `KeyError: 'token'`.
+_EMAIL = os.environ["RH_ADMIN_EMAIL"]
+_SENHA = os.environ["RH_ADMIN_PASSWORD"]
+_login = c.post("/api/rh/auth/login", json={"email": _EMAIL, "senha": _SENHA})
+assert _login.status_code == 200 and "token" in _login.json(), (
+    f"login do RH falhou ({_login.status_code}) — confira RH_ADMIN_EMAIL/"
+    f"RH_ADMIN_PASSWORD do ambiente: {_login.text[:200]}")
+rh = {"Authorization": f"Bearer {_login.json()['token']}"}
 
 r = c.get("/api/rh/config/emails", headers=rh)
 assert r.status_code == 200, r.text

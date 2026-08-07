@@ -19,6 +19,7 @@ from app.services.normalizacao import (ArquivoInvalido, combinar_pdfs,
                                        normalizar_para_pdf,
                                        validar_comprovante_recente)
 from app.services.slots import sincronizar_slots
+from app.services.upload_seguro import EXTENSOES_COM_WORD, ler_upload_sync
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["documentos"])
@@ -105,7 +106,22 @@ def enviar_arquivo(
     try:
         partes = []  # (nome, content_type, dados, pdf)
         for up in lista:
-            dados = up.file.read()
+            # Valida tamanho/extensão e SEMPRE fecha o spool. Até a v2.70 aqui
+            # era `up.file.read()` cru, sem `close()` em lugar nenhum do arquivo:
+            # o Starlette faz spool em disco acima de ~1MB, então cada RG, CPF e
+            # certidão do candidato ficava de temporário no container — e num
+            # LOOP, um por arquivo enviado. É o mesmo defeito que criou este
+            # serviço na v2.56, que corrigiu creche e portal e deixou de fora
+            # justamente o fluxo de MAIOR volume do sistema.
+            #
+            # A versão SÍNCRONA de propósito: esta rota é `def` (roda no
+            # threadpool) porque faz OCR pela Mistral com timeout de até 120s.
+            # Torná-la `async` para usar o `ler_upload` jogaria essa chamada
+            # bloqueante no event loop e travaria a API inteira a cada envio.
+            #
+            # `EXTENSOES_COM_WORD` porque a tela oferece .doc/.docx (Camera.jsx
+            # e Checklist.jsx) — a lista curta recusaria o que ela mesma ofereceu.
+            dados = ler_upload_sync(db, up, EXTENSOES_COM_WORD)
             pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
                                          rotulo=slot.tipo.value)
             if slot.tipo == TipoDocumento.comp_endereco:
@@ -201,7 +217,9 @@ def enviar_identidade(token: str,
     try:
         partes = []
         for up in lista:
-            dados = up.file.read()
+            # Mesma razão do `enviar_arquivo` (v2.71): valida e fecha o spool,
+            # na variante síncrona (esta rota também é `def`, e também faz OCR).
+            dados = ler_upload_sync(db, up, EXTENSOES_COM_WORD)
             pdf, _ = normalizar_para_pdf(up.filename or "arquivo", dados,
                                          rotulo="documento de identidade")
             partes.append((up.filename or "arquivo", up.content_type, dados, pdf))

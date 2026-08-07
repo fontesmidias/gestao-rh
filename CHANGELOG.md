@@ -11,6 +11,106 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.71.0] — 2026-08-06 — O documento do candidato não fica no disco
+
+Primeira leva de pendências levantadas depois do incidente da v2.70. Quatro
+itens fechados, todos verificados no código antes de mexer — vários que os
+documentos listavam como abertos já tinham sido feitos e foram descartados.
+
+### O spool que ficava no container — no fluxo de MAIOR volume
+
+`documentos.py` (envio pelo candidato, rota **pública**) e `rh_ficha.py`
+(inserção pelo RH) liam o upload com `up.file.read()` cru, **sem `close()` em
+lugar nenhum do arquivo**. O Starlette faz spool em disco acima de ~1 MB, então
+cada RG, CPF e certidão ficava de temporário no container — e num LOOP, um por
+arquivo enviado.
+
+É o mesmo defeito que criou o `upload_seguro.py` na v2.56. Ele corrigiu creche
+e portal, e deixou de fora justamente o caminho por onde passa quase tudo.
+
+**Por que não bastou chamar o `ler_upload` existente:** aquelas rotas são `def`,
+não `async def`. No FastAPI, rota síncrona roda no **threadpool**; `async` roda
+no **event loop**. E elas fazem OCR pela Mistral com timeout de até 120s —
+convertê-las para `async` só para usar a função assíncrona jogaria uma chamada
+bloqueante dentro do loop e **travaria a API inteira a cada envio**. Trocaria um
+vazamento de arquivo por indisponibilidade.
+
+Daí o `ler_upload_sync`: mesmas garantias, incluindo o `close()` no `finally`,
+para rota declarada com `def`. A validação virou uma função só (`_conferir`),
+usada pelas duas portas — variante nova não pode "esquecer" uma checagem.
+
+Verificado ponta a ponta na stack real: JPG de **4,90 MB** (bem acima do limiar
+de spool) → HTTP 200, slot `enviado`; `.exe` → 422 `formato_nao_suportado`.
+`EXTENSOES_COM_WORD` porque a tela oferece `.doc/.docx` — a lista curta
+recusaria o que ela mesma ofereceu (armadilha da v2.61).
+
+### SVG na logo era XSS armazenado
+
+`marca.py` aceitava `image/svg+xml` no upload de logo e favicon, e `_servir`
+devolvia com esse `media_type` numa rota **pública**, no mesmo domínio do
+painel. SVG é código: um `<script>` dentro dele executa quando o navegador
+abre, com acesso à sessão de quem estiver logado.
+
+O `upload_seguro.py` já excluía `.svg` pelo mesmo motivo (*"aceitava .exe, .svg
+(que carrega script)"*); esta rota nasceu antes dele e ficou de fora.
+
+**Tirado da allowlist E do `_servir`**: só do upload não bastaria — logo enviada
+antes da correção continuaria no storage sendo servida como SVG executável.
+Sem a entrada no mapa, ela cai no `image/png` do padrão e o script não roda. O
+front usa `accept="image/*"`, então nada que a tela prometa é recusado.
+
+### O terceiro caminho de e-mail ainda mentia sobre o anexo
+
+`webhook_email.py:56` mandava todo anexo como `application/pdf` chumbado — o
+mesmo defeito que a v2.41 corrigiu no SMTP e a v2.68 no Graph, vivo no caminho
+do Power Automate porque **nenhum teste o tocava**. Por ali saem o `.txt` do log
+(4×/dia) e o `.ics` do convite de entrevista: declarados como PDF, chegam
+"corrompidos" e não abrem, com o arquivo perfeito do outro lado.
+
+Agora deriva de `_tipo_do_anexo`, como os outros dois. Import local, seguindo o
+`m365.py` — `email.py` importa este módulo, e import no topo fecharia ciclo.
+
+### Testes que nunca rodaram no CI
+
+De 54 arquivos de teste, **6 rodavam**. O comentário do CI justificava: os que
+importam `app.main` "trocariam segundos por minutos de pipeline". Isso deixou de
+valer no instante em que a stack Docker passou a subir no mesmo job para o
+Playwright — o container `api` já tem tudo instalado.
+
+- **`test_anti_prompt_injection`** entrou no bloco stdlib: o módulo que ele
+  exercita importa só `re` e `secrets`, e o cabeçalho do teste já dizia "sem
+  banco, sem rede". Cabia ali desde sempre. É a defesa contra currículo com
+  instrução escondida, em upload público — regressão que não dá erro, só
+  ranqueia errado.
+- **Passo novo rodando dentro do container**: `documentos_catalogo` (divergência
+  enum × catálogo levanta `RuntimeError` **no boot** — quebra o deploy inteiro),
+  `email_templates`, `retomada_acesso` (*"o link IDENTIFICA, nunca AUTENTICA"*)
+  e `export_tirvu` (o Tirvu aceita ERRADO desvio de forma — mesmo argumento que
+  já colocou o Dexion no CI).
+
+Dois deles **não podiam** rodar no CI como estavam: tinham a senha
+`senha-teste-123` escrita na linha do login, enquanto o CI cria o admin com a
+senha do `.env` do job. Falhavam com `KeyError: 'token'`, que não diz nada sobre
+a causa. Agora leem do ambiente e afirmam o login com mensagem explícita.
+
+A imagem **não** carrega `tests/` (o Dockerfile copia só `app` e `migrations`) —
+código de teste em imagem de produção é superfície a mais. São copiados só
+durante o CI, com `docker cp backend/tests/.` (o `/.` evita o aninhamento
+silencioso que faz o Python rodar a cópia antiga — pego durante a validação).
+
+### Guarda-corpo
+
+`test_upload_fecha_spool.py`, validado por mutação nas duas frentes (remover o
+`close()` → reprova; devolver o SVG à allowlist → reprova). Monta um
+`UploadFile` real acima do limiar de spool e afirma que ele fecha — inclusive
+**quando o arquivo é recusado**, porque recusar e deixar o temporário no disco
+seria o pior dos dois mundos. Trava também que as rotas continuam síncronas.
+
+Detalhe pago na escrita: a primeira versão reprovava buscando `up.file.read()`
+no texto do arquivo — e achava o **comentário que explica a correção**. Teste
+que reprova a documentação do próprio conserto. Agora ignora comentário e
+docstring.
+
 ## [2.70.0] — 2026-08-06 — A migration que derrubou a API
 
 Incidente de produção, entre 7h e 9h da manhã. O Bruno foi usar o sistema no
