@@ -88,6 +88,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **No celular, mede-se a ALTURA DO CABEÇALHO — não só a largura** (v2.76,
+  *"a navegação está feia demais para mobile, horrível"*): as réguas existentes
+  mediam estouro lateral e altura de LINHA, e nenhuma via o defeito real —
+  quanto se rola até o primeiro registro. Medido em 390px: **Talentos 1212px**,
+  Colaboradores 1092px, Entrevistas 1039px, em telas de 844px de altura. Uma
+  tela e meia de rolagem para ver o primeiro item. A causa é sempre a mesma:
+  layout de desktop apenas EMPILHADO. As 4 regras estão no bloco final
+  `@media (max-width: 760px)` do `styles.css` e valem para toda tela com
+  `.rh-painel` + `DashPlanilha` — (1) filtros nascem RECOLHIDOS (chegavam a
+  643px sozinhos) com contador dos ativos, senão a lista parece recortada sem
+  explicação; (2) cards de métrica em 2 colunas; (3) botões do `.rh-topo` com
+  **`flex: 1 1 0`** — com `auto` cada um parte da largura do próprio texto e o
+  primeiro enche a tela; (4) título e respiro menores. No desktop nada muda
+  (`display: contents` no `<details>`). Teto travado em teste: § 9.1 do
+  `08-sistema-de-design.md` e `tabelas-cabem-na-tela.spec.js`.
 - **Confirmação de AÇÃO é `<Aviso>` flutuante; `.alerta` inline é para ESTADO**
   (v2.75, `frontend/src/Aviso.jsx`): *"esses avisos tem lugares que ele aparece
   no topo enquanto estamos lá embaixo na tela, ou seja nem aparecem"*. A regra

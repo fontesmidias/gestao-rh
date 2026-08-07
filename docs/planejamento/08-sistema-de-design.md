@@ -640,6 +640,52 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Termos de negócio têm `<Ajuda>`.
 - [ ] Abas usam a classe `ativa`.
 - [ ] Vira card no mobile de forma legível.
+- [ ] **No celular, a primeira linha da lista aparece antes de 600px** — medida,
+      não estimada (ver § 9.1).
+
+---
+
+## 9.1 Celular: o que vale para toda tela (v2.76)
+
+Feedback do Bruno, com print estendido: *"a navegação está feia demais para
+mobile, horrível"*.
+
+O problema não era estético. Medido em **390px de largura**, antes de qualquer
+registro aparecer:
+
+| Tela | Antes | Depois |
+|---|---|---|
+| Talentos | **1212px** | 549px |
+| Colaboradores | 1092px | 552px |
+| Entrevistas | 1039px | 471px |
+| Admissões | 817px | 542px |
+
+Em telas de 844px de altura, 1212px é **uma tela e meia de rolagem só para ver o
+primeiro item** — a pessoa abre a lista e não vê lista nenhuma. A causa: tudo
+desenhado para desktop e apenas EMPILHADO no celular.
+
+As quatro regras estão no `styles.css`, no bloco final `@media (max-width:
+760px)`, e valem para qualquer tela que use `.rh-painel` + `DashPlanilha` — tela
+nova nasce certa sem ninguém lembrar delas:
+
+1. **Filtro é passo seguinte, não a abertura da tela.** A barra de filtros nasce
+   RECOLHIDA (`.dash-filtros-caixa`, um `<details>`), com um contador de quantos
+   estão valendo. Chegavam a 643px sozinhos. Quem abre a lista quer a LISTA;
+   quem quer filtrar toca uma vez. **Filtro ativo escondido sem o contador seria
+   pior que filtro nenhum** — a lista pareceria recortada sem explicação.
+2. **Métrica é informação, não cartaz.** Cards em 2 colunas compactas
+   (`minmax(7.5rem)`), 63px cada em vez de ~120. Continuam clicáveis para
+   filtrar.
+3. **Ação do cabeçalho não ocupa a largura inteira.** `flex: 1 1 0` nos botões
+   de `.rh-topo > div` — com `auto` (o padrão) cada um parte da largura do
+   próprio texto e o primeiro botão já enche a tela, empurrando o vizinho para
+   baixo. A área de toque continua acima dos 44px recomendados.
+4. **O título não precisa de três linhas de respiro.** No celular cada pixel
+   acima do conteúdo é rolagem que a pessoa paga.
+
+**Como conferir:** abra a tela em 390px e meça onde começa a primeira linha —
+`document.querySelector('.dash-tabela tbody tr').getBoundingClientRect().top +
+scrollY`. Acima de ~600px, algo no cabeçalho está grande demais.
 
 ---
 

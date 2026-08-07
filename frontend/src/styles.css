@@ -265,6 +265,14 @@ a { color: var(--verde-escuro); }
    no mobile cai para 1-2 colunas sozinho. */
 .dash-filtros { display: grid; gap: var(--esp-2) var(--esp-3); align-items: end;
                 grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+/* A CAIXA dos filtros (v2.76): no DESKTOP ela não existe visualmente — o
+   `<summary>` some e o conteúdo fica sempre aberto, exatamente como antes. É no
+   celular que ela vira um dobrável (regra no bloco mobile lá embaixo).
+   `display: contents` faz o `<details>` desaparecer do layout: sem isso ele
+   viraria um bloco a mais entre os cards e a barra, mudando o espaçamento do
+   desktop por causa de um ajuste que é do celular. */
+.dash-filtros-caixa { display: contents; }
+.dash-filtros-resumo { display: none; }
 .dash-filtro { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
 .dash-filtro-rot { font-size: var(--fs-mini); font-weight: 600; color: var(--cinza-txt);
                    text-transform: uppercase; letter-spacing: .02em;
@@ -2152,4 +2160,76 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   .demo-marca-mais, .demo-marca-menos, .demo-marca-unica {
     animation: none; border-color: #1c7ed6;
   }
+}
+
+/* ==========================================================================
+   PADRÃO DE CELULAR (v2.76) — o que vale para TODA tela do painel
+   --------------------------------------------------------------------------
+   Feedback do Bruno, com print estendido da tela inteira: *"a navegação está
+   feia demais para mobile, horrível"*.
+
+   O diagnóstico não era estética. Medido em 390px de largura, ANTES de qualquer
+   registro aparecer na tela:
+
+       Admissões      817px        Colaboradores  1092px
+       Entrevistas   1039px        Talentos       1212px
+
+   Em telas de 844px de altura, isso é UMA TELA E MEIA de rolagem só para
+   chegar ao primeiro item — a pessoa abre a lista e não vê lista nenhuma. A
+   causa é que tudo foi desenhado para desktop e apenas EMPILHADO no celular:
+   os filtros (até 643px sozinhos, um por linha), os cards de métrica (um número
+   por cartão, 374-599px) e os botões de ação em largura cheia.
+
+   As quatro regras abaixo valem para qualquer tela que use `.rh-painel` e o
+   `DashPlanilha` — telas novas nascem certas sem ninguém lembrar delas.
+   ========================================================================== */
+@media (max-width: 760px) {
+  /* 1. FILTRO É PASSO SEGUINTE, não a abertura da tela.
+        A caixa nasce recolhida; quem quer filtrar toca uma vez. O contador no
+        resumo diz quantos estão valendo — filtro ativo escondido faria a lista
+        parecer recortada sem explicação. */
+  .dash-filtros-caixa { display: block; margin-bottom: var(--esp-2); }
+  .dash-filtros-resumo {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .7rem .9rem; border-radius: var(--raio-input);
+    background: var(--cartao); border: 1px solid var(--borda);
+    font-weight: 600; font-size: .95rem; cursor: pointer;
+  }
+  .dash-filtros-caixa[open] .dash-filtros-resumo {
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+  .dash-filtros-caixa[open] .dash-filtros { border-top-left-radius: 0; border-top-right-radius: 0; }
+
+  /* 2. MÉTRICA É INFORMAÇÃO, não cartaz.
+        Um número por cartão em largura quase cheia gastava 374-599px. Em duas
+        colunas compactas o mesmo conteúdo cabe em ~1/3 disso, e continua
+        clicável para filtrar. */
+  .dash-cards, .rh-metricas {
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .45rem;
+  }
+  .dash-card, .rh-metrica { padding: .5rem .6rem; }
+  .dash-card strong, .rh-metrica strong { font-size: 1.3rem; }
+  .dash-card span, .rh-metrica span { font-size: .74rem; }
+
+  /* 3. AÇÃO DO CABEÇALHO NÃO OCUPA A LARGURA INTEIRA.
+        Um botão por linha empurra o conteúdo para baixo sem ganhar nada: eles
+        cabem lado a lado e continuam com área de toque confortável (44px é o
+        mínimo recomendado; .7rem de padding + fonte .9rem passa disso). */
+  .rh-topo > div { display: flex; flex-wrap: wrap; gap: .4rem; }
+  /* `flex-basis: 0` é o que faz os botões DIVIDIREM a linha: com `auto` (o
+     padrão) cada um parte da largura do próprio texto, e "＋ Registrar
+     conversa" sozinho já enche os 390px, empurrando o vizinho para a linha de
+     baixo. Com base 0 os dois partem do mesmo tamanho e crescem juntos.
+     `min-width` em 7rem garante que, se forem muitos, quebrem em vez de virar
+     tiras ilegíveis. */
+  .rh-topo > div > button, .rh-topo > div > .btn-principal,
+  .rh-topo > div > .btn-secundario {
+    flex: 1 1 0; min-width: 7rem; padding: .7rem .6rem; font-size: .88rem;
+  }
+
+  /* 4. O TÍTULO DA PÁGINA NÃO PRECISA DE TRÊS LINHAS DE RESPIRO.
+        No celular cada pixel acima do conteúdo é rolagem que a pessoa paga. */
+  .rh-painel { padding: .7rem; }
+  .rh-painel > h1, .rh-topo h1 { font-size: 1.35rem; margin: 0 0 .5rem; }
+  .rh-painel > p.explica { font-size: .85rem; margin: 0 0 .6rem; }
 }
