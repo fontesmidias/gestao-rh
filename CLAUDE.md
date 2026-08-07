@@ -88,6 +88,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **O `smoke_test` roda no CI (v2.72.1) — e o preço de ele NÃO rodar já foi
+  pago**: são as 15 etapas ponta a ponta (cadastro → link mágico → autosave →
+  declaração → upload com imagem virando PDF → conclusão → aprovação → dossiê),
+  o único teste que percorre o caminho INTEIRO do candidato. Enquanto foi
+  portão manual, ficou VERMELHO por três versões sem ninguém saber (v2.71 → a
+  v2.72 o achou). Duas coisas ao mexer nele: (1) ele roda em **passo próprio**
+  do `ci.yml`, depois dos testes rápidos e antes do Playwright — falha cedo e o
+  log diz de cara que foi o smoke; (2) ele agora usa `os.environ.setdefault` e
+  lê a credencial do ambiente, então **não chumbe `DATABASE_URL` nem senha**
+  ali: dentro do container do CI o `localhost:55432` não existe, e o admin
+  nasce com a senha do `.env` do job. **Antes de acrescentar teste ao
+  `ci.yml`, rode-o DENTRO do container** (`docker exec -e PYTHONPATH=. <api>
+  python tests/x.py`) contra um banco limpo — passar na sua máquina não prova
+  nada sobre lá.
 - **Teste ESCRITO e teste VERIFICADO são coisas diferentes — e o relatório que
   diz "coberto" mede o primeiro** (v2.72): o Módulo de Entrevistas entregou 4
   levas, 41 cenários e 9 mutações, com relatórios honestos… e **nenhum dos 5

@@ -216,6 +216,36 @@ jobs:
             echo "::endgroup::"
           done
 
+      # O SMOKE — o portão mais completo do projeto, e o que ninguém rodava.
+      #
+      # 15 etapas ponta a ponta: cadastro pelo RH → link mágico → autosave da
+      # ficha → declaração de veracidade → upload de documento (imagem vira PDF
+      # no MinIO) → conclusão do envio → aprovação → dossiê. É o único teste que
+      # percorre o caminho INTEIRO do candidato; os demais cobrem uma fatia cada.
+      #
+      # Ficou fora do CI desde sempre, e o preço apareceu na v2.72: ele estava
+      # VERMELHO desde a v2.71 e ninguém soube. O `detail` do
+      # `upload_seguro._conferir` virou dicionário (passou a dizer a extensão
+      # recebida e a lista de aceitos), e a asserção comparava com a string
+      # antiga — comportamento CERTO, teste desatualizado, três versões sem
+      # ninguém ver. Portão manual é portão que se esquece.
+      #
+      # Dois defeitos precisaram ser corrigidos para ele rodar AQUI, os dois já
+      # conhecidos da casa: (1) `os.environ.update` sobrescrevia a
+      # `DATABASE_URL`, mandando-o para um `localhost:55432` que não existe no
+      # container; (2) a senha do admin era LITERAL na linha do login, e aqui o
+      # admin nasce com a senha do `.env` deste job (a armadilha da v2.71).
+      #
+      # Passo PRÓPRIO, não dentro do laço acima: ele leva mais que os outros
+      # juntos, e quando reprova o log tem que dizer de cara que foi o smoke —
+      # não uma linha perdida no meio de um `for`.
+      - name: Smoke test — 15 etapas ponta a ponta (dentro do container da API)
+        run: |
+          api=$(docker compose --env-file .env \
+            -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml \
+            ps -q api)
+          docker exec -e PYTHONPATH=. "$api" python tests/smoke_test.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20

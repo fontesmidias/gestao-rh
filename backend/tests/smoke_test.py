@@ -5,7 +5,12 @@ import io
 import os
 import re
 
-os.environ.update(
+# `setdefault`, não `update` (v2.72): o `update` SOBRESCREVIA o ambiente, então
+# o smoke ia SEMPRE ao banco local — dentro do container do CI isso o mandaria
+# para um `localhost:55432` que não existe ali. Era um dos dois motivos de ele
+# nunca ter entrado no pipeline. O padrão serve a máquina de quem desenvolve;
+# quem decide é o ambiente.
+for _chave, _valor in dict(
     DATABASE_URL="postgresql+psycopg://admissao:admissao@localhost:55432/admissao",
     MINIO_ENDPOINT="localhost:59000",
     MINIO_ACCESS_KEY="minio",
@@ -15,7 +20,8 @@ os.environ.update(
     RH_ADMIN_PASSWORD="senha-teste-123",
     SECRET_KEY="segredo-de-teste",
     BASE_URL="http://localhost:8090",
-)
+).items():
+    os.environ.setdefault(_chave, _valor)
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -28,8 +34,17 @@ c = TestClient(app)
 assert c.get("/api/health").json().get("status") == "ok"
 
 # 2) login RH (admin criado pelo bootstrap)
-r = c.post("/api/rh/auth/login", json={"email": "rh@greenhousedf.com.br", "senha": "senha-teste-123"})
-assert r.status_code == 200, r.text
+# Credencial do AMBIENTE, nunca literal (v2.72): no CI o admin nasce com a
+# senha do `.env` do job, e a literal devolvia 401 -> `KeyError: 'token'`, erro
+# que não fala da causa. Era o segundo motivo de o smoke nunca ter entrado no
+# pipeline — a mesma armadilha da v2.71.
+EMAIL_RH = os.environ["RH_ADMIN_EMAIL"]
+SENHA_RH = os.environ["RH_ADMIN_PASSWORD"]
+r = c.post("/api/rh/auth/login", json={"email": EMAIL_RH, "senha": SENHA_RH})
+assert r.status_code == 200, (
+    f"login falhou ({r.status_code}): confira RH_ADMIN_EMAIL/RH_ADMIN_PASSWORD "
+    f"— `criar_admin_inicial` só cria o admin com a tabela VAZIA, então num "
+    f"banco com usuários antigos o admin do .env não existe. Resposta: {r.text}")
 rh = {"Authorization": f"Bearer {r.json()['token']}"}
 
 # sem token -> 401

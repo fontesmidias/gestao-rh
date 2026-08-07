@@ -991,3 +991,48 @@ arquivos mexidos.
    com mensagem explícita. Três testes deste módulo repetiram a armadilha da
    v2.71 — ela vai se repetir de novo se o padrão não for copiado.
 3. **Ao enriquecer um `detail` de erro**, `grep` pela string antiga nos testes.
+
+---
+
+# Adendo v2.72.1 — o smoke entra no CI (2026-08-06)
+
+Resposta do Bruno à pergunta nº 1 do relatório anterior: **sim**, o
+`smoke_test.py` deve rodar no pipeline.
+
+## O que faltava não era a linha no `ci.yml`
+
+Acrescentar o passo é trivial. O que decidiu a leva foi **rodá-lo dentro do
+container da API**, como o CI faz — e ali apareceram os dois defeitos de sempre:
+
+1. **`os.environ.update` sobrescrevia a `DATABASE_URL`**: o smoke ia sempre ao
+   banco local, e dentro do container isso aponta para um `localhost:55432` que
+   não existe. Virou `setdefault`.
+2. **Senha do admin LITERAL na linha do login**: a armadilha da v2.71, pela
+   quarta vez nesta contagem.
+
+O 401 do segundo apareceu **exatamente como a mensagem nova prometia** —
+`confira RH_ADMIN_EMAIL/RH_ADMIN_PASSWORD`, com a explicação do
+`criar_admin_inicial` — em vez de um `KeyError: 'token'`. A mensagem fez o
+trabalho para o qual foi escrita, no primeiro uso real.
+
+## Verificação
+
+| O quê | Resultado |
+|---|---|
+| Smoke dentro do `deploy-api-1`, banco+MinIO limpos na rede da stack, senha do job | **15/15** |
+| Idem, 2ª execução no mesmo banco (idempotência) | **15/15** |
+| Smoke na máquina local, com os padrões | **15/15** |
+| YAML do `ci.yml` | válido; 13 passos, o smoke em 9º (antes do Playwright) |
+| Os 16 testes do CI | **OK**, sem regressão |
+
+## Decisão de desenho
+
+**Passo próprio, não mais uma linha no laço**: o smoke leva mais que todos os
+outros juntos, e num `for` compartilhado a falha dele viraria uma linha perdida
+no log. Fica depois dos testes rápidos e antes do Playwright — falha cedo e
+poupa os minutos de navegador.
+
+## Pendência que continua
+
+**A restauração de vaga pela lixeira** segue sem ser exercitada — registrada
+pela quarta vez (v2.67, v2.68, v2.72, aqui).
