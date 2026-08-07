@@ -223,6 +223,23 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
     t = db.get(Talento, talento_id)
     if t is None:
         raise HTTPException(status_code=404, detail="talento_nao_encontrado")
+    await _guardar_curriculo(db, t, arquivo, ator="publico")
+    return {"ok": True}
+
+
+async def _guardar_curriculo(db: Session, t: Talento, arquivo: UploadFile,
+                             *, ator: str, ator_detalhe: str | None = None) -> None:
+    """Valida, grava e indexa o currículo. Porta ÚNICA das duas entradas.
+
+    Extraída na v2.74, quando o RH ganhou como anexar currículo pelo painel
+    (`/rh/talentos/{id}/curriculo`). Duplicar isto faria as duas portas
+    divergirem na primeira mudança — e o que elas guardam é o mesmo arquivo, com
+    o mesmo teto, a mesma allowlist e a mesma indexação. O que muda é só QUEM
+    autoriza: token de upload lá, `requer_rh` aqui.
+
+    O `close()` fica no `finally` (v2.56/v2.71): o Starlette faz spool em disco
+    acima de ~1MB, e aqui passa currículo de gente real.
+    """
     try:
         conteudo = await arquivo.read()
     finally:
@@ -235,12 +252,22 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
     if ext not in CURRICULO_EXTS:
         raise HTTPException(status_code=422, detail="formato_nao_suportado")
     key = f"talentos/{t.id}/curriculo.{ext}"
+    # Troca de currículo com extensão DIFERENTE (.doc -> .pdf) muda a key, e o
+    # arquivo anterior ficaria órfão no MinIO: só o registro aponta para ele,
+    # então nem a tela nem o expurgo o alcançariam de novo. Mesmo defeito que o
+    # teste do anexo de entrevista pegou na v2.72.
+    if t.curriculo_key and t.curriculo_key != key:
+        try:
+            storage.remover(t.curriculo_key)
+        except Exception:
+            log.warning("Currículo anterior do talento %s não pôde ser removido "
+                        "(%s) — o novo foi gravado normalmente.", t.id, t.curriculo_key)
     content_type = CURRICULO_CT.get(ext, arquivo.content_type or "application/octet-stream")
     storage.salvar(key, conteudo, content_type)
     t.curriculo_key = key
     t.curriculo_nome = (arquivo.filename or f"curriculo.{ext}")[:200]
     t.curriculo_tipo = content_type
-    registrar(db, "talento_curriculo_enviado", ator="publico",
+    registrar(db, "talento_curriculo_enviado", ator=ator, ator_detalhe=ator_detalhe,
               detalhe={"talento": t.nome, "ext": ext})
     db.commit()
 
@@ -256,8 +283,6 @@ async def enviar_curriculo(talento_id: uuid.UUID, upload_token: str, arquivo: Up
     except Exception:
         log.warning("Não foi possível enfileirar a indexação do currículo do "
                     "talento %s — o backfill cobre depois.", t.id)
-
-    return {"ok": True}
 
 
 # ---------- RH (protegido) ----------
@@ -441,6 +466,35 @@ def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
     # o seu cadastro" a quem não se cadastrou — a pessoa levaria um susto, e o
     # e-mail pode nem ser dela (foi o RH que digitou).
     return {"ok": True, "id": str(talento.id), **_dump(talento)}
+
+
+@router.post("/rh/talentos/{talento_id}/curriculo", status_code=201,
+             dependencies=[Depends(requer_rh)])
+async def anexar_curriculo_pelo_rh(talento_id: uuid.UUID, arquivo: UploadFile,
+                                   db: Session = Depends(get_db),
+                                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Anexa (ou TROCA) o currículo de um talento, pelo painel.
+
+    Faltava (v2.74, cobrado pelo Bruno): o cadastro à mão da v2.73 dizia "o
+    currículo pode ser anexado depois, pela ficha da pessoa" — e **não havia
+    como anexar depois**. A única rota de upload era a pública, autorizada por
+    um `upload_token` com TTL de 30 min emitido no cadastro público: o RH não
+    tinha token nenhum, e para o currículo que chega por e-mail (o caso que
+    originou a leva) não havia caminho.
+
+    Mesma validação, mesmo storage e mesma indexação do upload público — a porta
+    é `_guardar_curriculo`. O que muda é quem autoriza.
+
+    **Troca é permitida de propósito**: o currículo que o RH recebe por e-mail
+    costuma vir atualizado depois. A key é a mesma (`talentos/{id}/curriculo.ext`),
+    então o arquivo anterior é sobrescrito no storage — e o texto indexado é
+    refeito pela fila, senão o Match ranquearia pelo currículo velho.
+    """
+    t = db.get(Talento, talento_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="talento_nao_encontrado")
+    await _guardar_curriculo(db, t, arquivo, ator="rh", ator_detalhe=rh.email)
+    return {"ok": True, **_dump(t)}
 
 
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])

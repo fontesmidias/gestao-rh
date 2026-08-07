@@ -95,18 +95,31 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
       ) },
     { chave: 'vaga', rotulo: 'Vaga', ordenavel: true, filtro: 'lista', quebra: true,
       // Snapshot: se a vaga foi excluída o título continua aqui (cenário 4).
-      valor: (l) => l.vaga_titulo || '—',
+      // Sem vaga, mostra cargo e posto (v2.74) — antes a coluna ficava com um
+      // travessão e a conversa parecia não ter assunto. O `valor` alimenta o
+      // filtro de lista, então ele precisa refletir o que a célula EXIBE.
+      valor: (l) => l.vaga_titulo
+        || [l.cargo, l.posto_nome].filter(Boolean).join(' · ') || '—',
       // `title` com o título inteiro: os postos reais são longos ("INEP -
       // 37/2025 - APOIO ADMINISTRATIVO, RECEPÇÃO E PORTARIA…") e o CSS corta
       // em 3 linhas para o card não ocupar meia tela — cortar sem `title`
       // esconderia de qual vaga é a entrevista (regra da v2.59/v2.60).
-      render: (l) => (
-        <span title={l.vaga_titulo || undefined}>
-          {l.vaga_titulo || '—'}
-          {l.vaga_titulo && !l.vaga_existe &&
-            <> <span className="chip" title="A vaga foi excluída; o título ficou registrado.">vaga excluída</span></>}
-        </span>
-      ) },
+      render: (l) => {
+        // Sem vaga cadastrada, cargo e posto ocupam o lugar dela (v2.74): é o
+        // que responde "para que foi essa conversa". O posto vem em `<small>`
+        // porque o cargo é o que decide o roteiro — a hierarquia da célula
+        // acompanha a do dado.
+        const semVaga = [l.cargo, l.posto_nome].filter(Boolean)
+        return (
+          <span title={l.vaga_titulo || semVaga.join(' · ') || undefined}>
+            {l.vaga_titulo || (semVaga.length
+              ? <>{l.cargo || ''}{l.posto_nome && <><br /><small>{l.posto_nome}</small></>}</>
+              : '—')}
+            {l.vaga_titulo && !l.vaga_existe &&
+              <> <span className="chip" title="A vaga foi excluída; o título ficou registrado.">vaga excluída</span></>}
+          </span>
+        )
+      } },
     { chave: 'tipo', rotulo: 'Tipo', ordenavel: true, filtro: 'select',
       opcoes: Object.values(ROTULO_TIPO),
       valor: (l) => ROTULO_TIPO[l.tipo] || l.tipo },
@@ -254,6 +267,19 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
   const [candidatos, setCandidatos] = useState([])
   const [vagas, setVagas] = useState([])
   const [salvando, setSalvando] = useState(false)
+  // --- v2.74 ---
+  // Cargo e posto para a entrevista SEM vaga cadastrada: o RH conversa para um
+  // posto que precisa repor gente, e cadastrar uma vaga só para marcar a
+  // conversa é burocracia inventada.
+  const [cargo, setCargo] = useState('')
+  const [cargoLivre, setCargoLivre] = useState(false)   // "＋ Cargo novo…"
+  const [postoId, setPostoId] = useState('')
+  const [postos, setPostos] = useState([])
+  const [cargosUsados, setCargosUsados] = useState([])
+  // Cadastro RÁPIDO da pessoa que ainda não está no banco: nome + WhatsApp,
+  // como a admissão faz — começa com o mínimo e completa no caminho. O
+  // currículo entra aqui mesmo, que é como ele costuma chegar (por e-mail).
+  const [novaPessoa, setNovaPessoa] = useState(null)   // {nome, telefone, arquivo}
   // Mensagem local: o card fica no meio da tela, e um setMsg do pai
   // renderizaria a confirmação fora do campo de visão de quem clicou.
   const [erro, setErro] = useState(null)
@@ -281,19 +307,60 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
     api.listarTalentos().then((r) => setTalentos(_lista(r))).catch(() => {})
     api.vagas().then((r) => setVagas(_lista(r))).catch(() => {})
     api.candidatos && api.candidatos({}).then((r) => setCandidatos(_lista(r))).catch(() => {})
+    // v2.74 — cargo e posto para a entrevista sem vaga. Estas DUAS devolvem
+    // objeto (`{postos}` / `{cargos}`), ao contrário das três acima: conferido
+    // no backend, não suposto — foi exatamente essa suposição que deixou os
+    // seletores vazios antes.
+    api.postos().then((r) => setPostos(r?.postos || [])).catch(() => {})
+    api.cargos().then((r) => setCargosUsados(r?.cargos || [])).catch(() => {})
   }, [])
 
   const criar = async () => {
-    if (!pessoaId) { setErro('Escolha a pessoa.'); return }
+    const cadastrando = quem === 'nova'
+    if (cadastrando && !(novaPessoa?.nome || '').trim()) {
+      setErro('Diga ao menos o nome da pessoa.'); return
+    }
+    if (!cadastrando && !pessoaId) { setErro('Escolha a pessoa.'); return }
     setSalvando(true)
     setErro(null)
     setAviso(null)
     try {
+      // Cadastro rápido ANTES da entrevista (v2.74): a entrevista precisa
+      // apontar para alguém. Vai pela MESMA rota do cadastro à mão (v2.73),
+      // então herda tudo — nome padronizado, consentimento não fingido, autor
+      // registrado. `forcar: true` porque aqui a duplicata não é erro do RH:
+      // ele está com a pessoa na frente e não veio conferir cadastro; barrar a
+      // conversa por causa de um homônimo seria o sistema atrapalhando.
+      let alvoId = pessoaId
+      let alvoTipo = quem
+      if (cadastrando) {
+        const t = await api.cadastrarTalento({
+          nome: novaPessoa.nome, telefone: novaPessoa.telefone || null,
+          origem: 'Cadastrado na entrevista', forcar: true,
+        })
+        alvoId = t.id
+        alvoTipo = 'talento'
+        // O currículo é anexado DEPOIS de existir o talento (a rota precisa do
+        // id). Falha aqui NÃO derruba a entrevista — o arquivo se anexa pela
+        // ficha, e perder a conversa por causa de um upload seria pior.
+        if (novaPessoa.arquivo) {
+          try {
+            await api.anexarCurriculoTalento(alvoId, novaPessoa.arquivo)
+          } catch (e) {
+            setAviso(`A pessoa foi cadastrada, mas o currículo não subiu `
+              + `(${e.detail || e.message}). Anexe pela ficha dela.`)
+          }
+        }
+      }
       const criada = await api.criarEntrevista({
         tipo,
-        talento_id: quem === 'talento' ? pessoaId : null,
-        candidato_id: quem === 'candidato' ? pessoaId : null,
+        talento_id: alvoTipo === 'talento' ? alvoId : null,
+        candidato_id: alvoTipo === 'candidato' ? alvoId : null,
         vaga_id: vagaId || null,
+        // Sem vaga, é o cargo que diz para que a conversa foi — e é ele que
+        // resolve o roteiro. Com vaga, a vaga manda (o backend dá precedência).
+        cargo: !vagaId ? (cargo || null) : null,
+        posto_id: !vagaId ? (postoId || null) : null,
         // Vazio = "já aconteceu": nasce em `realizada`. Exigir agendamento
         // prévio mataria o módulo — pessoa que aparece na porta é rotina.
         marcada_para: quando ? new Date(quando).toISOString() : null,
@@ -340,19 +407,69 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
         </div>
         <div className="campo">
           <span className="rotulo">A pessoa é</span>
-          <SelectBusca valor={quem} aoEscolher={(v) => { setQuem(v); setPessoaId('') }}>
+          {/* "Ainda não cadastrada" (v2.74): a pessoa que aparece na porta ou
+              manda currículo por e-mail não está em lista nenhuma, e antes o
+              formulário simplesmente não tinha o que oferecer. Ao escolher,
+              abre o cadastro rápido logo abaixo — e o que ela cadastrar já
+              entra no Banco de Talentos, então da próxima vez está na lista. */}
+          <SelectBusca valor={quem}
+                       aoEscolher={(v) => {
+                         setQuem(v); setPessoaId('')
+                         setNovaPessoa(v === 'nova' ? { nome: '', telefone: '', arquivo: null } : null)
+                       }}>
             <option value="talento">Do Banco de Talentos</option>
             <option value="candidato">Candidato / colaborador</option>
+            <option value="nova">Ainda não cadastrada — cadastrar agora</option>
           </SelectBusca>
         </div>
-        <div className="campo">
-          <span className="rotulo">Pessoa</span>
-          <SelectBusca valor={pessoaId} aoEscolher={setPessoaId}
-                       opcoes={lista.map((p) => ({
-                         valor: p.id, rotulo: p.nome || p.nome_completo,
-                         extra: p.cargo_interesse || p.cargo_funcao || '',
-                       }))} />
-        </div>
+        {quem !== 'nova' && (
+          <div className="campo">
+            <span className="rotulo">Pessoa</span>
+            <SelectBusca valor={pessoaId} aoEscolher={setPessoaId}
+                         opcoes={lista.map((p) => ({
+                           valor: p.id, rotulo: p.nome || p.nome_completo,
+                           extra: p.cargo_interesse || p.cargo_funcao || '',
+                         }))} />
+          </div>
+        )}
+        {/* CADASTRO RÁPIDO (v2.74): o MÍNIMO para a conversa acontecer — nome e
+            WhatsApp —, como a admissão faz (começa com o convite e completa no
+            caminho). O currículo entra aqui porque é assim que ele chega: por
+            e-mail, antes da conversa. O resto se preenche depois, pela ficha.
+            A pessoa entra no Banco de Talentos, então da próxima vez já está na
+            lista — e SEM consentimento fingido (v2.73). */}
+        {quem === 'nova' && novaPessoa && (
+          <div className="campo" style={{ gridColumn: '1 / -1' }}>
+            <span className="rotulo">Cadastrar a pessoa
+              <span className="dica-inline"> — nome e WhatsApp bastam; o resto entra depois</span></span>
+            <div className="rh-grid-2">
+              <label className="campo">
+                <span className="rotulo">Nome</span>
+                <input value={novaPessoa.nome} autoComplete="off"
+                       placeholder="Como a pessoa se apresentou"
+                       onChange={(e) => setNovaPessoa({ ...novaPessoa, nome: e.target.value })} />
+              </label>
+              <label className="campo">
+                <span className="rotulo">WhatsApp</span>
+                <input value={novaPessoa.telefone} autoComplete="off"
+                       placeholder="(61) 9…"
+                       onChange={(e) => setNovaPessoa({ ...novaPessoa, telefone: e.target.value })} />
+              </label>
+            </div>
+            <label className="campo">
+              <span className="rotulo">Currículo
+                <span className="dica-inline"> — opcional; PDF, foto ou Word</span></span>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx"
+                     onChange={(e) => setNovaPessoa({
+                       ...novaPessoa, arquivo: e.target.files?.[0] || null })} />
+            </label>
+            <p className="explica">
+              Entra no Banco de Talentos <strong>sem consentimento LGPD
+              registrado</strong> (a pessoa não está aqui para aceitar) — fica
+              gravado que foi você quem cadastrou.
+            </p>
+          </div>
+        )}
         <div className="campo">
           <span className="rotulo">Vaga
             <span className="dica-inline"> — opcional; conversa exploratória é caso real</span></span>
@@ -361,6 +478,55 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
                        opcoes={[{ valor: '', rotulo: '— sem vaga —' },
                                 ...vagas.map((v) => ({ valor: v.id, rotulo: v.titulo }))]} />
         </div>
+        {/* CARGO e POSTO só aparecem SEM vaga escolhida (v2.74): com a vaga, é
+            ela que diz para que a conversa foi, e mostrar três campos dizendo a
+            mesma coisa faria o RH preencher dois por engano — um assunto, um
+            controle (regra da v2.30). O cargo, além de registrar, é o que
+            resolve qual ROTEIRO vale (herança cargo → padrão). */}
+        {!vagaId && (
+          <>
+            <div className="campo">
+              <span className="rotulo">Cargo
+                <span className="dica-inline"> — decide o roteiro da entrevista</span></span>
+              {/* Lista os cargos JÁ USADOS na base (mais frequentes primeiro),
+                  com "＋ Cargo novo…" trocando para input livre — o mesmo padrão
+                  do `Detalhe.jsx` e do convite. Escolher da lista evita
+                  "Vigia"/"vigia"/"Vigía" virando três cargos (regra da v1.82).
+                  ⚠️ NÃO existe prop `permiteNovo` no `SelectBusca`: prop
+                  inventada é ignorada em silêncio pelo React (v2.64), e o campo
+                  pareceria funcionar sem nunca aceitar cargo novo. */}
+              {cargoLivre ? (
+                <input value={cargo} autoComplete="off" autoFocus
+                       placeholder="Digite o cargo"
+                       onChange={(e) => setCargo(e.target.value)} />
+              ) : (
+                <SelectBusca valor={cargo}
+                             aoEscolher={(v) => {
+                               if (v === '__novo') { setCargoLivre(true); setCargo('') }
+                               else setCargo(v)
+                             }}
+                             opcoes={[
+                               { valor: '', rotulo: '— não informado —' },
+                               ...cargosUsados.map((c) => ({
+                                 valor: c.nome, rotulo: c.nome,
+                                 extra: c.pessoas ? `${c.pessoas} pessoa(s)` : '',
+                               })),
+                               { valor: '__novo', rotulo: '＋ Cargo novo…' },
+                             ]} />
+              )}
+            </div>
+            <div className="campo">
+              <span className="rotulo">Posto
+                <span className="dica-inline"> — para qual contrato é a conversa</span></span>
+              <SelectBusca valor={postoId} aoEscolher={setPostoId}
+                           opcoes={[{ valor: '', rotulo: '— não informado —' },
+                                    ...postos.map((p) => ({
+                                      valor: p.id, rotulo: p.sigla || p.nome,
+                                      extra: p.sigla ? p.nome : '',
+                                    }))]} />
+            </div>
+          </>
+        )}
         {/* `datetime-local` e não o `InputData` do projeto: aquele componente é
             de DATA (máscara dd/mm/aaaa, `maxLength={10}`, guarda ISO
             aaaa-mm-dd) e não tem hora — e entrevista sem hora não se marca.

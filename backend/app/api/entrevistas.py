@@ -32,7 +32,7 @@ from app.api.auth_rh import requer_rh
 from app.core.config import ip_do_cliente
 from app.core.db import get_db
 from app.models.assinatura_entrevista import AssinaturaEntrevista
-from app.models.candidato import Candidato
+from app.models.candidato import Candidato, PostoServico
 from app.models.crm import Anotacao, PessoaTag, Tag
 from app.models.entrevista import (STATUS_TERMINAIS, Entrevista,
                                    StatusEntrevista, TipoEntrevista)
@@ -83,8 +83,14 @@ class EntrevistaIn(BaseModel):
     # Roteiro escolhido na hora. None = o sistema resolve por herança
     # (cargo+senioridade → cargo → padrão). Sugerido, nunca imposto.
     roteiro_id: uuid.UUID | None = None
-    cargo: str | None = None               # dica para a herança, quando não há vaga
+    # Cargo: dica para a herança do roteiro E, desde a v2.74, dado GRAVADO —
+    # quando não há vaga cadastrada, é ele que diz para que a conversa foi.
+    cargo: str | None = None
     senioridade: str | None = None
+    # Posto sem vaga (v2.74): o RH conversa para um posto que precisa repor
+    # gente, e cadastrar uma vaga só para marcar a conversa é burocracia
+    # inventada. Alternativa ao `vaga_id`, nunca substituto.
+    posto_id: uuid.UUID | None = None
     # O RH decide se o convite sai. Sem e-mail da pessoa, não sai — e a
     # resposta diz POR QUÊ (cenário 26), nunca falha calada.
     enviar_convite: bool = False
@@ -188,6 +194,9 @@ def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None) -> dict:
         # Snapshot: se a vaga foi excluída, o título continua aqui (cenário 4).
         "vaga_titulo": e.vaga_titulo,
         "vaga_existe": e.vaga_id is not None,
+        # v2.74: para a entrevista SEM vaga cadastrada. `posto_nome` é snapshot,
+        # então continua legível mesmo depois de o posto ir para a lixeira.
+        "cargo": e.cargo, "posto_id": e.posto_id, "posto_nome": e.posto_nome,
         "tipo": e.tipo.value if hasattr(e.tipo, "value") else e.tipo,
         "status": e.status.value if hasattr(e.status, "value") else e.status,
         "marcada_para": e.marcada_para, "realizada_em": e.realizada_em,
@@ -568,6 +577,16 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
         vaga_titulo = v.titulo      # snapshot desde o nascimento (cenário 4)
         cargo_da_vaga = v.cargo
 
+    # Posto (v2.74): snapshot do nome pela mesma razão do `vaga_titulo` — o
+    # posto pode ir para a lixeira, e a entrevista tem que continuar dizendo
+    # para ONDE a conversa foi.
+    posto_nome = None
+    if payload.posto_id:
+        p = db.get(PostoServico, payload.posto_id)
+        if p is None:
+            raise HTTPException(status_code=404, detail="posto_nao_encontrado")
+        posto_nome = p.nome
+
     modalidade = (payload.modalidade or "").strip() or None
     if modalidade is not None and modalidade not in inst.CHAVES_MODALIDADE:
         raise HTTPException(status_code=422, detail="modalidade_invalida")
@@ -596,6 +615,10 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
     e = Entrevista(
         talento_id=tid, candidato_id=cid,
         vaga_id=payload.vaga_id, vaga_titulo=vaga_titulo,
+        # v2.74: quando não há vaga, cargo e posto dizem para que a conversa foi.
+        # O cargo da VAGA tem precedência — se ela existe, é ela que manda.
+        cargo=(cargo_da_vaga or (payload.cargo or "").strip() or None),
+        posto_id=payload.posto_id, posto_nome=posto_nome,
         tipo=TipoEntrevista(payload.tipo),
         status=StatusEntrevista.realizada if ja_realizada else StatusEntrevista.marcada,
         marcada_para=payload.marcada_para,

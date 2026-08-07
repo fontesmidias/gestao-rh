@@ -11,6 +11,91 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.74.0] — 2026-08-07 — A pessoa que não está na lista
+
+Três pedidos do Bruno sobre o formulário de nova entrevista, com prints, mais um
+que ele cobrou no meio da leva. O fio comum: **o formulário só funcionava se
+tudo já estivesse cadastrado** — e o caso mais comum do recrutamento é
+exatamente o contrário.
+
+### A pessoa que ainda não existe
+
+> *"pode ser que a pessoa não esteja no banco, logo, tem que permitir cadastrar
+> a pessoa ali na hora, em regra o RH pode cadastrar com nome e whatsapp, para
+> depois preencher mais informações sobre ela, como no módulo admissões"*
+
+"A pessoa é" ganhou **"Ainda não cadastrada — cadastrar agora"**, e o cadastro
+abre no próprio formulário: **nome e WhatsApp bastam**, como a admissão faz —
+começa com o mínimo e completa no caminho. A pessoa entra no Banco de Talentos
+pela mesma rota do cadastro à mão (v2.73), então herda tudo: nome padronizado,
+**consentimento não fingido** e autor registrado. Da próxima vez ela já está na
+lista.
+
+`forcar: true` aqui é deliberado: o RH está com a pessoa na frente e não veio
+conferir cadastro. Barrar a conversa por causa de um homônimo seria o sistema
+atrapalhando.
+
+### O currículo — que a v2.73 prometeu e não entregou
+
+> *"na cadastro manual de talentos, você esqueceu da opção de poder anexar
+> currículo"*
+
+Pior que esquecer: a tela da v2.73 **dizia** "o currículo pode ser anexado
+depois, pela ficha da pessoa" — e não havia como. A única rota de upload era a
+PÚBLICA, autorizada por um `upload_token` com TTL de 30 min emitido no cadastro
+público; o RH não tem token nenhum. Promessa na interface sem rota atrás é a
+família do "documento que não nasce" (v2.69): ninguém vê o que falta.
+
+Agora há `POST /rh/talentos/{id}/curriculo`, e o anexo aparece em **três**
+lugares: no cadastro à mão, no cadastro pela entrevista e na ficha do talento
+(onde também **troca** — o currículo que chega por e-mail costuma vir atualizado
+depois). Mesma validação e mesma indexação do upload público: a porta é
+`_guardar_curriculo`, uma só.
+
+Troca com extensão diferente **remove o arquivo anterior**: só o registro aponta
+para a key, então o antigo ficaria órfão no MinIO, fora do alcance da tela e do
+expurgo — o defeito que o teste do anexo de entrevista pegou na v2.72.
+
+Falha no upload **não desfaz o cadastro**: a pessoa já entrou, e a tela diz que
+o arquivo não subiu. Perder o cadastro por causa de um anexo seria trocar um
+problema pequeno por um maior.
+
+### Cargo e posto quando não há vaga
+
+> *"na vaga, podem ser dois campos, cargo e posto, puxando todos já cadastrados
+> ou tendo a opção de criar ali mesmo"*
+
+Nem toda entrevista nasce de vaga aberta: o RH conversa para um posto que
+precisa repor gente. Os campos aparecem **só quando não há vaga escolhida** —
+três campos dizendo a mesma coisa fariam preencher dois por engano (um assunto,
+um controle, v2.30). Havendo vaga, ela manda, inclusive no cargo.
+
+O cargo não é decorativo: é ele que resolve **qual roteiro** a entrevista usa
+(herança cargo → padrão). Lista os cargos já usados na base, com "＋ Cargo
+novo…" trocando para texto livre — o padrão do `Detalhe.jsx`, que evita
+"Vigia"/"vigia"/"Vigía" virando três cargos.
+
+`posto_id` é FK **com snapshot do nome**, pela mesma razão do `vaga_titulo`: o
+posto pode ser excluído e a entrevista tem que continuar dizendo para onde a
+conversa foi. Testado com exclusão definitiva de verdade — a FK vira NULL e o
+nome permanece.
+
+### Uma armadilha evitada no caminho
+
+A primeira versão do seletor de cargo passava `permiteNovo` ao `SelectBusca` —
+**prop que não existe**. O React a ignoraria em silêncio e o campo pareceria
+funcionar sem nunca aceitar cargo novo: exatamente a armadilha da v2.64, pega
+por abrir a assinatura do componente antes de confiar nela.
+
+### Portões
+
+Migration `a2c4e6f8b1d3` executada up → down → up. 15 testes de backend, smoke
+**15/15**, E2E **26/26**, 4 mutações reprovando. Fluxo conferido na tela
+renderizada e no banco: cargo, posto, telefone, currículo e consentimento nulo
+com autor registrado.
+
+---
+
 ## [2.73.0] — 2026-08-07 — A porta que não existia
 
 O RH pode **cadastrar um talento à mão**, pelo painel. Era o último item do § 13

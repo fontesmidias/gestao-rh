@@ -1175,3 +1175,59 @@ inexistente — a varredura não achou nenhuma outra no repositório.
 Do § 13 restam **duas** coisas, ambas escopo novo e decisão do Bruno:
 Requisição de Pessoal (adiada por ele, desenho guardado) e o segundo avaliador
 com trava anti-peeking (datado, não descartado).
+
+---
+
+# Adendo v2.74 — a pessoa que não está na lista (2026-08-07)
+
+Três pedidos do Bruno sobre o formulário de nova entrevista (com prints), mais
+um que ele cobrou no meio da leva. O fio comum: **o formulário só funcionava se
+tudo já estivesse cadastrado** — e o caso mais comum do recrutamento é o
+contrário.
+
+## 1. O que foi entregue
+
+| Pedido | Como ficou |
+|---|---|
+| Cadastrar a pessoa na hora, com nome e WhatsApp | Opção **"Ainda não cadastrada"** em "A pessoa é"; o cadastro abre no próprio formulário e usa a rota da v2.73 (herda nome padronizado, consentimento não fingido, autor registrado) |
+| Anexar currículo | Em **três** lugares: cadastro à mão, cadastro pela entrevista e ficha do talento (onde também troca) |
+| Cargo e posto sem vaga | Aparecem só **sem vaga escolhida**; cargo com "＋ Cargo novo…", posto com FK + snapshot |
+
+**Duas decisões perguntadas antes de construir**, porque mudavam o trabalho:
+cargo/posto como ALTERNATIVA à vaga (não recadastro da Vaga), e o cadastro
+rápido entrando como TALENTO (não como candidato em admissão).
+
+## 2. O que a leva revelou
+
+**A v2.73 prometeu o que não podia cumprir.** A tela dizia "anexe depois pela
+ficha" e não havia rota: a única de upload era a pública, com `upload_token` de
+TTL curto. É a família do documento que não nasce (v2.69) — ninguém vê o que
+falta, porque a interface não acusa. Virou armadilha no `CLAUDE.md`.
+
+**Uma prop inventada, evitada a tempo.** A 1ª versão do seletor de cargo passava
+`permiteNovo` ao `SelectBusca` — prop que não existe. O React ignoraria em
+silêncio e o campo pareceria funcionar sem nunca aceitar cargo novo: a armadilha
+da v2.64, pega por abrir a assinatura antes de confiar nela.
+
+**Um teste meu reprovou código correto.** A 1ª versão esperava que
+`DELETE /rh/postos/{id}` zerasse a FK — mas aquela rota é exclusão SOFT
+(`ativo=False`), de propósito, justamente para não quebrar quem aponta para o
+posto. O `SET NULL` foi exercitado pelo caminho certo (ação em massa "excluir
+definitivo") e passou.
+
+## 3. Portões
+
+| Portão | Resultado |
+|---|---|
+| `test_entrevista_sem_vaga` (novo) | **OK** — 4 mutações reprovaram |
+| Migration `a2c4e6f8b1d3` | up → **down** → up executado |
+| 15 testes de backend | **OK** |
+| `smoke_test` | **15/15** |
+| E2E | **26/26** |
+| Fluxo na tela + conferência no banco | cargo, posto, telefone, currículo e consentimento nulo com autor |
+
+## 4. Estado do § 13
+
+Restam **duas**, ambas escopo novo e decisão do Bruno: a Requisição de Pessoal
+(adiada por ele, desenho guardado) e o segundo avaliador com trava anti-peeking
+(datado, não descartado).

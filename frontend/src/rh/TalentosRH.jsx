@@ -111,6 +111,20 @@ export default function TalentosRH({ aoAbrir }) {
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível abrir o currículo (${e.detail || e.message}).` }) }
   }
 
+  // Anexar/trocar currículo pela ficha (v2.74). Recarrega a lista para o 📎
+  // aparecer na hora — sem isso o RH não saberia se o arquivo entrou.
+  const anexarCurriculo = async (t, arquivo) => {
+    setMsg(null)
+    try {
+      await api.anexarCurriculoTalento(t.id, arquivo)
+      setMsg({ tipo: 'ok', texto: `Currículo de ${t.nome} anexado.` })
+      await recarregar()
+    } catch (e) {
+      setMsg({ tipo: 'erro',
+               texto: `Não foi possível anexar (${e.detail || e.message}).` })
+    }
+  }
+
   const enviarTeste = async (t) => {
     if (!t.email) { setMsg({ tipo: 'erro', texto: `${t.nome} não tem e-mail cadastrado — não dá para enviar o teste.` }); return }
     if (!window.confirm(`Enviar teste (DISC + situacional) para ${t.nome} (${t.email})?`)) return
@@ -307,11 +321,17 @@ export default function TalentosRH({ aoAbrir }) {
         <NovoTalento
           aoFechar={() => setCadastrando(false)}
           aoAbrirExistente={(id) => { setCadastrando(false); setAberto(id) }}
-          aoCriar={(t) => {
+          aoCriar={(t, avisoCurriculo) => {
             setCadastrando(false)
-            setMsg({ tipo: 'ok', texto: `${t.nome} entrou no Banco de Talentos. `
-              + 'O consentimento LGPD não foi registrado (cadastro pelo RH) — '
-              + 'consta na ficha.' })
+            // O 2º parâmetro só vem quando o cadastro deu certo mas o CURRÍCULO
+            // não subiu (v2.74): a pessoa entrou, e dizer "tudo certo" quando
+            // metade falhou faria o RH descobrir o arquivo faltando semanas
+            // depois. Aviso âmbar, não erro vermelho — o cadastro está lá.
+            setMsg(avisoCurriculo
+              ? { tipo: 'erro', texto: `${t.nome} entrou no Banco de Talentos. ${avisoCurriculo}` }
+              : { tipo: 'ok', texto: `${t.nome} entrou no Banco de Talentos. `
+                  + 'O consentimento LGPD não foi registrado (cadastro pelo RH) — '
+                  + 'consta na ficha.' })
             recarregar()
             setAberto(t.id)   // abre a ficha: o currículo se anexa por lá
           }} />
@@ -328,7 +348,8 @@ export default function TalentosRH({ aoAbrir }) {
                       linhaExpandida={(t) => (aberto === t.id
                         ? <FichaTalento t={t} verCurriculo={verCurriculo}
                                         doc={doc?.talento === t.id ? doc : null}
-                                        fecharDoc={() => setDoc(null)} /> : null)}
+                                        fecharDoc={() => setDoc(null)}
+                                        aoAnexarCurriculo={anexarCurriculo} /> : null)}
                       vazio="Nenhum talento cadastrado ainda." />
       )}
       {anotando && (
@@ -357,7 +378,7 @@ function Campo({ rotulo, children, largo }) {
   )
 }
 
-function FichaTalento({ t, verCurriculo, doc, fecharDoc }) {
+function FichaTalento({ t, verCurriculo, doc, fecharDoc, aoAnexarCurriculo }) {
   const lista = (v) => (Array.isArray(v) && v.length ? v.join(' · ') : null)
   return (
     <div className="ficha-talento">
@@ -378,13 +399,30 @@ function FichaTalento({ t, verCurriculo, doc, fecharDoc }) {
         {/* Aqui o botão FECHA quando o currículo já está aberto — sem isso ele
             recarregaria o mesmo arquivo e nada mudaria na tela, que é a versão
             silenciosa do clique morto que este feedback veio consertar. */}
+        {/* Anexar/TROCAR o currículo pela ficha (v2.74): a v2.73 dizia "anexe
+            depois pela ficha" e não havia como — a única rota de upload era a
+            pública, com token de TTL curto que o RH não tem. É por aqui que
+            entra o currículo que chega por e-mail depois do cadastro. */}
         <Campo rotulo="Currículo">
           {t.tem_curriculo
             ? (doc
                 ? <button className="btn-link" onClick={fecharDoc}>▲ fechar currículo</button>
                 : <button className="btn-link" onClick={() => verCurriculo(t)}>
                     📎 {t.curriculo_nome || 'abrir currículo'}</button>)
-            : 'não enviou'}</Campo>
+            : 'não enviou'}
+          <label className="btn-link" style={{ cursor: 'pointer' }}>
+            {t.tem_curriculo ? ' · trocar' : ' · anexar'}
+            <input type="file" style={{ display: 'none' }}
+                   accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx"
+                   onChange={(e) => {
+                     const f = e.target.files?.[0]
+                     // Limpa o input: sem isso, escolher o MESMO arquivo de novo
+                     // (depois de um erro) não dispara `onChange` — o valor não
+                     // mudou, e a tela pareceria ignorar o clique.
+                     e.target.value = ''
+                     if (f) aoAnexarCurriculo(t, f)
+                   }} />
+          </label></Campo>
         {/* Três estados, não dois (v2.73). O travessão sozinho não distingue
             "não temos o dado" de "não houve aceite, e sabemos por quê" — é a
             lição do terceiro estado do creche (v2.27/v2.54). Quem foi cadastrado

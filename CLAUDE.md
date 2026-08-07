@@ -88,6 +88,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Promessa na TELA sem rota atrás não existe** (v2.74, cobrado pelo Bruno): a
+  v2.73 escreveu no formulário *"o currículo pode ser anexado depois, pela ficha
+  da pessoa"* — e **não havia rota para isso**. A única de upload era a PÚBLICA,
+  autorizada por `upload_token` com TTL de 30 min emitido no cadastro público;
+  o RH não tem token nenhum. Ninguém percebe, porque a tela não acusa: é a
+  família do "documento que não nasce" (v2.69) e do worker que não roda (v2.66).
+  **Ao escrever uma instrução na interface, `grep` pela rota que a cumpre.** Hoje
+  existe `POST /rh/talentos/{id}/curriculo`, e as duas portas (pública e do RH)
+  compartilham `_guardar_curriculo` — duplicar faria divergirem na 1ª mudança.
+  Corolário: **troca de arquivo com extensão diferente muda a KEY**, e o antigo
+  vira órfão no storage (fora do alcance da tela E do expurgo) se não for
+  removido — mesmo defeito que o teste do anexo de entrevista pegou na v2.72.
 - **`api.x()` que não existe DERRUBA A TELA — e o `.catch` não salva** (v2.73,
   defeito visto pelo Bruno em produção): `EntrevistasRH` chamava
   `api.talentos()`, função que **nunca existiu** (a certa é `listarTalentos`), e
