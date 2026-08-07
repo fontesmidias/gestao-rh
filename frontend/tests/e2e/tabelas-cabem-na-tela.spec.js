@@ -195,3 +195,61 @@ test('a coluna de ações não domina a tabela', async ({ page }) => {
     + 'da tela — foi assim que o "Atender presencial" sumiu da vista.')
     .toBeLessThan(0.35)
 })
+
+// --------------------------------------------------------------------------
+// CELULAR: a lista aparece sem uma tela e meia de rolagem (v2.76)
+// --------------------------------------------------------------------------
+// Feedback do Bruno, com print estendido: *"a navegação está feia demais para
+// mobile, horrível"*.
+//
+// O defeito não era estético e não aparecia em nenhuma régua existente: as
+// outras medem LARGURA (nada estoura de lado) e ALTURA DE LINHA (o card não
+// vira pergaminho). Ninguém media quanto CABEÇALHO existe antes do primeiro
+// registro — e era isso que estava errado.
+//
+// Medido em 390px antes do conserto:
+//     Talentos 1212px · Colaboradores 1092px · Entrevistas 1039px
+// Em telas de 844px de altura, 1212px é uma tela e meia de rolagem só para ver
+// o primeiro item. A pessoa abre a lista e não vê lista nenhuma.
+//
+// O teto de 600px não é arbitrário: é o que sobra de uma tela de celular comum
+// (844px) depois de descontar o que o navegador ocupa — ou seja, garante que
+// ALGUMA linha da lista apareça sem rolar.
+test('celular: a lista começa antes de 600px (cabeçalho não engole a tela)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await entrar(page)
+
+  const TETO = 600
+  const problemas = []
+  for (const [nome, rota] of TELAS) {
+    await page.goto(rota)
+    await page.waitForTimeout(1200)
+    const m = await page.evaluate(() => {
+      const tr = document.querySelector('.dash-tabela tbody tr')
+      if (!tr) return null           // tela sem lista (ou sem dados) não conta
+      const caixa = document.querySelector('.dash-filtros-caixa')
+      return {
+        y: Math.round(tr.getBoundingClientRect().top + window.scrollY),
+        // A barra de filtros tem que nascer FECHADA no celular: é ela que
+        // sozinha chegava a 643px. Se alguém a abrir por padrão, o teto acima
+        // volta a estourar — mas esta asserção diz POR QUÊ, em vez de deixar o
+        // número falhar sem explicação.
+        filtrosAbertos: caixa ? caixa.open : null,
+      }
+    })
+    if (!m) continue
+    if (m.y > TETO) problemas.push(`${nome}: a 1ª linha só começa em ${m.y}px`)
+    if (m.filtrosAbertos === true) {
+      problemas.push(`${nome}: a barra de filtros nasce ABERTA no celular`)
+    }
+  }
+
+  expect(problemas,
+    'No celular o cabeçalho está empurrando a lista para fora da primeira tela. '
+    + 'Costuma ser (a) a barra de filtros aberta por padrão, (b) cards de '
+    + 'métrica em uma coluna, ou (c) botões de ação em largura cheia. '
+    + 'As regras estão no bloco final `@media (max-width: 760px)` do '
+    + 'styles.css, e o padrão está em 08-sistema-de-design.md § 9.1.\n'
+    + problemas.join('\n'))
+    .toEqual([])
+})

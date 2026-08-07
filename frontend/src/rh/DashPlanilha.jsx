@@ -63,6 +63,14 @@ export default function DashPlanilha({
   // sozinha com os valores que existem na tela, e o SelectBusca deixa digitar
   // para achar. Coluna cujo `valor` devolve ARRAY (tags, cargos) entra item a
   // item: quem tem 3 tags aparece nas 3, não numa opção "a, b, c".
+  // Quantos filtros estão VALENDO agora (os da coluna + os do pai). No celular
+  // a caixa nasce fechada, e sem esse número a pessoa veria a lista recortada
+  // sem entender por quê — filtro ativo escondido é pior que filtro nenhum.
+  const qtdFiltrosAtivos = useMemo(() => (
+    Object.values(filtros).filter((v) => v !== '' && v != null).length
+    + (filtrosExtras || []).filter((f) => f.valor).length
+  ), [filtros, filtrosExtras])
+
   const opcoesDerivadas = useMemo(() => {
     const mapa = {}
     for (const col of colunas) {
@@ -167,6 +175,21 @@ export default function DashPlanilha({
           começa a digitar e a lista filtra (feedback do Bruno: "filtro é algo
           funcional; todos eu possa começar a digitar e ir aparecendo"). Os de
           texto já filtram ao digitar em memória. Ver 08-sistema-de-design.md. */}
+      {/* No CELULAR os filtros nascem RECOLHIDOS (v2.76). Medido em 390px antes
+          disso: 643px só de filtros em Talentos, e a primeira linha da lista
+          começava em 1212px — uma tela e meia de rolagem para ver o primeiro
+          registro, em telas de 844px de altura. A pessoa abre a lista para ver
+          a LISTA; filtrar é o passo seguinte, e quem quer filtrar toca uma vez.
+          No desktop nada muda: o `<summary>` some e o conteúdo fica aberto (o
+          `open` do details é ignorado pelo CSS que o neutraliza lá). */}
+      <details className="dash-filtros-caixa">
+        <summary className="dash-filtros-resumo">
+          <span>Filtrar e exportar</span>
+          {qtdFiltrosAtivos > 0 && (
+            <span className="chip" title="Filtros aplicados agora">
+              {qtdFiltrosAtivos}</span>
+          )}
+        </summary>
       <div className="rh-card dash-filtros">
         {/* Filtros do PAI (server-side) entram na MESMA grade dos de coluna —
             feedback do Bruno 2026-07-30 sobre o creche: "tem dois cards, acho
@@ -213,6 +236,7 @@ export default function DashPlanilha({
           <button className="btn-secundario btn-mini" onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
         </div>
       </div>
+      </details>
 
       {configAberta && (
         <div className="rh-card dash-colunas">

@@ -11,6 +11,68 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.76.0] — 2026-08-07 — A lista que começava fora da tela
+
+> *"a navegação está feia demais para mobile, horrível. veja o print"* — com
+> print estendido da tela inteira.
+
+O diagnóstico não era estético. Medido em **390px de largura**, antes de
+qualquer registro aparecer:
+
+| Tela | Antes | Depois |
+|---|---|---|
+| Talentos | **1212px** | 549px |
+| Colaboradores | 1092px | 552px |
+| Entrevistas | 1039px | 471px |
+| Desenvolvimento | 1013px | 516px |
+| Admissões | 817px | 542px |
+
+Em telas de 844px de altura, 1212px é **uma tela e meia de rolagem só para ver
+o primeiro item** — a pessoa abre a lista e não vê lista nenhuma. A causa: tudo
+foi desenhado para desktop e apenas EMPILHADO no celular.
+
+Nenhuma régua existente pegava isso: as outras medem LARGURA (nada estoura de
+lado) e ALTURA DE LINHA (o card não vira pergaminho). **Ninguém media quanto
+cabeçalho existe antes do conteúdo.**
+
+### As quatro regras — valem para TODA tela, não só as desta leva
+
+Estão no `styles.css`, no bloco final `@media (max-width: 760px)`, e alcançam
+qualquer tela que use `.rh-painel` + `DashPlanilha`. Tela nova nasce certa sem
+ninguém lembrar delas.
+
+1. **Filtro é passo seguinte, não a abertura da tela.** A barra nasce recolhida
+   num `<details>`, com contador de quantos estão valendo. Chegava a **643px**
+   sozinha. Quem abre a lista quer a LISTA. O contador não é enfeite: filtro
+   ativo escondido faria a lista parecer recortada sem explicação.
+2. **Métrica é informação, não cartaz.** Cards em 2 colunas compactas — 63px
+   cada, contra ~120. Continuam clicáveis para filtrar.
+3. **Ação do cabeçalho não ocupa a largura inteira.** `flex: 1 1 0` nos botões:
+   com `auto` cada um parte da largura do próprio texto, e "＋ Registrar
+   conversa" sozinho enchia os 390px, empurrando o vizinho para baixo (368px →
+   179px). A área de toque continua acima dos 44px recomendados.
+4. **O título não precisa de três linhas de respiro.** No celular cada pixel
+   acima do conteúdo é rolagem que a pessoa paga.
+
+No desktop **nada muda**: o `<details>` é `display: contents` e o `<summary>`
+some, então o layout é byte a byte o de antes.
+
+### O padrão ficou registrado, e travado por teste
+
+- `08-sistema-de-design.md` ganhou a **§ 9.1**, com as regras, os números
+  medidos e como conferir.
+- O checklist ganhou a linha: *"no celular, a primeira linha da lista aparece
+  antes de 600px — medida, não estimada"*.
+- `tabelas-cabem-na-tela.spec.js` ganhou o teste que mede as 8 telas em 390px.
+  **Validado por mutação**: abrindo os filtros por padrão, ele reprova nomeando
+  cada tela e o motivo (`Talentos: a 1ª linha só começa em 1196px`).
+
+### Portões
+
+E2E **27/27** (o teste novo incluído), backend verde, smoke **15/15**.
+
+---
+
 ## [2.75.0] — 2026-08-07 — O aviso que ninguém via
 
 Cinco reprovações do Bruno usando o Módulo de Entrevistas, todas com print. São
