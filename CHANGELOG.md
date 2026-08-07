@@ -11,6 +11,66 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.72.3] — 2026-08-07 — O chip que esticava a tabela
+
+O CI da v2.72.2 **reprovou** — a régua de layout (`tabelas-cabem-na-tela`)
+acusou Talentos estourando 67px e, na sequência, Entrevistas com linha de 251px.
+Nenhum dos dois vinha das mudanças daquela leva (que mexeu só em testes, CI e no
+mapa da lixeira). Os dois eram defeitos REAIS de tela que ninguém tinha visto —
+e que agora atingiriam o RH em produção.
+
+### O chip da tag de reaproveitamento estica a coluna inteira
+
+`.chip` tem `white-space: nowrap` — correto para status e contagem, que ficariam
+feios partidos. Mas a coluna Tags de Talentos recebe a **tag de
+reaproveitamento**, que o próprio sistema gera a partir do cargo da vaga
+(`entrevistas.py:493`, `reaproveitar: <cargo>`).
+
+Não é problema de dado de teste. Medido contra a **base real**: o cargo com mais
+gente — *"Auxiliar de Serviços Gerais"*, **18 pessoas** — produz uma tag de **41
+caracteres**, mais longa que a do teste. O `max-width: 22rem` da `td` não contém
+um filho que se recusa a quebrar:
+
+```
+sem a tag  -> tabela 1002px / área visível 1004px   (cabe)
+com a tag  -> tabela 1049px / área visível 1004px   (45px fora da vista)
+```
+
+Corrigido com teto no chip dentro de coluna que quebra, texto inteiro no
+`title`. **O teto precisa ser ABSOLUTO (`14ch`)**: com `max-width: 100%` a
+largura da `td` é calculada a partir do conteúdo, então o `100%` acompanha o
+chip que cresce e não limita nada — medido, o chip continuava em 256px. Com
+`14ch` caiu para 116px e as cinco larguras passaram a caber.
+
+### No modo CARD, o corte de 3 linhas nunca funcionou
+
+Entrevistas a 1150px: um título real de posto (*"INEP - 37/2025 - APOIO
+ADMINISTRATIVO, RECEPÇÃO E PORTARIA…"*) deixava a linha em **251px**, contra o
+teto de 240 — o card ocupando meia tela, que é exatamente o defeito que o modo
+card existe para resolver. **Pré-existente**: confirmado com `git stash`, falha
+igual no código original.
+
+A causa tem duas camadas, e a segunda só apareceu medindo:
+
+1. a regra do corte é `td.dash-quebra > .dash-corta`, mas no card a `td` vira
+   `display: flex` e a regra não alcança o filho da mesma forma;
+2. **o navegador BLOCKIFICA o `.dash-corta`** (computed `flow-root`) e engole o
+   `-webkit-box` — ele resiste até a `display: -webkit-box !important` aplicado
+   inline. É o mesmo mecanismo que a v2.60 registrou para a `<td>`, num lugar
+   novo.
+
+Por isso o corte no card é por **`max-height`**, que não depende de `display`
+nenhum. São **duas** linhas ali (não três): as células ficam lado a lado numa
+grade e a mais alta estica as vizinhas — com três linhas dava 249px, ainda acima
+do teto; com duas, 226px. Na tabela continuam três.
+
+### Portões
+
+Suíte E2E completa: **26/26** — incluindo os dois testes que estavam vermelhos.
+Backend: 17 testes verdes, smoke 15/15.
+
+---
+
 ## [2.72.2] — 2026-08-06 — A lixeira devolve o que engoliu
 
 Fecha a última pendência do Módulo de Entrevistas, aberta desde a v2.67 e

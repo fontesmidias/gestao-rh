@@ -176,7 +176,14 @@ export default function TalentosRH({ aoAbrir }) {
       valor: (t) => (t.tags || []).map((g) => g.nome),
       render: (t) => (t.tags || []).length
         ? (t.tags || []).map((g) => (
-            <span key={g.id} className="chip" style={{ '--chip-cor': g.cor || undefined }}>{g.nome}</span>))
+            // `title` com o nome inteiro: a tag de reaproveitamento nasce do
+            // cargo da vaga e chega a 41 caracteres com os cargos reais da base
+            // ("reaproveitar: Auxiliar de Serviços Gerais"), então o CSS a corta
+            // com reticências para ela não esticar a coluna (v2.72.3). Cortar
+            // sem `title` esconderia qual tag é — a regra da v2.59: a contagem
+            // fica na célula, o texto inteiro no `title`.
+            <span key={g.id} className="chip" title={g.nome}
+                  style={{ '--chip-cor': g.cor || undefined }}>{g.nome}</span>))
         : '—' },
     // Oculta por padrão (v2.59): o filtro de cidade continua na barra do dash,
     // e a coluna era o que faltava para a tabela caber sem rolagem lateral.

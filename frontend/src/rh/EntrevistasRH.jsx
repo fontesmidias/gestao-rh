@@ -96,12 +96,16 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
     { chave: 'vaga', rotulo: 'Vaga', ordenavel: true, filtro: 'lista', quebra: true,
       // Snapshot: se a vaga foi excluída o título continua aqui (cenário 4).
       valor: (l) => l.vaga_titulo || '—',
+      // `title` com o título inteiro: os postos reais são longos ("INEP -
+      // 37/2025 - APOIO ADMINISTRATIVO, RECEPÇÃO E PORTARIA…") e o CSS corta
+      // em 3 linhas para o card não ocupar meia tela — cortar sem `title`
+      // esconderia de qual vaga é a entrevista (regra da v2.59/v2.60).
       render: (l) => (
-        <>
+        <span title={l.vaga_titulo || undefined}>
           {l.vaga_titulo || '—'}
           {l.vaga_titulo && !l.vaga_existe &&
             <> <span className="chip" title="A vaga foi excluída; o título ficou registrado.">vaga excluída</span></>}
-        </>
+        </span>
       ) },
     { chave: 'tipo', rotulo: 'Tipo', ordenavel: true, filtro: 'select',
       opcoes: Object.values(ROTULO_TIPO),

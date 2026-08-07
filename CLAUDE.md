@@ -88,6 +88,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`.chip` não quebra linha — em coluna de tabela ele estica tudo** (v2.72.3):
+  `white-space: nowrap` é certo para status e contagem (partidos ficariam
+  feios), mas a coluna Tags recebe a **tag de reaproveitamento**, que o sistema
+  gera do cargo da vaga (`reaproveitar: <cargo>`). Com o cargo mais numeroso da
+  base real — *"Auxiliar de Serviços Gerais"*, 18 pessoas — são **41
+  caracteres**, e a tabela de Talentos ia de 1002px para 1049px numa área de
+  1004px. **O teto do chip tem que ser ABSOLUTO (`14ch`), não `max-width:
+  100%`**: a largura da `td` é calculada A PARTIR do conteúdo, então `100%`
+  acompanha o chip que cresce e não limita nada (medido: continuava em 256px).
+  Texto inteiro no `title`, como manda a v2.59.
+- **No modo CARD o `-webkit-line-clamp` NÃO funciona — corte por `max-height`**
+  (v2.72.3): a regra do corte é `td.dash-quebra > .dash-corta`, mas no card a
+  `td` vira `display: flex` **e o navegador BLOCKIFICA o `.dash-corta`**
+  (computed `flow-root`), engolindo o `-webkit-box` — ele resiste até a
+  `display: -webkit-box !important` inline. É o mesmo mecanismo da v2.60 (que
+  registrou isso para a `<td>`) num lugar novo. Use `max-height`, que não
+  depende de `display`. E são **2 linhas** no card contra 3 na tabela: ali as
+  células ficam lado a lado numa grade e a mais alta ESTICA as vizinhas (3
+  linhas = 249px, acima do teto de 240; 2 linhas = 226px).
 - **Entrar na lixeira e VOLTAR dela são DUAS coisas** (v2.72.2,
   `api/lixeira.py::classes_restauraveis`): `mandar_para_lixeira(db, obj, "x",
   ...)` guarda o snapshot e faz o registro sumir da tela — mas restaurar usa um
