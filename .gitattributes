@@ -1,0 +1,17 @@
+# Shell scripts SEMPRE com LF, mesmo em máquina Windows.
+#
+# O repositório é desenvolvido no Windows com `core.autocrlf=true`, que grava
+# CRLF no disco ao fazer checkout. Um `.sh` com CRLF quebra dentro do container
+# Linux de um jeito que engana: o `\r` entra no shebang e o kernel responde
+# `bad interpreter: /bin/sh^M` — parece arquivo ausente ou imagem corrompida,
+# não final de linha. O `docker-entrypoint.sh` é exatamente o arquivo que, ao
+# falhar, deixa a API inteira fora do ar (ver v2.70).
+#
+# `text eol=lf` força LF no working tree independentemente do autocrlf local.
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Dockerfile e afins também são lidos por ferramentas Linux.
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

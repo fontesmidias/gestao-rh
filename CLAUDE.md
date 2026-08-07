@@ -88,6 +88,37 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Migration com INSERT cru NÃO herda default do modelo — e o `set -e` do
+  entrypoint transforma isso em queda TOTAL** (v2.70, incidente de 2026-08-06
+  entre 7h e 9h): a `d6f8b2c4e5a7` inseria em `assinatura` sem listar
+  `otp_tentativas`, que é `NOT NULL` **sem `server_default`** (o `default=0`
+  mora no modelo Python; SQL cru não passa pelo ORM). Em banco VAZIO o
+  `INSERT ... SELECT` insere zero linhas e passa VERDE — é o *"só passa em banco
+  limpo"* (v2.14) **de cabeça para baixo**: aqui o banco limpo ESCONDE o
+  defeito, e todo teste local passou. Em produção, com gente real na base,
+  `NotNullViolation`. O estrago não parou aí: o `docker-entrypoint.sh` roda
+  `alembic upgrade head` ANTES do `exec uvicorn`, então o exit 1 abortava o
+  script e **a API nunca subia** — cada restart repetia. O sintoma foi "não
+  loga, o back não fala com o banco"; **o banco estava perfeito, não havia back
+  nenhum**. Três defesas: (1) o entrypoint agora SEGUE EM FRENTE quando a
+  migration falha (schema velho no ar > tela morta) e o `/api/health` denuncia
+  com `migracoes.em_dia:false` — que é o que aquele campo, criado na v2.29 para
+  este cenário, nunca pôde fazer, porque sem API não há /health para consultar;
+  (2) `tests/test_migration_insert_cru.py` percorre a cadeia NA ORDEM de
+  execução e cobra as colunas obrigatórias de todo `INSERT INTO` (validado por
+  mutação; a ordem importa — sem ela reprovava `roteiro_entrevista.tipo`, que só
+  passou a existir DEPOIS do INSERT que a "omitia"); (3) ao escrever backfill
+  por SQL, confira as colunas `NOT NULL sem server_default` **no banco**, nunca
+  no modelo. Em `assinatura` são `id`, `candidato_id` e `otp_tentativas`.
+- **Migration já marcada como aplicada NÃO roda de novo — corrigir o arquivo
+  conserta o futuro, não o presente** (v2.70): depois do conserto manual, o
+  `alembic_version` da produção estava no head com a `d6f8b2c4e5a7` dada por
+  aplicada, mas **sem as linhas do backfill**. Editar aquele arquivo só ajuda
+  bancos novos. Para completar o que ficou faltando é preciso uma revisão NOVA
+  (`e9c1a3f5b7d2`), com o mesmo recorte e **idempotente** (`NOT EXISTS`) — senão
+  duplica em quem já recebeu. Ao consertar migration que já rodou em produção,
+  pergunte sempre: *este banco vai reexecutá-la?* Quase sempre a resposta é não.
+
 - **Documento com nome PARECIDO não é o documento — e a ausência não dá erro**
   (v2.69, feedback do Bruno: *"Ficha de integração não está sendo gerada para os
   efetivos"*): `gerar_docs_do_posto_e_regime` fazia `if candidato.regime ==

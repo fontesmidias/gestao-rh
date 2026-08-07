@@ -7,7 +7,18 @@ from app.core.config import get_settings
 from app.core.db import Base
 
 # Importa todos os models para que o autogenerate enxergue o metadata completo.
+#
+# ⚠️ A LISTA TEM QUE ESTAR COMPLETA. Modelo que não é importado aqui não entra
+# no `Base.metadata`, e o autogenerate conclui que a tabela dele "sobra" no
+# banco: ele gera um `op.drop_table` para cada uma. Em 2026-08-06 faltavam OITO
+# (alerta, assinatura_entrevista, entrevista, roteiro_entrevista,
+# solicitacao_assinatura, telemetria, testagem, vaga) — nada quebrava em
+# runtime, porque quem registra os modelos da aplicação é a cadeia de imports
+# da `app.main`; o estrago apareceria na primeira revisão autogerada.
+# Ao criar modelo novo, acrescente aqui.
+import app.models.alerta  # noqa: F401
 import app.models.assinatura  # noqa: F401
+import app.models.assinatura_entrevista  # noqa: F401
 import app.models.beneficio  # noqa: F401
 import app.models.candidato  # noqa: F401
 import app.models.configuracao  # noqa: F401
@@ -16,6 +27,7 @@ import app.models.desempenho  # noqa: F401
 import app.models.desenvolvimento  # noqa: F401
 import app.models.documento  # noqa: F401
 import app.models.email_template  # noqa: F401
+import app.models.entrevista  # noqa: F401
 import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
 import app.models.lixeira  # noqa: F401
@@ -23,10 +35,15 @@ import app.models.match  # noqa: F401
 import app.models.minutario  # noqa: F401
 import app.models.modelo_documento  # noqa: F401
 import app.models.prova  # noqa: F401
+import app.models.roteiro_entrevista  # noqa: F401
+import app.models.solicitacao_assinatura  # noqa: F401
 import app.models.talento  # noqa: F401
+import app.models.telemetria  # noqa: F401
+import app.models.testagem  # noqa: F401
 import app.models.teste  # noqa: F401
 import app.models.teste_vinculado  # noqa: F401
 import app.models.usuario_rh  # noqa: F401
+import app.models.vaga  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
