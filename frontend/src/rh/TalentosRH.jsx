@@ -7,6 +7,7 @@ import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
 import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
 import NovoTalento from './NovoTalento.jsx'
+import Aviso from '../Aviso.jsx'
 
 const STATUS = {
   novo: ['Novo', '#5bc0de'],
@@ -313,7 +314,10 @@ export default function TalentosRH({ aoAbrir }) {
         Ordene por qualquer coluna, filtre, selecione para agir em massa, envie testes e converta em
         candidato — os dados migram e o link de admissão é disparado.</p>
 
-      {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
+      {/* Aviso FLUTUANTE (v2.75): a lista é longa e o RH age em linhas do meio
+          e do fim — a confirmação no topo ficava fora do campo de visão. */}
+      <Aviso tipo={msg?.tipo === 'erro' ? 'erro' : 'ok'} texto={msg?.texto}
+             aoFechar={() => setMsg(null)} />
 
       {/* O formulário abre ACIMA da tabela e some ao terminar — a regra da casa
           é editar/criar PERTO, sem tela nova (sistema de design, item 2). */}

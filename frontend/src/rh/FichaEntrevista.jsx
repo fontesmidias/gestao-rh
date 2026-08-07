@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
 import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
@@ -31,6 +32,22 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
   const [campos, setCampos] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const [erroCarga, setErroCarga] = useState(null)
+  // ⚠️ O hook fica AQUI, acima do `if (!e) return` — chamar `useNavigate` depois
+  // de um return condicional quebra as regras dos hooks (a ordem muda entre
+  // renders). Mesma família do guard de estado nulo da v2.05.
+  const navegar = useNavigate()
+
+  // Atalho para o CRUD de roteiros (v2.75, pergunta do Bruno: *"cadê a parte
+  // onde posso fazer CRUD de mais roteiros?"*). A tela sempre existiu, em
+  // Configurações → 🗣️ Roteiros de entrevista, mas nada apontava para ela — e é
+  // AQUI, conduzindo a entrevista, que se percebe que o roteiro precisa mudar.
+  // A aba de Config vem do `localStorage`, não da URL: sem gravar a preferência
+  // ANTES de navegar, o atalho abriria a última aba usada e pareceria não ter
+  // funcionado.
+  const irParaRoteiros = () => {
+    localStorage.setItem('rh_config_aba', 'roteiros')
+    navegar('/rh/config')
+  }
   // Mensagem LOCAL: a ficha abre na linha, longe do topo — a confirmação tem
   // que nascer perto do botão que a gerou (regra da v1.96/v2.47).
   const [msg, setMsg] = useState(null)
@@ -129,10 +146,11 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
                 a nota significava, e a tela mostra qual versão sustentou a
                 avaliação. */}
             {e.roteiro_nome && (
-              <span className="chip"
-                    title="O roteiro com que esta entrevista foi feita. Editar o roteiro depois não altera este registro.">
-                roteiro: {e.roteiro_nome} v{e.roteiro_versao}
-              </span>
+              <button className="chip chip-link"
+                      title="Roteiro com que esta entrevista foi feita. Editar o roteiro depois NÃO altera este registro. Clique para ver e editar os roteiros."
+                      onClick={irParaRoteiros}>
+                roteiro: {e.roteiro_nome} v{e.roteiro_versao} ↗
+              </button>
             )}{' '}
             {e.modalidade && <span className="chip">{e.modalidade}</span>}{' '}
             {e.defasagem_dias > 0 && (
@@ -321,71 +339,73 @@ function Avaliacao({ form, campos, marcar, setCampos, desabilitado }) {
         </span>
       </div>
 
-      {/* Duas colunas, como o formulário da cartilha: as competências à
-          esquerda, as justificativas à direita — o avaliador vê a nota que deu
-          ao lado do que escreveu para sustentá-la, em vez de rolar entre elas. */}
-      <div className="rh-conferencia-corpo">
-        <div>
-          <span className="rh-conferencia-bloco-titulo">Competências</span>
-          <div className="rh-escala">
-            {form.competencias.map((c) => (
-              <div className="rh-escala-linha" key={c.chave}>
-                <span className="rh-escala-rotulo">
-                  {c.nome}
-                  <span className="dica-inline"> — {c.perguntas[campos.variante]
-                    || c.perguntas.comportamental}</span>
-                </span>
-                <span className="chips-escolha">
-                  {form.escala.map((s) => (
-                    <button type="button" key={s.valor} disabled={desabilitado}
-                            title={c.ancoras[s.valor]}
-                            className={`chip-escolha ${campos.competencias[c.chave] === s.valor ? 'on' : ''}`}
-                            onClick={() => marcar('competencias', c.chave,
-                                                  campos.competencias[c.chave] === s.valor
-                                                    ? undefined : s.valor)}>
-                      {s.rotulo}</button>
-                  ))}
-                </span>
-              </div>
-            ))}
+      {/* UMA competência por bloco: nome escrito UMA VEZ, com a pergunta, as
+          notas e a justificativa juntas (v2.75, reprovação do Bruno: *"por que
+          escrever o título duas vezes? basta escrever cada título 1x e estarem
+          alinhadas as notas e o campo de escrita"*).
+          Antes eram DUAS listas paralelas — competências à esquerda,
+          justificativas à direita — cada uma repetindo os 4 nomes. Além da
+          repetição, nada garantia que as duas colunas ficassem na mesma altura:
+          a pergunta da 1ª competência ocupa 2 linhas e a da 2ª ocupa 1, então a
+          justificativa da 2ª aparecia na altura da 3ª. A pessoa preenchia o
+          campo errado.
+          É a armadilha da v2.66 numa variação: a primitiva de 2 colunas serve
+          conteúdo EMPARELHADO, e o par aqui é *nota ↔ justificativa DAQUELA
+          competência* — não "a lista de notas" ao lado de "a lista de textos".
+          Emparelhando de verdade, o alinhamento deixa de ser sorte.
+          A composição é a da referência canônica (`FormularioAvaliacao.jsx`):
+          `.rh-escala-linha` com o rótulo e os `.chip-escolha`, e o `.campo` com
+          o textarea logo abaixo. */}
+      <div className="rh-conferencia-bloco-titulo">Competências</div>
+      <p className="explica" style={{ margin: '0 0 .6rem' }}>
+        Nota sem evidência é ruído — descreva o que foi observado, não o adjetivo.
+        A justificativa é obrigatória em cada nota dada.
+      </p>
+      <div className="rh-escala">
+        {form.competencias.map((c) => (
+          <div className="rh-escala-linha rh-escala-linha-larga" key={c.chave}>
+            <span className="rh-escala-rotulo">
+              {c.nome}
+              <span className="dica-inline"> — {c.perguntas[campos.variante]
+                || c.perguntas.comportamental}</span>
+            </span>
+            <span className="chips-escolha">
+              {form.escala.map((s) => (
+                <button type="button" key={s.valor} disabled={desabilitado}
+                        title={c.ancoras[s.valor]}
+                        className={`chip-escolha ${campos.competencias[c.chave] === s.valor ? 'on' : ''}`}
+                        onClick={() => marcar('competencias', c.chave,
+                                              campos.competencias[c.chave] === s.valor
+                                                ? undefined : s.valor)}>
+                  {s.rotulo}</button>
+              ))}
+            </span>
+            <textarea rows={2} disabled={desabilitado}
+                      value={campos.justificativas[c.chave] || ''}
+                      onChange={(ev) => marcar('justificativas', c.chave, ev.target.value)}
+                      placeholder="O que a pessoa disse que sustenta esta nota." />
           </div>
-          {/* As âncoras num <details>: cursor, marcador e margem vêm do
-              styles.css (regra da v2.47.1) — nada de style inline aqui. */}
-          <details>
-            <summary>ver âncoras das notas</summary>
-            {form.competencias.map((c) => (
-              <div className="campo" key={c.chave}>
-                <span className="rotulo">{c.nome}</span>
-                <ul>
-                  {form.escala.map((s) => (
-                    <li key={s.valor}><strong>{s.valor}</strong> — {c.ancoras[s.valor]}</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </details>
-        </div>
-
-        <div>
-          <span className="rh-conferencia-bloco-titulo">Justificativas (obrigatórias)</span>
-          <p className="explica" style={{ margin: '0 0 .4rem' }}>
-            Nota sem evidência é ruído — descreva o que foi observado, não o
-            adjetivo.
-          </p>
-          {form.competencias.map((c) => (
-            <label className="campo" key={c.chave}>
-              <span className="rotulo">{c.nome}
-                {campos.competencias[c.chave] != null && (
-                  <span className="dica-inline"> — nota {campos.competencias[c.chave]}</span>
-                )}</span>
-              <textarea rows={2} disabled={desabilitado}
-                        value={campos.justificativas[c.chave] || ''}
-                        onChange={(ev) => marcar('justificativas', c.chave, ev.target.value)}
-                        placeholder="O que a pessoa disse que sustenta esta nota." />
-            </label>
-          ))}
-        </div>
+        ))}
       </div>
+      {/* As âncoras num <details>: cursor, marcador e margem vêm do
+          styles.css (regra da v2.47.1) — nada de style inline aqui.
+          Continuam aqui embaixo, e não dentro de cada bloco: são as MESMAS
+          quatro descrições para todas as competências, e repeti-las em cada uma
+          seria a duplicação que esta leva veio remover. No dia a dia elas já
+          estão no `title` de cada chip. */}
+      <details>
+        <summary>ver âncoras das notas</summary>
+        {form.competencias.map((c) => (
+          <div className="campo" key={c.chave}>
+            <span className="rotulo">{c.nome}</span>
+            <ul>
+              {form.escala.map((s) => (
+                <li key={s.valor}><strong>{s.valor}</strong> — {c.ancoras[s.valor]}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </details>
 
       <div className="campo">
         <span className="rotulo">Recomendação</span>

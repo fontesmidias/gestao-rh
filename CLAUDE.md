@@ -88,6 +88,47 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Confirmação de AÇÃO é `<Aviso>` flutuante; `.alerta` inline é para ESTADO**
+  (v2.75, `frontend/src/Aviso.jsx`): *"esses avisos tem lugares que ele aparece
+  no topo enquanto estamos lá embaixo na tela, ou seja nem aparecem"*. A regra
+  da v1.96/v2.47 ("a mensagem vai onde a PESSOA está olhando") vinha sendo
+  corrigida tela a tela e voltava em cada tela nova — são 122 usos de
+  `.sucesso`/`.alerta` em 47 arquivos. O `<Aviso>` é `position: fixed`: fora do
+  fluxo, sempre no campo de visão. Segura no hover (e RECOMEÇA a contagem ao
+  sair, não retoma os últimos ms), fecha no ✕ ou Esc, e tem barra de tempo para
+  o sumiço não parecer aleatório. **Não converta os `.alerta` que DESCREVEM a
+  tela** (banco atrasado em Config, impedimentos da ficha): aquilo se consulta
+  enquanto se trabalha, e flutuar+sumir esconderia o que a pessoa precisa ler.
+  O critério é: respondeu a um clique → `<Aviso>`; explica o que está ali →
+  inline.
+- **Dois controles para a mesma escolha = um deles não decide nada** (v2.75,
+  duas vezes na mesma tela): (1) os botões "+ Triagem" e "+ Entrevista" abriam o
+  MESMO formulário e só mudavam o valor inicial de um campo "Tipo" que
+  continuava editável ali dentro — *"por que tem os dois, se ambos abrem a mesma
+  coisa?"*; (2) o "fechar" da coluna de ações e o "✕ fechar" do painel faziam a
+  mesma coisa. É a regra "um assunto, um controle" (v2.30) aplicada a AÇÃO, não
+  a filtro. Quando sobrar um só, escolha **o mais perto do conteúdo**: o ✕ do
+  painel fica ao lado do que se está lendo; o da coluna estava lá na direita,
+  com o painel já empurrando a linha para longe.
+- **A primitiva de 2 colunas quebra o ALINHAMENTO quando os lados têm alturas
+  diferentes** (v2.75, reprovação do Bruno: *"por que escrever o título duas
+  vezes? o UX está horrível"*): a ficha de entrevista tinha as 4 competências à
+  esquerda e os 4 textos de justificativa à direita, cada lado repetindo os
+  nomes. Além da duplicação, a pergunta de uma competência ocupa 2 linhas e a da
+  outra 1 — então o campo da 2ª aparecia na altura da 3ª, e a pessoa escrevia no
+  lugar errado, **num documento que ela assina**. É a v2.66 numa variação: aquela
+  primitiva serve conteúdo EMPARELHADO, e o par era *nota ↔ justificativa DAQUELA
+  competência*, não "a lista de notas" ao lado de "a lista de textos".
+  Emparelhando de verdade (um bloco por competência), o alinhamento deixa de ser
+  sorte. **Ao ver dois `.map()` sobre a MESMA lista em colunas irmãs, desconfie:
+  quase sempre é um bloco só.**
+- **Tela que existe mas ninguém acha não está entregue** (v2.75, *"cadê a parte
+  onde posso fazer CRUD de mais roteiros?"*): o CRUD de roteiros vive em
+  Configurações desde a v2.66 e **nada apontava para ele** de onde o trabalho
+  acontece. Módulo com tela de configuração própria precisa de atalho a partir
+  da tela de USO. Detalhe que morde: a aba de `Config.jsx` vem do
+  `localStorage` (`rh_config_aba`), não da URL — navegar sem gravar a
+  preferência abre a última aba usada, e o atalho parece não funcionar.
 - **Promessa na TELA sem rota atrás não existe** (v2.74, cobrado pelo Bruno): a
   v2.73 escreveu no formulário *"o currículo pode ser anexado depois, pela ficha
   da pessoa"* — e **não havia rota para isso**. A única de upload era a PÚBLICA,

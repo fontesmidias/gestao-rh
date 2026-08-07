@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { rh as api } from '../api.js'
 import DashPlanilha from './DashPlanilha.jsx'
 import SelectBusca from '../SelectBusca.jsx'
 import FichaEntrevista from './FichaEntrevista.jsx'
+import Aviso from '../Aviso.jsx'
 import { fmtData } from '../fmt.js'
 
 // Módulo de Entrevistas (v2.64) — o degrau que faltava entre "o RH olhou o
@@ -30,6 +32,7 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
   const [form, setForm] = useState(null)
   const [msg, setMsg] = useState(null)
   const [aberta, setAberta] = useState(null)
+  const navegar = useNavigate()
   const [novo, setNovo] = useState(null)
   const [incluirArquivadas, setIncluirArquivadas] = useState(false)
 
@@ -86,11 +89,26 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
   const colunas = [
     { chave: 'pessoa', rotulo: 'Pessoa', ordenavel: true, filtro: 'texto',
       sempreVisivel: true, quebra: true,
+      // ⚠️ CLIQUE MORTO consertado (v2.75, feedback do Bruno: *"quando clico no
+      // nome da pessoa não aparece nada"*). O `onClick` só fazia algo quando
+      // havia `candidato_id` — e quem é TALENTO não tem: é a maioria da lista,
+      // e TODOS os cadastrados na hora pela v2.74. O clique baixava a mão da
+      // pessoa e não acontecia nada: sem erro, sem espera, sem tela nova. É
+      // exatamente o defeito do currículo do Banco de Talentos (v2.54), e a
+      // regra que ficou de lá vale aqui: **o que é clicável tem que fazer
+      // alguma coisa, sempre**.
+      // Agora: com candidato, vai para a ficha dele (a mais completa); sem
+      // candidato, abre a ficha da própria conversa — que é o que existe sobre
+      // essa pessoa neste módulo.
       render: (l) => (
-        <button className="btn-link" title="Abrir a ficha da pessoa"
+        <button className="btn-link"
+                title={l.candidato_id
+                  ? 'Abrir a ficha completa da pessoa'
+                  : 'Abrir a ficha desta conversa'}
                 onClick={(ev) => {
                   ev.stopPropagation()
                   if (l.candidato_id && abrirPessoa) abrirPessoa(l.candidato_id)
+                  else setAberta(aberta === l.id ? null : l.id)
                 }}>{l.pessoa}</button>
       ) },
     { chave: 'vaga', rotulo: 'Vaga', ordenavel: true, filtro: 'lista', quebra: true,
@@ -175,18 +193,41 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
       <header className="rh-topo">
         <h1>Entrevistas</h1>
         <div>
-          {/* O `white-space: nowrap` do rótulo vive no styles.css, na regra
+          {/* UM botão só (v2.75, pergunta do Bruno: *"por que tem o botão
+              triagem e entrevista, se ambos abrem a mesma coisa?"*).
+              Ele estava certo: os dois abriam o MESMO formulário e só mudavam o
+              valor inicial de um campo "Tipo" que continuava editável ali
+              dentro — então o botão escolhido não decidia nada, e havia dois
+              controles para o mesmo assunto (o oposto da regra "um assunto, um
+              controle", v2.30). Quem clicasse em "+ Triagem" e mudasse de ideia
+              trocava no campo; quem clicasse em "+ Entrevista" idem. A escolha
+              real sempre foi o campo — agora ele é o único lugar onde ela é
+              feita, e é o PRIMEIRO do formulário.
+              O `white-space: nowrap` do rótulo vive no styles.css, na regra
               base do botão — não em style inline (v2.64). */}
-          <button className="btn-secundario" onClick={() => setNovo({ tipo: 'triagem' })}>
-            + Triagem
-          </button>{' '}
           <button className="btn-principal" onClick={() => setNovo({ tipo: 'entrevista' })}>
-            + Entrevista
+            + Registrar conversa
+          </button>{' '}
+          {/* Atalho para o CRUD de roteiros (v2.75): a tela mora em
+              Configurações, e quem trabalha aqui não a encontrava. A aba vem do
+              `localStorage`, então grava-se a preferência antes de navegar. */}
+          <button className="btn-secundario"
+                  title="Criar, editar e publicar os roteiros de entrevista e triagem"
+                  onClick={() => {
+                    localStorage.setItem('rh_config_aba', 'roteiros')
+                    navegar('/rh/config')
+                  }}>
+            🗣️ Roteiros
           </button>
         </div>
       </header>
 
-      {msg && <p className={msg.erro ? 'alerta' : 'sucesso'}>{msg.texto}</p>}
+      {/* Aviso FLUTUANTE (v2.75): antes era um `<p>` aqui no topo, e quem
+          clicou num botão do meio ou do fim da lista nunca o via — o print do
+          Bruno mostrava exatamente isso. Ancorado na janela, ele está sempre no
+          campo de visão; segura no hover e fecha no ✕ ou no Esc. */}
+      <Aviso tipo={msg?.erro ? 'erro' : 'ok'} texto={msg?.texto}
+             aoFechar={() => setMsg(null)} />
 
       {novo && (
         <NovaEntrevista inicial={novo} form={form}
@@ -213,10 +254,22 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
           aoMudar: (v) => setIncluirArquivadas(v === 'sim'),
         }]}
         chaveLinha={(l) => l.id}
+        // Só ABRIR aqui (v2.75, pergunta do Bruno: *"por que dois botões
+        // fechar?"*). Quando a ficha está aberta ela já tem o seu "✕ fechar", no
+        // cabeçalho do painel — e aquele é o certo, porque fica ao lado do
+        // conteúdo que se está lendo. Este, na coluna de ações lá na direita,
+        // era um segundo controle para a mesma coisa (regra "um assunto, um
+        // controle", v2.30), e a essa altura o painel já empurrou a linha para
+        // longe. Aberta, a ação vira rótulo desabilitado: o botão SUMIR seria
+        // pior — a coluna encolheria e as linhas dançariam na tela.
         acoesLinha={(l) => (
           <button className="btn-secundario btn-mini"
-                  onClick={() => setAberta(aberta === l.id ? null : l.id)}>
-            {aberta === l.id ? 'fechar' : 'abrir'}
+                  disabled={aberta === l.id}
+                  title={aberta === l.id
+                    ? 'A ficha está aberta abaixo — use o ✕ fechar dela'
+                    : 'Abrir a ficha desta conversa'}
+                  onClick={() => setAberta(l.id)}>
+            {aberta === l.id ? 'aberta ▾' : 'abrir'}
           </button>
         )}
         // O detalhe abre NA LINHA, nunca no fim da página (regra desde a v1.83).
@@ -398,8 +451,14 @@ function NovaEntrevista({ inicial, form, aoFechar, aoCriar, aoErro }) {
       </div>
 
       <div className="rh-grid-2">
+        {/* PRIMEIRO campo, e o único lugar onde a natureza é escolhida (v2.75):
+            as duas são coisas diferentes, não versões curta e longa da mesma —
+            a triagem não tem nota, competência nem âncora (§ 4.1), e a ficha
+            que cada uma abre depois é outra. Por isso a dica diz o que MUDA,
+            não só o nome. */}
         <div className="campo">
-          <span className="rotulo">Tipo</span>
+          <span className="rotulo">O que você vai registrar
+            <span className="dica-inline"> — muda a ficha que se preenche depois</span></span>
           <SelectBusca valor={tipo} aoEscolher={setTipo}>
             <option value="triagem">Triagem (checagem por telefone, sem nota)</option>
             <option value="entrevista">Entrevista (avaliação ancorada)</option>

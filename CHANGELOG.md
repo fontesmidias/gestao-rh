@@ -11,6 +11,99 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.75.0] — 2026-08-07 — O aviso que ninguém via
+
+Cinco reprovações do Bruno usando o Módulo de Entrevistas, todas com print. São
+defeitos de USO — o backend estava certo em todos.
+
+### O aviso aparecia onde a pessoa não estava olhando
+
+> *"esses avisos tem lugares que ele aparece no topo enquanto estamos lá embaixo
+> na tela, ou seja nem aparecem"*
+
+A confirmação era um `<p>` no topo do componente. Quem clicava num botão do meio
+ou do fim da lista **nunca a via**. É a regra da v1.96/v2.47 — *"a mensagem vai
+onde a PESSOA está olhando; o critério é DISTÂNCIA"* — que vinha sendo corrigida
+tela a tela e voltava em cada tela nova. São 122 usos de `.sucesso`/`.alerta` em
+47 arquivos: corrigir caso a caso não escala.
+
+Nasceu o `<Aviso>`: ancorado na JANELA (`position: fixed`), então está sempre no
+campo de visão, qualquer que seja o scroll. Cumpre os quatro pedidos —
+**discreto** (canto inferior direito, fora do caminho da leitura), **tempo de
+ler** (6s sucesso / 10s erro, com barra mostrando o tempo correr), **segura no
+hover** e **fecha no ✕ ou Esc**.
+
+⚠️ **Não substitui `.alerta` inline.** Muitos deles não respondem a ação nenhuma:
+descrevem um ESTADO da tela (o banco atrasado em Config, os impedimentos da
+ficha). Aquilo se consulta enquanto se trabalha — flutuar e sumir esconderia o
+que a pessoa precisa ler. Um responde a clique; o outro explica o que está ali.
+
+### Dois botões para a mesma coisa, duas vezes
+
+> *"por que tem o botão triagem e entrevista, se ambos abrem a mesma coisa?"*
+
+Abriam o MESMO formulário, mudando só o valor inicial de um campo "Tipo" que
+continuava editável ali dentro — o botão escolhido não decidia nada. Virou **"+
+Registrar conversa"**, e o campo Tipo (o primeiro do formulário) é o único lugar
+onde a natureza é escolhida.
+
+> *"por que dois botões fechar?"*
+
+O "fechar" da coluna de ações e o "✕ fechar" do painel faziam a mesma coisa.
+Ficou o do painel, que é o certo: está ao lado do conteúdo que se está lendo. Na
+coluna, a ação agora só ABRE.
+
+### Clique morto no nome da pessoa
+
+> *"quando clico no nome da pessoa não aparece nada"*
+
+O `onClick` só fazia algo com `candidato_id` — e quem é **talento** não tem: é a
+maioria da lista, e todos os cadastrados na hora pela v2.74. O clique não fazia
+nada: sem erro, sem espera, sem tela. É o defeito do currículo do Banco de
+Talentos (v2.54), e a regra de lá vale aqui: **o que é clicável tem que fazer
+alguma coisa, sempre**. Agora, sem candidato, abre a ficha da própria conversa.
+
+### O título escrito duas vezes
+
+> *"por que escrever o título duas vezes? basta escrever cada título 1x e
+> estarem alinhadas as notas e o campo de escrita. o UX está horrível"*
+
+Eram DUAS listas paralelas — as 4 competências à esquerda, os 4 textos à direita
+—, cada uma repetindo os nomes. Pior que a repetição: **nada garantia
+alinhamento**. A pergunta de uma competência ocupa 2 linhas e a da outra 1, então
+o campo da 2ª aparecia na altura da 3ª — e a pessoa escrevia a justificativa no
+lugar errado, num documento que ela assina.
+
+É a armadilha da v2.66 numa variação: a primitiva de 2 colunas serve conteúdo
+EMPARELHADO, e o par aqui é *nota ↔ justificativa daquela competência*, não "a
+lista de notas" ao lado de "a lista de textos". Agora é **um bloco por
+competência**: nome uma vez, pergunta, notas e justificativa juntas. Composição
+copiada da referência canônica (`FormularioAvaliacao.jsx`), como manda a v2.65.
+
+### O CRUD de roteiros que ninguém achava
+
+> *"cadê a parte onde posso fazer CRUD de mais roteiros?"*
+
+A tela sempre existiu (Configurações → 🗣️ Roteiros de entrevista), mas **nada
+apontava para ela** — e é conduzindo a entrevista que se percebe que o roteiro
+precisa mudar. Dois atalhos: o botão 🗣️ Roteiros no topo da lista e o chip do
+roteiro na ficha, agora clicável. A aba vem do `localStorage`, não da URL, então
+o atalho grava a preferência antes de navegar — sem isso abriria a última aba
+usada e pareceria não funcionar.
+
+### Portões
+
+Backend: testes verdes, smoke **15/15**. E2E: **26/26**. Ficha conferida na tela
+renderizada: 4 competências, **zero nomes duplicados**, chips e campo no mesmo
+bloco, estouro horizontal 0.
+
+*Nota sobre a suíte E2E:* uma execução acusou falhas no login — era o **rate
+limit** acumulado por rodar a suíte várias vezes seguidas (o limite é em
+memória, some ao reiniciar a API), não regressão. Armadilha já registrada na
+v2.60.
+
+---
+
 ## [2.74.0] — 2026-08-07 — A pessoa que não está na lista
 
 Três pedidos do Bruno sobre o formulário de nova entrevista, com prints, mais um
