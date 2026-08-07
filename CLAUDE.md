@@ -88,6 +88,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Nada que CRIA mora em bloco que se RECOLHE** (v2.76.1, reprovação do Bruno:
+  *"você tirou os botões de cadastro do banco de talentos, como assim?"*): o
+  "＋ Cadastrar talento" era passado em `acoesFiltro` e renderizado DENTRO do
+  card de filtros; quando a v2.76 recolheu esse card no celular, ele sumiu da
+  tela **sem nunca ter sido removido do código**. Filtrar refina o que se vê;
+  agir cria e leva embora — naturezas diferentes, cards diferentes
+  (`.dash-acoes`). Ao recolher qualquer bloco, liste o que está dentro dele.
+- **`body.scrollWidth` NÃO detecta tudo que vaza pela lateral** (v2.76.1): a
+  régua de largura dizia zero enquanto o Bruno via a ficha *"extrapolando as
+  laterais da tela mobile"* — o vazamento era de um elemento DENTRO do painel de
+  detalhe (`right=471` numa viewport de 390px), e overflow contido não alarga a
+  página. Meça a **borda direita** dos elementos
+  (`getBoundingClientRect().right > innerWidth`), com os painéis ABERTOS. Causa
+  daquele caso: `.dash-detalhe` usa `width: 100cqw`, certo no modo TABELA (o
+  container rola de lado) e errado no modo CARD, onde mede algo mais largo que a
+  tela. **Ordem para ganhar espaço vertical**: compactar espaçamento → recolher
+  o que é CONSULTA (filtros, texto explicativo) → encurtar rótulo
+  (`.so-desktop`) → só então esconder. **Nunca esconder ação.**
 - **No celular, mede-se a ALTURA DO CABEÇALHO — não só a largura** (v2.76,
   *"a navegação está feia demais para mobile, horrível"*): as réguas existentes
   mediam estouro lateral e altura de LINHA, e nenhuma via o defeito real —

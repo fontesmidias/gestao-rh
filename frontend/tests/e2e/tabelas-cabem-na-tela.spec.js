@@ -253,3 +253,68 @@ test('celular: a lista começa antes de 600px (cabeçalho não engole a tela)', 
     + problemas.join('\n'))
     .toEqual([])
 })
+
+// --------------------------------------------------------------------------
+// CELULAR: nada vaza pela borda — nem DENTRO do painel aberto (v2.76.1)
+// --------------------------------------------------------------------------
+// O teste de largura media `document.body.scrollWidth`, e por isso NÃO pegou o
+// defeito que o Bruno viu: *"o ajuste que você fez na página de entrevistas está
+// extrapolando as laterais da tela mobile"*. O `body` não rolava — quem vazava
+// era um elemento DENTRO do painel de detalhe (o "✕ fechar", medido em
+// `right=471` numa viewport de 390px), e o overflow ficava contido sem alargar
+// a página.
+//
+// A causa, confirmada por MUTAÇÃO (devolvê-la faz este teste reprovar):
+// `.dash-detalhe` usa `width: 100cqw` — certo no modo TABELA, onde o container
+// rola de lado e o painel precisa ficar preso à parte visível; errado no modo
+// CARD, onde mede um container mais largo que a tela.
+//
+// ⚠️ O `flex-wrap` acrescentado ao `.rh-conferencia-topo` na mesma leva NÃO era
+// a causa: removê-lo mantém este teste verde. Fica porque é a regra global da
+// v2.60 (flex sem wrap vaza) e protege contra um botão a mais no futuro — mas
+// não se atribua a ele o conserto deste defeito.
+//
+// Mede a borda DIREITA de cada elemento, que é o que denuncia conteúdo fora da
+// vista mesmo quando a página inteira não rola. 320px entra de propósito: é o
+// celular pequeno onde chip e botão longos aparecem primeiro.
+for (const largura of [320, 390]) {
+  test(`celular ${largura}px: nada vaza pela borda, nem na ficha aberta`, async ({ page }) => {
+    await page.setViewportSize({ width: largura, height: 844 })
+    await entrar(page)
+
+    const problemas = []
+    for (const [nome, rota] of TELAS) {
+      await page.goto(rota)
+      await page.waitForTimeout(1000)
+      // Abre o primeiro detalhe, se a tela tiver — é lá que o defeito morava.
+      const abrir = page.locator('.dash-tabela tbody button', { hasText: /^abrir$/ }).first()
+      if (await abrir.count()) {
+        await abrir.click({ timeout: 5000 }).catch(() => {})
+        await page.waitForTimeout(1200)
+      }
+      const vazando = await page.evaluate(() => (
+        [...document.querySelectorAll('.rh-painel *')]
+          .filter((e) => {
+            const r = e.getBoundingClientRect()
+            // Ignora o que tem tamanho zero (escondido) e o que rola por
+            // desenho (`.dash-scroll` contém a própria rolagem).
+            if (r.width === 0 || r.height === 0) return false
+            if (e.closest('.dash-scroll') && e.tagName === 'TABLE') return false
+            return r.right > window.innerWidth + 1
+          })
+          .slice(0, 3)
+          .map((e) => `${e.tagName}.${(e.className || '').toString().slice(0, 24)} `
+            + `(termina em ${Math.round(e.getBoundingClientRect().right)}px)`)
+      ))
+      for (const v of vazando) problemas.push(`${nome}: ${v}`)
+    }
+
+    expect(problemas,
+      'Algo passa da borda direita no celular. O `body` pode não rolar e o '
+      + 'defeito existir mesmo assim — é conteúdo dentro de um contêiner. '
+      + 'Costuma ser (a) `display: flex` sem `flex-wrap`, (b) `width: 100cqw` '
+      + 'herdado do modo tabela, ou (c) chip/botão com `nowrap` sem teto.\n'
+      + problemas.join('\n'))
+      .toEqual([])
+  })
+}

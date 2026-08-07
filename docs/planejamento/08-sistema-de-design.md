@@ -683,6 +683,29 @@ nova nasce certa sem ninguém lembrar delas:
 4. **O título não precisa de três linhas de respiro.** No celular cada pixel
    acima do conteúdo é rolagem que a pessoa paga.
 
+### Duas correções da v2.76.1 (reprovadas pelo Bruno em uso)
+
+**1. Ação NÃO mora no card de filtros.** A v2.76 recolheu o card de filtros no
+celular — e o botão "Cadastrar talento", que morava lá dentro (`acoesFiltro`),
+**sumiu da tela** sem nunca ter sido removido do código. *"Você tirou os botões
+de cadastro do banco de talentos, como assim?"*
+
+Filtrar e AGIR são naturezas diferentes: uma refina o que se vê, a outra cria e
+exporta. As ações têm card próprio (`.dash-acoes`), sempre visível. **Regra
+geral: nada que CRIA pode viver dentro de um bloco que se recolhe.**
+
+**2. `body.scrollWidth` não detecta tudo que vaza.** *"está extrapolando as
+laterais da tela mobile"* — e a régua de largura dizia zero. O vazamento era de
+um elemento DENTRO do painel de detalhe (`right=471` numa viewport de 390px), e
+overflow contido não alarga a página. A causa: `.dash-detalhe` usa
+`width: 100cqw`, certo no modo TABELA (o container rola de lado) e errado no
+modo CARD. **Meça a borda direita dos elementos, não o scroll do body.**
+
+**Ordem para ganhar espaço** (do menos ao mais destrutivo): compactar
+espaçamento → recolher o que é consulta (filtros, texto explicativo) →
+encurtar rótulo (`.so-desktop`) → só então esconder algo. **Nunca esconder
+ação.**
+
 **Como conferir:** abra a tela em 390px e meça onde começa a primeira linha —
 `document.querySelector('.dash-tabela tbody tr').getBoundingClientRect().top +
 scrollY`. Acima de ~600px, algo no cabeçalho está grande demais.

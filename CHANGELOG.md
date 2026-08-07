@@ -11,6 +11,67 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.76.1] — 2026-08-07 — O botão que sumiu junto com os filtros
+
+Correção de **duas regressões que a v2.76 causou** — as duas apontadas pelo
+Bruno usando o sistema em produção.
+
+### O botão de cadastro não sumiu: eu o escondi
+
+> *"Você tirou os botões de cadastro de novo banco de talentos. Como assim?"*
+> *"Não quero que os botões fiquem no mesmo card que os filtros, pois os botões
+> merecem ter seus próprios cards."*
+
+Ele estava certo nas duas frases, e é o mesmo defeito. O "＋ Cadastrar talento"
+morava **dentro do card de filtros** (`acoesFiltro` → `.dash-filtros-acoes`).
+Quando a v2.76 recolheu esse card no celular, o botão foi junto — **sumiu da
+tela sem nunca ter sido removido do código**.
+
+Filtrar e AGIR são naturezas diferentes: uma refina o que se vê, a outra cria e
+exporta. As ações ganharam card próprio (`.dash-acoes`), sempre visível.
+**Regra que fica: nada que CRIA pode viver dentro de um bloco que se recolhe.**
+
+*Sobre os filtros:* nenhum foi removido — todos continuam lá, recolhidos no
+celular com um contador dos que estão ativos. No desktop nada mudou.
+
+### A régua de largura não via o vazamento
+
+> *"O ajuste que você fez na página de entrevistas está extrapolando as laterais
+> da tela mobile."*
+
+O teste de largura media `document.body.scrollWidth` e dizia **zero**. O
+vazamento era de um elemento DENTRO do painel de detalhe — o "✕ fechar" medido
+em `right=471` numa viewport de 390px — e overflow contido não alarga a página.
+
+A causa: `.dash-detalhe` usa `width: 100cqw`, correto no modo TABELA (o container
+rola de lado e o painel precisa ficar preso à parte visível) e **errado no modo
+CARD**, onde mede um container mais largo que a tela.
+
+Teste novo mede a **borda direita** de cada elemento, em 320px e 390px, com o
+painel de detalhe ABERTO. Validado por mutação: devolver o `100cqw` faz ele
+reprovar nomeando o elemento e onde ele termina.
+
+**Uma mutação passou verde e mudou o texto do commit:** o `flex-wrap` que
+acrescentei ao `.rh-conferencia-topo` na mesma leva **não era a causa** —
+removê-lo mantém o teste verde. Ele fica porque é a regra global da v2.60, mas
+o comentário no teste diz explicitamente para não lhe atribuir o conserto.
+
+### Espaço vertical: a ordem para ganhar
+
+O card de ações novo custou ~130px e devolveu a lista para fora da primeira tela
+em 5 telas. Resolvido sem esconder nada: card sem moldura no celular, texto
+explicativo cortado em 2 linhas (abre ao tocar) e `⬇ Exportar CSV` virando
+`⬇ CSV` via `.so-desktop`, com a frase inteira no `title`.
+
+A ordem ficou registrada na folha: **compactar espaçamento → recolher o que é
+consulta → encurtar rótulo → só então esconder. Nunca esconder ação.**
+
+### Portões
+
+E2E **29/29** (dois testes novos), backend verde, smoke **15/15**.
+
+---
+
 ## [2.76.0] — 2026-08-07 — A lista que começava fora da tela
 
 > *"a navegação está feia demais para mobile, horrível. veja o print"* — com
