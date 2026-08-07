@@ -89,8 +89,15 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
+          # `test_api_front_existe` (v2.73): varre o JSX e reprova chamada a
+          # `api.x()` que não existe no `api.js`. Nasceu de um defeito que o
+          # Bruno viu em produção — `api.talentos()` (a certa é `listarTalentos`)
+          # derrubava a tela inteira de Entrevistas no ErrorBoundary, e o
+          # `.catch(() => {})` ao lado não protegia: `undefined()` é TypeError
+          # SÍNCRONO. Stdlib pura, lê arquivos, roda em segundos.
           for t in test_design_system test_upload_multipart test_versao test_nomes \
-                   test_migration_insert_cru test_anti_prompt_injection; do
+                   test_migration_insert_cru test_anti_prompt_injection \
+                   test_api_front_existe; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
@@ -214,7 +221,8 @@ jobs:
                    test_upload_fecha_spool \
                    test_entrevistas test_roteiros_entrevista \
                    test_entrevista_documentos test_entrevista_arquivamento \
-                   test_entrevista_anexo test_lixeira_restaura; do
+                   test_entrevista_anexo test_lixeira_restaura \
+                   test_talento_cadastro_rh; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

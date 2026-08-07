@@ -35,13 +35,26 @@ class Talento(Base):
     cidade: Mapped[str | None] = mapped_column(String(120))
     escolaridade: Mapped[str | None] = mapped_column(String(60))
     resumo: Mapped[str | None] = mapped_column(Text)   # experiência/apresentação
-    origem: Mapped[str | None] = mapped_column(String(80))  # como soube da empresa
+    # PROCEDÊNCIA do cadastro: "Importação (Forms)", "Currículo por e-mail",
+    # "Indicação"… (o comentário antigo dizia "como soube da empresa", mas o uso
+    # real do código sempre foi este — a importação grava a fonte aqui).
+    origem: Mapped[str | None] = mapped_column(String(80))
     # efetivo | intermitente | tanto_faz (string, não enum — simples e suficiente)
     tipo_contratacao: Mapped[str | None] = mapped_column(String(20))
     ja_trabalhou_funcao: Mapped[bool | None] = mapped_column(Boolean)
     recebe_seguro_desemprego: Mapped[bool | None] = mapped_column(Boolean)
-    # aceite LGPD (obrigatório no formulário) — carimbo é a prova do consentimento
+    # aceite LGPD (obrigatório no formulário) — carimbo é a prova do consentimento.
+    # ⚠️ NULO no cadastro FEITO PELO RH (v2.73): a pessoa não estava na tela para
+    # marcar nada, e gravar o carimbo ali registraria como aceite do titular algo
+    # que ele não fez. Quem assumiu o cadastro fica nos dois campos abaixo, e a
+    # tela mostra "sem consentimento registrado" — o registro descreve o ato
+    # REAL, nunca a versão conveniente (precedente da `AutorizacaoEquipe`).
     consentimento_lgpd_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Quem cadastrou à mão (v2.73). `_nome` é SNAPSHOT: se o usuário do RH for
+    # removido, o responsável pelo cadastro não some junto (padrão da `Anotacao`).
+    cadastrado_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("usuario_rh.id", ondelete="SET NULL"))
+    cadastrado_por_nome: Mapped[str | None] = mapped_column(String(200))
     # currículo (opcional): arquivo original guardado no MinIO, servido como veio
     curriculo_key: Mapped[str | None] = mapped_column(String(300))
     curriculo_nome: Mapped[str | None] = mapped_column(String(200))

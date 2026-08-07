@@ -11,6 +11,76 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.73.0] — 2026-08-07 — A porta que não existia
+
+O RH pode **cadastrar um talento à mão**, pelo painel. Era o último item do § 13
+do Módulo de Entrevistas: o pedido original falava em "currículo que chega por
+e-mail", mas o problema real era a porta ausente — o Banco de Talentos tinha
+duas entradas (formulário público e importação de planilha do Forms) e **nenhuma
+servia ao RH**. O currículo que chegava por e-mail ou indicação ficava de fora,
+ou obrigava a pedir que a pessoa preenchesse o formulário de novo.
+
+### Consentimento não se finge
+
+No formulário público a pessoa marca "li e concordo" e o `consentimento_lgpd_em`
+é carimbado; na importação, o carimbo vem da coluna da planilha. **Quando o RH
+cadastra à mão, ninguém marcou nada.**
+
+Decisão do Bruno: registrar a **origem**, sem fingir aceite. O campo fica NULO,
+`cadastrado_por_id`/`_nome` guardam quem assumiu (nome em SNAPSHOT, como a
+`Anotacao` do CRM), e a ficha diz *"sem aceite — cadastrado por Fulano"* em vez
+de um travessão que parece dado faltando. É o precedente da `AutorizacaoEquipe`
+(v1.42) e do manifesto de admissão assistida (v2.56): **o registro descreve o ato
+REAL, nunca a versão conveniente**.
+
+A tela avisa disso **antes** de cadastrar, não depois — e sugere mandar o link do
+Banco de Talentos quando o aceite dela importa.
+
+A mutação que carimba o consentimento é a mais importante do teste novo: ela
+passaria em qualquer revisão de código (o cadastro funciona igual, a tela fica
+até mais limpa) e o que se perde é a verdade de um registro de LGPD.
+
+### Duplicata avisa, não funde
+
+409 dizendo **quem** já existe, com botão para abrir a ficha da pessoa — "já
+existe" sem nome faz o RH procurar na lista (regra da v2.55). Mesma regra de
+duplicidade da importação de planilha (e-mail; ou nome+telefone, comparando só os
+dígitos): duas portas para o mesmo banco não podem discordar sobre o que é a
+mesma pessoa. `forcar` existe para o homônimo real e fica na auditoria.
+
+É a regra da casa para equivalência assistida — jornadas, incidência de
+benefícios e cargos do Tirvu todos propõem e deixam o humano confirmar.
+
+### E um defeito de produção, relatado no meio da leva
+
+> *"a msg abaixo aparece, no módulo de entrevistas quando clico em triagem ou
+> entrevista — 😕 Algo deu errado ao abrir esta página"*
+
+Era o ErrorBoundary. O formulário de nova entrevista chamava **`api.talentos()`,
+uma função que nunca existiu** (a certa é `listarTalentos`). O `.catch(() => {})`
+ao lado não protegia nada: `undefined()` é `TypeError` **síncrono**, estourado
+antes de existir promessa para capturar — e exceção de render apaga a tela
+inteira. Mesma família da `prop` inventada no `SelectBusca` (v2.64) e da classe
+CSS fantasma (v2.25): o JSX fica plausível e o build passa.
+
+**O defeito tinha uma segunda metade, mais silenciosa.** As três rotas daquele
+`useEffect` devolvem lista pura (`-> list[dict]`), mas o código lia
+`r.itens || r.vagas || []` — então, mesmo sem o `TypeError`, os seletores de
+pessoa, vaga e candidato abririam **vazios, sem erro nenhum**. Corrigir só o nome
+deixaria dois terços do defeito de pé. Medido depois do conserto: 18 pessoas e
+3 vagas nos seletores.
+
+`test_api_front_existe.py` varre todo o JSX e reprova chamada a `api.x()`
+inexistente. A varredura completa não achou nenhuma outra.
+
+### Portões
+
+Backend: 15 testes verdes, smoke **15/15**. E2E: **26/26**. Migration
+`f1a3c5e7b9d2` executada up → down → up. 4 mutações no cadastro e 1 no defeito do
+front, todas reprovaram. Fluxo conferido na tela renderizada.
+
+---
+
 ## [2.72.3] — 2026-08-07 — O chip que esticava a tabela
 
 O CI da v2.72.2 **reprovou** — a régua de layout (`tabelas-cabem-na-tela`)

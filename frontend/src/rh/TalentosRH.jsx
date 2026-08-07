@@ -6,6 +6,7 @@ import MemoriaPessoa from './MemoriaPessoa.jsx'
 import TelemetriaPessoa from './TelemetriaPessoa.jsx'
 import Modal from '../Modal.jsx'
 import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
+import NovoTalento from './NovoTalento.jsx'
 
 const STATUS = {
   novo: ['Novo', '#5bc0de'],
@@ -39,6 +40,8 @@ export default function TalentosRH({ aoAbrir }) {
   // {blob, nome, talento} — currículo exibido na tela, amarrado ao talento
   // para não reaparecer no painel de outra pessoa.
   const [doc, setDoc] = useState(null)
+  // formulário de cadastro à mão aberto (v2.73)
+  const [cadastrando, setCadastrando] = useState(false)
 
   const recarregar = () => api.listarTalentos({}).then(setTalentos).catch(() => setTalentos([]))
   useEffect(() => { recarregar() }, [])
@@ -298,8 +301,29 @@ export default function TalentosRH({ aoAbrir }) {
 
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
+      {/* O formulário abre ACIMA da tabela e some ao terminar — a regra da casa
+          é editar/criar PERTO, sem tela nova (sistema de design, item 2). */}
+      {cadastrando && (
+        <NovoTalento
+          aoFechar={() => setCadastrando(false)}
+          aoAbrirExistente={(id) => { setCadastrando(false); setAberto(id) }}
+          aoCriar={(t) => {
+            setCadastrando(false)
+            setMsg({ tipo: 'ok', texto: `${t.nome} entrou no Banco de Talentos. `
+              + 'O consentimento LGPD não foi registrado (cadastro pelo RH) — '
+              + 'consta na ficha.' })
+            recarregar()
+            setAberto(t.id)   // abre a ficha: o currículo se anexa por lá
+          }} />
+      )}
+
       {!talentos ? <p>Carregando…</p> : (
         <DashPlanilha id="talentos" colunas={colunas} dados={talentos} cards={cards}
+                      acoesFiltro={
+                        <button className="btn-principal btn-mini"
+                                onClick={() => setCadastrando(true)}>
+                          ＋ Cadastrar talento
+                        </button>}
                       acoesLinha={acoesLinha} acoesMassa={acoesMassa}
                       linhaExpandida={(t) => (aberto === t.id
                         ? <FichaTalento t={t} verCurriculo={verCurriculo}
@@ -361,8 +385,18 @@ function FichaTalento({ t, verCurriculo, doc, fecharDoc }) {
                 : <button className="btn-link" onClick={() => verCurriculo(t)}>
                     📎 {t.curriculo_nome || 'abrir currículo'}</button>)
             : 'não enviou'}</Campo>
+        {/* Três estados, não dois (v2.73). O travessão sozinho não distingue
+            "não temos o dado" de "não houve aceite, e sabemos por quê" — é a
+            lição do terceiro estado do creche (v2.27/v2.54). Quem foi cadastrado
+            pelo RH não aceitou nada, e a ficha DIZ isso com o nome de quem
+            assumiu, em vez de deixar um campo vazio que parece descuido. */}
         <Campo rotulo="Consentimento LGPD">
-          {t.consentimento_lgpd_em ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}` : null}</Campo>
+          {t.consentimento_lgpd_em
+            ? `aceito em ${fmtDataHora(t.consentimento_lgpd_em)}`
+            : (t.cadastrado_por_nome
+                ? <span title="A pessoa não estava na tela para aceitar os termos. Para ter o aceite dela, envie o link do Banco de Talentos.">
+                    sem aceite — cadastrado por {t.cadastrado_por_nome}</span>
+                : null)}</Campo>
         <Campo rotulo="Cadastro">{fmtDataHora(t.criado_em)}</Campo>
       </div>
       {/* O currículo renderiza AQUI, na ficha, e não em aba nova (v2.33) — é o
