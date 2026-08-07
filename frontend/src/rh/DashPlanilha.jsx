@@ -49,6 +49,20 @@ export default function DashPlanilha({
     return new Set(colunas.filter((c) => c.oculta).map((c) => c.chave))
   })
   const [configAberta, setConfigAberta] = useState(false)
+  // Celular = o mesmo limiar do bloco `@media (max-width: 760px)` do
+  // styles.css. Precisa vir do JS porque um `<details>` fechado não RENDERIZA o
+  // conteúdo — CSS nenhum reabre isso (v2.76.2). `matchMedia` acompanha o giro
+  // do aparelho e o redimensionamento da janela; sem o listener, quem abrisse a
+  // tela no celular e girasse continuaria com os filtros escondidos num
+  // desktop.
+  const [ehCelular, setEhCelular] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 760px)')
+    const ao = (e) => setEhCelular(e.matches)
+    mq.addEventListener('change', ao)
+    return () => mq.removeEventListener('change', ao)
+  }, [])
 
   const visiveis = colunas.filter((c) => !ocultas.has(c.chave))
   const valorDe = (linha, col) => (col.valor ? col.valor(linha) : linha[col.chave])
@@ -205,7 +219,13 @@ export default function DashPlanilha({
           a LISTA; filtrar é o passo seguinte, e quem quer filtrar toca uma vez.
           No desktop nada muda: o `<summary>` some e o conteúdo fica aberto (o
           `open` do details é ignorado pelo CSS que o neutraliza lá). */}
-      <details className="dash-filtros-caixa">
+      {/* ⚠️ `open={!ehCelular}`: um `<details>` FECHADO não renderiza o conteúdo,
+          e `display: contents` no CSS não muda isso — o esconder é do
+          NAVEGADOR, não do estilo. Foi o que sumiu com a barra de filtros no
+          DESKTOP na v2.76 (*"não voltaram os filtros de select com busca"*):
+          eu neutralizei a caixa no CSS achando que bastava, e no desktop os 9
+          filtros continuaram fechados. O estado tem que nascer certo no JSX. */}
+      <details className="dash-filtros-caixa" open={!ehCelular}>
         <summary className="dash-filtros-resumo">
           <span>Filtrar e exportar</span>
           {qtdFiltrosAtivos > 0 && (

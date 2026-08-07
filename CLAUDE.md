@@ -88,6 +88,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`<details>` FECHADO não renderiza o conteúdo — CSS não reabre** (v2.76.2,
+  *"não voltaram os filtros de select com busca"*): ao recolher a barra de
+  filtros no celular, neutralizei a caixa no CSS (`display: contents` +
+  `summary` escondido) achando que no desktop tudo voltaria ao normal. Não
+  volta: quem esconde o conteúdo de um `details` fechado é o NAVEGADOR, e os 9
+  filtros ficaram no DOM com altura zero. O estado tem que nascer certo no JSX
+  (`open={!ehCelular}`, com `matchMedia` + listener para o giro do aparelho).
+  **Corolário para o teste**: afirmar que o elemento EXISTE não basta — meça
+  `getBoundingClientRect().height > 0`. E régua de layout apontada só para
+  celular não vê regressão de desktop; as três que existiam mediam 390px.
 - **Nada que CRIA mora em bloco que se RECOLHE** (v2.76.1, reprovação do Bruno:
   *"você tirou os botões de cadastro do banco de talentos, como assim?"*): o
   "＋ Cadastrar talento" era passado em `acoesFiltro` e renderizado DENTRO do

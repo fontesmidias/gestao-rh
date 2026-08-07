@@ -318,3 +318,58 @@ for (const largura of [320, 390]) {
       .toEqual([])
   })
 }
+
+// --------------------------------------------------------------------------
+// DESKTOP: a barra de filtros está ABERTA e as ações estão à vista (v2.76.2)
+// --------------------------------------------------------------------------
+// Duas regressões que a v2.76/v2.76.1 causaram, ambas vistas pelo Bruno em
+// produção — e nenhuma das réguas existentes pegava, porque todas mediam
+// CELULAR:
+//
+//   *"não voltaram os filtros de select com busca, quero que volte para todos"*
+//   *"você tirou os botões de cadastro do banco de talentos"*
+//
+// A causa do primeiro é sutil e vale registrar: um `<details>` FECHADO não
+// renderiza o conteúdo, e `display: contents` no CSS não muda isso — quem
+// esconde é o NAVEGADOR, não o estilo. Neutralizar a caixa na folha não bastou;
+// o `open` tem que nascer certo no JSX (`open={!ehCelular}`).
+//
+// O segundo é o botão de CRIAR: ele morava dentro do card de filtros e sumiu
+// junto quando o card passou a recolher. Card próprio, sempre visível.
+test('desktop: filtros abertos e ações visíveis em todas as listas', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await entrar(page)
+
+  const problemas = []
+  for (const [nome, rota] of TELAS) {
+    await page.goto(rota)
+    await page.waitForTimeout(1100)
+    const m = await page.evaluate(() => {
+      const cx = document.querySelector('.dash-filtros-caixa')
+      const filtros = [...document.querySelectorAll('.dash-filtro')]
+      const acoes = document.querySelector('.dash-acoes')
+      const visivel = (el) => !!el && el.getBoundingClientRect().height > 0
+      return {
+        temDash: !!document.querySelector('.dash-tabela'),
+        caixaFechada: cx ? cx.open === false : false,
+        qtdFiltros: filtros.length,
+        // Filtro que existe no DOM mas tem altura zero está escondido — foi
+        // exatamente o sintoma (os 9 filtros continuavam lá, invisíveis).
+        filtrosVisiveis: filtros.filter(visivel).length,
+        acoesVisiveis: visivel(acoes),
+      }
+    })
+    if (!m.temDash) continue
+    if (m.caixaFechada) problemas.push(`${nome}: a barra de filtros está FECHADA no desktop`)
+    if (m.qtdFiltros > 0 && m.filtrosVisiveis === 0) {
+      problemas.push(`${nome}: ${m.qtdFiltros} filtros no DOM, nenhum visível`)
+    }
+    if (!m.acoesVisiveis) problemas.push(`${nome}: o card de ações não está visível`)
+  }
+
+  expect(problemas,
+    'No desktop os filtros têm que estar ABERTOS e as ações à vista. '
+    + 'Lembre: `<details>` fechado NÃO renderiza o conteúdo — CSS não reabre '
+    + 'isso, o `open` precisa nascer certo no JSX.\n' + problemas.join('\n'))
+    .toEqual([])
+})
