@@ -11,6 +11,56 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.72.1] — 2026-08-06 — O smoke entra no CI
+
+Resposta do Bruno à pergunta deixada em aberto na v2.72 (*"o `smoke_test` deve
+entrar no CI?"*): **sim**.
+
+O smoke é o portão mais completo do projeto — 15 etapas ponta a ponta: cadastro
+pelo RH → link mágico → autosave da ficha → declaração de veracidade → upload de
+documento (imagem vira PDF no MinIO) → conclusão → aprovação → dossiê. É o único
+teste que percorre o caminho INTEIRO do candidato; os demais cobrem uma fatia
+cada. E era justamente o que ninguém rodava.
+
+### Os dois defeitos que o impediam de rodar lá — os mesmos de sempre
+
+Não bastou acrescentar a linha no `ci.yml`. Rodando-o **dentro do container da
+API**, como o pipeline faz, apareceram os dois de sempre:
+
+1. **`os.environ.update` sobrescrevia a `DATABASE_URL`** — o smoke ia sempre ao
+   banco local, e dentro do container isso o mandaria para um
+   `localhost:55432` que não existe ali. Virou `setdefault`, como o
+   `test_match_persistencia` na v2.72 e como todo o resto do projeto.
+2. **A senha do admin era LITERAL na linha do login** — a armadilha da v2.71,
+   pela quarta vez nesta contagem. No CI o admin nasce com a senha do `.env` do
+   job.
+
+O erro do segundo apareceu **exatamente como a mensagem nova prometia**, e é a
+diferença que ela existe para fazer:
+
+```
+AssertionError: login falhou (401): confira RH_ADMIN_EMAIL/RH_ADMIN_PASSWORD
+— `criar_admin_inicial` só cria o admin com a tabela VAZIA...
+```
+
+Não foi um `KeyError: 'token'` num dict.
+
+### Verificado como o CI faz, não como é conveniente
+
+Rodado **dentro do `deploy-api-1`**, contra um Postgres e um MinIO recém-criados
+na rede da stack, com a senha do job (`senha-ci-12345678`): **15/15**. E de novo
+no mesmo banco, para provar idempotência: **15/15**. Também segue verde na
+máquina de quem desenvolve, com os padrões — os dois ambientes, não um.
+
+### Passo próprio, não mais uma linha no laço
+
+O smoke leva mais que todos os outros testes juntos. Num `for` compartilhado,
+uma falha dele viraria uma linha perdida no meio do log; em passo próprio, o
+GitHub mostra de cara qual portão caiu. Fica **depois** dos testes rápidos e
+**antes** do Playwright: falha cedo, poupa os minutos de navegador.
+
+---
+
 ## [2.72.0] — 2026-08-06 — O teste que ninguém rodava
 
 Fecha a dívida do **Módulo de Entrevistas** — as quatro levas (v2.64 → v2.68)
