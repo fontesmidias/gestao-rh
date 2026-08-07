@@ -273,6 +273,13 @@ a { color: var(--verde-escuro); }
    desktop por causa de um ajuste que é do celular. */
 .dash-filtros-caixa { display: contents; }
 .dash-filtros-resumo { display: none; }
+/* AÇÕES em card próprio (v2.76.1): criar, exportar e escolher colunas. Não
+   moram no card de filtros — filtrar refina o que se vê; agir cria e leva
+   embora. Além da natureza diferente, o card de filtros se RECOLHE no celular,
+   e um botão de criar dentro dele desaparece junto (foi o que escondeu o
+   "Cadastrar talento" na v2.76). */
+.dash-acoes { display: flex; flex-wrap: wrap; align-items: center;
+              gap: var(--esp-2); margin-bottom: var(--esp-2); }
 .dash-filtro { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
 .dash-filtro-rot { font-size: var(--fs-mini); font-weight: 600; color: var(--cinza-txt);
                    text-transform: uppercase; letter-spacing: .02em;
@@ -1812,8 +1819,15 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 /* Conferência de um envio: documento de um lado, campos do outro. No celular
    as duas colunas viram uma só (o RH também confere pelo telefone). */
 .rh-conferencia { padding: 1.1rem 1.2rem 1.2rem; }
+/* `flex-wrap` + `min-width: 0` no lado do texto: sem os dois, o "✕ fechar" era
+   empurrado para FORA da tela no celular (medido: `right=471` numa viewport de
+   390px). O flex prefere estourar o contêiner a quebrar a linha, e o bloco de
+   título/chips usa o tamanho do CONTEÚDO como piso — a pegadinha clássica que a
+   v2.60 promoveu a regra global e que este contêiner não herdou. */
 .rh-conferencia-topo { display: flex; justify-content: space-between;
-                       align-items: flex-start; gap: 1rem; margin-bottom: .9rem; }
+                       align-items: flex-start; gap: 1rem; margin-bottom: .9rem;
+                       flex-wrap: wrap; }
+.rh-conferencia-topo > *:first-child { min-width: 0; flex: 1 1 12rem; }
 .rh-conferencia-topo h3 { margin: 0 0 .2rem; font-size: 1.05rem; }
 .rh-conferencia-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
                         gap: 1.4rem; align-items: start; }
@@ -2227,9 +2241,80 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
     flex: 1 1 0; min-width: 7rem; padding: .7rem .6rem; font-size: .88rem;
   }
 
+  /* 5. O PAINEL DE DETALHE NÃO HERDA A LARGURA DA TABELA.
+        A regra `width: 100cqw` do `.dash-detalhe` existe para o modo TABELA,
+        onde o container rola de lado e o painel precisa ficar preso à parte
+        visível. No modo CARD não há rolagem lateral — e ali o `100cqw` mede um
+        container mais largo que a tela, então a ficha aberta VAZAVA pela
+        direita (medido em 390px: `right=471`, ~80px fora da vista).
+        O `body.scrollWidth` não acusava, porque o vazamento é de um elemento
+        DENTRO do painel, não da página — foi por isso que a régua de largura
+        não pegou. `auto` devolve a largura natural do card, que já é a da tela. */
+  .dash-tabela tr.dash-detalhe > td > * {
+    position: static; width: auto; max-width: 100%;
+  }
+  /* Botão dentro da ficha aberta também não pode esticar a linha: o "✕ fechar"
+     media 471px de borda direita porque o `.rh-topo` da ficha herdava o
+     `flex: 1 1 0` da regra 3, que é para o cabeçalho da PÁGINA. */
+  .dash-detalhe .rh-topo { flex-wrap: wrap; gap: .4rem; }
+  .dash-detalhe .rh-topo > button { flex: 0 0 auto; }
+  /* Chip longo dentro da ficha (o do roteiro: "roteiro: Roteiro padrão —
+     cargos operacionais v1") não quebra linha e vazava em telas de 320px. É o
+     mesmo teto da v2.72.3 para chip em coluna de tabela; aqui em `%` porque o
+     contêiner já tem a largura da tela. Texto inteiro no `title`. */
+  .rh-conferencia .chip {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
+
+  /* 6. O CARD DE AÇÕES É COMPACTO — mas NUNCA some.
+        Ele nasceu na v2.76.1 porque os botões escondidos dentro dos filtros
+        eram pior defeito (o "Cadastrar talento" desaparecia). Só que um card
+        cheio custava ~130px e empurrava a lista de volta para fora da primeira
+        tela. Sem moldura de card, botões lado a lado: mesma função, ~40px. */
+  /* `.rh-card.dash-acoes` e não só `.dash-acoes`: o elemento tem as DUAS
+     classes, e `.rh-card` (padding, borda, sombra) tem a mesma especificidade —
+     ganharia por vir depois na folha. Sem os dois seletores a moldura fica e o
+     bloco continua com 90px. */
+  .rh-card.dash-acoes {
+    background: none; border: none; box-shadow: none; padding: 0;
+    gap: .35rem; margin-bottom: .5rem;
+  }
+  /* `> *` e não `> button`: alguns módulos passam um `<label>` de check em
+     `acoesFiltro` (Colaboradores manda "incluir em admissão"), e ele precisa
+     dividir a linha como os demais — senão o último botão fica sozinho numa
+     terceira fileira e o bloco volta a 90px. */
+  .dash-acoes > * {
+    flex: 1 1 auto; min-width: 6.5rem; padding: .55rem .5rem; font-size: .82rem;
+    /* `auto` (não `0`) + `overflow: visible`: com base 0 os três dividiam a
+       linha em partes iguais e "＋ Cadastrar talento", o rótulo mais longo,
+       ficava CORTADO. Com `auto` cada um parte do próprio texto e quebra para a
+       linha de baixo quando não cabe — rótulo cortado é pior que uma fileira a
+       mais. A regra base do botão já traz `white-space: nowrap` (v2.64). */
+    overflow: visible;
+  }
+  .dash-acoes > label { display: flex; align-items: center; gap: .35rem; padding: 0; }
+  /* Utilitário do padrão: trecho de rótulo que só faz sentido onde há espaço.
+     "⬇ Exportar CSV" vira "⬇ CSV" no celular — o ícone e a sigla bastam, e o
+     `title` guarda a frase inteira. Use com PARCIMÔNIA: encurtar rótulo é a
+     última saída, depois de compactar espaçamento; rótulo que vira enigma é
+     pior que uma fileira a mais. */
+  .so-desktop { display: none; }
+
   /* 4. O TÍTULO DA PÁGINA NÃO PRECISA DE TRÊS LINHAS DE RESPIRO.
         No celular cada pixel acima do conteúdo é rolagem que a pessoa paga. */
   .rh-painel { padding: .7rem; }
   .rh-painel > h1, .rh-topo h1 { font-size: 1.35rem; margin: 0 0 .5rem; }
-  .rh-painel > p.explica { font-size: .85rem; margin: 0 0 .6rem; }
+  /* O texto que explica a tela fica em DUAS LINHAS no celular, com reticências
+     (84px viravam rolagem antes de qualquer dado). Não some: quem quiser ler
+     toca e ele abre — `-webkit-line-clamp` funciona aqui porque é um `<p>`
+     comum, não uma `<td>` (a blockificação da v2.60 não se aplica). */
+  .rh-painel > p.explica {
+    font-size: .8rem; margin: 0 0 .5rem;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .rh-painel > p.explica:active, .rh-painel > p.explica:focus {
+    -webkit-line-clamp: unset;
+  }
 }

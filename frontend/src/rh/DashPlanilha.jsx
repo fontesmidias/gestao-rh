@@ -170,6 +170,29 @@ export default function DashPlanilha({
           ))}
         </div>
       )}
+      {/* AÇÕES em card PRÓPRIO, acima dos filtros (v2.76.1, reprovação do
+          Bruno: *"você tirou os botões de cadastro do banco de talentos, como
+          assim?"* e *"não quero que os botões fiquem no mesmo card que os
+          filtros, pois os botões merecem ter seus próprios cards"*).
+          Ele estava certo em ambos, e é o mesmo defeito: as ações moravam
+          DENTRO do card de filtros (`.dash-filtros-acoes`), e quando a v2.76
+          recolheu esse card no celular o botão "Cadastrar talento" foi junto —
+          sumiu da tela sem nunca ter sido removido do código.
+          Filtrar e AGIR são coisas de natureza diferente: uma refina o que se
+          vê, a outra cria e exporta. Card próprio, sempre visível. */}
+      <div className="rh-card dash-acoes">
+        {acoesFiltro}
+        {/* No celular o rótulo encolhe para "CSV" (o `.so-desktop` some lá):
+            três botões com rótulo inteiro ocupavam duas fileiras e devolviam a
+            lista para fora da primeira tela. O `title` mantém o significado
+            para quem passa o mouse no desktop. */}
+        <button className="btn-secundario btn-mini" onClick={exportarCsv}
+                title="Exportar para CSV o que está filtrado na tela">
+          ⬇ <span className="so-desktop">Exportar </span>CSV</button>
+        <button className="btn-secundario btn-mini"
+                title="Escolher quais colunas aparecem"
+                onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
+      </div>
       {/* Barra de filtros: GRADE compacta (não uma-linha-por-filtro), cada
           filtro com rótulo pequeno em cima. Os 'select' viram SelectBusca —
           começa a digitar e a lista filtra (feedback do Bruno: "filtro é algo
@@ -230,10 +253,13 @@ export default function DashPlanilha({
             )}
           </label>
         ))}
+        {/* As ações saíram daqui na v2.76.1 — foram para o `.dash-acoes`, em
+            card próprio acima. Um botão de CRIAR não pode morar dentro de um
+            bloco que se recolhe: ele desaparece junto. */}
         <div className="dash-filtros-acoes">
-          {acoesFiltro}
-          <button className="btn-secundario btn-mini" onClick={exportarCsv}>⬇ Exportar CSV</button>
-          <button className="btn-secundario btn-mini" onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>
+          <button className="btn-link btn-mini" onClick={() => setFiltros({})}
+                  disabled={qtdFiltrosAtivos === 0}
+                  title="Voltar a mostrar tudo">Limpar filtros</button>
         </div>
       </div>
       </details>
