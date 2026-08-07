@@ -381,6 +381,23 @@ a { color: var(--verde-escuro); }
   white-space: normal; max-width: 22rem; min-width: 6rem; word-break: break-word;
 }
 .rh-tabela td.dash-quebra small { white-space: normal; }
+/* CHIP dentro de coluna que quebra: o `max-width: 22rem` da `td` NÃO contém um
+   filho que se recusa a quebrar — `.chip` tem `white-space: nowrap` (certo para
+   status e contagem, que ficariam feios partidos), e um chip longo estica a
+   coluna inteira, furando o teto acima.
+   Apareceu com a TAG DE REAPROVEITAMENTO (v2.72.3): ela nasce do cargo da vaga
+   (`reaproveitar: <cargo>`), e o cargo mais numeroso da base real — "Auxiliar
+   de Serviços Gerais", 18 pessoas — produz **41 caracteres**. Medido em
+   Talentos: a tabela ia de 1002px para 1049px numa área visível de 1004px.
+   O texto inteiro continua no `title` do chip; aqui ele é cortado com
+   reticências, como a `.dash-corta` já faz para texto longo de célula.
+   ⚠️ O teto tem que ser ABSOLUTO (`ch`), não `max-width: 100%`: a largura da
+   `td` é calculada A PARTIR do conteúdo, então `100%` acompanha o chip que
+   cresce e não limita nada — medido, o chip continuava em 256px e a tabela
+   estourava 59px. Com `14ch` ele para de puxar a coluna. */
+.dash-tabela td.dash-quebra .chip, .rh-tabela td.dash-quebra .chip {
+  max-width: 14ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+}
 /* cards de métrica clicáveis: clicar ativa o filtro correspondente (item 3).
    Reusa .rh-metrica; vira botão com estado hover/ativo. */
 /* cards do dash: auto-fit (adapta a qualquer quantidade, não fixo em 6 como o
@@ -1510,6 +1527,31 @@ body[data-rh-ocupado] { cursor: progress; }
   .rh-tabela tbody td:empty,
   .rh-tabela tbody td.dash-vazio { display: none; }
   .rh-tabela tbody td[colspan] { display: block; }
+  /* O CORTE EM 3 LINHAS TAMBÉM VALE NO CARD (v2.72.3).
+     No modo tabela ele é feito por `td.dash-quebra > .dash-corta`; aqui a `td`
+     vira `display: flex` e o `.dash-corta` passa a ser item de flex, então
+     aquela regra não o alcança e o texto longo volta a crescer sem limite.
+     Medido em Entrevistas a 1150px: um título real de posto ("INEP - 37/2025 -
+     APOIO ADMINISTRATIVO, RECEPÇÃO E PORTARIA…") deixava a linha em **251px**,
+     contra o teto de 240 — o card ocupando meia tela, que é o defeito que o
+     modo card existe para resolver.
+     `min-width: 0` é obrigatório: sem ele o item de flex usa o tamanho do
+     CONTEÚDO como piso e o `overflow: hidden` não corta nada (a pegadinha
+     clássica do flexbox, já registrada na v2.60).
+     ⚠️ Aqui o corte é por `max-height`, NÃO por `-webkit-line-clamp`: no card o
+     navegador BLOCKIFICA o `.dash-corta` (computed `flow-root`) e engole o
+     `-webkit-box` — medido, ele resiste até a `display: -webkit-box !important`
+     inline. É o mesmo mecanismo que a v2.60 registrou para a `<td>`, num lugar
+     novo. `max-height` não depende de `display` nenhum e corta na mesma altura;
+     o preço é não ter reticências no card — o texto inteiro fica no `title`.
+     São DUAS linhas aqui, não três: no card as células ficam lado a lado numa
+     grade, e a mais alta da fileira estica as vizinhas — três linhas de título
+     de posto deixavam a linha em 249px (medido), ainda acima do teto de 240.
+     Com duas, 226px. Na TABELA continuam três: lá a coluna é estreita e cortar
+     mais esconderia informação sem ganhar altura. */
+  .rh-tabela tbody td.dash-quebra .dash-corta {
+    max-height: calc(2 * 1.5em); overflow: hidden; min-width: 0;
+  }
   /* linha em edição inline mantém o destaque como card */
   .rh-tabela tr.linha-editando { border-color: var(--verde); }
   .rh-tabela tr.linha-form-inline { padding: 0; overflow: hidden; }
