@@ -8,6 +8,7 @@ import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
+import Exigencias from './Exigencias.jsx'
 import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
 import EntrevistasDaPessoa from './EntrevistasDaPessoa.jsx'
@@ -1121,6 +1122,14 @@ export default function Detalhe({ id, aoVoltar }) {
       {/* Documento específico avulso: ação, fica junto do trabalho (regra da
           v2.47 — trabalho e consulta em faixas separadas). */}
       <DocumentosEspecificos id={id} setMsg={setMsg} />
+
+      {/* O que ESTA pessoa precisa entregar (v2.80). Recolhido: o padrão serve
+          quase todo mundo, e um bloco sempre aberto com ~50 itens competiria
+          com o trabalho diário desta tela. */}
+      <details>
+        <summary>☑️ O que é obrigatório para esta pessoa</summary>
+        <Exigencias candidatoId={id} setMsg={setMsg} />
+      </details>
 
       {pendDossie && (
         <div className="alerta">

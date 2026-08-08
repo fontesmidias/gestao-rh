@@ -88,6 +88,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Obrigatoriedade tem TRÊS camadas e mora fora do slot** (v2.80,
+  `services/exigencias.py`): fábrica → padrão da casa (config dinâmica) →
+  exceção da pessoa (`Candidato.exigencias`), a mais específica vencendo e a
+  ausência HERDANDO (`None` é silêncio; `False` é decisão de dispensar).
+  ⚠️ **NÃO guarde a decisão em `SlotDocumento.obrigatorio`**: a
+  `sincronizar_slots` REESCREVE aquele campo a cada execução e o wizard salva a
+  cada 900ms — a dispensa sumiria sozinha, em silêncio. O slot é o estado do
+  ENVIO; a regra mora no candidato. `aceite_lgpd`, `pessoais.email` e
+  `documentos.cpf` não se desmarcam: sem eles não há base legal, código de
+  assinatura nem casamento de CPF, e o fluxo quebraria LONGE dali. O filtro de
+  pendências fica no FIM de `pendencias_da_ficha` (peneira sobre o resultado),
+  não espalhado nas 12 verificações.
+- **Asserção de 422 precisa dizer POR QUÊ foi recusado** (v2.80, achado por
+  mutação): tirar o guard de `SEMPRE_OBRIGATORIOS` não fez o teste falhar —
+  aquelas chaves também não estão no catálogo, então caíam em
+  `chave_desconhecida`, 422 igual. **Conferir só o status code faz o teste
+  passar com a proteção removida.** Afirme sobre o `detail`. Corolário: valide
+  na ORDEM certa (o guard do sistema ANTES da checagem de catálogo), senão a
+  proteção real some no dia em que a chave entrar na lista.
 - **Documento de kit é POR POSTO — cobertura precisa da porta avulsa** (v2.79,
   `revisao.py::acrescentar_documento_especifico`): *"um intermitente precisou
   dar cobertura na presidência da República; não estava fácil marcar para

@@ -9,6 +9,8 @@ import EmailsConfig from './EmailsConfig.jsx'
 import LogsRH from './LogsRH.jsx'
 import TelemetriaRH from './TelemetriaRH.jsx'
 import RoteirosEntrevista from './RoteirosEntrevista.jsx'
+import Exigencias from './Exigencias.jsx'
+import Aviso from '../Aviso.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
 // celular. Opcional — sem chave, o OCR local (Tesseract) continua valendo.
@@ -327,6 +329,7 @@ const SUBMENUS = [
   // catálogos (Tags, Modelos): o RH monta o roteiro uma vez e depois só o
   // escolhe na ficha — não é tela de uso diário (§ 14.1).
   ['roteiros', '🗣️ Roteiros de entrevista'],
+  ['exigencias', '☑️ Documentos e campos obrigatórios'],
   ['integracoes', '🔌 E-mail e integrações'],
   ['emails', '✉️ Textos dos e-mails'],
   ['telemetria', '📈 Telemetria'],
@@ -336,9 +339,14 @@ const SUBMENUS = [
 
 export default function Config({ aoVoltar }) {
   const [aba, setAba] = useState(localStorage.getItem('rh_config_aba') || 'geral')
+  // Aviso FLUTUANTE (v2.75): a lista de exigências é longa, e a confirmação no
+  // topo ficaria fora do campo de visão de quem marcou um item lá embaixo.
+  const [avisoConfig, setAvisoConfig] = useState(null)
   const trocar = (id) => { setAba(id); localStorage.setItem('rh_config_aba', id) }
   return (
     <main className="rh-painel">
+      <Aviso tipo={avisoConfig?.tipo === 'erro' ? 'erro' : 'ok'}
+             texto={avisoConfig?.texto} aoFechar={() => setAvisoConfig(null)} />
       <header className="rh-topo">
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>⚙️ Configurações</h1>
@@ -362,6 +370,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'importacoes' && <Importacoes />}
       {aba === 'tags' && <TagsConfig />}
       {aba === 'roteiros' && <RoteirosEntrevista />}
+      {aba === 'exigencias' && <Exigencias setMsg={setAvisoConfig} />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>

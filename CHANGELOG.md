@@ -11,6 +11,74 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.80.0] — 2026-08-08 — Obrigatório é decisão, não constante
+
+> *"Ter a opção de, no front, por padrão vir marcado os campos obrigatórios para
+> todos (lógico, aqueles que têm que ser obrigatórios), mas customizável por
+> candidato, pelo pessoal do RH. Daí ter um padrão geral lá em configurações."*
+
+A obrigatoriedade era **chumbada em dois lugares** — `services/slots.py` para
+documentos, `api/ficha.py` para campos. Mudar qualquer coisa exigia deploy, e o
+caso excepcional (a pessoa que comprovadamente não tem aquele documento) não
+tinha saída nenhuma.
+
+### Três camadas, a mais específica vence
+
+```
+1. PADRÃO DE FÁBRICA        — o que o sistema traz
+2. PADRÃO DA CASA (config)  — o RH muda para TODOS, sem deploy
+3. EXCEÇÃO DA PESSOA        — o RH decide para UMA, com motivo
+```
+
+Ausência em qualquer nível **herda de cima**, nunca vira "não é obrigatório":
+`None` é silêncio, `False` é uma decisão de dispensar, e o sistema precisa
+distinguir os dois. Mesma herança do roteiro de entrevista (v2.66) e do prazo de
+validade em Desenvolvimento.
+
+Cobre **documentos e campos** — 19 e 33 itens —, com rótulo legível: o RH não
+deve ver `trabalho_banco.pix_tipo`.
+
+### Onde a decisão mora, e por que não no slot
+
+`SlotDocumento.obrigatorio` seria o lugar óbvio — e errado. A
+`sincronizar_slots` **reescreve** aquele campo a cada execução, e o wizard salva
+a cada 900ms: a dispensa do RH sumiria sozinha em segundos, em silêncio. A
+decisão vai para `Candidato.exigencias`; o slot continua sendo o estado do
+ENVIO, não o da regra. **É o bloco 6 do teste** — três sincronizações seguidas,
+e a dispensa continua de pé.
+
+### O que não se desmarca
+
+`aceite_lgpd`, `pessoais.email` e `documentos.cpf` não entram na tela. Não é
+preciosismo: sem aceite não há base legal para guardar a ficha; sem e-mail o
+código de assinatura não chega e a admissão para no meio; sem CPF a pessoa não
+casa em creche, Tirvu nem ponto. Quebraria **longe daqui**, onde ninguém ligaria
+uma coisa à outra.
+
+### Duas lições de teste nesta leva
+
+**Uma mutação passou verde e obrigou a reescrever a asserção.** Remover o guard
+de `SEMPRE_OBRIGATORIOS` não fazia o teste falhar: aquelas chaves também não
+estão no catálogo, então caíam em `chave_desconhecida` — 422 igual. Conferir só
+o código faria o teste passar com a proteção removida. A asserção passou a
+exigir o **motivo** da recusa (`exigencia_do_sistema`), e a ordem de validação
+foi corrigida: o guard vem ANTES da checagem de catálogo, senão a proteção real
+sumiria no dia em que alguém acrescentasse a chave à lista.
+
+**O filtro de pendências ficou no fim, não espalhado.** As 12 verificações de
+completude continuam num lugar só; a exigência é uma peneira sobre o resultado.
+Menos superfície para errar — e o que não está no catálogo passa reto por
+padrão, para que uma pendência nova acrescentada amanhã valha, em vez de sumir
+por não estar catalogada.
+
+### Portões
+
+Migration `b3d5f7a9c2e4` executada up → down → up. 5 mutações, todas reprovaram.
+Backend verde, smoke **15/15**, E2E **30/30**. Fluxo conferido na tela: marcar
+em Configurações, ver o chip de origem, desfazer, e a ficha herdando.
+
+---
+
 ## [2.79.0] — 2026-08-08 — O documento da cobertura
 
 > *"Um intermitente precisou dar cobertura na presidência da República. Não

@@ -247,6 +247,17 @@ class Candidato(Base):
     # é o pior jeito. Lista, não campo único: ninguém troca de matrícula uma
     # vez só na vida (recontratação, correção, fusão de cadastro).
     matriculas_anteriores: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # EXCEÇÃO de obrigatoriedade desta pessoa (v2.80):
+    # `{"documentos": {"chave": bool}, "campos": {"chave": bool}}`.
+    # NULL = segue o padrão da casa (config dinâmica) e, na falta dele, o de
+    # fábrica — ver `services/exigencias.py`. Ausência de uma chave HERDA;
+    # só `True`/`False` explícitos decidem, porque `False` aqui é uma DECISÃO
+    # ("o RH dispensou") e precisa se distinguir do silêncio.
+    #
+    # ⚠️ NÃO usar `SlotDocumento.obrigatorio` para isto: a `sincronizar_slots`
+    # reescreve aquele campo a cada autosave (900ms no wizard), e a dispensa
+    # sumiria sozinha. O slot guarda o estado do ENVIO; a regra mora aqui.
+    exigencias: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     data_nascimento: Mapped[str | None] = mapped_column(String(10))  # dd/mm/aaaa
     # Situação do vínculo: None enquanto é candidato em admissão; "ativo" ou
     # "desligado" quando vira colaborador. Não confundir com `status` (fluxo).

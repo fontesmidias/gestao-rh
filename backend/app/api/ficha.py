@@ -562,4 +562,22 @@ def pendencias_da_ficha(db: Session, candidato: Candidato) -> list[str]:
     if contatos is None:
         pendencias.append("contatos_emergencia")
 
-    return pendencias
+    # FILTRO das exigências (v2.80): o que o RH dispensou (para todos, na
+    # config, ou para ESTA pessoa, na ficha dela) deixa de ser pendência.
+    #
+    # Filtra no FIM, em vez de espalhar `if obrigatorio(...)` nas 12
+    # verificações acima: as regras de COMPLETUDE continuam num lugar só, e a
+    # camada de exigência é uma peneira sobre o resultado. Menos superfície para
+    # errar, e a lista continua legível.
+    #
+    # ⚠️ O que NÃO está no mapa passa reto (`True` no `get`). É deliberado:
+    # `aceite_lgpd`, `pessoais.email` e `documentos.cpf` são `SEMPRE_OBRIGATORIOS`
+    # e nem aparecem na tela; e uma pendência nova que alguém acrescente aqui
+    # amanhã vale por padrão, em vez de sumir por não estar catalogada.
+    from app.services.exigencias import mapa_campos
+    obrigatorios = mapa_campos(db, candidato)
+    # `contatos_emergencia` é a chave histórica desta lista; no catálogo ela se
+    # chama `emergencia.contatos` (agrupada com as demais de emergência).
+    apelidos = {"contatos_emergencia": "emergencia.contatos"}
+    return [p for p in pendencias
+            if obrigatorios.get(apelidos.get(p, p), True)]
