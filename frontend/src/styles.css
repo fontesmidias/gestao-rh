@@ -1792,7 +1792,22 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
                 gap: .4rem; margin-bottom: .4rem; }
 @media (max-width: 860px) {
   .rh-pdi-linha { grid-template-columns: 1fr; }
-  .rh-escala-linha { flex-direction: column; align-items: stretch; }
+  /* `justify-content: start` é obrigatório aqui (v2.77): a regra base usa
+     `space-between`, que numa linha HORIZONTAL empurra os chips para a direita
+     — certo. Ao virar COLUNA no celular, o mesmo `space-between` passa a
+     distribuir VERTICALMENTE, e abriu um vazio de ~200px entre a pergunta e os
+     botões de nota (print do Bruno). Trocar `flex-direction` sem revisar o
+     `justify-content` é a armadilha da v2.63 noutra roupa. */
+  .rh-escala-linha { flex-direction: column; align-items: stretch;
+                     justify-content: flex-start; gap: .5rem; }
+  /* `flex: 0 0 auto` no rótulo: a regra base o declara `flex: 1 1 12rem`, que
+     numa LINHA horizontal significa "ocupe a largura que sobrar" — certo. Ao
+     virar COLUNA, o mesmo `1 1` passa a mandar no eixo VERTICAL e o rótulo
+     esticava para 192px com 3 linhas de texto (medido), abrindo o vazio entre a
+     pergunta e os botões de nota que o Bruno viu no print. Trocar
+     `flex-direction` sem revisar as flags de flex dos filhos é a armadilha da
+     v2.63; aqui ela apareceu no eixo oposto. */
+  .rh-escala-rotulo { flex: 0 0 auto; }
 }
 
 /* --- Radar de competências + timeline ---------------------------------- */
@@ -1925,6 +1940,31 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 .rh-sidebar .ajuda-q:hover::after, .rh-sidebar .ajuda-q:focus::after,
 td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   left: 0; transform: none;
+}
+
+/* ÂNCORA no próprio chip de nota (v2.77) — *"as âncoras têm que estar perto dos
+   marcadores"*. Mesmo mecanismo do `.ajuda-q` (CSS puro, sem estado no React),
+   aplicado ao `.chip-escolha` da ficha de entrevista: a descrição que separa
+   "4 — Evidência forte" de "3 — Atende" aparece ao passar o mouse E ao TOCAR
+   (`:focus`), que é o que faltava — o `title` nativo não abre no celular.
+   O balão sobe (`bottom: 100%`) em vez de descer: os chips ficam logo acima do
+   campo de justificativa, e para baixo ele cobriria justamente o que a pessoa
+   vai escrever em seguida. */
+.chip-com-dica { position: relative; }
+.chip-com-dica:hover::after, .chip-com-dica:focus::after {
+  content: attr(data-dica); position: absolute; z-index: 60;
+  bottom: calc(100% + 6px); left: 0;
+  width: max-content; max-width: min(320px, 82vw); padding: .55rem .7rem;
+  background: #22302a; color: #fff; font-size: .76rem; font-weight: 400;
+  line-height: 1.45; text-align: left; text-transform: none; letter-spacing: 0;
+  border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+  white-space: normal; pointer-events: none;
+}
+/* Os últimos chips da fileira alinham o balão à DIREITA, senão ele vaza pela
+   borda da tela (a mesma correção que o `.ajuda-q` faz na sidebar). */
+.chips-escolha .chip-com-dica:nth-child(n+3):hover::after,
+.chips-escolha .chip-com-dica:nth-child(n+3):focus::after {
+  left: auto; right: 0;
 }
 
 .teste-aviso-suave {

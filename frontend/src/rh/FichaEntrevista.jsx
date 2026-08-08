@@ -371,9 +371,19 @@ function Avaliacao({ form, campos, marcar, setCampos, desabilitado }) {
             </span>
             <span className="chips-escolha">
               {form.escala.map((s) => (
+                // A ÂNCORA vem junto do botão (v2.77, pedido do Bruno: *"as
+                // âncoras têm que estar perto dos marcadores"*). Antes ela só
+                // existia no `title` — que **não abre no celular**, onde não há
+                // mouse — e num `<details>` no fim do bloco, longe de onde a
+                // nota é dada. Quem avalia precisa ler a âncora NA HORA de
+                // escolher: é ela que separa "4" de "3".
+                // `data-dica` + `.chip-com-dica` reusa o mecanismo do
+                // `Ajuda.jsx` (CSS puro, `:hover` no desktop e `:focus` no
+                // toque) — o padrão da casa, em vez de um popup novo.
                 <button type="button" key={s.valor} disabled={desabilitado}
                         title={c.ancoras[s.valor]}
-                        className={`chip-escolha ${campos.competencias[c.chave] === s.valor ? 'on' : ''}`}
+                        data-dica={c.ancoras[s.valor]}
+                        className={`chip-escolha chip-com-dica ${campos.competencias[c.chave] === s.valor ? 'on' : ''}`}
                         onClick={() => marcar('competencias', c.chave,
                                               campos.competencias[c.chave] === s.valor
                                                 ? undefined : s.valor)}>
@@ -394,7 +404,12 @@ function Avaliacao({ form, campos, marcar, setCampos, desabilitado }) {
           seria a duplicação que esta leva veio remover. No dia a dia elas já
           estão no `title` de cada chip. */}
       <details>
-        <summary>ver âncoras das notas</summary>
+        {/* Continua existindo mesmo com a âncora no chip (v2.77): aqui elas
+            aparecem LADO A LADO, e comparar as quatro é outra tarefa —
+            calibrar antes de começar, ou conferir um caso limítrofe. O chip
+            responde "o que é o 3?"; esta lista responde "onde termina o 3 e
+            começa o 4?". */}
+        <summary>ver todas as âncoras lado a lado</summary>
         {form.competencias.map((c) => (
           <div className="campo" key={c.chave}>
             <span className="rotulo">{c.nome}</span>

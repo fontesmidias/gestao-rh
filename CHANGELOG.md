@@ -11,6 +11,52 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.77.0] — 2026-08-07 — A âncora ao lado da nota
+
+Dois problemas na ficha de entrevista, os dois com print.
+
+### O vazio entre a pergunta e os botões de nota
+
+No celular abria um buraco de ~130px entre a pergunta da competência e os chips
+de nota. A causa: a regra base declara `.rh-escala-rotulo { flex: 1 1 12rem }` —
+numa LINHA horizontal isso significa *"ocupe a largura que sobrar"*, e está
+certo. Ao virar COLUNA no celular, o mesmo `1 1` passa a mandar no eixo
+**vertical**, e o rótulo esticava para **192px** com 3 linhas de texto.
+
+É a armadilha da v2.63 (`trocar display invalida as flags dos filhos`) no eixo
+oposto: mudei `flex-direction` sem revisar o `flex` de quem está dentro.
+Medido depois: rótulo 192px → 67px, bloco 428px → 303px.
+
+### A âncora estava longe de onde a nota é dada
+
+> *"tanto na versão web quanto na desktop, as âncoras têm que estar perto dos
+> marcadores. Seria interessante se fosse um popup?"*
+
+A descrição que separa "4 — Evidência forte" de "3 — Atende" só existia em dois
+lugares ruins: no `title` do chip — que **não abre no celular**, onde não há
+mouse — e num `<details>` no fim do bloco, longe da decisão.
+
+Agora ela aparece **no próprio chip**, ao passar o mouse (desktop) e **ao tocar**
+(celular). Não é componente novo: reusa o mecanismo do `Ajuda.jsx` — CSS puro
+com `:hover`/`:focus`, sem estado no React —, que é o padrão de tooltip da casa.
+O balão sobe em vez de descer, porque os chips ficam logo acima do campo de
+justificativa e para baixo ele cobriria o que a pessoa vai escrever.
+
+O `<details>` continua, com rótulo novo (*"ver todas as âncoras lado a lado"*):
+o chip responde *"o que é o 3?"*; a lista responde *"onde termina o 3 e começa o
+4?"* — calibrar antes de começar é outra tarefa.
+
+### Portões
+
+E2E **30/30**, backend verde, smoke **15/15**.
+
+*Nota de método:* uma execução acusou falha no teste da câmera guiada e o
+`git stash` sugeriu regressão minha. Reproduzindo com as mudanças restauradas,
+**passou** — era ruído de ambiente. O `git stash` isola o código, não o estado
+do container; confirmar duas vezes antes de acusar o próprio diff.
+
+---
+
 ## [2.76.2] — 2026-08-07 — O `<details>` fechado não renderiza
 
 > *"Não voltaram os filtros de select com busca. Quero que volte para todos que
