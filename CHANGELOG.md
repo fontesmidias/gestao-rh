@@ -67,9 +67,26 @@ o monta: 5.261 bytes chegando, com o MIME do Excel — não `application/pdf`
 chumbado, o defeito que a v2.41 corrigiu no SMTP e a v2.68 no Graph. É a lição
 do teste do `.ics`: substituir o limite externo, não as próprias funções.
 
+### E um defeito maior, que o CI achou
+
+O primeiro push **reprovou**: no container, o anexo saía como `octet-stream`, não
+Excel. A causa é do ambiente, não do código — `mimetypes.guess_type` lê a tabela
+do **sistema** (no Linux, `/etc/mime.types`), e a imagem não conhece `.xlsx`.
+Passava no Windows, falhava no CI.
+
+Investigando, o problema era maior que o meu: **`.ics` e `.docx` também saíam
+como `octet-stream`** naquele ambiente. No caso do `.ics`, isso significa
+**convite de entrevista sem o "adicionar à agenda"** — o mesmo defeito que a
+v2.68 corrigiu no caminho do Graph, vivo no SMTP desde sempre.
+
+O `_tipo_do_anexo` ganhou mapa explícito para o que o sistema não garante. O
+comentário do `.md` já previa exatamente isso e ninguém generalizou.
+
 ### Portões
 
-3 mutações, todas reprovaram. Backend verde, smoke **15/15**, E2E **30/30**.
+3 mutações, todas reprovaram. Backend verde, smoke **15/15**, E2E **30/30** —
+e os testes rodados **dentro do container**, contra banco limpo, que é a
+condição real do CI.
 
 ---
 

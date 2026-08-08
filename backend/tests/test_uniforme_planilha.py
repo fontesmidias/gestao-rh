@@ -210,6 +210,24 @@ checar(tipo == ("application",
        f"o MIME é o do Excel, não `application/pdf` chumbado (veio {tipo}) — "
        f"o defeito que a v2.41 corrigiu no SMTP e a v2.68 no Graph")
 
+# ⚠️ O MIME não pode depender de ONDE o código roda (v2.81, achado pelo CI):
+# `mimetypes.guess_type` lê a tabela do SISTEMA (no Linux, /etc/mime.types), e
+# a imagem do container não conhece `.xlsx`, `.ics` nem `.docx`. O teste passava
+# no Windows e reprovava no CI — com o anexo saindo como `octet-stream`, que no
+# caso do `.ics` significa convite SEM o "adicionar à agenda".
+# Por isso o `_tipo_do_anexo` tem mapa EXPLÍCITO para o que o sistema não
+# garante; estas asserções cobram que ele continue lá.
+for ext, esperado in (
+    (".xlsx", ("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+    (".ics", ("text", "calendar")),
+    (".docx", ("application",
+               "vnd.openxmlformats-officedocument.wordprocessingml.document")),
+    (".md", ("text", "markdown")),
+):
+    veio = _tipo_do_anexo(f"arquivo{ext}")
+    checar(veio == esperado,
+           f"`{ext}` tem MIME próprio em QUALQUER sistema (veio {veio})")
+
 # --------------------------------------------------------------------------
 print("\n6. o TEXTO do e-mail diz que há anexo")
 # --------------------------------------------------------------------------

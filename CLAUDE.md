@@ -2383,6 +2383,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   conferir antes se a fila não está cheia de ruído — velocidade em fila errada
   multiplica erro. Coberto por `tests/test_jornada_duplicidade.py` (casos
   reais da planilha, validado por mutação).
+- **`mimetypes.guess_type` depende do SISTEMA — não do código** (v2.81, achado
+  pelo CI): a tabela vem do SO (no Linux, `/etc/mime.types`), e a imagem do
+  container **não conhece `.xlsx`, `.ics` nem `.docx`**. O teste passava no
+  Windows e reprovava no CI, com o anexo saindo como `octet-stream` — e no caso
+  do `.ics` isso significa **convite sem o "adicionar à agenda"**, defeito que
+  estava vivo no SMTP desde sempre (a v2.68 corrigiu só o caminho do Graph). O
+  `email._tipo_do_anexo` agora tem MAPA EXPLÍCITO para essas extensões; o
+  comentário do `.md` já previa o problema e ninguém generalizou. **Ao anexar
+  formato novo, acrescente ao mapa** — e desconfie de qualquer teste de MIME que
+  só rodou na sua máquina.
 - **Uniformes: a lista fica na TELA, mas a planilha vai ANEXA no aviso**
   (v2.07 **revista na v2.81** — `revisao.py::uniformes`,
   `services/uniforme_planilha.py`): na v2.07 o Bruno pediu os dados por e-mail
