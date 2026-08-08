@@ -24,12 +24,28 @@ def _tipo_do_anexo(nome: str) -> tuple[str, str]:
     """
     import mimetypes
 
+    # ⚠️ Extensões que o `mimetypes` NÃO conhece em toda máquina. A tabela dele
+    # vem do SISTEMA (no Linux, `/etc/mime.types`), então o mesmo código acerta
+    # no Windows de quem desenvolve e erra na imagem do container — foi assim
+    # que o `.xlsx` da planilha de uniforme (v2.81) saiu como `octet-stream`
+    # NO CI, com o teste verde localmente. Mapa explícito para o que o sistema
+    # não garante: aqui a resposta não depende de onde o código roda.
+    _CONHECIDOS = {
+        ".md": ("text", "markdown"),
+        ".xlsx": ("application",
+                  "vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        ".xls": ("application", "vnd.ms-excel"),
+        ".docx": ("application",
+                  "vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        ".ics": ("text", "calendar"),
+    }
+    minusculo = (nome or "").lower()
+    for ext, par in _CONHECIDOS.items():
+        if minusculo.endswith(ext):
+            return par
+
     tipo, _ = mimetypes.guess_type(nome or "")
     if not tipo:
-        # `.md` não está no mapa de todo sistema, e é o formato do resumo de
-        # log — sem esta linha ele voltaria a ser octet-stream.
-        if (nome or "").lower().endswith(".md"):
-            return "text", "markdown"
         return "application", "octet-stream"
     principal, _, secundario = tipo.partition("/")
     return principal, secundario or "octet-stream"
