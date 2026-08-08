@@ -11,6 +11,68 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.81.0] — 2026-08-08 — A planilha que chega na caixa
+
+> *"No corpo do email de envio de uniformes, tem que ir os dados da pessoa,
+> como nome, CPF, cargo, posto e medidas. (…) quero algo que seja possível
+> através da leitura do email, os responsáveis do uniforme identificarem as
+> informações, sem a necessidade de entrar no sistema. Acho que seria o caso
+> uma planilha do Excel ser enviada por e-mail."*
+
+### Isto reverte a v2.07 — conscientemente
+
+Na v2.07 ele pediu a mesma coisa e, ao ser perguntado, **escolheu o contrário**:
+dados só na tela, e-mail como empurrão. O argumento era bom — *"ficha de pessoal
+circulando em caixa que ninguém controla"*.
+
+O uso mostrou o custo do outro lado: **quem compra e separa uniforme não é
+usuário do painel**, e obrigá-lo a entrar para ver três medidas transformava um
+recado em tarefa. Perguntado de novo, ele escolheu a planilha **anexa** — o
+meio-termo que não existia antes:
+
+- **anexo, não corpo** — não fica indexado no histórico da caixa de todo mundo,
+  e dá para abrir no Excel e trabalhar em cima;
+- **uma pessoa por e-mail**, no gatilho que já existia — não é dump da base.
+
+A reversão está registrada no cabeçalho de `uniforme_planilha.py` e no
+`CLAUDE.md`. Sem isso, a próxima leva leria a regra da v2.07 e "consertaria"
+isto de volta.
+
+### O que vai, e o que não vai
+
+Sete colunas, em ordem fixa: **Nome · CPF · Cargo · Posto · Calça · Camisa ·
+Calçado**. O CPF sai **mascarado** (`123.456.789-09`) e vem da **ficha**, não do
+convite — o da ficha é o que a pessoa digitou e foi conferido contra o
+documento.
+
+Banco, PIX, endereço e salário estão a um `getattr` de distância e **não
+entram**. Anexo circula; o que não é necessário para a tarefa não deve viajar
+junto. O teste cobra isso explicitamente.
+
+### Duas garantias que o histórico da casa exigiu
+
+**Falha no anexo não segura o aviso.** Se a planilha não montar, o e-mail sai
+sem ela, com o link da tela — como funcionava antes. Perder o aviso (ou travar a
+conclusão da admissão) por causa de um `.xlsx` seria trocar um problema pequeno
+por um maior.
+
+**O texto do template foi corrigido.** Ele afirmava *"a lista não vai por
+e-mail"* — verdade até a v2.80, mentira a partir daqui. Instrução que o sistema
+não cumpre é a armadilha da v2.74, e o teste cobra que o corpo mencione o anexo.
+
+### Verificado onde importa
+
+O anexo foi conferido **no limite de envio** (`enviar_email`), não na função que
+o monta: 5.261 bytes chegando, com o MIME do Excel — não `application/pdf`
+chumbado, o defeito que a v2.41 corrigiu no SMTP e a v2.68 no Graph. É a lição
+do teste do `.ics`: substituir o limite externo, não as próprias funções.
+
+### Portões
+
+3 mutações, todas reprovaram. Backend verde, smoke **15/15**, E2E **30/30**.
+
+---
+
 ## [2.80.0] — 2026-08-08 — Obrigatório é decisão, não constante
 
 > *"Ter a opção de, no front, por padrão vir marcado os campos obrigatórios para
