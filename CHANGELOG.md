@@ -11,6 +11,64 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.79.0] — 2026-08-08 — O documento da cobertura
+
+> *"Um intermitente precisou dar cobertura na presidência da República. Não
+> estava fácil marcar para emitir os documentos específicos da presidência.
+> Como podemos melhorar isso? Bem como para outros documentos específicos."*
+
+### O diagnóstico mudou o desenho
+
+A primeira leitura seria "faltam os documentos da Presidência". Conferindo o
+código: **eles existem desde a v1.17–v1.21**, estão no catálogo, no enum e são
+selecionáveis. O que faltava era outra coisa.
+
+O kit é marcado **por POSTO** (`PostoServico.documentos_kit`) — e numa
+**cobertura** a pessoa justamente não está lotada no posto que exige o
+documento. As duas saídas disponíveis eram ruins:
+
+- **lotá-la no posto da Presidência** — muda o VÍNCULO dela para emitir um papel;
+- **marcar o kit no posto dela** — passaria a exigir aquilo de TODO MUNDO ali.
+
+Daí a rota nova: acrescenta **um documento a uma pessoa**, sem tocar em posto
+nenhum. O documento nasce como qualquer outro do kit e segue o fluxo normal —
+aparece para assinar, entra no dossiê, conta como pendência.
+
+Na ficha da pessoa, num bloco recolhido (é caso excepcional, não pode competir
+com o trabalho diário): escolhe o documento, diz o motivo, pronto.
+
+### As quatro garantias
+
+1. **A lista vem do MESMO catálogo do kit de posto.** Uma lista paralela
+   divergiria na primeira mudança — lição do enum reescrito à mão (v2.69).
+2. **Só o catálogo entra.** Aceitar qualquer valor do enum deixaria acrescentar
+   ficha de integração ou termo de VT à mão — documentos que o sistema decide
+   por regime e por posto. No caso do VT seria um **segundo termo de desconto de
+   6% em folha**.
+3. **Motivo obrigatório**, e a auditoria guarda o motivo **e o posto da
+   pessoa** — é o contraste que torna o registro verificável depois: *"lotada em
+   X, assinou o kit de Y"*. Precedente do `reverter` (v1.65) e da troca de
+   matrícula (v2.45).
+4. **Não duplica assinatura viva.** Reemitir apagaria o que a pessoa já
+   assinou; o 409 diz se está *pendente* ou *assinado*, porque a tela precisa
+   distinguir — um pede paciência, o outro pede o caminho de invalidar.
+
+### Uma mutação que quase passou por aprovação
+
+A mutação que remove a checagem do catálogo fazia a rota estourar `KeyError`, e
+o `TestClient` **repropaga a exceção do servidor**: o script morria sem imprimir
+nenhum "FALHOU", e a saída sem falhas passaria por sucesso. É exatamente a
+armadilha registrada na v2.72.2. Com `raise_server_exceptions=False` o 500 vira
+resposta e as asserções o reprovam — nomeando cada documento proibido.
+
+### Portões
+
+`test_documento_especifico.py`: 4 mutações, todas reprovaram (a da duplicata
+mostrou o estrago real: **2 assinaturas no banco**). Backend verde, smoke
+**15/15**, E2E **30/30**. Fluxo conferido na tela renderizada.
+
+---
+
 ## [2.78.0] — 2026-08-08 — Um botão, dois estados
 
 > *"Não precisa ter um botão dizendo que está aberto e outro para fechar,

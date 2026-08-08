@@ -819,6 +819,16 @@ export const rh = {
     req('/rh/talentos', { method: 'POST', headers: authRH(),
         body: JSON.stringify(dados) }),
   opcoesTalento: () => req('/talentos/opcoes'),
+  // Documento específico avulso, para COBERTURA (v2.79): a pessoa assina o kit
+  // de um posto onde não está lotada, sem mudar o vínculo dela. O motivo é
+  // obrigatório e vai para a auditoria junto com o posto dela — é o contraste
+  // que torna o registro verificável depois.
+  documentosEspecificos: (candidatoId) =>
+    req(`/rh/candidatos/${candidatoId}/documentos-especificos`, { headers: authRH() }),
+  acrescentarDocumentoEspecifico: (candidatoId, documento, motivo) =>
+    req(`/rh/candidatos/${candidatoId}/documento-especifico`, {
+      method: 'POST', headers: authRH(),
+      body: JSON.stringify({ documento, motivo }) }),
   // Anexar/trocar o currículo pelo painel (v2.74). Faltava: o cadastro à mão
   // dizia "anexe depois pela ficha" e não havia rota para isso — a única era a
   // pública, autorizada por um token com TTL que o RH não tem.

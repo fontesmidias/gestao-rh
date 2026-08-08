@@ -222,7 +222,8 @@ jobs:
                    test_entrevistas test_roteiros_entrevista \
                    test_entrevista_documentos test_entrevista_arquivamento \
                    test_entrevista_anexo test_lixeira_restaura \
-                   test_talento_cadastro_rh test_entrevista_sem_vaga; do
+                   test_talento_cadastro_rh test_entrevista_sem_vaga \
+                   test_documento_especifico; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

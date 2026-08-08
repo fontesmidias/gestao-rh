@@ -765,6 +765,103 @@ function MemoriaColaborador({ id, nome }) {
 // Informativo de integração: o candidato só o vê para assinar DEPOIS que o RH
 // dispara aqui (feedback do Bruno). Some se não houver informativo (efetivo
 // não-INFRAERO). Recolhido quando não há nada pendente.
+// Documento ESPECÍFICO acrescentado a UMA pessoa (v2.79).
+//
+// Nasceu da COBERTURA (feedback do Bruno): *"um intermitente precisou dar
+// cobertura na presidência da República. Não estava fácil marcar para emitir os
+// documentos específicos da presidência"*.
+//
+// O kit da Presidência sempre existiu e sempre foi selecionável — mas **por
+// POSTO**, e numa cobertura a pessoa justamente NÃO está lotada no posto que
+// exige o documento. As saídas eram lotá-la lá (muda o vínculo dela para emitir
+// um papel) ou marcar o kit no posto dela (passaria a exigir aquilo de todo
+// mundo daquele posto). Aqui é para UMA pessoa, e mais nada.
+//
+// Fica RECOLHIDO: é caso excepcional, e um bloco sempre aberto competiria com o
+// que se faz todo dia nesta tela. O `<details>` traz cursor, marcador e respiro
+// do styles.css — nada de style inline (v2.47.1).
+function DocumentosEspecificos({ id, setMsg }) {
+  const [itens, setItens] = useState(null)
+  const [escolhido, setEscolhido] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const carregar = () => api.documentosEspecificos(id)
+    .then((r) => setItens(r.disponiveis || []))
+    .catch(() => setItens([]))
+  useEffect(() => { carregar() }, [id])
+
+  const acrescentar = async () => {
+    if (!escolhido) { setMsg?.({ tipo: 'erro', texto: 'Escolha o documento.' }); return }
+    if (!motivo.trim()) {
+      setMsg?.({ tipo: 'erro', texto: 'Diga o motivo — é o que explica depois por que esta pessoa assinou este documento.' })
+      return
+    }
+    setSalvando(true)
+    try {
+      const r = await api.acrescentarDocumentoEspecifico(id, escolhido, motivo.trim())
+      setMsg?.({ tipo: 'ok', texto: `${r.rotulo} acrescentado — já aparece para a pessoa assinar.` })
+      setEscolhido(''); setMotivo('')
+      carregar()
+    } catch (e) {
+      // O 409 traz se o documento já foi ASSINADO: reemitir apagaria o que ela
+      // assinou, e a mensagem precisa distinguir os dois casos.
+      const d = e.dados
+      setMsg?.({ tipo: 'erro', texto: d?.erro === 'documento_ja_existe'
+        ? `${d.rotulo} já está ${d.assinado ? 'assinado' : 'pendente'} para esta pessoa.`
+        : `Não foi possível acrescentar (${e.detail || e.message}).` })
+    } finally { setSalvando(false) }
+  }
+
+  if (!itens || itens.length === 0) return null
+  const livres = itens.filter((i) => !i.ja_tem)
+
+  return (
+    <details>
+      <summary>📎 Acrescentar documento específico (cobertura, caso excepcional)</summary>
+      <div className="rh-card">
+        <p className="explica">
+          Para quem vai <strong>dar cobertura</strong> num posto que exige documento
+          próprio — Presidência, INFRAERO — sem mudar a lotação dela. Vale só para
+          esta pessoa; o posto e os demais colaboradores não mudam.
+        </p>
+        {livres.length === 0 ? (
+          <p className="explica">Esta pessoa já tem todos os documentos específicos.</p>
+        ) : (
+          <div className="rh-grid-2">
+            <div className="campo">
+              <span className="rotulo">Documento</span>
+              <SelectBusca valor={escolhido} aoEscolher={setEscolhido}
+                           opcoes={[{ valor: '', rotulo: '— escolha —' },
+                                    ...livres.map((i) => ({ valor: i.chave, rotulo: i.rotulo }))]} />
+            </div>
+            <label className="campo">
+              <span className="rotulo">Motivo
+                <span className="dica-inline"> — fica na auditoria</span></span>
+              <input value={motivo} autoComplete="off"
+                     placeholder="Ex.: cobertura na Presidência em 08/08"
+                     onChange={(ev) => setMotivo(ev.target.value)} />
+            </label>
+          </div>
+        )}
+        {livres.length > 0 && (
+          <div className="navegacao">
+            <button className="btn-principal btn-mini" disabled={salvando}
+                    onClick={acrescentar}>
+              {salvando ? 'Acrescentando…' : 'Acrescentar documento'}
+            </button>
+          </div>
+        )}
+        {itens.some((i) => i.ja_tem) && (
+          <p className="explica">
+            Já tem: {itens.filter((i) => i.ja_tem).map((i) => i.rotulo).join(' · ')}
+          </p>
+        )}
+      </div>
+    </details>
+  )
+}
+
 function PainelInformativo({ id, setMsg }) {
   const [itens, setItens] = useState(null)
   const [liberando, setLiberando] = useState(false)
@@ -1020,6 +1117,10 @@ export default function Detalhe({ id, aoVoltar }) {
       {/* Informativo de integração: ação (liberar), não consulta — fica junto
           do trabalho. Some quando o candidato não tem informativo. */}
       <PainelInformativo id={id} setMsg={setMsg} />
+
+      {/* Documento específico avulso: ação, fica junto do trabalho (regra da
+          v2.47 — trabalho e consulta em faixas separadas). */}
+      <DocumentosEspecificos id={id} setMsg={setMsg} />
 
       {pendDossie && (
         <div className="alerta">
