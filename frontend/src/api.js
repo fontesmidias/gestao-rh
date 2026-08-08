@@ -819,6 +819,19 @@ export const rh = {
     req('/rh/talentos', { method: 'POST', headers: authRH(),
         body: JSON.stringify(dados) }),
   opcoesTalento: () => req('/talentos/opcoes'),
+  // Exigências (v2.80): o que é obrigatório na admissão. Padrão da casa em
+  // Configurações; exceção por pessoa na ficha dela. `obrigatorio: null`
+  // desfaz a exceção e devolve ao padrão — sem isso o RH teria que saber de
+  // cor qual era o valor original.
+  exigenciasPadrao: () => req('/rh/config/exigencias', { headers: authRH() }),
+  salvarExigenciaPadrao: (grupo, chave, obrigatorio) =>
+    req('/rh/config/exigencias', { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ grupo, chave, obrigatorio }) }),
+  exigenciasDoCandidato: (id) =>
+    req(`/rh/candidatos/${id}/exigencias`, { headers: authRH() }),
+  ajustarExigencia: (id, grupo, chave, obrigatorio, motivo) =>
+    req(`/rh/candidatos/${id}/exigencias`, { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ grupo, chave, obrigatorio, motivo }) }),
   // Documento específico avulso, para COBERTURA (v2.79): a pessoa assina o kit
   // de um posto onde não está lotada, sem mudar o vínculo dela. O motivo é
   // obrigatório e vai para a auditoria junto com o posto dela — é o contraste

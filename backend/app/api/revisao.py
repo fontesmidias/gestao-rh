@@ -815,3 +815,125 @@ def acrescentar_documento_especifico(candidato_id: uuid.UUID,
     db.commit()
     return {"ok": True, "documento": chave,
             "rotulo": DOCS_ESPECIFICOS_DISPONIVEIS[chave]}
+
+
+# --------------------------------------------------------------------------
+# EXIGÊNCIAS (v2.80) — o que é obrigatório, para todos e para cada pessoa
+# --------------------------------------------------------------------------
+# Pedido do Bruno: *"por padrão vir marcado os campos obrigatórios para todos
+# (lógico, aqueles que têm que ser obrigatórios), mas customizável por
+# candidato, pelo pessoal do RH. Daí ter um padrão geral lá em configurações"*.
+#
+# A resolução em três camadas mora em `services/exigencias.py`; aqui só ficam as
+# portas. A do PADRÃO GERAL está em `configuracoes.py`, junto da config dinâmica.
+
+class ExigenciaIn(BaseModel):
+    """Ajuste de UMA exigência para UMA pessoa.
+
+    `obrigatorio = None` REMOVE a exceção e devolve a pessoa ao padrão da casa —
+    é o "desfazer". Sem ele, uma dispensa dada por engano ficaria para sempre, e
+    o RH teria que adivinhar o padrão para reproduzi-lo à mão.
+    """
+    grupo: str                     # "documentos" | "campos"
+    chave: str
+    obrigatorio: bool | None = None
+    motivo: str = ""
+
+
+def _validar_exigencia(grupo: str, chave: str) -> None:
+    """Recusa grupo/chave inválidos e o que é do SISTEMA.
+
+    ⚠️ A ordem importa, e ela custou uma mutação para aparecer: o guard de
+    `SEMPRE_OBRIGATORIOS` vem ANTES da checagem de catálogo. `pessoais.email` e
+    `documentos.cpf` não estão em `CAMPOS_PADRAO` (não são configuráveis), então
+    a checagem de catálogo já os recusaria — mas com a mensagem ERRADA
+    ("chave_desconhecida"), e a proteção real sumiria no dia em que alguém
+    acrescentasse essas chaves ao catálogo. Validar na ordem certa faz o motivo
+    da recusa ser o verdadeiro.
+    """
+    from app.services.exigencias import (CAMPOS_PADRAO, DOCUMENTOS_PADRAO,
+                                         SEMPRE_OBRIGATORIOS)
+    if grupo not in ("documentos", "campos"):
+        raise HTTPException(status_code=422, detail="grupo_invalido")
+    if chave in SEMPRE_OBRIGATORIOS:
+        # Não é preciosismo: sem aceite LGPD não há base legal para guardar a
+        # ficha; sem e-mail o código de assinatura não chega e a admissão para
+        # no meio; sem CPF a pessoa não casa em creche, Tirvu nem ponto.
+        # Quebraria LONGE daqui, onde ninguém ligaria uma coisa à outra.
+        raise HTTPException(status_code=422, detail="exigencia_do_sistema")
+    catalogo = DOCUMENTOS_PADRAO if grupo == "documentos" else CAMPOS_PADRAO
+    if chave not in catalogo:
+        raise HTTPException(status_code=422, detail="chave_desconhecida")
+
+
+@router.get("/rh/candidatos/{candidato_id}/exigencias")
+def ler_exigencias(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """O que é exigido desta pessoa, com a ORIGEM de cada item.
+
+    A origem (`fabrica` / `casa` / `pessoa` / `sistema`) é o que deixa a tela
+    dizer *"dispensado para esta pessoa"* em vez de só mostrar um check
+    desmarcado — sem ela o RH não distingue "o padrão é assim" de "alguém
+    decidiu isto aqui".
+    """
+    from app.services.exigencias import dump_para_tela
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    return dump_para_tela(db, cand)
+
+
+@router.put("/rh/candidatos/{candidato_id}/exigencias")
+def ajustar_exigencia(candidato_id: uuid.UUID, payload: ExigenciaIn,
+                      db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Dispensa ou passa a exigir UM item, só para esta pessoa.
+
+    O MOTIVO é obrigatório ao mudar (não ao desfazer): é ele que explica, meses
+    depois, por que aquela pessoa não entregou um documento que todo mundo
+    entrega. Mesma regra do `reverter` (v1.65) e da troca de matrícula (v2.45).
+
+    Ao mudar DOCUMENTO, os slots são ressincronizados na hora — senão a tela do
+    candidato continuaria pedindo o que acabou de ser dispensado, e ele veria a
+    mudança só no autosave seguinte.
+    """
+    from app.services.exigencias import ROTULOS
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+
+    grupo = (payload.grupo or "").strip()
+    chave = (payload.chave or "").strip()
+    _validar_exigencia(grupo, chave)
+
+    motivo = (payload.motivo or "").strip()
+    if payload.obrigatorio is not None and not motivo:
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+
+    # Reescreve o dicionário inteiro em vez de mutar em profundidade: o
+    # SQLAlchemy não detecta mudança DENTRO de um JSON já carregado, e a
+    # gravação se perderia em silêncio.
+    atual = dict(cand.exigencias or {})
+    do_grupo = dict(atual.get(grupo) or {})
+    if payload.obrigatorio is None:
+        do_grupo.pop(chave, None)      # volta ao padrão da casa
+    else:
+        do_grupo[chave] = bool(payload.obrigatorio)
+    atual[grupo] = do_grupo
+    cand.exigencias = {g: v for g, v in atual.items() if v}  # não guarda grupo vazio
+
+    if grupo == "documentos":
+        from app.services.slots import sincronizar_slots
+        sincronizar_slots(db, cand)
+
+    registrar(db, "exigencia_ajustada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=cand.id,
+              detalhe={"grupo": grupo, "chave": chave,
+                       "rotulo": ROTULOS.get(chave, chave),
+                       "obrigatorio": payload.obrigatorio,
+                       "motivo": motivo or None})
+    db.commit()
+    return {"ok": True, "grupo": grupo, "chave": chave,
+            "obrigatorio": payload.obrigatorio,
+            "rotulo": ROTULOS.get(chave, chave)}

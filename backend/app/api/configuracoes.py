@@ -1113,3 +1113,79 @@ def auditoria(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)
          "candidato_id": e.candidato_id, "detalhe": e.detalhe}
         for e in eventos
     ]
+
+
+# --------------------------------------------------------------------------
+# EXIGÊNCIAS — o padrão da CASA (v2.80)
+# --------------------------------------------------------------------------
+# Pedido do Bruno: *"daí ter um padrão geral lá em configurações"*. Aqui se
+# define o que vale para TODOS; a exceção por pessoa fica na ficha dela
+# (`revisao.py`). A resolução em camadas mora em `services/exigencias.py`.
+
+class ExigenciaPadraoIn(BaseModel):
+    grupo: str                     # "documentos" | "campos"
+    chave: str
+    obrigatorio: bool | None = None   # None = volta ao padrão de FÁBRICA
+
+
+@router.get("/rh/config/exigencias")
+def ver_exigencias(db: Session = Depends(get_db),
+                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """O padrão da casa, com a origem de cada item (fábrica ou casa)."""
+    from app.services.exigencias import dump_para_tela
+    return dump_para_tela(db)          # sem candidato: só fábrica + casa
+
+
+@router.put("/rh/config/exigencias")
+def salvar_exigencia_padrao(payload: ExigenciaPadraoIn,
+                            db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Muda o padrão para TODOS os candidatos daqui em diante.
+
+    ⚠️ Vale para quem AINDA está preenchendo, não para quem já concluiu: as
+    pendências são calculadas na hora de declarar. Tornar algo obrigatório não
+    reabre ficha de ninguém — reabrir admissão encerrada é outro caminho, com
+    outras guardas (v2.03/v2.43).
+
+    `obrigatorio = None` remove a chave e devolve ao padrão de fábrica: sem isso
+    o RH não teria como desfazer sem saber de cor qual era o valor original.
+    """
+    import json
+
+    from app.api.revisao import _validar_exigencia
+    from app.services.config_dinamica import ler_config
+    from app.services.exigencias import CHAVE_CONFIG, ROTULOS
+
+    # MESMA validação da rota por pessoa: duas cópias divergiriam na primeira
+    # mudança, e é ela que guarda a regra de que `pessoais.email` e
+    # `documentos.cpf` não se desmarcam — nem aqui, nem lá.
+    grupo = (payload.grupo or "").strip()
+    chave = (payload.chave or "").strip()
+    _validar_exigencia(grupo, chave)
+
+    bruto = ler_config(db, (CHAVE_CONFIG,)).get(CHAVE_CONFIG)
+    try:
+        atual = json.loads(bruto) if bruto else {}
+        if not isinstance(atual, dict):
+            atual = {}
+    except (ValueError, TypeError):
+        # Config ilegível não trava a gravação: começa do zero em vez de
+        # devolver 500 e deixar o RH sem saída.
+        atual = {}
+
+    do_grupo = dict(atual.get(grupo) or {})
+    if payload.obrigatorio is None:
+        do_grupo.pop(chave, None)
+    else:
+        do_grupo[chave] = bool(payload.obrigatorio)
+    atual[grupo] = do_grupo
+    gravar_config(db, {CHAVE_CONFIG: json.dumps(
+        {g: v for g, v in atual.items() if v}, ensure_ascii=False)})
+
+    registrar(db, "exigencia_padrao_alterada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"grupo": grupo, "chave": chave,
+                       "rotulo": ROTULOS.get(chave, chave),
+                       "obrigatorio": payload.obrigatorio})
+    db.commit()
+    return {"ok": True, "grupo": grupo, "chave": chave,
+            "obrigatorio": payload.obrigatorio}

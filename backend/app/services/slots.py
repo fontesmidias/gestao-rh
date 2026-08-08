@@ -96,6 +96,22 @@ def sincronizar_slots(db: Session, candidato: Candidato) -> list[SlotDocumento]:
     }
 
     aplicaveis = _slots_aplicaveis(db, candidato)
+
+    # A OBRIGATORIEDADE vem do serviço de exigências (v2.80): padrão de fábrica
+    # → padrão da casa (config) → exceção desta pessoa. O `_slots_aplicaveis`
+    # continua respondendo o que se APLICA (reservista só para homem de 18-45,
+    # laudo só para quem declarou PCD) — as duas perguntas são diferentes, e
+    # misturá-las faria o RH "dispensar" um documento que nem seria pedido.
+    #
+    # Uma leitura de config para a lista inteira: este método roda a cada
+    # autosave do wizard (900ms), e resolver item a item releria a config
+    # dezenas de vezes por salvamento.
+    from app.services.exigencias import mapa_documentos
+    obrigatorios = mapa_documentos(db, candidato)
+    for spec in aplicaveis:
+        chave = spec["tipo"].value if hasattr(spec["tipo"], "value") else str(spec["tipo"])
+        if chave in obrigatorios:
+            spec["obrigatorio"] = obrigatorios[chave]
     chaves_aplicaveis = set()
     for spec in aplicaveis:
         chave = (spec["tipo"], spec.get("dependente_id"))
