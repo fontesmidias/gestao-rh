@@ -200,6 +200,23 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   primeiro enche a tela; (4) título e respiro menores. No desktop nada muda
   (`display: contents` no `<details>`). Teto travado em teste: § 9.1 do
   `08-sistema-de-design.md` e `tabelas-cabem-na-tela.spec.js`.
+- **Marcador de variável DIGITADO à mão erra em silêncio — insira pelo cursor**
+  (v2.82, `frontend/src/CampoComVariaveis.jsx`): as variáveis eram uma LISTA NO
+  TOPO da tela; a pessoa lia `{{nome_social}}`, voltava ao texto e digitava de
+  memória, com as duas chaves de cada lado. `fichas.aplicar_variaveis` é regex
+  `{{(\w+)}}` e só substitui o que casa com chave conhecida — então
+  `{{nome_socal}}` (sem o "i") **fica no texto como está** e sai impresso no PDF
+  que a pessoa assina; num e-mail de acesso, `{{codigo}}` mal digitado significa
+  que ninguém recebe o código. É a família do defeito silencioso: nada quebra, o
+  resultado é que está errado. Duas decisões que fazem o seletor funcionar: (1)
+  **a posição vem do DOM** (`selectionStart` lido do próprio campo, guardado no
+  `onBlur`) — estado do React se perde quando o campo perde o foco, que é
+  exatamente o que acontece ao clicar no seletor; (2) **o foco volta ao texto**
+  com `setSelectionRange` dentro de `setTimeout(…, 0)` — o React ainda não
+  repintou o valor novo quando o `onChange` retorna, e mexer na seleção antes
+  disso não tem efeito. Ao criar editor novo que aceite variável, use este
+  componente nos DOIS campos (título/assunto **e** corpo): metade ligada parece
+  ligada, e o `test_campo_variaveis.py` cobra `count("<CampoComVariaveis") >= 2`.
 - **Confirmação de AÇÃO é `<Aviso>` flutuante; `.alerta` inline é para ESTADO**
   (v2.75, `frontend/src/Aviso.jsx`): *"esses avisos tem lugares que ele aparece
   no topo enquanto estamos lá embaixo na tela, ou seja nem aparecem"*. A regra

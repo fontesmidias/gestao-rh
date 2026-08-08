@@ -41,7 +41,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 
 ### Documentos e assinaturas
 - **Ficha de integração por regime**: o documento de boas-vindas (dados, VT, VA, conta salário, ponto pelo Tirvu+, prazos de assinatura e normativos) existe para **efetivo e intermitente**. A diferença é o ciclo de pagamento dos benefícios — o efetivo apura **do dia 1 ao dia 30**; o intermitente, **semanalmente**. Só vai ao colaborador depois que o RH libera
-- **Modelos de documento** no papel timbrado, com variáveis (`{{nome}}`, `{{cargo}}`…), prévia, envio pontual e predefinições (Ofício, Comunicado, Contrato, Declaração)
+- **Modelos de documento** no papel timbrado, com variáveis (`{{nome}}`, `{{cargo}}`…), prévia, envio pontual e predefinições (Ofício, Comunicado, Contrato, Declaração). A variável é **escolhida numa lista com busca e entra na posição do cursor**, nos modelos e nos textos de e-mail — digitá-la à mão erra em silêncio: um `{{nome_socal}}` sem o "i" não casa com nada, não dá erro e sai impresso no PDF que a pessoa assina
 - **Assinatura eletrônica simples** (Lei 14.063/2020, art. 4º, I): código de uso único por e-mail, manifesto de evidências no PDF (hash SHA-256, IP, dispositivo, data) e **verificador público por QR code**
 - **Multi-signatário em ordem de papéis**: um documento pode exigir a assinatura do colaborador, de alguém do RH (assina logado) e/ou de um terceiro externo (link próprio + código), em sequência — o PDF final consolida todas as assinaturas
 - **Assinatura da equipe por autorização prévia**: um representante autoriza uma vez (ato de vontade datado), e sua assinatura passa a constar nos documentos daquele modelo — sem carimbo falso

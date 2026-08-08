@@ -97,7 +97,7 @@ jobs:
           # SÍNCRONO. Stdlib pura, lê arquivos, roda em segundos.
           for t in test_design_system test_upload_multipart test_versao test_nomes \
                    test_migration_insert_cru test_anti_prompt_injection \
-                   test_api_front_existe; do
+                   test_api_front_existe test_campo_variaveis; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

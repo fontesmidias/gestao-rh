@@ -11,6 +11,58 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.82.0] — 2026-08-08 — A variável entra onde o cursor está
+
+> *"Nos modelos, seja de email, mensagens, doc, mostrar todas as variáveis
+> disponíveis de cada colaborador (…) eu paro o cursor de digitação em
+> determinado lugar do modelo e tenha como abrir um select com busca com as
+> opções de variáveis, acho que melhora a ux e ui."*
+
+### O erro que não dá erro
+
+As variáveis eram uma **lista no topo da tela**. A pessoa lia `{{nome_social}}`,
+voltava ao texto e digitava de memória — com as duas chaves de cada lado.
+
+Errar não quebra nada: o `aplicar_variaveis` usa regex e só substitui o que casa
+com uma chave conhecida. `{{nome_socal}}` (sem o "i") fica no texto **como
+está** — e sai impresso no PDF que a pessoa assina. Num e-mail, `{{codigo}}` mal
+digitado significa que ninguém recebe o código de acesso.
+
+Agora a variável é escolhida numa lista com busca — que casa também pela
+**descrição**, não só pelo nome — e entra pronta, na posição do cursor. Não há o
+que digitar errado.
+
+### Duas decisões que fazem funcionar
+
+**A posição vem do DOM, não do React.** `selectionStart` lido do próprio campo e
+guardado no `onBlur` — estado do React se perde quando o campo perde o foco, que
+é exatamente o que acontece ao clicar no seletor. Guardar depois seria tarde.
+
+**O foco volta para o texto**, com o cursor depois da variável. Sem isso a pessoa
+insere, o cursor some, e precisa clicar no texto de novo — o seletor viraria um
+atalho que custa dois cliques a mais.
+
+Os chips continuam ao lado, agora **clicáveis**: quem já sabe o nome não abre
+lista nenhuma, e clicar insere no mesmo lugar.
+
+### Ligado nos dois editores
+
+Modelos de documento **e** textos dos e-mails, nos dois campos de cada um
+(título/assunto e corpo). O teste cobra os dois — deixar metade seria o tipo de
+coisa que ninguém percebe até precisar.
+
+A lista que ficava no topo de Modelos **saiu**: com o seletor sob cada campo, ela
+apareceria três vezes na mesma tela, e no topo é legenda longe de onde se
+escreve.
+
+### Portões
+
+2 mutações, ambas reprovaram. Backend verde, smoke **15/15**, E2E **30/30**.
+Comportamento verificado na tela: inserção no meio do texto (posição 15 → cursor
+em 23, foco de volta) pelos dois caminhos, chip e seletor.
+
+---
+
 ## [2.81.0] — 2026-08-08 — A planilha que chega na caixa
 
 > *"No corpo do email de envio de uniformes, tem que ir os dados da pessoa,

@@ -2105,6 +2105,24 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   background: #fff; border: 1px solid var(--borda-suave);
   font-family: Consolas, monospace; font-size: .8rem; }
 .chip-var.obrigatoria { border-color: var(--verde-vivo); font-weight: 700; }
+/* Seletor de variáveis DEBAIXO do campo de texto (v2.82) — *"eu paro o cursor
+   de digitação em determinado lugar do modelo e tenha como abrir um select com
+   busca com as opções de variáveis"*. Fica logo abaixo porque é sobre AQUELE
+   campo: no topo da tela seria uma legenda, e a pessoa teria que rolar de volta
+   para consultar enquanto escreve. */
+.campo-variaveis { display: flex; flex-wrap: wrap; align-items: flex-start;
+                   gap: var(--esp-2); margin-top: var(--esp-2); }
+.campo-variaveis > .select-busca { flex: 0 0 auto; min-width: 13rem; }
+.campo-variaveis-chips { display: flex; flex-wrap: wrap; gap: var(--esp-1);
+                         flex: 1 1 14rem; min-width: 0; }
+/* Fonte monoespaçada nos chips: `{{nome_social}}` é código, e a mudança de
+   fonte é o que faz o olho distinguir a variável do texto ao redor. */
+.campo-variaveis-chips .chip { font-family: Consolas, monospace; }
+@media (max-width: 760px) {
+  /* No celular o seletor ocupa a largura e os chips vêm abaixo: lado a lado
+     eles ficariam com 6rem cada, ilegíveis. */
+  .campo-variaveis > .select-busca { flex: 1 1 100%; }
+}
 .email-acoes { display: flex; flex-wrap: wrap; gap: var(--esp-2);
   align-items: center; margin-top: var(--esp-3); }
 .email-previa { margin-top: var(--esp-4); }
