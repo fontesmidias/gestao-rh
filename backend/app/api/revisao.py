@@ -694,3 +694,124 @@ def pedir_documento(candidato_id: uuid.UUID, payload: PedirDocumentoIn,
                        "status_candidato": cand.status.value})
     db.commit()
     return {"slot_id": slot.id, "tipo": tipo.value, "liberado_em": slot.liberado_em}
+
+
+class DocumentoEspecificoIn(BaseModel):
+    """Documento ESPECÍFICO acrescentado a UMA pessoa (v2.79).
+
+    `documento` é valor de `DocumentoAssinavel` — os mesmos do kit de posto
+    (`postos.DOCS_ESPECIFICOS_DISPONIVEIS`), não uma lista paralela: duas fontes
+    para "quais são os documentos especiais" divergiriam na primeira mudança.
+
+    `motivo` é OBRIGATÓRIO. É ele que explica, meses depois, por que alguém
+    lotado no posto X assinou o kit do posto Y — sem isso o registro fica sem a
+    metade que importa (precedente do `reverter` colaborador→candidato, v1.65,
+    e da troca de matrícula, v2.45).
+    """
+    documento: str
+    motivo: str = ""
+
+
+@router.get("/rh/candidatos/{candidato_id}/documentos-especificos")
+def listar_documentos_especificos(candidato_id: uuid.UUID,
+                                  db: Session = Depends(get_db)) -> dict:
+    """O que dá para acrescentar a esta pessoa, e o que ela já tem.
+
+    A tela precisa das duas listas: oferecer um documento que a pessoa já
+    assinou faria o RH clicar e receber um 409 — erro que o sistema podia ter
+    evitado.
+    """
+    from app.api.postos import DOCS_ESPECIFICOS_DISPONIVEIS
+    from app.models.assinatura import Assinatura
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+
+    ja_tem = {
+        a.documento.value if hasattr(a.documento, "value") else a.documento
+        for a in db.scalars(select(Assinatura).where(
+            Assinatura.candidato_id == cand.id,
+            Assinatura.invalidada_em.is_(None))).all()
+    }
+    return {
+        "disponiveis": [
+            {"chave": chave, "rotulo": rotulo, "ja_tem": chave in ja_tem}
+            for chave, rotulo in DOCS_ESPECIFICOS_DISPONIVEIS.items()
+        ],
+    }
+
+
+@router.post("/rh/candidatos/{candidato_id}/documento-especifico")
+def acrescentar_documento_especifico(candidato_id: uuid.UUID,
+                                     payload: DocumentoEspecificoIn,
+                                     db: Session = Depends(get_db),
+                                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    """Acrescenta UM documento específico à pessoa, sem mexer no posto dela.
+
+    Nasceu da COBERTURA (feedback do Bruno, 2026-08-07): *"um intermitente
+    precisou dar cobertura na presidência da República. Não estava fácil marcar
+    para emitir os documentos específicos da presidência"*.
+
+    O kit da Presidência sempre existiu e sempre foi selecionável — mas **por
+    POSTO**, e numa cobertura a pessoa justamente NÃO está lotada no posto que
+    exige o documento. A única saída era lotá-la lá, o que muda o vínculo dela
+    para resolver uma emissão de papel; ou marcar o kit no posto dela, o que
+    passaria a exigir aqueles documentos de todo mundo daquele posto.
+
+    Aqui é para UMA pessoa e mais nada. O documento nasce como qualquer outro do
+    kit (`Assinatura` liberada), então segue o fluxo normal: aparece para ela
+    assinar, entra no dossiê, conta como pendência.
+
+    **Não duplica assinatura viva**: se a pessoa já tem aquele documento
+    pendente ou assinado, responde 409 — reemitir apagaria o que ela já assinou.
+    Para trocar, existe o caminho de invalidar.
+    """
+    from app.api.postos import DOCS_ESPECIFICOS_DISPONIVEIS
+    from app.models.assinatura import Assinatura, DocumentoAssinavel
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if cand.status == StatusCandidato.expurgado:
+        raise HTTPException(status_code=409, detail="candidato_expurgado")
+
+    chave = (payload.documento or "").strip()
+    if chave not in DOCS_ESPECIFICOS_DISPONIVEIS:
+        # Só os do catálogo: aceitar qualquer valor do enum deixaria o RH
+        # acrescentar ficha de integração ou termo de VT por engano — documentos
+        # que o sistema decide sozinho, por regime e por posto.
+        raise HTTPException(status_code=422, detail="documento_nao_disponivel")
+    doc = DocumentoAssinavel(chave)
+
+    motivo = (payload.motivo or "").strip()
+    if not motivo:
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+
+    ja = db.scalar(select(Assinatura).where(
+        Assinatura.candidato_id == cand.id,
+        Assinatura.documento == doc,
+        Assinatura.invalidada_em.is_(None)))
+    if ja is not None:
+        raise HTTPException(status_code=409, detail={
+            "erro": "documento_ja_existe",
+            "assinado": ja.assinado_em is not None,
+            "rotulo": DOCS_ESPECIFICOS_DISPONIVEIS[chave],
+        })
+
+    db.add(Assinatura(candidato_id=cand.id, documento=doc,
+                      aguardando_liberacao=False))
+    # O posto DA PESSOA vai para a auditoria de propósito: é o contraste que
+    # explica o registro — "lotada no posto X, assinou o kit do posto Y". Sem
+    # ele, o motivo escrito pelo RH fica sem o contexto que o torna verificável.
+    # (`Candidato` tem a FK, não um relationship — daí o `db.get`.)
+    from app.models.candidato import PostoServico
+    posto = (db.get(PostoServico, cand.posto_servico_id)
+             if cand.posto_servico_id else None)
+    registrar(db, "documento_especifico_acrescentado", ator="rh",
+              ator_detalhe=rh.email, candidato_id=cand.id,
+              detalhe={"documento": chave, "motivo": motivo,
+                       "posto_da_pessoa": posto.nome if posto else None})
+    db.commit()
+    return {"ok": True, "documento": chave,
+            "rotulo": DOCS_ESPECIFICOS_DISPONIVEIS[chave]}

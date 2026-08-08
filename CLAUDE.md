@@ -88,6 +88,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Documento de kit é POR POSTO — cobertura precisa da porta avulsa** (v2.79,
+  `revisao.py::acrescentar_documento_especifico`): *"um intermitente precisou
+  dar cobertura na presidência da República; não estava fácil marcar para
+  emitir os documentos específicos"*. Os documentos EXISTEM desde a v1.17 e são
+  selecionáveis — mas em `PostoServico.documentos_kit`, e quem faz cobertura
+  não está lotado no posto que os exige. As saídas eram lotá-la lá (muda o
+  VÍNCULO para emitir um papel) ou marcar o kit no posto dela (exigiria aquilo
+  de todo mundo ali). A rota acrescenta UM documento a UMA pessoa, sem tocar em
+  posto. Quatro travas: a lista vem do MESMO
+  `postos.DOCS_ESPECIFICOS_DISPONIVEIS` (lista paralela divergiria);
+  **só o catálogo entra** — aceitar qualquer valor do enum deixaria criar um
+  SEGUNDO `termo_vt`, que é desconto de 6% em folha; motivo obrigatório, com o
+  POSTO DA PESSOA na auditoria (*"lotada em X, assinou o kit de Y"*); e 409 em
+  assinatura viva, dizendo se está pendente ou assinada.
 - **Botão DESABILITADO que anuncia estado é ruído, não controle** (v2.78,
   terceira tentativa no mesmo botão): a v2.75 deixou dois "fechar" (coluna +
   painel); a v2.75.1 tirou um e desabilitou o outro quando a ficha abria —
