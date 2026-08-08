@@ -88,6 +88,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`flex: 1 1 X` muda de EIXO quando o contêiner vira coluna** (v2.77): a
+  `.rh-escala-rotulo` é `flex: 1 1 12rem` — numa linha horizontal isso é "ocupe
+  a largura que sobrar", certo; no celular, onde a `.rh-escala-linha` vira
+  `flex-direction: column`, o mesmo `1 1` passa a mandar na ALTURA e o rótulo
+  esticou para 192px com 3 linhas de texto, abrindo um vazio de ~130px entre a
+  pergunta e os botões de nota. É a v2.63 (`trocar display invalida regras de
+  filho`) no eixo oposto: ao mudar `flex-direction` numa media query, revise
+  `flex` E `justify-content` dos filhos — `space-between` numa coluna distribui
+  VERTICALMENTE.
+- **`title` não abre no CELULAR — informação que decide vai no `:focus`**
+  (v2.77): a âncora que separa "4 — Evidência forte" de "3 — Atende" só existia
+  no `title` do chip e num `<details>` no fim do bloco. Sem mouse, o `title` não
+  existe; e informação que sustenta a NOTA precisa estar onde a nota é dada.
+  Use `data-dica` + o mecanismo do `Ajuda.jsx` (CSS puro, `:hover` no desktop e
+  `:focus` no toque) em vez de inventar popup. Balão para CIMA quando houver
+  campo de texto logo abaixo — para baixo ele cobre o que a pessoa vai escrever.
 - **`<details>` FECHADO não renderiza o conteúdo — CSS não reabre** (v2.76.2,
   *"não voltaram os filtros de select com busca"*): ao recolher a barra de
   filtros no celular, neutralizei a caixa no CSS (`display: contents` +
