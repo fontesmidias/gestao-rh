@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
+import CampoComVariaveis from '../CampoComVariaveis.jsx'
 
 // 📝 Modelos de documento — página exclusiva (Configurações → Modelos).
 // CRUD completo + prévia + duplicar + opções de envio (e-mail / assinatura
@@ -162,10 +163,10 @@ export default function Modelos() {
         <strong> assinatura eletrônica</strong> — nesse caso ele entra no mesmo fluxo das fichas
         (código por e-mail, bloco de assinatura, manifesto com papel do signatário e verificação
         pública por QR code).</p>
-      <p className="explica" style={{ marginTop: '-.4rem' }}>Variáveis disponíveis:{' '}
-        {Object.entries(dados.variaveis).map(([k, desc]) => (
-          <code key={k} title={desc} style={{ marginRight: '.4rem' }}>{`{{${k}}}`}</code>
-        ))}</p>
+      {/* A lista de variáveis SAIU daqui (v2.82): ela agora fica sob cada campo
+          do editor, com seletor de busca e inserção na posição do cursor.
+          Mantê-la aqui deixaria a mesma informação em TRÊS lugares na mesma
+          tela — e no topo ela é legenda, longe de onde se escreve. */}
 
       <div className="rh-lote" style={{ margin: '.4rem 0 .6rem' }}>
         <input placeholder="🔎 Buscar modelo pelo título…" value={busca}
@@ -184,6 +185,7 @@ export default function Modelos() {
       {edit && !edit.id && (
         <CamposModelo edit={edit} setEdit={setEdit} postos={postos} papeis={papeis}
                       pessoas={pessoas} salvar={salvar} salvando={salvando}
+                      variaveis={dados.variaveis}
                       onCancelar={() => setEdit(null)} />
       )}
 
@@ -250,6 +252,7 @@ export default function Modelos() {
                           <CamposModelo edit={edit} setEdit={setEdit} postos={postos}
                                         papeis={papeis} pessoas={pessoas} inline
                                         salvar={salvar} salvando={salvando}
+                                        variaveis={dados.variaveis}
                                         onCancelar={() => setEdit(null)} />
                         </td>
                       </tr>
@@ -534,20 +537,28 @@ function EnviarParaPessoa({ modelo, pessoas, setMsg, aoFechar }) {
 }
 
 function CamposModelo({ edit, setEdit, postos, papeis, pessoas, salvar, salvando,
-                        onCancelar, inline }) {
+                        onCancelar, inline, variaveis }) {
   const ref = useRef(null)
   useEffect(() => {
     if (inline && ref.current) ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
   return (
     <div ref={ref} className={inline ? 'form-inline-conteudo' : ''}>
-      <label className="campo"><span className="rotulo">Título (aceita variáveis)</span>
-        <input value={edit.titulo} placeholder="Ex.: Declaração de vínculo — {{nome}}" autoFocus
-               onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} /></label>
-      <label className="campo"><span className="rotulo">Corpo do documento</span>
-        <textarea rows={7} value={edit.corpo}
-                  placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…"
-                  onChange={(e) => setEdit({ ...edit, corpo: e.target.value })} /></label>
+      {/* Título e corpo com o SELETOR DE VARIÁVEIS (v2.82): antes a lista
+          ficava no topo da tela e a pessoa digitava `{{nome_social}}` de
+          memória, com as duas chaves de cada lado. Errar não dá erro nenhum —
+          o `aplicar_variaveis` só troca o que casa, então `{{nome_socal}}` sai
+          IMPRESSO no documento que a pessoa assina. */}
+      <CampoComVariaveis
+        como="input" rotulo="Título" dica="aceita variáveis"
+        valor={edit.titulo} aoMudar={(v) => setEdit({ ...edit, titulo: v })}
+        variaveis={variaveis}
+        placeholder="Ex.: Declaração de vínculo — {{nome}}" />
+      <CampoComVariaveis
+        rotulo="Corpo do documento" linhas={7}
+        valor={edit.corpo} aoMudar={(v) => setEdit({ ...edit, corpo: v })}
+        variaveis={variaveis}
+        placeholder="Declaramos que {{nome}}, CPF {{cpf}}, exerce a função de {{cargo}}…" />
       <div className="linha2">
         <label className="campo"><span className="rotulo">Aplica-se a</span>
           <SelectBusca valor={edit.escopo} aoEscolher={(v) => setEdit({ ...edit, escopo: v })}>

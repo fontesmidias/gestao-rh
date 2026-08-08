@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import CampoComVariaveis from '../CampoComVariaveis.jsx'
 import { rh as api } from '../api.js'
 
 // Textos dos e-mails do sistema (v2.06, pedido do Bruno em 2026-07-28: "uma
@@ -164,11 +165,21 @@ function Editor({ item, aoSalvar }) {
           o e-mail inteiro num lugar só (pedido de 2026-07-29). */}
       {item.evento && <Destinatarios item={item} aoSalvar={aoSalvar} />}
 
-      <label className="campo"><span className="rotulo">Assunto</span>
-        <input value={assunto} onChange={(e) => setAssunto(e.target.value)} /></label>
-      <label className="campo"><span className="rotulo">Texto do e-mail</span>
-        <textarea rows={8} value={corpo} onChange={(e) => setCorpo(e.target.value)} />
-      </label>
+      {/* Assunto e corpo com o SELETOR DE VARIÁVEIS (v2.82): a lista acima
+          continua (é onde as OBRIGATÓRIAS se destacam), mas digitar
+          `{{primeiro_nome}}` de memória era o caminho para o erro que não dá
+          erro — variável com nome torto fica no texto como está, e o e-mail
+          sai com `{{codigo}}` no lugar do código. */}
+      <CampoComVariaveis
+        como="input" rotulo="Assunto"
+        valor={assunto} aoMudar={setAssunto}
+        variaveis={Object.fromEntries(item.variaveis.map(
+          (v) => [v.nome, v.descricao + (v.obrigatoria ? ' (obrigatória)' : '')]))} />
+      <CampoComVariaveis
+        rotulo="Texto do e-mail" linhas={8}
+        valor={corpo} aoMudar={setCorpo}
+        variaveis={Object.fromEntries(item.variaveis.map(
+          (v) => [v.nome, v.descricao + (v.obrigatoria ? ' (obrigatória)' : '')]))} />
       <small className="explica">Deixe uma linha em branco entre os parágrafos. A
         aparência (cores, logo, rodapé) é aplicada automaticamente.</small>
       {item.botao_texto_padrao && (
