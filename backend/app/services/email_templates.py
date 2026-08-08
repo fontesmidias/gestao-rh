@@ -686,9 +686,16 @@ CATALOGO: tuple[ModeloEmail, ...] = (
        rotulo="Uniforme: tamanhos de um novo admitido",
        quando="O candidato conclui a admissão tendo informado os tamanhos.",
        assunto="👕 Uniforme: {{nome}} informou os tamanhos",
+       # ⚠️ O corpo dizia "a lista NÃO vai por e-mail" até a v2.80 — era a
+       # decisão da v2.07, revertida na v2.81 a pedido do Bruno: quem compra e
+       # separa uniforme não é usuário do painel. A planilha agora vai ANEXA, e
+       # o texto tem que dizer isso: instrução na tela que o sistema não cumpre
+       # é a armadilha da v2.74.
        corpo="{{nome}} concluiu a admissão e informou os tamanhos de uniforme.\n\n"
-             "A lista completa, com posto e medidas, fica na tela Uniformes — "
-             "não vai por e-mail.",
+             "Os dados vão na PLANILHA EM ANEXO — nome, CPF, cargo, posto e as "
+             "três medidas. Dá para separar o uniforme direto por ela, sem "
+             "entrar no sistema.\n\n"
+             "A lista completa de todo mundo continua na tela Uniformes.",
        variaveis={"nome": "nome do colaborador",
                   "link": "endereço da tela de Uniformes"},
        botao_texto="Ver a lista de uniformes", botao_url_var="link",

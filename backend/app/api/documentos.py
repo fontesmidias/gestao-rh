@@ -517,10 +517,31 @@ def concluir_envio(token: str, request: Request, db: Session = Depends(get_db)) 
     from app.models.ficha import DadosProfissionaisBancarios
     _u = db.get(DadosProfissionaisBancarios, candidato.id)
     if _u and (_u.tamanho_calca or _u.tamanho_camisa or _u.tamanho_calcado):
+        # A PLANILHA vai anexa (v2.81, pedido do Bruno): *"quero algo que seja
+        # possível através da leitura do email, os responsáveis do uniforme
+        # identificarem as informações, sem a necessidade de entrar no
+        # sistema"*. Quem compra e separa uniforme não é usuário do painel, e
+        # obrigá-lo a entrar para ver três medidas transformava recado em
+        # tarefa. Reverte conscientemente a decisão da v2.07 — ver o cabeçalho
+        # de `services/uniforme_planilha.py`.
+        #
+        # Falha ao montar o anexo NÃO pode segurar o aviso: o e-mail sai sem
+        # ele, com o link da tela, que é como funcionava antes. Perder o aviso
+        # inteiro por causa de um .xlsx seria trocar um problema pequeno por um
+        # maior (mesma regra do `avisar()`, que nunca levanta).
+        anexos = None
+        try:
+            from app.services.uniforme_planilha import (montar_planilha,
+                                                        nome_do_arquivo)
+            anexos = [(nome_do_arquivo(candidato), montar_planilha(db, [candidato]))]
+        except Exception:
+            log.warning("Não foi possível montar a planilha de uniforme de %s — "
+                        "o aviso sai sem anexo.", candidato.id, exc_info=True)
         avisar_modelo(
             db, "uniforme_pendente", "aviso_uniforme",
             {"nome": candidato.nome_completo,
-             "link": f"{base_url_publica(request)}/rh/uniformes"})
+             "link": f"{base_url_publica(request)}/rh/uniformes"},
+            anexos=anexos)
     return {"status": candidato.status}
 
 
