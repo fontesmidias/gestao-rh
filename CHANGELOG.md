@@ -11,6 +11,48 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.78.0] — 2026-08-08 — Um botão, dois estados
+
+> *"Não precisa ter um botão dizendo que está aberto e outro para fechar,
+> totalmente desnecessário — e tem um 'risquinho' aparecendo também."*
+
+Terceira tentativa no mesmo controle, e a certa. A v2.75 deixou **dois** botões
+"fechar" (um na coluna, outro no painel). A v2.75.1 tirou um e **desabilitou** o
+outro quando a ficha abria — trocou um defeito por outro: botão desabilitado que
+anuncia estado não é controle, é ruído ocupando o lugar de uma ação.
+
+Agora é **um só, que alterna**: *"Mais detalhes"* / *"Menos detalhes"*. O rótulo
+diz o que ACONTECE ao clicar, não o estado atual — quem lê um botão espera o
+efeito. O `✕ fechar` do painel saiu, e com ele a prop `aoFechar`, que ficaria
+declarada sem uso.
+
+### O risquinho
+
+Era real e tinha causa: a `td` da linha de detalhe recebe `background` e borda do
+tema, mas mede a largura **visível** do container (`100cqw` = 1060px) enquanto a
+tabela pode ser mais larga (1370px). A borda de baixo era desenhada só até onde
+a `td` chega, e a diferença aparecia como uma faixa clara à direita da linha
+aberta. Sem borda e sem fundo próprios não há o que sobrar — quem pinta o painel
+é o `.rh-conferencia` lá dentro.
+
+### E um defeito que o rótulo novo criou
+
+`.acoes-candidato:has(> :only-child)` fixava `width: 12ch` — largura pensada para
+"abrir". Com "Menos detalhes" o texto saía cortado ("lenos detalhe" no print).
+Foi para `16ch`.
+
+Fica a regra: **ao trocar o texto de um botão de ação, confira a largura da
+coluna** — ela é dimensionada em `ch`, proporcional ao rótulo, e o
+`text-overflow: ellipsis` esconde o corte em vez de denunciá-lo.
+
+### Portões
+
+E2E **30/30**, backend verde, smoke **15/15**. Conferido nos dois ambientes:
+desktop com o rótulo inteiro, celular com zero botões "fechar" e zero
+vazamentos.
+
+---
+
 ## [2.77.0] — 2026-08-07 — A âncora ao lado da nota
 
 Dois problemas na ficha de entrevista, os dois com print.

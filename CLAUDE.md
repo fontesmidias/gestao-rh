@@ -88,6 +88,26 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Botão DESABILITADO que anuncia estado é ruído, não controle** (v2.78,
+  terceira tentativa no mesmo botão): a v2.75 deixou dois "fechar" (coluna +
+  painel); a v2.75.1 tirou um e desabilitou o outro quando a ficha abria —
+  *"não precisa ter um botão dizendo que está aberto e outro para fechar"*. O
+  certo é **um botão que ALTERNA**, com rótulo dizendo o que ACONTECE ao clicar
+  ("Mais detalhes" / "Menos detalhes"), nunca o estado atual. Ao remover o
+  controle duplicado, **tire também a prop que o alimentava** (`aoFechar`),
+  senão fica declarada sem uso.
+- **Trocar o TEXTO de um botão de ação exige revisar a largura da coluna**
+  (v2.78): `.acoes-candidato:has(> :only-child)` fixa `width` em `ch` —
+  proporcional ao rótulo. "abrir" cabia em 12ch; "Menos detalhes" saiu cortado
+  ("lenos detalhe" no print do Bruno), e o `text-overflow: ellipsis` da regra
+  vizinha ESCONDE o corte em vez de denunciá-lo. Rótulo cortado é rótulo que
+  não se lê.
+- **A `td` do detalhe não pode ter borda nem fundo próprios** (v2.78, o
+  "risquinho"): ela mede a largura VISÍVEL do container (`100cqw`, 1060px)
+  enquanto a tabela pode ser mais larga (1370px), então a borda inferior era
+  desenhada só até onde a `td` chega e a diferença virava uma faixa clara à
+  direita da linha aberta. Quem pinta o painel é o `.rh-conferencia` dentro
+  dela.
 - **`flex: 1 1 X` muda de EIXO quando o contêiner vira coluna** (v2.77): a
   `.rh-escala-rotulo` é `flex: 1 1 12rem` — numa linha horizontal isso é "ocupe
   a largura que sobrar", certo; no celular, onde a `.rh-escala-linha` vira

@@ -27,7 +27,7 @@ import { fmtDataHora } from '../fmt.js'
 // teste cobre VOCABULÁRIO (classe existe? token existe?), não COMPOSIÇÃO (qual
 // primitiva serve a qual papel).
 
-export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar }) {
+export default function FichaEntrevista({ entrevistaId, form, aoMudar }) {
   const [e, setE] = useState(null)
   const [campos, setCampos] = useState(null)
   const [salvando, setSalvando] = useState(false)
@@ -161,7 +161,10 @@ export default function FichaEntrevista({ entrevistaId, form, aoFechar, aoMudar 
             )}
           </div>
         </div>
-        <button className="btn-secundario btn-mini" onClick={aoFechar}>✕ fechar</button>
+        {/* SEM botão de fechar aqui (v2.78): quem abriu a ficha foi o "Mais
+            detalhes" da linha, e ele mesmo fecha — virando "Menos detalhes".
+            Dois controles para a mesma ação é o que o Bruno reprovou duas vezes
+            seguidas. */}
       </div>
 
       {/* Entrevista que passou da data e ninguém fechou: o sistema PERGUNTA.

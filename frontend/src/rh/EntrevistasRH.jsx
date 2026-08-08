@@ -254,22 +254,22 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
           aoMudar: (v) => setIncluirArquivadas(v === 'sim'),
         }]}
         chaveLinha={(l) => l.id}
-        // Só ABRIR aqui (v2.75, pergunta do Bruno: *"por que dois botões
-        // fechar?"*). Quando a ficha está aberta ela já tem o seu "✕ fechar", no
-        // cabeçalho do painel — e aquele é o certo, porque fica ao lado do
-        // conteúdo que se está lendo. Este, na coluna de ações lá na direita,
-        // era um segundo controle para a mesma coisa (regra "um assunto, um
-        // controle", v2.30), e a essa altura o painel já empurrou a linha para
-        // longe. Aberta, a ação vira rótulo desabilitado: o botão SUMIR seria
-        // pior — a coluna encolheria e as linhas dançariam na tela.
+        // UM botão só, que ALTERNA (v2.78). Duas tentativas erradas antes desta:
+        // a v2.75 deixou dois "fechar" (um aqui, outro no painel) e a v2.75.1
+        // desabilitou este quando a ficha abria — o que o Bruno resumiu bem:
+        // *"não precisa ter um botão dizendo que está aberto e outro para
+        // fechar, totalmente desnecessário"*. Botão desabilitado que anuncia
+        // estado não é controle, é ruído: ocupa o lugar de uma ação e não faz
+        // nada.
+        // O rótulo diz o que ACONTECE ao clicar ("Mais detalhes" / "Menos
+        // detalhes"), não o estado atual — quem lê um botão espera o efeito.
         acoesLinha={(l) => (
           <button className="btn-secundario btn-mini"
-                  disabled={aberta === l.id}
                   title={aberta === l.id
-                    ? 'A ficha está aberta abaixo — use o ✕ fechar dela'
-                    : 'Abrir a ficha desta conversa'}
-                  onClick={() => setAberta(l.id)}>
-            {aberta === l.id ? 'aberta ▾' : 'abrir'}
+                    ? 'Fechar a ficha desta conversa'
+                    : 'Ver a ficha desta conversa'}
+                  onClick={() => setAberta(aberta === l.id ? null : l.id)}>
+            {aberta === l.id ? 'Menos detalhes' : 'Mais detalhes'}
           </button>
         )}
         // O detalhe abre NA LINHA, nunca no fim da página (regra desde a v1.83).
@@ -279,7 +279,6 @@ export default function EntrevistasRH({ aoVoltar, abrirPessoa }) {
           <div className="ficha-talento">
             <FichaEntrevista
               entrevistaId={l.id} form={form}
-              aoFechar={() => setAberta(null)}
               aoMudar={carregar} />
           </div>
         ) : null)}

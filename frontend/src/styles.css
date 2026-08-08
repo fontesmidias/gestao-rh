@@ -1187,9 +1187,15 @@ button.chip-link:hover { filter: brightness(1.08); }
      seria relativo à célula, que é justamente o que se quer limitar. */
   width: clamp(17ch, 16vw, 24ch);
 }
-/* Uma ação só: não precisa de grade nem da largura de duas. */
+/* Uma ação só: não precisa de grade nem da largura de duas.
+   16ch e não 12ch (v2.78): o botão de detalhe passou a dizer o que ACONTECE
+   ("Mais detalhes" / "Menos detalhes") em vez de "abrir", e com 12ch o rótulo
+   saía cortado — "lenos detalhe" no print do Bruno. A regra logo abaixo aplica
+   `text-overflow: ellipsis`, então o corte não vazava, mas rótulo cortado é
+   rótulo que não se lê. Ao trocar o TEXTO de um botão de ação, confira a
+   largura da coluna: ela é dimensionada em `ch`, proporcional ao rótulo. */
 .acoes-candidato:has(> :only-child) {
-  grid-template-columns: minmax(0, 1fr); width: 12ch;
+  grid-template-columns: minmax(0, 1fr); width: 16ch;
 }
 .acoes-candidato .btn-mini {
   margin-right: 0;
@@ -1739,6 +1745,15 @@ a.portal-doc:hover { border-color: var(--verde-vivo); }
 .dash-tabela tr.dash-detalhe > td > * {
   position: sticky; left: 0; box-sizing: border-box;
   width: 100cqw; max-width: 100cqw;
+}
+/* O "risquinho" (v2.78): a `td` do detalhe recebe `background` e borda do tema
+   e mede a largura VISÍVEL do container (100cqw = 1060px), enquanto a tabela
+   pode ser mais larga (1370px). A diferença aparecia como uma faixa clara de
+   ~2px à direita da linha aberta — parecia sujeira, e era a borda de baixo da
+   `td` desenhada só até onde ela chega. Sem borda e sem fundo próprios, não há
+   o que sobrar: quem pinta o painel é o `.rh-conferencia` lá dentro. */
+.dash-tabela tr.dash-detalhe > td {
+  border: none; background: none;
 }
 
 /* --- Interruptor da leitura de atestado de saúde (Config) --------------- */
