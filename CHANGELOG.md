@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.83.0] — 2026-08-08 — O Tirvu voltou a falar por nome
+
+> *"o que eu preciso que esteja na planilha de exportação para o tirvu é a
+> informação da coluna nome (…) na coluna de descrição da jornada, vá a
+> informação da coluna descrição (…) a de cargos também mudou, não é mais sobre
+> o id do cargo, é sobre o nome do cargo mesmo."*
+
+### Uma reversão consciente
+
+Em **2026-07-24** o feedback foi o oposto: colar o texto fazia o Tirvu gravar
+**zero**, e o export passou a escrever o `tirvu_id` nas três colunas. A decisão
+ficou gravada no código, no `CLAUDE.md` e na memória do projeto.
+
+O Tirvu mudou. O Bruno **testou uma importação com o texto direto na célula** e
+ela foi aceita — nas três colunas, inclusive Cargo, que agora casa pelo nome e
+não mais pelo id. Sem esse teste, a troca não teria sido feita: o modo como esse
+erro se manifesta é traiçoeiro (a planilha entra e o vínculo nasce zerado, sem
+reclamação), então a palavra de quem viu a importação passar é o que decide.
+
+| Coluna | Antes | Agora |
+|---|---|---|
+| Posto de Serviço | `posto.tirvu_id` (`59`) | `posto.nome` (`ANAC - 14/2026 - SEDE`) |
+| Cargo | de-para `CargoTirvu` (`50`) | `cargo_funcao` (`AUXILIAR DE SERVIÇOS GERAIS`) |
+| Descrição da Jornada | `jornada.tirvu_id` (`531`) | `jornada.descricao` (o texto completo) |
+
+`Empresa` continua fixa em `1` — ela nunca foi por texto.
+
+### O que isso conserta de quebra
+
+Com ID, quem estivesse num posto ou jornada **sem `tirvu_id` cadastrado** saía
+com a célula vazia. Nos dados reais de produção são **19 postos e 23 jornadas**
+nessa situação. O texto é dado do próprio cadastro e existe sempre: a
+dependência do de-para desaparece do caminho do export.
+
+### A pendência mudou de natureza
+
+Antes, célula vazia significava *"o ID não foi cadastrado"* e o rótulo dizia
+**"ID Tirvu do posto"**. Agora significa *"esta pessoa não tem posto na ficha"* —
+outro problema, resolvido em outro lugar. Os rótulos viraram **Posto**, **Cargo**
+e **Jornada**; manter o texto antigo mandaria o RH procurar no cadastro de IDs,
+onde não há nada a corrigir.
+
+O de-para `CargoTirvu` **continua vivo e sendo alimentado** — ele guarda o CBO,
+que é o que distingue cargo homônimo. Só deixou de ser consultado no export;
+`tirvu_id_do_cargo` foi removida por ter ficado órfã.
+
+### Portões
+
+4 mutações, todas reprovaram — inclusive as duas que restauram o ID nas células
+(reprovam mostrando `49` e `246`, não por ausência: os stubs carregam ID **e**
+texto de propósito). Planilha conferida com os **dados reais de produção**: 28
+colunas, aba `Plan1`, três células com o texto certo e nenhuma pendência.
+
+---
+
 ## [2.82.0] — 2026-08-08 — A variável entra onde o cursor está
 
 > *"Nos modelos, seja de email, mensagens, doc, mostrar todas as variáveis

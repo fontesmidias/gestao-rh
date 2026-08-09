@@ -14,8 +14,7 @@ import unicodedata
 
 from sqlalchemy.orm import Session
 
-from app.models.candidato import (Candidato, CargoTirvu, Jornada,
-                                  PostoServico)
+from app.models.candidato import Candidato, Jornada, PostoServico
 from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco)
 
 
@@ -29,15 +28,11 @@ def normalizar_cargo(texto) -> str:
     return re.sub(r"\s+", " ", sem_acento).strip().lower()
 
 
-def tirvu_id_do_cargo(db: Session, cargo_funcao) -> str:
-    """ID do Tirvu para um cargo (texto livre) via de-para `CargoTirvu`. Vazio se
-    o cargo não foi cadastrado — vira pendência na pré-checagem."""
-    chave = normalizar_cargo(cargo_funcao)
-    if not chave:
-        return ""
-    from sqlalchemy import select
-    m = db.scalar(select(CargoTirvu).where(CargoTirvu.cargo_normalizado == chave))
-    return (m.tirvu_id if m else "") or ""
+# `tirvu_id_do_cargo` foi REMOVIDA em 2026-08-08: o Tirvu passou a casar o cargo
+# pelo NOME, então o export escreve `c.cargo_funcao` direto. O de-para
+# `CargoTirvu` continua existindo e sendo alimentado — ele guarda o CBO, que é o
+# que distingue cargo homônimo ("AUXILIAR DE SERVIÇOS GERAIS" tem CBO de limpeza
+# e de produção) —, só não é mais consultado aqui.
 
 # A empregadora é sempre a Green House, ID 1 na base do Tirvu (decisão do Bruno
 # 2026-07-24). Fixo no export — não depende de cadastro de empresa.
@@ -191,20 +186,36 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
 
     matricula = garantir_matricula(db, c) if gerar_matricula else (c.matricula or "")
 
-    # Empresa/Posto/Cargo/Jornada: o importador do Tirvu casa por ID NUMÉRICO da
-    # base dele, não pelo texto (feedback 2026-07-24: colar o texto fez o Tirvu
-    # gravar zero). Escrevemos o `tirvu_id` cadastrado; se faltar, sai vazio e
-    # `pendencias_linha` acusa (melhor barrar aqui que subir e o Tirvu zerar).
+    # Posto/Cargo/Jornada vão como TEXTO — e isto REVERTE a decisão de
+    # 2026-07-24, de propósito.
+    #
+    # Naquela data o Tirvu casava por ID NUMÉRICO: colar o texto fazia ele
+    # gravar zero, e por isso o export passou a escrever o `tirvu_id`. O Tirvu
+    # MUDOU. O Bruno testou uma importação com o texto direto na célula em
+    # 2026-08-08 e ela foi aceita — nas três colunas, inclusive Cargo, que agora
+    # casa pelo NOME e não mais pelo id.
+    #
+    # A troca não é cosmética: com ID, quem estivesse num posto ou jornada sem
+    # `tirvu_id` cadastrado saía com a célula VAZIA (19 postos e 23 jornadas da
+    # base real estão nessa situação) e virava pendência. O texto é dado do
+    # próprio cadastro e existe sempre — some a dependência do de-para.
+    #
+    # ⚠️ Se um dia o Tirvu voltar a exigir ID, o sintoma é traiçoeiro: ele
+    # ACEITA a planilha e grava o vínculo ZERADO, sem reclamar. Não confie na
+    # importação "ter passado" — confira um vínculo na tela do Tirvu.
     return {
         # Empresa é SEMPRE a Green House = ID 1 no Tirvu (decisão do Bruno
         # 2026-07-24: o grupo opera com uma empregadora só; não depende de
         # cadastro nem vira pendência). Se um dia houver outra, trocar aqui.
         "Empresa": EMPRESA_TIRVU_ID,
-        "Posto de Serviço": (posto.tirvu_id if posto else "") or "",
+        "Posto de Serviço": (posto.nome if posto else "") or "",
         "Matrícula": matricula,
         "Nome Completo": c.nome_completo or "",
         "CPF": cpf_mascarado(cpf),
-        "Cargo": tirvu_id_do_cargo(db, c.cargo_funcao),
+        # O Tirvu casa o cargo pelo NOME desde 2026-08-08 — o de-para
+        # `CargoTirvu` deixou de ser necessário AQUI (segue vivo para o CBO,
+        # que distingue homônimo na padronização).
+        "Cargo": (c.cargo_funcao or "").strip(),
         "Data de Nascimento": _data(nascimento),
         "Data de Admissão": _data(c.data_admissao),
         "Sexo (M ou F)": sexo,
@@ -216,10 +227,10 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
         "Salário - Complementar": "",
         "Salário - Extra": "",
         "Data Vigência - Salário": "",
-        # Apesar do nome "Descrição", o Tirvu casa a jornada por ID (feedback
-        # 2026-07-24: "veio com id zerado, o correto seria 246"). Escreve o
-        # tirvu_id da jornada, não a descrição.
-        "Descrição da Jornada de Trabalho": (jornada.tirvu_id if jornada else "") or "",
+        # A coluna se chama "Descrição" e agora recebe a DESCRIÇÃO mesmo — que é
+        # a forma canônica da jornada no cadastro (o texto único que o RH
+        # confirma; os campos estruturados são metadados internos).
+        "Descrição da Jornada de Trabalho": (jornada.descricao if jornada else "") or "",
         # só dígitos: o front agora guarda mascarado (61) 99999-8888, mas o
         # Tirvu recebe o telefone limpo (como PIS/CPF-sem-máscara alhures)
         "Whatsapp": _so_digitos(c.celular_whatsapp),
@@ -276,10 +287,13 @@ def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
 # Rótulo amigável do campo na lista de pendências mostrada ao RH (a coluna do
 # layout tem nome técnico; o RH lê o nome do campo como aparece na ficha).
 _ROTULO_PENDENCIA = {
-    # Estes agora saem como ID do Tirvu; se vazio, o cadastro do ID falta.
-    "Posto de Serviço": "ID Tirvu do posto",
-    "Cargo": "ID Tirvu do cargo",
-    "Descrição da Jornada de Trabalho": "ID Tirvu da jornada",
+    # Desde 2026-08-08 estes saem como TEXTO (nome do posto, nome do cargo,
+    # descrição da jornada): quando falta, o que falta é o VÍNCULO na ficha da
+    # pessoa — não o cadastro de um ID. Dizer "ID Tirvu do posto" mandaria o RH
+    # procurar no lugar errado.
+    "Posto de Serviço": "Posto",
+    "Cargo": "Cargo",
+    "Descrição da Jornada de Trabalho": "Jornada",
     "Registra Ponto (S ou N)": "Registra Ponto",
 }
 
