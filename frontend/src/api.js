@@ -357,6 +357,19 @@ export const rh = {
     return r
   },
   sair: () => { localStorage.removeItem('rh_token'); localStorage.removeItem('rh_nome') },
+  // Primeiro acesso (v2.84): instalação sem NENHUM usuário cria o próprio
+  // administrador. Quem decide é o servidor (a tabela está vazia?), nunca a
+  // tela — ver o comentário do portão em `api/auth_rh.py`.
+  primeiroAcessoNecessario: () => req('/rh/auth/primeiro-acesso'),
+  primeiroAcesso: async (nome, email, senha) => {
+    const r = await req('/rh/auth/primeiro-acesso',
+                        { method: 'POST', body: JSON.stringify({ nome, email, senha }) })
+    // Já entra: a pessoa acabou de escolher a credencial, pedir que a digite de
+    // novo é só mais um passo para errar.
+    localStorage.setItem('rh_token', r.token)
+    localStorage.setItem('rh_nome', r.nome)
+    return r
+  },
   esqueciSenha: (email) =>
     req('/rh/auth/esqueci-senha', { method: 'POST', body: JSON.stringify({ email }) }),
   redefinirSenha: (token, senha_nova) =>

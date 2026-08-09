@@ -39,7 +39,7 @@ os.environ.setdefault("MINIO_ENDPOINT", "localhost:59000")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minio")
 os.environ.setdefault("MINIO_SECRET_KEY", "minio12345")
 os.environ.setdefault("MINIO_SECURE", "false")
-os.environ.setdefault("RH_ADMIN_EMAIL", "rh@greenhousedf.com.br")
+os.environ.setdefault("RH_ADMIN_EMAIL", "rh@exemplo.com.br")
 os.environ.setdefault("RH_ADMIN_PASSWORD", "senha-teste-123")
 os.environ.setdefault("SECRET_KEY", "segredo-de-teste")
 os.environ.setdefault("BASE_URL", "http://localhost:8090")
@@ -74,7 +74,7 @@ def _nitida() -> bytes:
 
 
 c = TestClient(app)
-H = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@greenhousedf.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
+H = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@exemplo.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
 suf = uuid.uuid4().hex[:8]
 jid = c.post("/api/rh/jornadas", headers=H,
              json={"descricao": f"PCD TESTE {suf}"}).json()["id"]
@@ -137,13 +137,13 @@ with SessionLocal() as db:
         EventoAuditoria.acao == "documento_pedido_ao_candidato",
         EventoAuditoria.candidato_id == uuid.UUID(cid))).all()
     checar(len(ev) == 1, f"um evento de auditoria ({len(ev)})")
-    checar(ev and ev[0].ator_detalhe == "rh@greenhousedf.com.br",
+    checar(ev and ev[0].ator_detalhe == "rh@exemplo.com.br",
            "com o e-mail de quem pediu — é dado de saúde registrado por "
            "terceiro sobre alguém")
     slot_db = db.scalar(select(SlotDocumento).where(
         SlotDocumento.candidato_id == uuid.UUID(cid),
         SlotDocumento.tipo == TipoDocumento.laudo_pcd))
-    checar(slot_db is not None and slot_db.liberado_por == "rh@greenhousedf.com.br",
+    checar(slot_db is not None and slot_db.liberado_por == "rh@exemplo.com.br",
            "e o próprio slot guarda quem abriu a porta")
 
 # ================= 3. quem já enviou o laudo não é incomodado de novo

@@ -11,6 +11,75 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.84.0] — 2026-08-08 — O sistema não sabe mais quem é você
+
+> *"o e-mail exposto na documentação é o rh@greenhousedf.com.br, ou seja, esse
+> e-mail é real. Está deixando um ponto de vulnerabilidade exposta no
+> repositório do GitHub. Quero que tire isso agora e mais: coloque um cadastro,
+> tipo guiado, onde no primeiro acesso ali sejam coletados os dados e criados os
+> dados cadastrais (…) mas lembre que é somente para o primeiro acesso."*
+
+### O e-mail saiu — mas o conserto não é apagar texto
+
+O endereço real aparecia em **46 arquivos versionados**, e trocá-los todos seria
+tratar o sintoma: enquanto o primeiro administrador nascer do `.env`, sempre
+haverá um e-mail e uma senha escritos em arquivo, e o `.env.example` sempre
+sugerirá *algum* endereço. A causa é o admin vir de configuração.
+
+Agora, **com o banco sem nenhum usuário, o painel abre um cadastro guiado**:
+nome, e-mail, senha (com repetição), e entra direto — a pessoa acabou de
+escolher a credencial, pedir que a digite de novo é só mais um passo para errar.
+
+`RH_ADMIN_EMAIL`/`RH_ADMIN_PASSWORD` continuam existindo para instalação
+automatizada, mas saíram do `.env.example` como caminho recomendado. As duas
+portas dividem o mesmo portão — *a tabela está vazia* —, então não se atropelam.
+
+### O portão é o banco, não a tela
+
+As duas rotas novas são **públicas por necessidade**: não há quem autentique
+antes do primeiro usuário existir. O que separa "instalação nova se
+configurando" de "qualquer um cria administrador na produção" é uma única
+checagem no servidor. Criado o primeiro, a consulta passa a dizer `false` e a
+criação responde **409** — para sempre.
+
+É por isso que o teste afirma sobre o **estado do banco**, não só sobre o status
+code: a mutação que remove o portão devolveu 200 **e criou um segundo usuário**,
+e as duas asserções reprovaram. Com o gate fora, a tela continuaria idêntica —
+o defeito só apareceria no dia em que alguém encontrasse a rota.
+
+### Limpeza do endereço
+
+| Onde | O que era | O que ficou |
+|---|---|---|
+| `.env.example`, `config.py` | `rh@greenhousedf.com.br` | vazio / `seudominio.com.br` |
+| `ci.yml` e 32 testes | credencial do banco efêmero | `admin@exemplo.com.br` |
+| Placeholders de tela e exemplo | endereço real | exemplo genérico |
+| **Documentos** (rodapé, termo LGPD, contato do DP) | — | **mantidos**, por decisão |
+
+O último ponto é conteúdo público legítimo da empresa. Ficou combinado tirá-lo
+do código numa próxima leva, lendo da configuração — inclusive nos documentos.
+
+**Achado no caminho:** `EmailStr` **recusa o TLD `.local`** (não é domínio
+público). A primeira troca usou `admin@exemplo.local` e teria quebrado o CI com
+um 401 — que apareceria como "senha errada", apontando para o lugar errado.
+
+### De quebra: uma regra de senha, não quatro
+
+`len(senha) < 8` estava copiado em quatro rotas. Virou `exigir_senha_forte()`.
+Regra repetida envelhece torto: basta alguém endurecer num ponto para haver duas
+políticas no mesmo sistema — e a mais fraca é a que vale, porque é por ela que
+se cria o usuário.
+
+### Portões
+
+19 verificações, 3 mutações (portão removido, consulta sempre `true`, senha sem
+validação), todas reprovaram. Rodado **dentro do container** antes de entrar no
+CI, onde ganhou banco próprio — o banco principal do job já tem admin, e lá o
+fluxo não existiria. Fluxo conferido na TELA, com prints: cadastro, senha
+divergente, entrada no painel e o login normal de volta depois. Smoke 15/15.
+
+---
+
 ## [2.83.1] — 2026-08-08 — A empresa também vai por nome
 
 > *"para empresa deve usar a informação da coluna razao_social, não o ID."*

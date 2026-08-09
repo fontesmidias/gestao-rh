@@ -38,7 +38,7 @@ os.environ.setdefault("MINIO_ENDPOINT", "localhost:59000")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minio")
 os.environ.setdefault("MINIO_SECRET_KEY", "minio12345")
 os.environ.setdefault("MINIO_SECURE", "false")
-os.environ.setdefault("RH_ADMIN_EMAIL", "rh@greenhousedf.com.br")
+os.environ.setdefault("RH_ADMIN_EMAIL", "rh@exemplo.com.br")
 os.environ.setdefault("RH_ADMIN_PASSWORD", "senha-teste-123")
 os.environ.setdefault("SECRET_KEY", "segredo-de-teste")
 os.environ.setdefault("BASE_URL", "http://localhost:8090")
@@ -63,7 +63,7 @@ def checar(condicao, descricao):
 
 
 c = TestClient(app)
-H = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@greenhousedf.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
+H = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@exemplo.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
 
 CABECALHO = ["ID", "CPF", "Colaborador", "PCD?", "Deficiência", "Status", "Lotação",
              "Cargo", "Jornada de Trabalho"]

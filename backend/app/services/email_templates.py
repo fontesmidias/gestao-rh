@@ -553,7 +553,7 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                   "quem_criou": "quem cadastrou", "link": "endereço do painel"},
        obrigatorias=("email",),
        botao_texto="Acessar o painel", botao_url_var="link",
-       exemplo={"primeiro_nome": "Ana", "email": "ana@greenhousedf.com.br",
+       exemplo={"primeiro_nome": "Ana", "email": "ana@exemplo.com.br",
                 "quem_criou": "Bruno", "link": "https://exemplo/rh"}),
 
     # ---------------------------------------------------- assinatura (envios)

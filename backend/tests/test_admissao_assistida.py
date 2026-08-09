@@ -54,7 +54,7 @@ from app.models.usuario_rh import UsuarioRH  # noqa: E402
 from app.services.fichas import gerar_ficha_cadastro  # noqa: E402
 
 FALHAS = []
-OPERADOR = "rh.maria@greenhousedf.com.br"
+OPERADOR = "rh.maria@exemplo.com.br"
 _RH = UsuarioRH(email=OPERADOR, nome="Maria RH", senha_hash="x")
 app.dependency_overrides[requer_rh] = lambda: _RH
 cli = TestClient(app)

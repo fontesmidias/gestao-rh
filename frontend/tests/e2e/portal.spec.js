@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 // Credenciais do admin criado pelo bootstrap (definidas no .env da stack de teste).
-const RH_EMAIL = process.env.RH_EMAIL || 'rh@greenhousedf.com.br'
+const RH_EMAIL = process.env.RH_EMAIL || 'admin@exemplo.com.br'
 const RH_SENHA = process.env.RH_SENHA || 'admin-inicial-trocar'
 
 test('home é um portal com as três portas', async ({ page }) => {

@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exigir_senha_forte, requer_rh
 from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.core.security import hash_senha, verificar_senha
@@ -59,8 +59,7 @@ def trocar_senha(payload: SenhaIn, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(requer_rh)) -> None:
     if not verificar_senha(payload.senha_atual, rh.senha_hash):
         raise HTTPException(status_code=422, detail="senha_atual_incorreta")
-    if len(payload.senha_nova) < 8:
-        raise HTTPException(status_code=422, detail="senha_curta_minimo_8")
+    exigir_senha_forte(payload.senha_nova)
     rh.senha_hash = hash_senha(payload.senha_nova)
     registrar(db, "senha_alterada", ator="rh", ator_detalhe=rh.email)
     db.commit()
@@ -103,8 +102,7 @@ def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depend
     nome = payload.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
-    if len(payload.senha) < 8:
-        raise HTTPException(status_code=422, detail="senha_curta_minimo_8")
+    exigir_senha_forte(payload.senha)
     email = payload.email.lower()
     if db.scalar(select(UsuarioRH).where(UsuarioRH.email == email)) is not None:
         raise HTTPException(status_code=409, detail="email_ja_utilizado")
@@ -160,8 +158,7 @@ def redefinir_senha_usuario(usuario_id: uuid.UUID, payload: UsuarioSenhaIn,
     usuario = db.get(UsuarioRH, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=404, detail="usuario_nao_encontrado")
-    if len(payload.senha_nova) < 8:
-        raise HTTPException(status_code=422, detail="senha_curta_minimo_8")
+    exigir_senha_forte(payload.senha_nova)
     usuario.senha_hash = hash_senha(payload.senha_nova)
     registrar(db, "usuario_rh_senha_redefinida", ator="rh", ator_detalhe=rh.email,
               detalhe={"usuario": usuario.email})
