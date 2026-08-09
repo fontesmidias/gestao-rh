@@ -82,8 +82,10 @@ linha = t.linha_tirvu(db, cand, gerar_matricula=False)
 #
 # Os stubs têm tirvu_id E texto de propósito: se alguém reverter para o ID, a
 # asserção reprova com o valor errado à vista, em vez de passar por ausência.
-# Empresa continua FIXA = "1" (Green House) — ela nunca foi por texto.
-assert linha["Empresa"] == "1", linha["Empresa"]
+# Empresa também virou TEXTO (2026-08-08): sai a RAZÃO SOCIAL, não o id "1".
+# Este candidato TEM empresa_id, então usa a razão social da empregadora
+# vinculada — quem não tem cai no padrão (caso logo abaixo).
+assert linha["Empresa"] == "GREEN HOUSE LTDA", linha["Empresa"]
 assert linha["Posto de Serviço"] == "GHS", linha["Posto de Serviço"]
 assert linha["Cargo"] == "Analista DF Jr", linha["Cargo"]
 assert linha["Descrição da Jornada de Trabalho"] == "GHS SEDE - 2A A 5A ...", \
@@ -132,7 +134,10 @@ assert linha_sj["CTPS Número"] == "7777", linha_sj["CTPS Número"]
 # Repare que o posto e a jornada aqui TÊM tirvu_id e não têm texto: é o inverso
 # do stub principal, e reprova quem voltar a ler o ID (a linha sairia
 # preenchida e a pendência não dispararia).
-cand_sem_vinculo = _Stub(**{**cand.__dict__, "cargo_funcao": ""})
+# `empresa_id=None` de propósito: é o caso REAL da base (o grupo tem uma
+# empregadora só e quase ninguém tem o vínculo preenchido), e é ele que exercita
+# a queda no padrão. Sem isso a asserção da razão social passaria pelo vínculo.
+cand_sem_vinculo = _Stub(**{**cand.__dict__, "cargo_funcao": "", "empresa_id": None})
 db_sem_texto = _DBFake({**objetos,
                         ("Candidato", cid): cand_sem_vinculo,
                         ("Jornada", "j1"): _Stub(tirvu_id="246", descricao=""),
@@ -140,7 +145,9 @@ db_sem_texto = _DBFake({**objetos,
                        cargo_id="50")
 linha2 = t.linha_tirvu(db_sem_texto, cand_sem_vinculo, gerar_matricula=False)
 pend = t.pendencias_linha(linha2)
-assert linha2["Empresa"] == "1"  # empresa é fixa, nunca falta
+# Empresa NUNCA falta: sem vínculo (ou com razão social vazia) cai no padrão,
+# por isso segue fora da lista de pendências.
+assert linha2["Empresa"] == t.EMPRESA_RAZAO_SOCIAL_PADRAO, linha2["Empresa"]
 assert "Empresa" not in pend, pend
 assert "Posto" in pend, pend
 assert "Cargo" in pend, pend

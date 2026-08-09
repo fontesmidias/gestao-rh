@@ -1426,10 +1426,14 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   distingue homônimo), só não é mais consultado no export —
   `tirvu_id_do_cargo` foi REMOVIDA por ficar órfã. Os `tirvu_id` de posto e
   jornada seguem sendo cadastrados e usados na IMPORTAÇÃO (é por eles que a
-  planilha de Postos casa sem duplicar). **Empresa é FIXA = "1"**
-  (Green House) no export — `EMPRESA_TIRVU_ID` em `export_tirvu.py`; o grupo
-  opera com uma empregadora só (decisão do Bruno 2026-07-24), NÃO depende de
-  cadastro nem vira pendência. A tela de Empresas em Config não pede ID. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
+  planilha de Postos casa sem duplicar). **Empresa vai por RAZÃO SOCIAL**
+  (v2.83.1 — era o ID `"1"`): `EMPRESA_RAZAO_SOCIAL_PADRAO` em
+  `export_tirvu.py` é o PADRÃO, usado quando a ficha não tem `empresa_id` (o
+  caso da esmagadora maioria: o grupo opera com uma empregadora só, decisão do
+  Bruno 2026-07-24). Quem TEM o vínculo usa a razão social DELE — se surgir uma
+  segunda empregadora (Nossa Cozinha), o export acerta sozinho em vez de
+  carimbar Green House em todo mundo. Nunca é vazia, então NÃO vira pendência.
+  A tela de Empresas em Config não pede ID. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
   (sem linha de exemplo) — por isso a validação de julho aprovou a FORMA e errou
   o CONTEÚDO. Agora: `PostoServico.tirvu_id` (já existia) e `Jornada.tirvu_id`
   (novo), e o de-para `CargoTirvu` (cargo texto→id, casado por `normalizar_cargo`:

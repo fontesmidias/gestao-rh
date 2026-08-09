@@ -14,7 +14,7 @@ import unicodedata
 
 from sqlalchemy.orm import Session
 
-from app.models.candidato import Candidato, Jornada, PostoServico
+from app.models.candidato import Candidato, Empresa, Jornada, PostoServico
 from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco)
 
 
@@ -34,9 +34,15 @@ def normalizar_cargo(texto) -> str:
 # que distingue cargo homônimo ("AUXILIAR DE SERVIÇOS GERAIS" tem CBO de limpeza
 # e de produção) —, só não é mais consultado aqui.
 
-# A empregadora é sempre a Green House, ID 1 na base do Tirvu (decisão do Bruno
-# 2026-07-24). Fixo no export — não depende de cadastro de empresa.
-EMPRESA_TIRVU_ID = "1"
+# A empregadora vai por RAZÃO SOCIAL desde 2026-08-08 (mesma virada de
+# posto/cargo/jornada: o Tirvu passou a casar por texto). Antes ia o ID "1".
+#
+# O grupo opera com uma empregadora só (decisão do Bruno 2026-07-24), então o
+# valor continua sendo um PADRÃO — não vira pendência nem depende de cadastro.
+# Mas quem TEM `empresa_id` na ficha usa a razão social dela: se um dia houver
+# uma segunda empregadora (Nossa Cozinha já foi citada), o export acerta sozinho
+# em vez de carimbar Green House em todo mundo, que é o erro que não dá erro.
+EMPRESA_RAZAO_SOCIAL_PADRAO = "GREEN HOUSE SERVICOS DE LOCACAO DE MAO DE OBRA LTDA"
 
 COLUNAS_TIRVU = [
     "Empresa", "Posto de Serviço", "Matrícula", "Nome Completo", "CPF",
@@ -148,7 +154,11 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     d = db.get(DocumentosIdentificacao, c.id)
     posto = db.get(PostoServico, c.posto_servico_id) if c.posto_servico_id else None
     jornada = db.get(Jornada, c.jornada_id) if c.jornada_id else None
-    # Empresa é fixa (ID 1, Green House) — não precisa buscar do cadastro.
+    # Empresa: usa a razão social da empregadora vinculada; sem vínculo (a
+    # esmagadora maioria, já que o grupo tem uma só), cai no padrão.
+    empresa = db.get(Empresa, c.empresa_id) if getattr(c, "empresa_id", None) else None
+    razao_social = ((empresa.razao_social if empresa else "") or "").strip() \
+        or EMPRESA_RAZAO_SOCIAL_PADRAO
 
     cpf = (d.cpf if d and d.cpf else c.cpf) or ""
     # CTPS para o Tirvu: SEMPRE derivar do CPF (número = 7 primeiros, série = 4
@@ -204,10 +214,9 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     # ACEITA a planilha e grava o vínculo ZERADO, sem reclamar. Não confie na
     # importação "ter passado" — confira um vínculo na tela do Tirvu.
     return {
-        # Empresa é SEMPRE a Green House = ID 1 no Tirvu (decisão do Bruno
-        # 2026-07-24: o grupo opera com uma empregadora só; não depende de
-        # cadastro nem vira pendência). Se um dia houver outra, trocar aqui.
-        "Empresa": EMPRESA_TIRVU_ID,
+        # Empresa vai por RAZÃO SOCIAL (nunca vazia: cai no padrão), então
+        # continua fora de `pendencias_linha`.
+        "Empresa": razao_social,
         "Posto de Serviço": (posto.nome if posto else "") or "",
         "Matrícula": matricula,
         "Nome Completo": c.nome_completo or "",
