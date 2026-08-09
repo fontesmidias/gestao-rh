@@ -1408,11 +1408,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   `AutorizacaoEquipe` — representante confirma 1x por código (ato de vontade);
   vira etapa já satisfeita por "autorização prévia" no roteiro do modelo; o
   manifesto diz "emitido sob autorização permanente de X", não "X assinou".
-- **Integração Tirvu — CASA POR ID NUMÉRICO, NÃO POR TEXTO** (feedback de campo
-  2026-07-24, REVERTE a premissa de 2026-07-19): o importador do Tirvu casa
-  **Posto, Cargo e Jornada por ID numérico** da base dele (posto GHS=49, cargo
-  analista df jr=50, jornada GHS SEDE=246). Colar o TEXTO (nome do posto,
-  descrição da jornada) fazia o Tirvu gravar ZERO. **Empresa é FIXA = "1"**
+- **Integração Tirvu — CASA POR TEXTO desde 2026-08-08 (era por ID)** (v2.83,
+  SEGUNDA reversão desta premissa): o export escreve **`posto.nome`,
+  `cargo_funcao` e `jornada.descricao`** nas três colunas. O Tirvu MUDOU: em
+  2026-07-24 colar o texto fazia ele gravar ZERO (por isso o export passou a
+  mandar `tirvu_id`), e em 2026-08-08 o Bruno **testou uma importação com o
+  texto na célula e ela foi aceita**, cargo inclusive. ⚠️ **Se voltar a exigir
+  ID, o sintoma engana**: o Tirvu ACEITA a planilha e grava o vínculo ZERADO,
+  calado — não confie em "a importação passou", confira um vínculo na tela dele.
+  Ganho colateral: com ID, quem estava em posto/jornada sem `tirvu_id` saía com
+  célula VAZIA (na base real, **19 postos e 23 jornadas**); o texto vem do
+  próprio cadastro e existe sempre. **A pendência mudou de NATUREZA** — antes
+  era "o ID não foi cadastrado" ("ID Tirvu do posto"), agora é "esta pessoa não
+  tem posto na ficha", e os rótulos viraram `Posto`/`Cargo`/`Jornada`; o texto
+  antigo mandaria o RH procurar no cadastro de IDs, onde não há o que corrigir.
+  O de-para `CargoTirvu` **continua vivo e alimentado** (guarda o CBO, que
+  distingue homônimo), só não é mais consultado no export —
+  `tirvu_id_do_cargo` foi REMOVIDA por ficar órfã. Os `tirvu_id` de posto e
+  jornada seguem sendo cadastrados e usados na IMPORTAÇÃO (é por eles que a
+  planilha de Postos casa sem duplicar). **Empresa é FIXA = "1"**
   (Green House) no export — `EMPRESA_TIRVU_ID` em `export_tirvu.py`; o grupo
   opera com uma empregadora só (decisão do Bruno 2026-07-24), NÃO depende de
   cadastro nem vira pendência. A tela de Empresas em Config não pede ID. O modelo `docs/Layout de Importação de Admissões.xlsx` só tem cabeçalho
@@ -1421,10 +1435,10 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   (novo), e o de-para `CargoTirvu` (cargo texto→id, casado por `normalizar_cargo`:
   minúsculo/sem acento/espaços — cargo NÃO vira FK, só um mapa lateral usado no
   export). Há também `Empresa.tirvu_id` (coluna criada na migration) mas ele NÃO
-  é usado — empresa é fixa=1 no export. `linha_tirvu` escreve o `tirvu_id`; a
-  coluna "Descrição da Jornada de Trabalho" recebe o ID da jornada (apesar do
-  nome). Falta de ID vira PENDÊNCIA (`pendencias_linha` inclui Posto/Cargo/
-  Jornada — NÃO Empresa). RH cadastra os IDs de Cargo em Config→Cargos, de
+  é usado — empresa é fixa=1 no export. A coluna "Descrição da Jornada de
+  Trabalho" hoje recebe a DESCRIÇÃO mesmo (de 2026-07-24 a 2026-08-08 recebeu o
+  ID, apesar do nome). Vínculo ausente vira PENDÊNCIA (`pendencias_linha`
+  inclui Posto/Cargo/Jornada — NÃO Empresa). RH cadastra os IDs de Cargo em Config→Cargos, de
   Jornada na página de Jornadas e de Posto na página de Postos (input inline
   `.campo-pendente`/"— sem ID" âmbar quando vazio) — o de Posto vem pronto da
   importação da planilha de Postos do Tirvu (casa por ID; GHS=49). Rotas: `/rh/cargos-tirvu` (GET lista cargos usados×ID, PUT upsert;

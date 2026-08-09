@@ -75,12 +75,19 @@ db = _DBFake(objetos, cargo_id="50")
 
 linha = t.linha_tirvu(db, cand, gerar_matricula=False)
 
-# Posto/Cargo/Jornada saem como ID NUMÉRICO — não o texto (bug 2026-07-24)
-# Empresa é FIXA = "1" (Green House), independente de cadastro.
+# Posto/Cargo/Jornada saem como TEXTO desde 2026-08-08 — o Tirvu MUDOU e passou
+# a casar pelo nome (o Bruno testou a importação com o texto na célula e ela foi
+# aceita). Até 2026-07-24 era o oposto: colar o texto fazia o Tirvu gravar zero,
+# e este mesmo teste cravava os IDs "49"/"50"/"246".
+#
+# Os stubs têm tirvu_id E texto de propósito: se alguém reverter para o ID, a
+# asserção reprova com o valor errado à vista, em vez de passar por ausência.
+# Empresa continua FIXA = "1" (Green House) — ela nunca foi por texto.
 assert linha["Empresa"] == "1", linha["Empresa"]
-assert linha["Posto de Serviço"] == "49", linha["Posto de Serviço"]
-assert linha["Cargo"] == "50", linha["Cargo"]
-assert linha["Descrição da Jornada de Trabalho"] == "246", linha["Descrição da Jornada de Trabalho"]
+assert linha["Posto de Serviço"] == "GHS", linha["Posto de Serviço"]
+assert linha["Cargo"] == "Analista DF Jr", linha["Cargo"]
+assert linha["Descrição da Jornada de Trabalho"] == "GHS SEDE - 2A A 5A ...", \
+    linha["Descrição da Jornada de Trabalho"]
 # CTPS derivada do CPF mesmo com "0000" gravado no banco (export re-deriva)
 assert linha["CTPS Número"] == "1234567", linha["CTPS Número"]
 assert linha["CTPS Série"] == "8909", linha["CTPS Série"]
@@ -116,27 +123,41 @@ linha_sj = t.linha_tirvu(_DBFake(objs_sujo, cargo_id="50"), cand_cpf_sujo,
 assert linha_sj["CTPS Número"] == "7777", linha_sj["CTPS Número"]
 
 
-# ---- pendência quando o ID do Tirvu falta (posto/cargo/jornada; empresa NÃO) ----
-db_sem_ids = _DBFake({**objetos,
-                      ("Jornada", "j1"): _Stub(tirvu_id=None, descricao="Y"),
-                      ("PostoServico", "p1"): _Stub(tirvu_id=None, nome="Z")},
-                     cargo_id=None)
-linha2 = t.linha_tirvu(db_sem_ids, cand, gerar_matricula=False)
+# ---- pendência quando falta o VÍNCULO (posto/cargo/jornada; empresa NÃO) ----
+# Com o casamento por texto, a pendência mudou de NATUREZA: antes acusava "o ID
+# do Tirvu não foi cadastrado"; agora acusa "esta pessoa não tem posto/cargo/
+# jornada na ficha". O rótulo acompanhou — dizer "ID Tirvu do posto" mandaria o
+# RH procurar no cadastro de IDs, que não é mais onde o problema está.
+#
+# Repare que o posto e a jornada aqui TÊM tirvu_id e não têm texto: é o inverso
+# do stub principal, e reprova quem voltar a ler o ID (a linha sairia
+# preenchida e a pendência não dispararia).
+cand_sem_vinculo = _Stub(**{**cand.__dict__, "cargo_funcao": ""})
+db_sem_texto = _DBFake({**objetos,
+                        ("Candidato", cid): cand_sem_vinculo,
+                        ("Jornada", "j1"): _Stub(tirvu_id="246", descricao=""),
+                        ("PostoServico", "p1"): _Stub(tirvu_id="49", nome="")},
+                       cargo_id="50")
+linha2 = t.linha_tirvu(db_sem_texto, cand_sem_vinculo, gerar_matricula=False)
 pend = t.pendencias_linha(linha2)
 assert linha2["Empresa"] == "1"  # empresa é fixa, nunca falta
-assert "ID Tirvu da empresa" not in pend, pend
-assert "ID Tirvu do posto" in pend, pend
-assert "ID Tirvu do cargo" in pend, pend
-assert "ID Tirvu da jornada" in pend, pend
+assert "Empresa" not in pend, pend
+assert "Posto" in pend, pend
+assert "Cargo" in pend, pend
+assert "Jornada" in pend, pend
 
 
-# ---- workbook: aba Plan1, célula do cargo contém o ID ----
+# ---- workbook: aba Plan1, célula do cargo contém o NOME do cargo ----
 wb_bytes = t.montar_workbook_tirvu([linha])
 wb = load_workbook(io.BytesIO(wb_bytes))
 ws = wb.active
 assert ws.title == "Plan1", ws.title
 cabecalho = [c.value for c in ws[1]]
 i_cargo = cabecalho.index("Cargo")
-assert ws.cell(row=2, column=i_cargo + 1).value == "50"
+assert ws.cell(row=2, column=i_cargo + 1).value == "Analista DF Jr", \
+    ws.cell(row=2, column=i_cargo + 1).value
+i_posto = cabecalho.index("Posto de Serviço")
+assert ws.cell(row=2, column=i_posto + 1).value == "GHS", \
+    ws.cell(row=2, column=i_posto + 1).value
 
 print("test_export_tirvu: OK")
