@@ -11,6 +11,27 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.83.1] — 2026-08-08 — A empresa também vai por nome
+
+> *"para empresa deve usar a informação da coluna razao_social, não o ID."*
+
+A v2.83 trocou posto, cargo e jornada para texto e **deixou a Empresa como
+`"1"`** — ela era fixa desde julho e não parecia parte da virada. Era.
+
+Agora sai a **razão social**. O valor continua sendo um padrão (o grupo opera com
+uma empregadora só, e por isso Empresa segue fora das pendências), mas quem tem
+`empresa_id` na ficha usa a razão social **daquela** empregadora: se um dia
+houver uma segunda — Nossa Cozinha já foi citada —, o export acerta sozinho em
+vez de carimbar Green House em todo mundo. Esse é o tipo de erro que não dá erro.
+
+`EMPRESA_TIRVU_ID = "1"` deu lugar a `EMPRESA_RAZAO_SOCIAL_PADRAO`.
+
+2 mutações, ambas reprovaram: voltar ao `"1"` e ignorar o vínculo. O caso do
+padrão passou a usar `empresa_id=None` — antes o candidato do teste tinha
+vínculo, e a asserção teria passado pelo caminho errado.
+
+---
+
 ## [2.83.0] — 2026-08-08 — O Tirvu voltou a falar por nome
 
 > *"o que eu preciso que esteja na planilha de exportação para o tirvu é a

@@ -29,7 +29,8 @@ serial e texto são as duas coisas que um parser lê sem reclamar.
 
 O que é invariante da empregadora — país, moeda, regime da empresa, tipo de
 declaração — vai com valor fixo, pelo mesmo raciocínio que já rege o
-`EMPRESA_TIRVU_ID = "1"`: o grupo opera com uma empregadora só.
+`EMPRESA_RAZAO_SOCIAL_PADRAO` do export do Tirvu: o grupo opera com uma
+empregadora só.
 
 O que varia por pessoa — categoria do trabalhador, CBO, sindicato, conta
 bancária, grau de instrução — **vira PENDÊNCIA anunciada**, nunca padrão
