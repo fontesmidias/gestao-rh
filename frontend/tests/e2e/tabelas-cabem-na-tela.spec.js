@@ -300,6 +300,15 @@ for (const largura of [320, 390]) {
             // desenho (`.dash-scroll` contém a própria rolagem).
             if (r.width === 0 || r.height === 0) return false
             if (e.closest('.dash-scroll') && e.tagName === 'TABLE') return false
+            // Os cards de MÉTRICA são uma fila que rola de lado no celular
+            // (v2.85): em Admissões são 8, e empilhá-los em 2 colunas gastava
+            // 275px de cabeçalho com altura que variava com o rótulo mais
+            // longo. Aqui vale a mesma isenção do `.dash-scroll` — o conteúdo
+            // fica fora da VISTA, não fora da PÁGINA (`body.scrollWidth`
+            // continua igual à viewport). Rolar métrica de lado é aceitável
+            // porque é consulta; a regra "nunca esconder AÇÃO" segue valendo
+            // para a `.dash-acoes`, que não rola.
+            if (e.closest('.dash-cards, .rh-metricas')) return false
             return r.right > window.innerWidth + 1
           })
           .slice(0, 3)
