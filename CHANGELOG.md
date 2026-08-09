@@ -11,6 +11,38 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.85.1] — 2026-08-08 — A métrica vira fila no celular
+
+O CI reprovou a v2.85 na régua de mobile: em **Admissões a primeira linha só
+começava em 639px**, contra o teto de 600px.
+
+**A causa não era a fonte.** Medida a diferença de altura entre Yu Gothic, Noto
+Sans JP e Outfit no mesmo texto: **1px**. O que a fonte fez foi empurrar uma
+tela que já estava a 8px do limite — aqui ela media 592px, e no CI, com dados
+diferentes, um rótulo a mais quebrando em duas linhas bastou.
+
+A causa real estava desde a v2.76: **oito cards de métrica em duas colunas são
+quatro fileiras** — 275px de cabeçalho antes da lista, com altura que variava
+conforme o rótulo mais longo. Um número diferente no banco mudava o layout.
+
+No celular eles viram uma **fila que rola de lado**: uma fileira só, altura
+previsível. Admissões caiu de **592px para 384px**, e as outras cinco telas
+melhoraram junto.
+
+Rolar métrica de lado é aceitável porque **métrica é consulta**. A regra "nunca
+esconder AÇÃO" (v2.76.1) continua valendo: a `.dash-acoes` segue inteira na tela.
+
+O terceiro card aparece cortado na borda de propósito — é o que sinaliza que há
+mais para o lado, em vez de a fila parecer terminada.
+
+A régua de vazamento lateral ganhou a mesma isenção que o `.dash-scroll` já
+tinha: o conteúdo fica fora da VISTA, não fora da PÁGINA (`body.scrollWidth`
+continua igual à viewport).
+
+E2E **30/30**.
+
+---
+
 ## [2.85.0] — 2026-08-08 — A fonte é sua
 
 > *"quero que todas as fontes, de maneira global, seja Yu Gothic regular por

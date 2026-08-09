@@ -220,6 +220,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   primeiro enche a tela; (4) título e respiro menores. No desktop nada muda
   (`display: contents` no `<details>`). Teto travado em teste: § 9.1 do
   `08-sistema-de-design.md` e `tabelas-cabem-na-tela.spec.js`.
+- **Cabeçalho no limite quebra com QUALQUER mudança — e a culpada parece ser a
+  última** (v2.85.1): o CI reprovou a régua de mobile logo após a troca de fonte
+  (Admissões em **639px** contra o teto de 600), e a leitura óbvia era "a fonte
+  nova é mais alta". **Medido: 1px de diferença** entre Yu Gothic, Noto Sans JP
+  e Outfit. A causa real vinha da v2.76: **8 cards de métrica em 2 colunas são 4
+  fileiras** — 275px de cabeçalho, com altura VARIÁVEL conforme o rótulo mais
+  longo, então um dado diferente no banco muda o layout (aqui media 592px, no CI
+  639). No celular eles viram **fila que rola de lado** (592 → **384px**).
+  Rolar MÉTRICA de lado é aceitável — é consulta; a regra "nunca esconder AÇÃO"
+  (v2.76.1) segue valendo para a `.dash-acoes`. A régua de borda direita ganhou
+  a mesma isenção do `.dash-scroll`: o conteúdo fica fora da VISTA, não fora da
+  PÁGINA. **Antes de culpar a mudança da vez, meça a contribuição dela** — e
+  desconfie de teto que passa no seu banco e falha no CI: é altura dependente de
+  DADO.
 - **A fonte do sistema é CONFIGURÁVEL, e a pilha mora no SERVIDOR** (v2.85,
   `services/marca.py::FONTES`): padrão **Yu Gothic**, escolhível em
   Configurações → Identidade visual. ⚠️ **Yu Gothic é PROPRIETÁRIA da

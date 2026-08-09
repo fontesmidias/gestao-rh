@@ -2316,15 +2316,36 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
   .dash-filtros-caixa[open] .dash-filtros { border-top-left-radius: 0; border-top-right-radius: 0; }
 
   /* 2. MÉTRICA É INFORMAÇÃO, não cartaz.
-        Um número por cartão em largura quase cheia gastava 374-599px. Em duas
-        colunas compactas o mesmo conteúdo cabe em ~1/3 disso, e continua
-        clicável para filtrar. */
+        Um número por cartão em largura quase cheia gastava 374-599px. Duas
+        colunas compactas resolveram isso na v2.76 — e continuaram custando caro
+        onde há MUITOS cards: em Admissões são 8, ou seja QUATRO fileiras, 275px
+        só de métrica. Pior, a altura dependia do rótulo mais longo: um texto que
+        quebra em duas linhas empurra a lista inteira (foi assim que a tela
+        estourou o teto de 600px no CI, com dados diferentes dos daqui).
+
+        No celular eles viram uma FILA que rola de lado: uma fileira só, altura
+        previsível, e a lista começa perto do topo. Rolar métrica de lado é
+        barato — é consulta, não ação; a regra "nunca esconder ação" continua
+        valendo para a `.dash-acoes`, que segue inteira na tela. */
   .dash-cards, .rh-metricas {
-    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .45rem;
+    display: flex; flex-wrap: nowrap; gap: .45rem;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    /* sem isto o flex encolhe os cards até o texto virar duas linhas, que é
+       exatamente a altura variável que se quer eliminar */
+    padding-bottom: .25rem;
   }
-  .dash-card, .rh-metrica { padding: .5rem .6rem; }
+  .dash-card, .rh-metrica {
+    padding: .5rem .6rem;
+    flex: 0 0 auto; min-width: 7.5rem; scroll-snap-align: start;
+  }
   .dash-card strong, .rh-metrica strong { font-size: 1.3rem; }
-  .dash-card span, .rh-metrica span { font-size: .74rem; }
+  .dash-card span, .rh-metrica span {
+    font-size: .74rem;
+    /* rótulo em UMA linha: é o que torna a altura previsível. O texto inteiro
+       continua no `title` de quem já o define. */
+    white-space: nowrap;
+  }
 
   /* 3. AÇÃO DO CABEÇALHO NÃO OCUPA A LARGURA INTEIRA.
         Um botão por linha empurra o conteúdo para baixo sem ganhar nada: eles
