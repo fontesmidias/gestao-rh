@@ -163,7 +163,7 @@ assert r.status_code == 200, r.text
 _um = next(x for x in c.get("/api/rh/config/emails", headers=rh).json()
            if x["chave"] == "documento_rejeitado")
 assert _um["personalizado"] is True and _um["assunto"].startswith("TESTE"), _um
-assert _um["atualizado_por"] == "rh@exemplo.com.br"
+assert _um["atualizado_por"] == _EMAIL, _um["atualizado_por"]
 
 # e o envio passa a usar o texto do RH
 from app.core.db import SessionLocal  # noqa: E402
@@ -177,7 +177,7 @@ assert "Precisamos de novo: borrado" in texto, texto
 # histórico guardou o texto ANTERIOR (o de fábrica)
 r = c.get("/api/rh/config/emails/documento_rejeitado/versoes", headers=rh)
 assert r.status_code == 200 and len(r.json()) >= 1, r.text
-assert r.json()[0]["autor"] == "rh@exemplo.com.br"
+assert r.json()[0]["autor"] == _EMAIL, r.json()[0]["autor"]
 assert "TESTE" not in r.json()[0]["assunto"], (
     "o histórico deve guardar o texto ANTERIOR, não o novo")
 
@@ -216,8 +216,8 @@ try:
                      "botao_texto": "Reenviar"})
     assert r.status_code == 200, r.text
     # destinatário é SEMPRE o usuário logado
-    assert r.json()["enviado_para"] == "rh@exemplo.com.br", r.json()
-    assert _capturado["dest"] == "rh@exemplo.com.br", _capturado["dest"]
+    assert r.json()["enviado_para"] == _EMAIL, r.json()
+    assert _capturado["dest"] == _EMAIL, _capturado["dest"]
     # marca de teste no assunto: se vazar, fica evidente que é ensaio
     assert _capturado["assunto"].startswith("[TESTE] "), _capturado["assunto"]
     # usou o texto DIGITADO (não o salvo) e substituiu com o exemplo
