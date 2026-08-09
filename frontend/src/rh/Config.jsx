@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
+import SelectBusca from '../SelectBusca.jsx'
 import { ErrosRecentes } from './Diagnostico.jsx'
 import { comAmpulheta } from '../Carregando.jsx'
 import Importacoes from './Importacoes.jsx'
@@ -244,6 +245,14 @@ function IdentidadeVisual() {
   useEffect(() => { carregar().catch(() => {}) }, [])
   if (!dados) return null
 
+  // A pilha da fonte ESCOLHIDA na tela (ainda não salva), para a prévia. Vem do
+  // catálogo do servidor; enquanto a escolha for a que já está gravada, usa a
+  // pilha que ele resolveu. Sem par no catálogo, herda a da tela — nunca fica
+  // sem fonte.
+  const fontePreview =
+    (dados.fontes || []).find((f) => f.valor === dados.empresa_fonte)?.pilha
+    || dados.fonte_pilha || 'inherit'
+
   const campo = (chave, rotulo, textarea) => (
     <label className="campo"><span className="rotulo">{rotulo}</span>
       {textarea
@@ -279,14 +288,43 @@ function IdentidadeVisual() {
       {campo('empresa_razao', 'Razão social')}
       {campo('empresa_endereco', 'Endereço completo', true)}
       {campo('empresa_contato', 'Contato (telefone | site)')}
+
+      {/* Fonte do SISTEMA (v2.85). A lista vem do servidor — escrever as opções
+          aqui daria duas listas, e a do front é a que a pessoa vê. */}
+      <label className="campo"><span className="rotulo">Fonte do sistema</span>
+        <SelectBusca valor={dados.empresa_fonte || 'yu-gothic'}
+                     aoEscolher={(v) => setDados({ ...dados, empresa_fonte: v })}
+                     opcoes={(dados.fontes || []).map((f) => ({
+                       valor: f.valor, rotulo: f.rotulo, extra: f.nota,
+                     }))} />
+        <span className="dica-inline">Vale para as telas do sistema — o painel e o
+          formulário do candidato. <strong>Os documentos em PDF não mudam</strong>:
+          eles têm fonte própria, e alterá-la invalidaria a conferência dos que já
+          foram assinados.</span></label>
+
+      {/* Prévia ao vivo: fonte se confere OLHANDO. Um nome numa lista não diz
+          como o texto vai ficar, e o `fontePreview` mostra o resultado antes de
+          salvar — inclusive o negrito, que é onde a diferença aparece. */}
+      <div className="fonte-previa" style={{ fontFamily: fontePreview }}>
+        <strong>Maria de Fátima Souza</strong> — Auxiliar de Serviços Gerais<br />
+        Admissão em 08/08/2026 · CPF 123.456.789-09 · Matrícula 9990001
+      </div>
+
       <button className="btn-secundario" onClick={async () => {
         setMsg(null)
         try {
-          await api.salvarMarca({
+          const r = await api.salvarMarca({
             empresa_nome: dados.empresa_nome, empresa_razao: dados.empresa_razao,
             empresa_cnpj: dados.empresa_cnpj, empresa_endereco: dados.empresa_endereco,
-            empresa_contato: dados.empresa_contato,
+            empresa_contato: dados.empresa_contato, empresa_fonte: dados.empresa_fonte,
           })
+          setDados(r)
+          // Aplica JÁ, sem recarregar: o servidor devolve a pilha resolvida, e
+          // ver a mudança é a confirmação de que ela valeu.
+          if (r?.fonte_pilha) {
+            document.documentElement.style.setProperty('--fonte', r.fonte_pilha)
+            localStorage.setItem('marca_fonte', r.fonte_pilha)
+          }
           setMsg({ tipo: 'ok', texto: 'Dados da empresa salvos. Valem para os próximos documentos.' })
         } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` }) }
       }}>Salvar dados</button>

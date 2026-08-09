@@ -4,6 +4,15 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import ErroFatal from './ErroFatal.jsx'
 import { instalarCapturaGlobal } from './telemetria.js'
+// As DUAS famílias embutidas (v2.85). Yu Gothic, o padrão, é PROPRIETÁRIA da
+// Microsoft e não pode ser empacotada — quem não a tem instalada (Android,
+// iPhone, Linux: a maior parte do público do wizard) cai na Noto Sans JP, que é
+// livre, tem a mesma origem tipográfica e pesa ~13KB no subconjunto latino.
+// A Outfit continua porque segue escolhível no painel.
+import '@fontsource/noto-sans-jp/400.css'
+import '@fontsource/noto-sans-jp/600.css'
+import '@fontsource/noto-sans-jp/700.css'
+import '@fontsource/noto-sans-jp/800.css'
 import '@fontsource/outfit/400.css'
 import '@fontsource/outfit/600.css'
 import '@fontsource/outfit/700.css'
@@ -15,6 +24,27 @@ import './styles.css'
 document.documentElement.dataset.tema =
   localStorage.getItem('tema')
   || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro')
+
+// ---------------------------------------------------------------------------
+// Fonte configurável (v2.85)
+// ---------------------------------------------------------------------------
+// Aplicada ANTES de perguntar ao servidor, a partir do que ficou guardado da
+// última visita: a resposta leva uns 100ms e, sem isso, toda tela abriria com a
+// fonte padrão e trocaria na cara de quem está lendo. O `localStorage` é cache,
+// não fonte da verdade — quem manda é o servidor, e a resposta dele sobrescreve.
+const _fonteSalva = localStorage.getItem('marca_fonte')
+if (_fonteSalva) document.documentElement.style.setProperty('--fonte', _fonteSalva)
+
+fetch('/api/marca/aparencia')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((d) => {
+    if (!d?.fonte) return
+    document.documentElement.style.setProperty('--fonte', d.fonte)
+    localStorage.setItem('marca_fonte', d.fonte)
+  })
+  // Falha aqui NÃO pode quebrar nada: sem resposta vale o `--fonte` do CSS, que
+  // já é uma pilha completa. Fonte é aparência — nunca motivo para tela morta.
+  .catch(() => {})
 
 // ---------------------------------------------------------------------------
 // Aba aberta durante um deploy: recarrega uma vez, sozinha

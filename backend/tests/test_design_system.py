@@ -192,6 +192,38 @@ checar(re.search(r"^summary\s*\{[^}]*list-style-position:\s*inside", fonte_css, 
        "o marcador do summary continua `inside` (senão fura o padding do card)")
 
 
+# --- A fonte vem do TOKEN, nunca de uma pilha literal (v2.85) --------------
+#
+# Mora aqui, e não no `test_fonte_configuravel`, por um motivo prático: aquele
+# precisa de banco e app, então roda DENTRO do container da API — onde a árvore
+# do frontend não existe (o contexto de build é só `./backend`). Este bloco lê
+# arquivos e roda no passo stdlib, com o repositório inteiro à mão.
+#
+# O `body` repetia a pilha literal enquanto o `--fonte` existia logo acima:
+# trocar o token deixaria a fonte escolhida valer em tudo MENOS no texto
+# corrido — a tela muda "quase toda", que é o pior defeito de enxergar.
+_corpo_body = (fonte_css.split("body {", 1)[1].split("}", 1)[0]
+               if "body {" in fonte_css else "")
+# Sem tirar os COMENTÁRIOS, a asserção casaria com o `var(--fonte)` escrito no
+# comentário que EXPLICA a regra, e passaria verde com a pilha literal de volta
+# (armadilha da v2.71 na variante CSS, pega por mutação).
+_body_sem_comentario = re.sub(r"/\*.*?\*/", "", _corpo_body, flags=re.S)
+_decl_fonte = [ln for ln in _body_sem_comentario.splitlines() if "font-family" in ln]
+checar(bool(_decl_fonte) and "var(--fonte)" in _decl_fonte[0],
+       f"o `body` declara `font-family: var(--fonte)` — a fonte é configurável "
+       f"(v2.85) e uma pilha literal aqui ignora a escolha no texto corrido "
+       f"(veio {(_decl_fonte[0].strip() if _decl_fonte else 'nenhuma')!r})")
+
+_main = (RAIZ / "frontend" / "src" / "main.jsx").read_text(encoding="utf-8")
+# Yu Gothic é proprietária e não pode ser empacotada: sem a Noto Sans JP
+# importada, quem não a tem instalada (Android/iPhone/Linux — a maior parte do
+# público do wizard) cai direto na fonte genérica do aparelho.
+checar("noto-sans-jp" in _main,
+       "a Noto Sans JP é importada no main.jsx (fallback livre da Yu Gothic)")
+checar("/api/marca/aparencia" in _main,
+       "e o main.jsx busca a fonte configurada no servidor")
+
+
 print()
 if FALHAS:
     print(f"test_design_system: {len(FALHAS)} FALHA(S)")

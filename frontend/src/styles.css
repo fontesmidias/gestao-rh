@@ -5,7 +5,9 @@
    vem das variáveis abaixo. Para mudar o visual, mude AQUI — os
    componentes apenas consomem os tokens (var(--nome)), nunca valores
    soltos. Tema escuro sobrepõe só o bloco [data-tema='escuro'].
-   Estilo: "fintech vibrante" — Outfit, verde vivo, cantos gordos.
+   Estilo: "fintech vibrante" — verde vivo, cantos gordos. A FONTE é
+   configurável no painel (v2.85): o padrão é Yu Gothic, com Noto Sans JP
+   embutida para quem não a tem instalada. Ver `--fonte`.
    Mobile-first, alvos de toque ≥48px.
    ============================================================ */
 
@@ -57,8 +59,20 @@
      AA é 4,5:1). Ver a armadilha do "token fantasma" em 08-sistema-de-design. */
   --texto-suave: #5c6b62;
 
-  /* Tipografia (escala única — nunca tamanhos soltos) */
-  --fonte: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Tipografia (escala única — nunca tamanhos soltos).
+
+     A fonte é CONFIGURÁVEL no painel (Configurações → Identidade visual,
+     v2.85): o `main.jsx` sobrescreve este token com a pilha que o servidor
+     devolve. O valor aqui é o que vale enquanto a resposta não chega — e
+     também o que vale se a API estiver fora do ar, então tem que ser uma
+     pilha COMPLETA, nunca um nome solto.
+
+     Yu Gothic é o padrão e é PROPRIETÁRIA da Microsoft: não pode ser
+     empacotada, então vem acompanhada da Noto Sans JP (livre, embutida) para
+     quem não a tem instalada — celular e Linux, a maior parte do público do
+     wizard. */
+  --fonte: 'Yu Gothic UI', 'Yu Gothic', 'YuGothic', 'Noto Sans JP',
+           system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --fs-titulo: 1.55rem;
   --fs-sub: 1.2rem;
   --fs-secao: 1.02rem;
@@ -130,7 +144,11 @@
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 body {
   color: var(--texto); line-height: 1.55; font-size: var(--fs-corpo);
-  font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* `var(--fonte)`, NUNCA a lista literal: o token é o que a configuração
+     sobrescreve, e uma cópia aqui faria a fonte escolhida valer em tudo menos
+     no texto corrido — o defeito mais difícil de enxergar, porque a tela muda
+     "quase toda". */
+  font-family: var(--fonte);
   background: var(--bg-page) fixed;
 }
 h1 { font-size: var(--fs-titulo); color: var(--tinta); margin-bottom: .75rem;
@@ -496,6 +514,16 @@ button.dash-card.ativo::after { content: ' ✕'; font-size: .75rem; color: var(-
 .rotulo { display: block; font-weight: 700; font-size: .92rem; margin-bottom: .35rem;
           color: var(--tinta); }
 .dica-inline { font-weight: 400; color: #7b8b81; font-style: normal; font-size: .85rem; }
+/* Prévia da fonte escolhida (v2.85, Configurações → Identidade visual). O
+   `font-family` vem INLINE do JSX: é o único jeito de mostrar uma fonte que
+   ainda não foi salva, e é justamente o que se quer conferir antes de aplicar
+   no sistema inteiro. */
+.fonte-previa {
+  border: 1px dashed var(--borda); border-radius: var(--raio-input);
+  padding: var(--esp-2); margin: var(--esp-2) 0;
+  background: var(--cartao); color: var(--texto);
+  font-size: var(--fs-corpo); line-height: 1.6;
+}
 /* Campo que ainda não foi preenchido e faz falta lá na frente (export do Tirvu,
    dossiê). Não é ERRO — é lembrete: o RH salva assim mesmo e resolve depois. */
 .campo-pendente { border-color: var(--ambar) !important;
