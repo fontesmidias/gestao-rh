@@ -1242,7 +1242,7 @@ function Smtp() {
       </div>
       <div className="linha2">
         <label className="campo"><span className="rotulo">Usuário (e-mail completo)</span>
-          <input placeholder="rh@greenhousedf.com.br" value={cfg.smtp_user || ''}
+          <input placeholder="rh@suaempresa.com.br" value={cfg.smtp_user || ''}
                  onChange={(e) => setCfg({ ...cfg, smtp_user: e.target.value })} /></label>
         <label className="campo">
           <span className="rotulo">Senha {cfg.senha_definida && '(já definida — preencha só para trocar)'}</span>

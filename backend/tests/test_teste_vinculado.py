@@ -29,7 +29,7 @@ os.environ.setdefault("MINIO_ENDPOINT", "localhost:59000")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minio")
 os.environ.setdefault("MINIO_SECRET_KEY", "minio12345")
 os.environ.setdefault("MINIO_SECURE", "false")
-os.environ.setdefault("RH_ADMIN_EMAIL", "rh@greenhousedf.com.br")
+os.environ.setdefault("RH_ADMIN_EMAIL", "rh@exemplo.com.br")
 os.environ.setdefault("RH_ADMIN_PASSWORD", "senha-teste-123")
 os.environ.setdefault("SECRET_KEY", "segredo-de-teste")
 os.environ.setdefault("BASE_URL", "http://localhost:8090")
@@ -39,7 +39,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 c = TestClient(app)
-rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@greenhousedf.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
+rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh@exemplo.com.br', 'senha': 'senha-teste-123'}).json()['token']}"}
 
 _ID = _uuid.uuid4().hex[:6].upper()
 
@@ -111,7 +111,7 @@ v = r.json()
 assert v["origem"] == "testagem", v
 # escolha do RH => NÃO é automático, e fica registrado quem afirmou
 assert v["automatico"] is False, v
-assert v["vinculado_por"] == "rh@greenhousedf.com.br", v
+assert v["vinculado_por"] == "rh@exemplo.com.br", v
 assert v.get("testes"), "o resultado deveria vir junto (lido na origem)"
 
 # sai da lista de disponíveis (não se aproveita o mesmo teste duas vezes)

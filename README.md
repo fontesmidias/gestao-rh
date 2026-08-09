@@ -149,7 +149,7 @@ As imagens (`ghcr.io/fontesmidias/gestao-rh-api|frontend`) são **públicas**, p
 ### Docker Compose (a partir do código-fonte)
 
 ```bash
-cp .env.example .env   # edite: senhas, SMTP, RH_ADMIN_*, FRONTEND_PORT
+cp .env.example .env   # edite: senhas, SMTP, FRONTEND_PORT
 
 # Local / VPS sem domínio (sem HTTPS — apenas validação):
 docker compose --env-file .env -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml up -d --build
@@ -161,7 +161,7 @@ docker compose --env-file .env -f deploy/docker-compose.base.yml -f deploy/docke
 docker compose --env-file .env -f deploy/docker-compose.base.yml -f deploy/docker-compose.certbot.yml up -d --build
 ```
 
-> Use sempre `--env-file .env` (os arquivos compose ficam em `deploy/`, e a interpolação lê o `.env` do diretório do primeiro `-f`). Acesse `http://IP:FRONTEND_PORT` — painel do RH em `/rh` (admin inicial criado a partir de `RH_ADMIN_EMAIL`/`RH_ADMIN_PASSWORD`).
+> Use sempre `--env-file .env` (os arquivos compose ficam em `deploy/`, e a interpolação lê o `.env` do diretório do primeiro `-f`). Acesse `http://IP:FRONTEND_PORT` — painel do RH em `/rh`. Na primeira vez, o painel abre um **cadastro guiado** que cria o administrador (nome, e-mail e senha) — não é preciso definir credencial em arquivo nenhum. Para instalação automatizada, `RH_ADMIN_EMAIL`/`RH_ADMIN_PASSWORD` no `.env` continuam funcionando e dispensam a tela.
 
 ### Desenvolvimento e testes
 

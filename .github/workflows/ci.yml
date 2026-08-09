@@ -139,7 +139,7 @@ jobs:
           MINIO_SECRET_KEY=minio-ci-12345
           MINIO_BUCKET=admissao
           MINIO_SECURE=false
-          RH_ADMIN_EMAIL=rh@greenhousedf.com.br
+          RH_ADMIN_EMAIL=admin@exemplo.com.br
           RH_ADMIN_PASSWORD=senha-ci-12345678
           EOF
 
@@ -230,6 +230,35 @@ jobs:
             echo "::endgroup::"
           done
 
+      # O primeiro acesso descreve a instalação NOVA, e por isso precisa de um
+      # banco SEM NENHUM usuário — o `.env` do job já criou o admin no banco
+      # principal, então rodá-lo lá reprovaria na pré-condição. Ganha um banco
+      # próprio, criado e derrubado aqui.
+      #
+      # Vale o custo: o que ele protege é o PORTÃO ("a tabela está vazia") de
+      # duas rotas PÚBLICAS que criam administrador. Se o portão cair, a tela
+      # continua idêntica e o defeito só aparece quando alguém a encontrar.
+      - name: Teste do primeiro acesso (banco próprio, sem usuários)
+        run: |
+          api=$(docker compose --env-file .env \
+            -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml \
+            ps -q api)
+          db=$(docker compose --env-file .env \
+            -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml \
+            ps -q db)
+          docker exec "$db" psql -U admissao -d admissao \
+            -c "DROP DATABASE IF EXISTS primeiro_acesso;" \
+            -c "CREATE DATABASE primeiro_acesso;"
+          url="postgresql+psycopg://admissao:admissao-ci@db:5432/primeiro_acesso"
+          docker exec -e PYTHONPATH=. -e DATABASE_URL="$url" "$api" \
+            python -m alembic upgrade head
+          # RH_ADMIN_* vazios: é o padrão da v2.84 e o que faz a tela existir.
+          docker exec -e PYTHONPATH=. -e DATABASE_URL="$url" \
+            -e RH_ADMIN_EMAIL= -e RH_ADMIN_PASSWORD= "$api" \
+            python tests/test_primeiro_acesso.py || exit 1
+          docker exec "$db" psql -U admissao -d admissao \
+            -c "DROP DATABASE primeiro_acesso;"
+
       # O SMOKE — o portão mais completo do projeto, e o que ninguém rodava.
       #
       # 15 etapas ponta a ponta: cadastro pelo RH → link mágico → autosave da
@@ -274,7 +303,7 @@ jobs:
         working-directory: frontend
         env:
           BASE_URL: http://localhost:8090
-          RH_EMAIL: rh@greenhousedf.com.br
+          RH_EMAIL: admin@exemplo.com.br
           RH_SENHA: senha-ci-12345678
         run: npx playwright test
 

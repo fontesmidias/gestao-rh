@@ -16,7 +16,7 @@ for _chave, _valor in dict(
     MINIO_ACCESS_KEY="minio",
     MINIO_SECRET_KEY="minio12345",
     MINIO_SECURE="false",
-    RH_ADMIN_EMAIL="rh@greenhousedf.com.br",
+    RH_ADMIN_EMAIL="rh@exemplo.com.br",
     RH_ADMIN_PASSWORD="senha-teste-123",
     SECRET_KEY="segredo-de-teste",
     BASE_URL="http://localhost:8090",

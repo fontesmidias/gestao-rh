@@ -27,7 +27,7 @@ os.environ.update(
     MINIO_ACCESS_KEY="minio",
     MINIO_SECRET_KEY="minio12345",
     MINIO_SECURE="false",
-    RH_ADMIN_EMAIL="rh@greenhousedf.com.br",
+    RH_ADMIN_EMAIL="rh@exemplo.com.br",
     RH_ADMIN_PASSWORD="senha-teste-123",
     SECRET_KEY="segredo-de-teste",
     BASE_URL="http://localhost:8090",
@@ -42,7 +42,7 @@ from app.models.candidato import Candidato
 
 c = TestClient(app)
 
-r = c.post("/api/rh/auth/login", json={"email": "rh@greenhousedf.com.br", "senha": "senha-teste-123"})
+r = c.post("/api/rh/auth/login", json={"email": "rh@exemplo.com.br", "senha": "senha-teste-123"})
 assert r.status_code == 200, r.text
 rh = {"Authorization": f"Bearer {r.json()['token']}"}
 

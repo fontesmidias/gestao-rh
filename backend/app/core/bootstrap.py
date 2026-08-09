@@ -11,7 +11,18 @@ log = logging.getLogger(__name__)
 
 
 def criar_admin_inicial(db: Session) -> None:
-    """Cria o primeiro usuário do RH a partir do .env, apenas se a tabela estiver vazia."""
+    """Cria o primeiro usuário do RH a partir do .env, se a tabela estiver vazia.
+
+    Caminho OPCIONAL desde a v2.84, para instalação automatizada (provisionamento
+    sem ninguém na tela). Com as variáveis vazias — o padrão — nada acontece
+    aqui, e quem cria o primeiro administrador é a tela de PRIMEIRO ACESSO
+    (`/rh/auth/primeiro-acesso`): assim nenhuma senha precisa ser escrita em
+    arquivo, e o e-mail de quem opera não vive no repositório.
+
+    As duas portas dividem o MESMO portão — "a tabela está vazia" —, então elas
+    não se atropelam: preenchido o `.env`, o admin nasce aqui e a tela de
+    primeiro acesso já não aparece.
+    """
     settings = get_settings()
     if not settings.rh_admin_email or not settings.rh_admin_password:
         return

@@ -200,6 +200,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   primeiro enche a tela; (4) título e respiro menores. No desktop nada muda
   (`display: contents` no `<details>`). Teto travado em teste: § 9.1 do
   `08-sistema-de-design.md` e `tabelas-cabem-na-tela.spec.js`.
+- **Rota PÚBLICA que cria administrador: o portão é o BANCO, e o teste afirma
+  sobre o ESTADO** (v2.84, `api/auth_rh.py`): o primeiro admin nascia do `.env`,
+  o que obrigava a escrever senha em arquivo e — em repositório PÚBLICO —
+  publicava o e-mail de quem opera. Hoje, com `select(UsuarioRH).limit(1) is
+  None`, o painel abre um cadastro guiado. As duas rotas
+  (`GET/POST /rh/auth/primeiro-acesso`) são públicas **por necessidade** (não há
+  quem autentique antes do primeiro usuário), então a ÚNICA coisa que separa
+  "instalação nova" de "qualquer um cria admin na produção" é aquela checagem.
+  **Se ela cair, nada na tela denuncia** — a tela fica idêntica e o defeito só
+  aparece quando alguém achar a rota. Por isso o teste confere o BANCO
+  (`quantos == 1`) além do 409: a mutação que remove o portão devolve 200 **e
+  cria o segundo usuário**, e só a asserção de estado prova que a recusa é real.
+  O `.env` (`RH_ADMIN_EMAIL`/`_PASSWORD`) segue válido para provisionamento
+  automatizado e divide o MESMO portão, então as duas portas não se atropelam.
+  **Teste com pré-condição de banco vazio precisa de banco PRÓPRIO no CI** (o
+  principal já tem o admin do job) e tem que ANUNCIAR a pré-condição quebrada,
+  em vez de falhar numa asserção que não fala da causa.
+- **`EmailStr` RECUSA o TLD `.local`** (v2.84): não é domínio público, e o
+  `email-validator` reprova. Ao trocar e-mail de teste por um genérico, use
+  `exemplo.com.br` — `admin@exemplo.local` faz o login devolver **401**, que
+  aparece como "senha errada" e manda procurar no lugar errado (a armadilha da
+  v2.71 com outra causa).
 - **Marcador de variável DIGITADO à mão erra em silêncio — insira pelo cursor**
   (v2.82, `frontend/src/CampoComVariaveis.jsx`): as variáveis eram uma LISTA NO
   TOPO da tela; a pessoa lia `{{nome_social}}`, voltava ao texto e digitava de

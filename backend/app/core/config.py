@@ -27,9 +27,15 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = "rh@greenhousedf.com.br"
+    # Sem padrão: um e-mail real escrito aqui vira o remetente de quem esquecer
+    # de configurar — e, num repositório público, publica o endereço de quem
+    # opera o sistema. Vazio, o envio é recusado com mensagem clara.
+    smtp_from: str = ""
 
-    # Admin inicial do RH: criado no primeiro start se não existir nenhum usuário.
+    # Admin inicial do RH — OPCIONAL, para instalação automatizada. Vazio (o
+    # padrão), o primeiro acesso é feito pela TELA: com o banco sem usuário, o
+    # sistema abre o cadastro guiado e cria o administrador ali. Assim nenhuma
+    # senha precisa ser escrita em arquivo.
     rh_admin_email: str = ""
     rh_admin_password: str = ""
     rh_session_ttl_hours: int = 12

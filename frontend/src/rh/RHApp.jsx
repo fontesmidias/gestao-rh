@@ -34,8 +34,24 @@ import { observarTabelas } from '../responsivo.js'
 
 export default function RHApp() {
   const [logado, setLogado] = useState(api.logado())
+  // `null` = ainda perguntando ao servidor. Distinguir de `false` importa: com
+  // os dois no mesmo estado, a tela de login PISCA antes do primeiro acesso
+  // aparecer, e quem está instalando vê um login que não tem como usar.
+  const [primeiroAcesso, setPrimeiroAcesso] = useState(null)
   const tokenReset = new URLSearchParams(window.location.search).get('redefinir')
+
+  useEffect(() => {
+    if (logado || tokenReset) { setPrimeiroAcesso(false); return }
+    api.primeiroAcessoNecessario()
+      .then((r) => setPrimeiroAcesso(Boolean(r?.necessario)))
+      // Falha de rede não pode ESCONDER o login: sem resposta, mostramos a tela
+      // de sempre — que é o comportamento certo em toda instalação já usada.
+      .catch(() => setPrimeiroAcesso(false))
+  }, [logado, tokenReset])
+
   if (tokenReset) return <RedefinirSenha token={tokenReset} />
+  if (!logado && primeiroAcesso === null) return null
+  if (!logado && primeiroAcesso) return <PrimeiroAcesso aoEntrar={() => setLogado(true)} />
   if (!logado) return <Login aoEntrar={() => setLogado(true)} />
   return (
     <>
@@ -43,6 +59,88 @@ export default function RHApp() {
       <Carregando />
       <Painel aoSair={() => { api.sair(); setLogado(false) }} />
     </>
+  )
+}
+
+/**
+ * Primeiro acesso (v2.84): a instalação ainda não tem NENHUM usuário, e esta
+ * tela cria o administrador.
+ *
+ * Antes, o primeiro usuário nascia do `.env` — o que obrigava a escrever uma
+ * senha em arquivo e, num repositório público, publicava o e-mail de quem opera
+ * o sistema. Aqui ninguém escreve credencial em lugar nenhum.
+ *
+ * Ela só aparece enquanto o SERVIDOR disser que é necessário. Criado o
+ * primeiro usuário, a rota responde 409 e este caminho fecha para sempre — o
+ * portão é o banco, não esta tela (ver `api/auth_rh.py`).
+ */
+function PrimeiroAcesso({ aoEntrar }) {
+  const [nome, setNome] = useState('')
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
+  const [repetir, setRepetir] = useState('')
+  const [erro, setErro] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+
+  const curta = senha.length > 0 && senha.length < 8
+  const difere = repetir.length > 0 && senha !== repetir
+  const pode = nome.trim() && email.trim() && senha.length >= 8 && senha === repetir
+
+  const criar = async (e) => {
+    e.preventDefault()
+    setErro(null); setSalvando(true)
+    try {
+      await api.primeiroAcesso(nome.trim(), email.trim(), senha)
+      aoEntrar()
+    } catch (er) {
+      // Cada recusa diz o que RESOLVE. "Não foi possível" faria a pessoa tentar
+      // a mesma coisa de novo — e aqui ela está instalando o sistema sozinha,
+      // sem ninguém a quem perguntar.
+      const motivos = {
+        primeiro_acesso_ja_feito: 'Este sistema já tem um administrador. '
+          + 'Recarregue a página para entrar pelo login.',
+        senha_curta_minimo_8: 'A senha precisa ter pelo menos 8 caracteres.',
+        nome_obrigatorio: 'Informe seu nome.',
+      }
+      setErro(motivos[er.detail]
+        || (er.status === 429
+          ? 'Muitas tentativas. Aguarde alguns minutos e tente de novo.'
+          : 'Não foi possível criar o administrador. Confira os dados e tente de novo.'))
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <main className="cartao rh-login">
+      <img src={logo} alt="" className="logo-img" />
+      <h1>👋 Bem-vindo</h1>
+      <p className="explica">Este sistema ainda não tem nenhum usuário. Crie abaixo a sua
+        conta de administrador — ela será usada para entrar no painel e, depois, para
+        cadastrar o resto da equipe.</p>
+      <form onSubmit={criar}>
+        <label className="campo"><span className="rotulo">Seu nome completo</span>
+          <input value={nome} onChange={(e) => setNome(e.target.value)}
+                 autoComplete="name" autoFocus /></label>
+        <label className="campo"><span className="rotulo">Seu e-mail</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                 autoComplete="username" />
+          <span className="dica-inline">É com ele que você vai entrar no painel.</span></label>
+        <label className="campo"><span className="rotulo">Crie uma senha</span>
+          <InputSenha value={senha} onChange={(e) => setSenha(e.target.value)}
+                      autoComplete="new-password" />
+          <span className="dica-inline">Pelo menos 8 caracteres.</span></label>
+        <label className="campo"><span className="rotulo">Repita a senha</span>
+          <InputSenha value={repetir} onChange={(e) => setRepetir(e.target.value)}
+                      autoComplete="new-password" /></label>
+        {/* Avisos inline: descrevem o ESTADO do formulário enquanto a pessoa
+            escreve — não são confirmação de ação (regra da v2.75). */}
+        {curta && <div className="alerta">A senha precisa ter pelo menos 8 caracteres.</div>}
+        {difere && <div className="alerta">As duas senhas não estão iguais.</div>}
+        {erro && <div className="alerta">{erro}</div>}
+        <button className="btn-principal" type="submit" disabled={!pode || salvando}>
+          {salvando ? 'Criando…' : 'Criar administrador e entrar'}</button>
+      </form>
+    </main>
   )
 }
 
