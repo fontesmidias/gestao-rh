@@ -11,6 +11,30 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.84.1] — 2026-08-08 — A asserção do autor lia o e-mail literal
+
+O CI reprovou no `test_email_templates`. A v2.84 trocou o e-mail dos testes por
+um genérico, e quatro asserções comparavam com a **string**, não com a variável
+de ambiente — sendo que `_EMAIL = os.environ["RH_ADMIN_EMAIL"]` já existia dez
+linhas acima, e é com esse admin que o teste faz login e edita o template.
+
+No CI o administrador nasce com o e-mail do `.env` do job, então
+`atualizado_por` vinha dele e a comparação falhava.
+
+É a armadilha da v2.71 — *"senha literal em teste o amarra a UM banco"* — na
+variante do e-mail: a v2.84 só mudou **qual** string estava chumbada, sem tirar
+o problema. As quatro passam a usar `_EMAIL` e a informar o valor recebido na
+mensagem de erro.
+
+Os outros doze testes do CI que ainda citam o endereço foram conferidos um a um:
+são todos `os.environ.setdefault`, que o job sobrescreve.
+
+Validado como manda a regra e como faltou na v2.84: **banco novo dentro do
+container**, com o admin do job. Os 16 testes do bloco mais o do primeiro
+acesso, todos verdes antes do push.
+
+---
+
 ## [2.84.0] — 2026-08-08 — O sistema não sabe mais quem é você
 
 > *"o e-mail exposto na documentação é o rh@greenhousedf.com.br, ou seja, esse
