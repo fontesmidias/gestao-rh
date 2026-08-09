@@ -76,6 +76,26 @@ docker compose --env-file .env -f deploy/docker-compose.base.yml -f deploy/docke
 .env do diretório do primeiro `-f`, que é `deploy/` — sem a flag, porta e
 REDIS_URL saem vazias.)
 
+**Usuário PADRÃO dos testes locais** (v2.85, pedido do Bruno: *"para os testes
+locais, deixe um user e senha padrão, para não perdermos mais tempo"*). O
+`criar_admin_inicial` só cria o admin do `.env` com a tabela **VAZIA**, então em
+banco de desenvolvimento com usuários antigos aquele e-mail não existe — e o
+sintoma é um 401 que aparece como `KeyError: 'token'` ou "senha errada",
+apontando para o lugar errado (mordeu no smoke, no `test_email_templates` e nos
+testes de tela no mesmo dia). Rode uma vez após subir a stack:
+
+```bash
+docker cp backend/tests/. <api>:/app/tests
+docker exec -e PYTHONPATH=. <api> python tests/preparar_ambiente_local.py
+# teste@exemplo.com.br / senha-teste-123
+BASE_URL=http://localhost:8090 RH_EMAIL=teste@exemplo.com.br \
+  RH_SENHA=senha-teste-123 npx playwright test --workers=1
+```
+
+**`--workers=1` não é preciosismo**: em paralelo a suíte estoura o rate limit do
+login (15/5min por IP) e as falhas PARECEM defeito de layout — timeout esperando
+a tabela (v2.60). Reiniciar o container da API zera o limite (é em memória).
+
 Ambiente de teste efêmero (SEMPRE recriar limpo entre execuções — resíduo causa
 falsos erros):
 
@@ -200,6 +220,27 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   primeiro enche a tela; (4) título e respiro menores. No desktop nada muda
   (`display: contents` no `<details>`). Teto travado em teste: § 9.1 do
   `08-sistema-de-design.md` e `tabelas-cabem-na-tela.spec.js`.
+- **A fonte do sistema é CONFIGURÁVEL, e a pilha mora no SERVIDOR** (v2.85,
+  `services/marca.py::FONTES`): padrão **Yu Gothic**, escolhível em
+  Configurações → Identidade visual. ⚠️ **Yu Gothic é PROPRIETÁRIA da
+  Microsoft** — não existe no Fontsource/Google Fonts e embutir o `.ttf` do
+  Windows seria violação de licença num repo PÚBLICO; por isso ela vem
+  acompanhada da **Noto Sans JP** (livre, embutida, ~13KB no subset latino), que
+  atende Android/iPhone/Linux — a maior parte do público do wizard. **Só o
+  catálogo entra** (422 `fonte_desconhecida`): a pilha vira o `--fonte` de TODA
+  tela, e fonte inexistente **não dá erro**, só deixa a tela estranha. A rota
+  `GET /marca/aparencia` é **pública** porque o wizard não tem login — sem ela a
+  customização valeria só no painel. **Os DOCUMENTOS não mudam**: o hash do ato
+  de assinatura é calculado sobre o PDF do fpdf2, e trocar a fonte faria
+  manifesto emitido apontar para arquivo que não se reproduz (há teste varrendo
+  os geradores). Ao mexer em tipografia: **use `var(--fonte)`, nunca a lista
+  literal** — o `body` a repetia, e trocar só o token deixaria a fonte valer em
+  tudo menos no texto corrido.
+- **Teste estrutural de CSS tem que IGNORAR comentário** (v2.85, furo pego por
+  mutação): a asserção `"var(--fonte)" in corpo_do_body` passava verde com a
+  pilha literal de volta — porque casava com o `var(--fonte)` escrito no
+  COMENTÁRIO que explica a regra. É a v2.71 (`_tem_no_codigo`) na variante CSS:
+  remova `/* … */` antes de afirmar, e afirme sobre a LINHA da declaração.
 - **Rota PÚBLICA que cria administrador: o portão é o BANCO, e o teste afirma
   sobre o ESTADO** (v2.84, `api/auth_rh.py`): o primeiro admin nascia do `.env`,
   o que obrigava a escrever senha em arquivo e — em repositório PÚBLICO —

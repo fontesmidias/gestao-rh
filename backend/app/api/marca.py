@@ -15,7 +15,8 @@ from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services.auditoria import registrar
 from app.services.config_dinamica import gravar_config
-from app.services.marca import dados_empresa, salvar_dados
+from app.services.marca import (FONTES, dados_empresa, pilha_da_fonte,
+                                salvar_dados)
 
 router = APIRouter(tags=["marca"])
 
@@ -37,7 +38,16 @@ _MAX_BYTES = 2 * 1024 * 1024  # 2 MB por imagem
 def ver_marca(db: Session = Depends(get_db)) -> dict:
     d = dados_empresa(db)
     return {**{k: d[k] for k in d if not k.endswith("_key")},
-            "tem_logo": bool(d["logo_key"]), "tem_favicon": bool(d["favicon_key"])}
+            "tem_logo": bool(d["logo_key"]), "tem_favicon": bool(d["favicon_key"]),
+            # O catálogo vai junto: a tela monta o seletor a partir DELE, nunca de
+            # uma lista escrita à mão no JSX — duas listas divergiriam na primeira
+            # fonte nova, e a do front é a que a pessoa vê.
+            # A `pilha` vai junto para a tela mostrar a PRÉVIA da fonte escolhida
+            # antes de salvar — fonte se confere olhando, não lendo o nome.
+            "fontes": [{"valor": k, "rotulo": v["rotulo"], "nota": v["nota"],
+                        "pilha": v["pilha"]}
+                       for k, v in FONTES.items()],
+            "fonte_pilha": pilha_da_fonte(d.get("empresa_fonte"))}
 
 
 class MarcaIn(BaseModel):
@@ -46,11 +56,18 @@ class MarcaIn(BaseModel):
     empresa_cnpj: str | None = None
     empresa_endereco: str | None = None
     empresa_contato: str | None = None
+    empresa_fonte: str | None = None
 
 
 @router.put("/rh/marca")
 def salvar_marca(payload: MarcaIn, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+    # SÓ o catálogo entra. Aceitar texto livre deixaria gravar uma pilha CSS
+    # arbitrária que vai para o `<style>` de TODA tela, inclusive as públicas —
+    # e uma fonte que não existe não dá erro: a tela só fica estranha, sem nada
+    # apontando a causa. Mesma trava do documento específico (v2.79).
+    if payload.empresa_fonte is not None and payload.empresa_fonte not in FONTES:
+        raise HTTPException(status_code=422, detail="fonte_desconhecida")
     salvar_dados(db, payload.model_dump(exclude_none=True))
     registrar(db, "marca_atualizada", ator="rh", ator_detalhe=rh.email)
     db.commit()
@@ -99,6 +116,21 @@ def upload_favicon(arquivo: UploadFile, db: Session = Depends(get_db),
 
 
 # --- Servir a logo/favicon (PÚBLICO: aparecem no painel e nos e-mails) -------
+
+
+@router.get("/marca/aparencia")
+def aparencia_publica(db: Session = Depends(get_db)) -> dict:
+    """A fonte da interface, para QUALQUER tela (v2.85).
+
+    PÚBLICA porque o wizard do candidato não tem login e é a maior parte do uso
+    do sistema — deixar a fonte só no `/rh/marca` faria a customização valer no
+    painel e não valer para quem está enviando documento pelo celular.
+
+    Devolve a PILHA resolvida, não a chave: quem consome só aplica, e uma chave
+    inválida no banco já cai no padrão aqui (`pilha_da_fonte`), em vez de
+    chegar ao CSS e deixar a tela sem fonte nenhuma.
+    """
+    return {"fonte": pilha_da_fonte(dados_empresa(db).get("empresa_fonte"))}
 
 
 @router.get("/marca/logo")

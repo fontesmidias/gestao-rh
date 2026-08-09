@@ -224,7 +224,7 @@ jobs:
                    test_entrevista_anexo test_lixeira_restaura \
                    test_talento_cadastro_rh test_entrevista_sem_vaga \
                    test_documento_especifico test_exigencias \
-                   test_uniforme_planilha; do
+                   test_uniforme_planilha test_fonte_configuravel; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

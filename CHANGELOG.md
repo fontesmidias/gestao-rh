@@ -11,6 +11,86 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.85.0] — 2026-08-08 — A fonte é sua
+
+> *"quero que todas as fontes, de maneira global, seja Yu Gothic regular por
+> padrão, mas que possa ser customizado em Configurações, dentro da aba
+> Identidade visual. não precisa alterar a fonte dos documentos, apenas do
+> sistema."*
+
+### Yu Gothic é proprietária — e isso muda o desenho
+
+Ela vem no Windows e no macOS, mas **não pode ser redistribuída**: não existe no
+Google Fonts nem no Fontsource, e embutir o `.ttf` do Windows num repositório
+público seria violação de licença. Declará-la sozinha faria o RH ver Yu Gothic e
+o candidato no celular ver a fonte genérica do aparelho — sem nada avisando.
+
+Então ela vem **acompanhada da Noto Sans JP**, que é livre, tem a mesma origem
+tipográfica e pesa ~13KB no subconjunto latino. Windows e macOS usam Yu Gothic;
+Android, iPhone e Linux caem na Noto — parecida o bastante para a troca não
+saltar aos olhos.
+
+### O seletor tem lista, não campo livre
+
+Cinco fontes em **Configurações → Identidade visual**, cada uma com a cadeia de
+alternativas pronta no servidor: Yu Gothic (padrão), Outfit (a original),
+Noto Sans JP, fonte do aparelho e Georgia.
+
+A pilha escolhida vira o `--fonte` de **toda tela**, inclusive as públicas —
+texto livre deixaria gravar CSS arbitrário, e **fonte que não existe não dá
+erro**: a tela só fica estranha, sem nada apontando a causa. Fora do catálogo é
+422. Uma prévia mostra o resultado antes de salvar, com negrito, porque fonte se
+confere olhando e não lendo o nome.
+
+### A rota é pública, senão vale só metade
+
+O wizard do candidato não tem login e é a maior parte do uso. Sem
+`GET /marca/aparencia` público, a customização valeria no painel e não valeria
+para quem está enviando documento pelo celular.
+
+### Os documentos não mudam
+
+Limite explícito do pedido, e há razão técnica: o PDF é gerado pelo fpdf2 com
+fontes próprias, e o **hash do ato de assinatura** é calculado sobre ele —
+trocar a fonte faria manifesto já emitido apontar para um arquivo que não se
+reproduz. O teste varre os geradores e reprova se algum passar a ler a config.
+
+### Dois defeitos achados no caminho
+
+**O `body` repetia a pilha literal** em vez de usar `var(--fonte)`. Trocar só o
+token deixaria a fonte valer em tudo **menos no texto corrido** — o defeito mais
+difícil de enxergar, porque a tela muda "quase toda".
+
+**`--bg-suave` não existia.** Usei o token na prévia e a conferência acusou:
+token fantasma cai no fallback e a tela fica plausível, com a cor errada nos dois
+temas (v2.46).
+
+### Usuário padrão para testes locais
+
+> *"para os testes locais, deixe um user e senha padrão, para não perdermos mais
+> tempo."*
+
+`criar_admin_inicial` só cria o admin do `.env` com a tabela **vazia** — em banco
+de desenvolvimento com usuários antigos aquele e-mail não existe, e o 401 aparece
+como `KeyError: 'token'` ou "senha errada". Custou três diagnósticos no mesmo
+dia. `tests/preparar_ambiente_local.py` cria (ou redefine)
+`teste@exemplo.com.br` / `senha-teste-123`, e recusa rodar com
+`ENVIRONMENT=production`.
+
+Fica documentado junto que a suíte de tela precisa de **`--workers=1`**: em
+paralelo ela estoura o rate limit do login e as falhas parecem defeito de layout.
+
+### Portões
+
+26 verificações, 3 mutações. **A primeira versão do teste tinha um furo**: a
+asserção do `body` casava com o `var(--fonte)` escrito no comentário que EXPLICA
+a regra, e passava verde com a pilha literal de volta — a armadilha da v2.71,
+teste que aprova a própria documentação. Corrigido removendo comentários antes
+de afirmar. Conferido na tela: painel inteiro em Yu Gothic, seletor com prévia.
+E2E **30/30**.
+
+---
+
 ## [2.84.1] — 2026-08-08 — A asserção do autor lia o e-mail literal
 
 O CI reprovou no `test_email_templates`. A v2.84 trocou o e-mail dos testes por
