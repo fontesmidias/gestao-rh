@@ -33,6 +33,14 @@ def criar_admin_inicial(db: Session) -> None:
             nome="Administrador RH",
             email=settings.rh_admin_email.lower(),
             senha_hash=hash_senha(settings.rh_admin_password),
+            # SUPERADMIN (v2.86), como o primeiro acesso pela tela: as duas
+            # portas dividem o mesmo portão ("a tabela está vazia"), então
+            # precisam produzir o MESMO usuário. Cair no default `rh` deixaria
+            # a instalação provisionada sem ninguém capaz de gerir papéis — e
+            # sem tela para corrigir, porque `config:usuarios` é justamente o
+            # que falta. Foi o que o CI pegou: o admin do `.env` nascia `rh` e
+            # o `test_email_templates` levava 403 em `config:escrever`.
+            papel="superadmin",
         )
     )
     db.commit()

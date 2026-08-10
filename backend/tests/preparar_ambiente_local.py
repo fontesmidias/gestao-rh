@@ -51,13 +51,21 @@ from app.models.usuario_rh import UsuarioRH         # noqa: E402
 with SessionLocal() as db:
     u = db.scalar(select(UsuarioRH).where(UsuarioRH.email == EMAIL))
     if u is None:
-        db.add(UsuarioRH(nome=NOME, email=EMAIL, senha_hash=hash_senha(SENHA)))
+        # SUPERADMIN (v2.86): o usuário padrão dos testes locais precisa poder
+        # abrir TODA tela, senão o Playwright reprova telas de configuração com
+        # 403 e o sintoma aparece como defeito de layout — a mesma confusão que
+        # o rate limit já causou (v2.60).
+        db.add(UsuarioRH(nome=NOME, email=EMAIL, senha_hash=hash_senha(SENHA),
+                         papel="superadmin"))
         acao = "criado"
     else:
         # Redefine sempre: o banco local pode ter uma senha antiga, e o ponto do
         # script é que estas credenciais funcionem SEM ninguém precisar conferir.
         u.senha_hash = hash_senha(SENHA)
         u.ativo = True
+        # O papel também: um banco local anterior à v2.86 tem este usuário como
+        # `rh`, e aí metade das telas responde 403 sem o script dizer nada.
+        u.papel = "superadmin"
         acao = "atualizado"
     db.commit()
 

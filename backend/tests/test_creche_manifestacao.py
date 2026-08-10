@@ -154,7 +154,8 @@ assert r.status_code == 409, "já declarado tem que recusar, não reescrever a d
 EMAIL = f"rh-manifesto-{SUF}@exemplo.com"
 with SessionLocal() as db:
     db.add(UsuarioRH(email=EMAIL, nome="RH Manifesto",
-                     senha_hash=hash_senha("manifesto-123"), ativo=True))
+                     senha_hash=hash_senha("manifesto-123"), ativo=True,
+                     papel="superadmin"))
     db.commit()
 tok_rh = c.post("/api/rh/auth/login",
                 json={"email": EMAIL, "senha": "manifesto-123"}).json()["token"]

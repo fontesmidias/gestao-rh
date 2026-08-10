@@ -60,7 +60,8 @@ EMAIL = f"rh-word-{uuid.uuid4().hex[:8]}@exemplo.com"
 SENHA = "teste-word-123"
 with SessionLocal() as db:
     db.add(UsuarioRH(email=EMAIL, nome="RH Teste Word",
-                     senha_hash=hash_senha(SENHA), ativo=True))
+                     senha_hash=hash_senha(SENHA), ativo=True,
+                     papel="superadmin"))
     db.commit()
 
 tok = c.post("/api/rh/auth/login", json={"email": EMAIL, "senha": SENHA}).json()["token"]

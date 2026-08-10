@@ -46,7 +46,9 @@ from app.models.candidato import Candidato  # noqa: E402
 from app.models.usuario_rh import UsuarioRH  # noqa: E402
 
 FALHAS = []
-_RH = UsuarioRH(email="rh@teste.com", nome="RH Teste", senha_hash="x")
+# `papel` obrigatório desde a v2.86 — ver test_admissao_assistida.
+_RH = UsuarioRH(email="rh@teste.com", nome="RH Teste", senha_hash="x",
+                papel="superadmin")
 app.dependency_overrides[requer_rh] = lambda: _RH
 cli = TestClient(app)
 db = SessionLocal()
