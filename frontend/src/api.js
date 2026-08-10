@@ -1362,6 +1362,25 @@ export const rh = {
   verAssinantes: () => req('/rh/config/assinantes', { headers: authRH() }),
   salvarAssinantes: (dados) =>
     req('/rh/config/assinantes', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  // --- Papéis e permissões (v2.86) ---
+  // `minhasPermissoes` é o que o painel usa para esconder o que a pessoa não
+  // pode. Esconder é cortesia, não segurança — quem protege é o `exige` de
+  // cada rota; mas botão que sempre responde 403 ensina a ignorar erro.
+  minhasPermissoes: () => req('/rh/permissoes/minhas', { headers: authRH() }),
+  catalogoPermissoes: () => req('/rh/permissoes/catalogo', { headers: authRH() }),
+  // ⚠️ `papeisAcesso*`, NÃO `papeis*`: as chaves `papeis`/`criarPapel`/
+  // `editarPapel` JÁ EXISTEM neste mesmo objeto (papéis de ASSINATURA, acima).
+  // Chave repetida em objeto literal sobrescreve a anterior em SILÊNCIO — o
+  // build passa e três telas (Config, Modelos, RoteiroAssinatura) passariam a
+  // chamar a rota errada. Domínios diferentes, nomes diferentes.
+  papeisAcesso: () => req('/rh/papeis', { headers: authRH() }),
+  criarPapelAcesso: (dados) =>
+    req('/rh/papeis', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
+  editarPapelAcesso: (id, dados) =>
+    req(`/rh/papeis/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  excluirPapelAcesso: (id) =>
+    req(`/rh/papeis/${id}`, { method: 'DELETE', headers: authRH() }),
+
   usuarios: () => req('/rh/usuarios', { headers: authRH() }),
   criarUsuario: (dados) =>
     req('/rh/usuarios', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),

@@ -11,6 +11,83 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.86.0] — 2026-08-10 — Nem todo mundo pode tudo
+
+Até aqui o painel respondia UMA pergunta na porta: *"está logado?"*. O
+`requer_rh` era a única proteção de **476 rotas**, então quem entrasse podia
+efetivar, desligar em lote, exportar a base com 1.171 CPFs, baixar a trilha de
+auditoria e **criar outro administrador**. Não havia degrau entre consultar a
+lista de candidatos e apagar a pessoa.
+
+Isso passou a doer agora porque os módulos de Processos e Recepção (próximas
+levas) trazem para dentro do sistema gente que **não é do RH** — o gestor que
+avalia a própria equipe, a recepcionista que anuncia visita. Dar a essas pessoas
+a chave que o Coordenador tem hoje não era opção, e a mudança fica mais cara a
+cada módulo novo.
+
+**O que foi feito**
+
+- **Catálogo de 40 permissões** (`services/permissoes.py`), com o eixo na
+  NATUREZA DO ATO, não no arquivo. Um `GET` que devolve a base inteira com CPF
+  é `dados:exportar_base` e não `colaboradores:ler` — é assim que a LGPD o
+  enxerga, e é o que separa "abrir a ficha da Maria" de "levar 1.171 CPFs para
+  fora". As 14 permissões que não se desfazem sozinhas ficam marcadas como
+  sensíveis, e a tela conta quantas cada papel tem.
+- **362 rotas `/rh/*` declaram a permissão que exigem.** Os 19 routers com
+  `dependencies` global eram todos-ou-nada: `colaboradores.py` cobria com a
+  MESMA dependência o `GET` que lista e o `POST .../desligar`.
+- **5 papéis de fábrica** — superadmin, admin, RH, gestor e recepção —, todos
+  editáveis pelo painel (Configurações → 🔑 Papéis e permissões), mais os que o
+  superadmin criar. O `admin` é tudo **menos** `config:usuarios`: quem
+  administra o sistema não escolhe quem entra nele, senão "admin" e "superadmin"
+  seriam o mesmo papel com dois nomes — e o segundo poderia se promover ao
+  primeiro.
+
+**Três decisões que sustentam o desenho**
+
+1. **Rota sem permissão declarada é REPROVADA no CI**, não liberada por padrão
+   (`test_permissoes_declaradas.py`, stdlib pura). Com default aberto, "ainda
+   não declarei" e "decidi que é livre" ficariam indistinguíveis no código, e a
+   diferença só apareceria no dia em que alguém achasse a URL. As 9 isenções
+   legítimas (perfil próprio, login, callbacks OAuth) estão listadas **com
+   justificativa** — não há terceira opção.
+2. **O superadmin IGNORA a checagem**, em vez de ser um papel com todas as
+   caixas marcadas. Se fosse lista, cada módulo novo nasceria DESMARCADO para
+   ele, e o dono do sistema descobriria isso levando um 403 na própria casa. É o
+   que faz módulo novo nascer 100% liberado sem ninguém precisar lembrar.
+3. **Papel que não resolve devolve conjunto VAZIO, que nega.** Cair num padrão
+   permissivo faria um papel quebrado (removido, escrito errado numa migration)
+   passar por administrador — e o sintoma seria acesso a MAIS, que ninguém
+   reporta.
+
+**A migration promove todo usuário existente a superadmin — de propósito.**
+Rebaixar no deploy tiraria acesso de quem estava no meio de uma admissão, sem
+aviso e sem ninguém para reconceder (o único que poderia também teria sido
+rebaixado): a instalação ficaria travada por fora. Segurança que chega quebrando
+o trabalho é revertida às pressas, e o que fica é nenhuma segurança. O degrau
+real acontece na TELA, onde se vê o que cada papel concede — decisão de quem
+conhece a equipe, não de uma migration adivinhando por e-mail.
+
+**Travas que impedem fechar a porta por dentro**: o papel `superadmin` não se
+edita, papel de fábrica não se apaga, papel em uso não se exclui (o 409 diz
+quantas pessoas seriam afetadas) e rebaixar/desativar o ÚLTIMO superadmin é 422
+— sem isso, ninguém mais conseguiria gerir papéis, e não há tela para desfazer.
+
+**Validado por mutação**: remover o `exige` da rota de desligar faz
+`test_permissoes_efeito.py` reprovar com a mensagem certa — *"404 significa que
+a autorização passou"*. Sem essa asserção, a recepcionista poderia desligar
+colaboradores. As 10 asserções afirmam sobre o MOTIVO do 403 e sobre o ESTADO do
+banco, não só sobre o status code (lições da v2.80 e v2.84).
+
+**Dois defeitos de colisão pegos pelos próprios guarda-corpos**: já existia um
+componente `Papeis` (papel com que se ASSINA um documento) e as chaves
+`papeis`/`criarPapel`/`editarPapel` no `api.js` — chave repetida em objeto
+literal sobrescreve a anterior **em silêncio**, e três telas (Config, Modelos,
+RoteiroAssinatura) passariam a chamar a rota errada com o build passando.
+Renomeados para `PapeisAcesso`/`papeisAcesso*`. O `test_design_system` ainda
+pegou uma classe fantasma (`rh-conferencia-bloco`) e um token inexistente
+(`--aviso`) na tela nova.
+
 ## [2.85.1] — 2026-08-08 — A métrica vira fila no celular
 
 O CI reprovou a v2.85 na régua de mobile: em **Admissões a primeira linha só

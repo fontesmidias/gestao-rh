@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import get_settings, ip_do_cliente
 from app.core.db import get_db
 from app.models.modelo_documento import ModeloDocumento
@@ -58,7 +58,8 @@ class NovaAutorizacaoIn(BaseModel):
 
 @router.get("/rh/modelos/{modelo_id}/autorizacoes-equipe",
             dependencies=[Depends(requer_rh)])
-def listar(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def listar(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     autos = db.scalars(select(AutorizacaoEquipe)
                        .where(AutorizacaoEquipe.modelo_id == modelo_id)
                        .order_by(AutorizacaoEquipe.criado_em.desc())).all()
@@ -68,7 +69,7 @@ def listar(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
 @router.post("/rh/autorizacoes-equipe", status_code=201,
              dependencies=[Depends(requer_rh)])
 def criar(payload: NovaAutorizacaoIn, db: Session = Depends(get_db),
-          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+          rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Cadastra a autorização e dispara o código de confirmação ao representante
     (a autorização só vale DEPOIS que ele confirma — é o ato de vontade dele)."""
     if db.get(ModeloDocumento, payload.modelo_id) is None:
@@ -103,7 +104,7 @@ class ConfirmarIn(BaseModel):
 
 @router.post("/rh/autorizacoes-equipe/confirmar", dependencies=[Depends(requer_rh)])
 def confirmar(payload: ConfirmarIn, request: Request, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """O RH digita o código que o representante recebeu (ou o próprio
     representante o informa). Valida e ATIVA a autorização."""
     exigir(f"auth-equipe:{payload.autorizacao_id}", maximo=10, janela_s=900)
@@ -130,7 +131,7 @@ def confirmar(payload: ConfirmarIn, request: Request, db: Session = Depends(get_
 @router.post("/rh/autorizacoes-equipe/{aut_id}/revogar",
              dependencies=[Depends(requer_rh)])
 def revogar(aut_id: uuid.UUID, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+            rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     a = db.get(AutorizacaoEquipe, aut_id)
     if a is None:
         raise HTTPException(status_code=404, detail="autorizacao_nao_encontrada")

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import ip_do_cliente
 from app.core.db import get_db
 from app.models.usuario_rh import UsuarioRH
@@ -101,7 +101,7 @@ def coletar(payload: LoteIn, request: Request,
 
 @router.post("/rh/telemetria", status_code=202)
 def coletar_rh(payload: LoteIn, request: Request, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> dict:
     """Coleta do PAINEL: mesma mecânica, mas com o usuário identificado."""
     n = tel.registrar_eventos(
         db, [e.model_dump() for e in payload.eventos],
@@ -121,7 +121,7 @@ def coletar_rh(payload: LoteIn, request: Request, db: Session = Depends(get_db),
 
 @router.get("/rh/telemetria/resumo")
 def resumo(dias: int = 7, db: Session = Depends(get_db),
-           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+           _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> dict:
     """Painel de cima da aba: totais, erros agrupados, páginas lentas, fricção."""
     return tel.resumo(db, dias=min(max(dias, 1), 365))
 
@@ -131,7 +131,7 @@ def listar(tipo: str | None = None, origem: str | None = None,
            evento: str | None = None, pagina: str | None = None,
            dias: int | None = None, limite: int = 300,
            db: Session = Depends(get_db),
-           _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+           _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     desde = (datetime.now(timezone.utc) - timedelta(days=dias)) if dias else None
     return tel.listar(db, tipo=tipo, origem=origem, evento=evento,
                       pagina=pagina, desde=desde, limite=limite)
@@ -140,7 +140,7 @@ def listar(tipo: str | None = None, origem: str | None = None,
 @router.get("/rh/telemetria/jornada.csv")
 def exportar_jornada(dias: int = 30, origem: str | None = None,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                     rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Os eventos em ordem cronológica, para análise de CAMINHO fora daqui.
 
     A tela responde "está quebrando?", "onde travam?" e "o que está lento?".
@@ -174,7 +174,7 @@ def exportar_jornada(dias: int = 30, origem: str | None = None,
 def da_pessoa(candidato_id: uuid.UUID | None = None,
               talento_id: uuid.UUID | None = None, limite: int = 200,
               db: Session = Depends(get_db),
-              _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+              _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     """Telemetria individualizada — o painel que aparece na ficha da pessoa.
 
     Quando só um dos ids vem, descobrimos o par pelo mini-CRM: a pessoa
@@ -199,7 +199,7 @@ def da_pessoa(candidato_id: uuid.UUID | None = None,
 
 @router.get("/rh/telemetria/retencao")
 def ver_retencao(db: Session = Depends(get_db),
-                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> dict:
     return {"dias": tel.retencao_dias(db), "padrao": tel.RETENCAO_PADRAO_DIAS}
 
 
@@ -209,7 +209,7 @@ class RetencaoIn(BaseModel):
 
 @router.put("/rh/telemetria/retencao")
 def salvar_retencao(payload: RetencaoIn, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Prazo de retenção, configurável pelo painel (pedido do Bruno)."""
     from app.services.auditoria import registrar
     from app.services.config_dinamica import gravar_config
@@ -242,7 +242,7 @@ class RegraIn(BaseModel):
 
 @router.get("/rh/telemetria/alertas/regras")
 def listar_regras(db: Session = Depends(get_db),
-                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                  _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     from app.models.alerta import RegraAlerta
     from sqlalchemy import select as _select
     regras = db.scalars(_select(RegraAlerta).order_by(RegraAlerta.criado_em)).all()
@@ -256,7 +256,7 @@ def listar_regras(db: Session = Depends(get_db),
 
 @router.post("/rh/telemetria/alertas/regras", status_code=201)
 def criar_regra(payload: RegraIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> dict:
     from app.models.alerta import RegraAlerta, TipoAlerta
     from app.services.auditoria import registrar
 
@@ -274,7 +274,7 @@ def criar_regra(payload: RegraIn, db: Session = Depends(get_db),
 @router.put("/rh/telemetria/alertas/regras/{regra_id}")
 def editar_regra(regra_id: uuid.UUID, payload: RegraIn,
                  db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> dict:
     from app.models.alerta import RegraAlerta, TipoAlerta
     from app.services.auditoria import registrar
 
@@ -293,7 +293,7 @@ def editar_regra(regra_id: uuid.UUID, payload: RegraIn,
 
 @router.delete("/rh/telemetria/alertas/regras/{regra_id}", status_code=204)
 def excluir_regra(regra_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+                  rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> None:
     from app.models.alerta import RegraAlerta
     from app.services.auditoria import registrar
 
@@ -308,7 +308,7 @@ def excluir_regra(regra_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.post("/rh/telemetria/alertas/testar")
 def testar_regras(db: Session = Depends(get_db),
-                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                  _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     """"O que dispararia agora?" — sem enviar e sem gravar histórico.
 
     Não consumir o silêncio nem o histórico é essencial: testar uma regra não
@@ -328,7 +328,7 @@ def testar_regras(db: Session = Depends(get_db),
 
 @router.get("/rh/telemetria/alertas/historico")
 def historico_alertas(limite: int = 100, db: Session = Depends(get_db),
-                      _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                      _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     """Alertas já disparados — a prova de que o vigia está acordado.
 
     Sem esta lista, caixa de entrada silenciosa seria ambígua: "não houve
@@ -347,7 +347,7 @@ class ExpurgoIn(BaseModel):
 
 @router.post("/rh/telemetria/expurgar")
 def expurgar(payload: ExpurgoIn, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("dados:expurgar"))) -> dict:
     """Apaga telemetria de um intervalo. Fica na AUDITORIA — quem apagou o quê.
 
     Exigir o intervalo é proposital: sem `desde` nem `ate`, um clique

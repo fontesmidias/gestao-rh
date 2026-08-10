@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica, ip_do_cliente
 from app.core.db import get_db
 from app.core.security import verificar_senha
@@ -89,7 +89,7 @@ def _dump_sol(db: Session, sol: SolicitacaoAssinatura) -> dict:
              dependencies=[Depends(requer_rh)])
 def montar_roteiro(cid: uuid.UUID, payload: NovaSolicitacaoIn, request: Request,
                    db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     cand = db.get(Candidato, cid)
     if cand is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
@@ -184,7 +184,7 @@ def _titulo_corpo(db: Session, payload: NovaSolicitacaoIn) -> tuple[str, str | N
 @router.post("/rh/solicitacoes-assinatura/{sol_id}/disparar",
              dependencies=[Depends(requer_rh)])
 def disparar(sol_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     sol = db.get(SolicitacaoAssinatura, sol_id)
     if sol is None:
         raise HTTPException(status_code=404, detail="solicitacao_nao_encontrada")
@@ -205,7 +205,8 @@ def disparar(sol_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
 
 @router.get("/rh/candidatos/{cid}/solicitacoes-assinatura",
             dependencies=[Depends(requer_rh)])
-def listar_do_candidato(cid: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def listar_do_candidato(cid: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     sols = db.scalars(select(SolicitacaoAssinatura)
                       .where(SolicitacaoAssinatura.candidato_id == cid)
                       .order_by(SolicitacaoAssinatura.criado_em.desc())).all()
@@ -219,7 +220,7 @@ class CancelarIn(BaseModel):
 @router.post("/rh/solicitacoes-assinatura/{sol_id}/cancelar",
              dependencies=[Depends(requer_rh)])
 def cancelar(sol_id: uuid.UUID, payload: CancelarIn, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     sol = db.get(SolicitacaoAssinatura, sol_id)
     if sol is None:
         raise HTTPException(status_code=404, detail="solicitacao_nao_encontrada")
@@ -246,7 +247,7 @@ def cancelar(sol_id: uuid.UUID, payload: CancelarIn, db: Session = Depends(get_d
 
 @router.get("/rh/minhas-assinaturas")
 def minhas_assinaturas(db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     # etapas usuario_rh minhas, na vez, ainda não assinadas, solicitação aguardando
     etapas = db.scalars(
         select(EtapaAssinatura)
@@ -273,7 +274,7 @@ def minhas_assinaturas(db: Session = Depends(get_db),
 def dash_assinaturas(situacao: str | None = None, busca: str | None = None,
                      pendentes: bool = False,
                      db: Session = Depends(get_db),
-                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     _rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Visão geral das assinaturas dos documentos de TODOS os candidatos, sem
     precisar entrar em cada admissão. Uma linha por candidato com quantas fichas
     assinou / faltam, e o alerta de pendências."""
@@ -321,7 +322,7 @@ def dash_assinaturas(situacao: str | None = None, busca: str | None = None,
 
 @router.get("/rh/ordem-assinatura")
 def ver_ordem_assinatura(db: Session = Depends(get_db),
-                         _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Ordem configurável em que as fichas-base aparecem para assinar/no dossiê."""
     from app.api.assinaturas import NOMES_DOC
     from app.models.assinatura import DocumentoAssinavel
@@ -336,7 +337,7 @@ class OrdemIn(BaseModel):
 
 @router.put("/rh/ordem-assinatura")
 def salvar_ordem_assinatura(payload: OrdemIn, db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                            rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.api.assinaturas import NOMES_DOC
     from app.models.assinatura import DocumentoAssinavel
     from app.services.ordem_assinatura import salvar_ordem
@@ -350,7 +351,7 @@ def salvar_ordem_assinatura(payload: OrdemIn, db: Session = Depends(get_db),
 
 @router.get("/rh/minhas-assinaturas/feitas")
 def minhas_assinaturas_feitas(db: Session = Depends(get_db),
-                              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                              rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """O que EU já assinei (etapas usuario_rh minhas com assinado_em)."""
     etapas = db.scalars(
         select(EtapaAssinatura)
@@ -374,7 +375,7 @@ def minhas_assinaturas_feitas(db: Session = Depends(get_db),
 
 @router.get("/rh/solicitacoes-assinatura")
 def listar_todas(db: Session = Depends(get_db),
-                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 _rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Todos os roteiros (para a aba Gerenciar) — visão geral do RH."""
     sols = db.scalars(select(SolicitacaoAssinatura)
                       .order_by(SolicitacaoAssinatura.criado_em.desc())).all()
@@ -400,7 +401,7 @@ class AssinarRhIn(BaseModel):
 @router.post("/rh/etapas/{etapa_id}/assinar")
 def assinar_etapa_rh(etapa_id: uuid.UUID, payload: AssinarRhIn, request: Request,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Usuário do RH assina a etapa dele, provando presença com a senha."""
     exigir(f"assin-rh:{rh.id}", maximo=MAX_TENTATIVAS_SENHA, janela_s=900)
     e = db.get(EtapaAssinatura, etapa_id)
@@ -444,7 +445,7 @@ class RecusarIn(BaseModel):
 @router.post("/rh/etapas/{etapa_id}/recusar")
 def recusar_etapa_rh(etapa_id: uuid.UUID, payload: RecusarIn,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Recusa != cancelamento (correção M6): a solicitação vai a pendente_rh e o
     RH decide reatribuir a etapa; as anteriores já assinadas NÃO se perdem."""
     e = db.get(EtapaAssinatura, etapa_id)

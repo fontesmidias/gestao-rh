@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica, ip_do_cliente
 from app.core.db import get_db
 from app.models.prova import (SENIORIDADES, AplicacaoProva, ItemBanco, LinkProva,
@@ -94,7 +94,8 @@ def _dump_prova(db: Session, p: ProvaCargo, com_questoes: bool = False) -> dict:
 
 
 @router.get("/rh/provas", dependencies=[Depends(requer_rh)])
-def listar_provas(db: Session = Depends(get_db)) -> list[dict]:
+def listar_provas(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> list[dict]:
     provas = db.scalars(select(ProvaCargo).order_by(ProvaCargo.criado_em.desc())).all()
     return [_dump_prova(db, p) for p in provas]
 
@@ -111,7 +112,7 @@ class ProvaIn(BaseModel):
 
 @router.post("/rh/provas", status_code=201, dependencies=[Depends(requer_rh)])
 def criar_prova(payload: ProvaIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     if not (payload.titulo or "").strip():
         raise HTTPException(status_code=422, detail="titulo_obrigatorio")
     p = ProvaCargo(titulo=payload.titulo.strip()[:200],
@@ -130,7 +131,8 @@ def criar_prova(payload: ProvaIn, db: Session = Depends(get_db),
 
 
 @router.get("/rh/provas/{prova_id}", dependencies=[Depends(requer_rh)])
-def detalhe_prova(prova_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def detalhe_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     p = db.get(ProvaCargo, prova_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prova_nao_encontrada")
@@ -139,7 +141,7 @@ def detalhe_prova(prova_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
 
 @router.put("/rh/provas/{prova_id}", dependencies=[Depends(requer_rh)])
 def editar_prova(prova_id: uuid.UUID, payload: ProvaIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     p = db.get(ProvaCargo, prova_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prova_nao_encontrada")
@@ -164,7 +166,7 @@ def editar_prova(prova_id: uuid.UUID, payload: ProvaIn, db: Session = Depends(ge
 
 @router.delete("/rh/provas/{prova_id}", status_code=204, dependencies=[Depends(requer_rh)])
 def excluir_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+                  rh: UsuarioRH = Depends(exige("selecao:provas"))) -> None:
     p = db.get(ProvaCargo, prova_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prova_nao_encontrada")
@@ -177,7 +179,7 @@ def excluir_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
 @router.post("/rh/provas/{prova_id}/duplicar", status_code=201,
              dependencies=[Depends(requer_rh)])
 def duplicar_prova(prova_id: uuid.UUID, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Clona a prova inteira (config + todas as questões, com gabarito e
     explicação). A cópia nasce com título "(cópia)" e as MESMAS questões, mas
     sem links/aplicações (é um novo modelo)."""
@@ -232,7 +234,7 @@ def _validar_questao(payload: QuestaoIn) -> None:
 @router.post("/rh/provas/{prova_id}/questoes", status_code=201,
              dependencies=[Depends(requer_rh)])
 def criar_questao(prova_id: uuid.UUID, payload: QuestaoIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     p = db.get(ProvaCargo, prova_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prova_nao_encontrada")
@@ -255,7 +257,7 @@ def criar_questao(prova_id: uuid.UUID, payload: QuestaoIn, db: Session = Depends
 
 @router.put("/rh/provas/{prova_id}/questoes/{questao_id}", dependencies=[Depends(requer_rh)])
 def editar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID, payload: QuestaoIn,
-                   db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     q = db.get(QuestaoProva, questao_id)
     if q is None or q.prova_id != prova_id:
         raise HTTPException(status_code=404, detail="questao_nao_encontrada")
@@ -277,7 +279,7 @@ def editar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID, payload: QuestaoI
 @router.delete("/rh/provas/{prova_id}/questoes/{questao_id}", status_code=204,
                dependencies=[Depends(requer_rh)])
 def excluir_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
-                    db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> None:
+                    db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:provas"))) -> None:
     q = db.get(QuestaoProva, questao_id)
     if q is None or q.prova_id != prova_id:
         raise HTTPException(status_code=404, detail="questao_nao_encontrada")
@@ -289,7 +291,7 @@ def excluir_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
 @router.post("/rh/provas/{prova_id}/questoes/{questao_id}/duplicar", status_code=201,
              dependencies=[Depends(requer_rh)])
 def duplicar_questao(prova_id: uuid.UUID, questao_id: uuid.UUID,
-                     db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Clona uma questão na MESMA prova (enunciado, opções, gabarito, explicação,
     peso). A cópia entra ao final da ordem."""
     q = db.get(QuestaoProva, questao_id)
@@ -364,7 +366,8 @@ def _campos_item(payload: ItemIn) -> dict:
 @router.get("/rh/banco-itens", dependencies=[Depends(requer_rh)])
 def listar_itens(cargo: str | None = None, senioridade: str | None = None,
                  tag: str | None = None, tipo: str | None = None,
-                 db: Session = Depends(get_db)) -> dict:
+                 db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Lista os itens do banco, filtrando por cargo/senioridade/tag/tipo. Também
     devolve os cargos e tags existentes (p/ alimentar os seletores do front)."""
     q = select(ItemBanco).order_by(ItemBanco.criado_em.desc())
@@ -387,7 +390,7 @@ def listar_itens(cargo: str | None = None, senioridade: str | None = None,
 
 @router.post("/rh/banco-itens", status_code=201, dependencies=[Depends(requer_rh)])
 def criar_item(payload: ItemIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     _validar_item(payload)
     it = ItemBanco(**_campos_item(payload), criado_por=rh.email)
     db.add(it)
@@ -399,7 +402,7 @@ def criar_item(payload: ItemIn, db: Session = Depends(get_db),
 
 @router.put("/rh/banco-itens/{item_id}", dependencies=[Depends(requer_rh)])
 def editar_item(item_id: uuid.UUID, payload: ItemIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     it = db.get(ItemBanco, item_id)
     if it is None:
         raise HTTPException(status_code=404, detail="item_nao_encontrado")
@@ -413,7 +416,7 @@ def editar_item(item_id: uuid.UUID, payload: ItemIn, db: Session = Depends(get_d
 
 @router.delete("/rh/banco-itens/{item_id}", status_code=204, dependencies=[Depends(requer_rh)])
 def excluir_item(item_id: uuid.UUID, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> None:
+                 rh: UsuarioRH = Depends(exige("selecao:provas"))) -> None:
     it = db.get(ItemBanco, item_id)
     if it is None:
         raise HTTPException(status_code=404, detail="item_nao_encontrado")
@@ -432,7 +435,7 @@ class PromoverIn(BaseModel):
 @router.post("/rh/provas/{prova_id}/questoes/{questao_id}/promover", status_code=201,
              dependencies=[Depends(requer_rh)])
 def promover_para_banco(prova_id: uuid.UUID, questao_id: uuid.UUID, payload: PromoverIn,
-                        db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Reaproveita uma questão de uma prova existente: COPIA para o banco de
     itens (a questão original continua na prova). Cargo/senioridade/tags podem
     ser informados na promoção; o cargo cai no da prova se não vier."""
@@ -467,7 +470,7 @@ class MontarIn(BaseModel):
 @router.post("/rh/provas/{prova_id}/adicionar-do-banco", status_code=201,
              dependencies=[Depends(requer_rh)])
 def adicionar_do_banco(prova_id: uuid.UUID, payload: MontarIn, db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Adiciona itens do banco a uma prova, COPIANDO cada item para uma
     QuestaoProva (snapshot — editar o item depois não muda a prova). Dois modos:
     - MANUAL: `item_ids` escolhidos a dedo.
@@ -521,7 +524,7 @@ class LinkIn(BaseModel):
 
 @router.post("/rh/provas/{prova_id}/link", status_code=201, dependencies=[Depends(requer_rh)])
 def criar_link(prova_id: uuid.UUID, payload: LinkIn, request: Request,
-               db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     p = db.get(ProvaCargo, prova_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prova_nao_encontrada")
@@ -860,7 +863,8 @@ def _dump_aplicacao_rh(db: Session, a: AplicacaoProva, com_respostas: bool = Fal
 
 @router.get("/rh/provas-aplicacoes", dependencies=[Depends(requer_rh)])
 def listar_aplicacoes(prova_id: uuid.UUID | None = None, status: str | None = None,
-                      db: Session = Depends(get_db)) -> list[dict]:
+                      db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:corrigir"))) -> list[dict]:
     q = select(AplicacaoProva).order_by(AplicacaoProva.criado_em.desc())
     if prova_id:
         q = q.where(AplicacaoProva.prova_id == prova_id)
@@ -870,7 +874,8 @@ def listar_aplicacoes(prova_id: uuid.UUID | None = None, status: str | None = No
 
 
 @router.get("/rh/provas-aplicacoes/{aid}", dependencies=[Depends(requer_rh)])
-def detalhe_aplicacao(aid: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def detalhe_aplicacao(aid: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:corrigir"))) -> dict:
     a = db.get(AplicacaoProva, aid)
     if a is None:
         raise HTTPException(status_code=404, detail="aplicacao_nao_encontrada")
@@ -884,7 +889,7 @@ class CorrecaoIn(BaseModel):
 
 @router.put("/rh/provas-aplicacoes/{aid}/correcao", dependencies=[Depends(requer_rh)])
 def corrigir_discursivas(aid: uuid.UUID, payload: CorrecaoIn, db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         rh: UsuarioRH = Depends(exige("selecao:corrigir"))) -> dict:
     a = db.get(AplicacaoProva, aid)
     if a is None:
         raise HTTPException(status_code=404, detail="aplicacao_nao_encontrada")

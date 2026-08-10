@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import (Candidato, CargoTirvu, Empresa, Jornada,
                                   PostoServico)
@@ -58,14 +58,15 @@ def _dump_empresa(e: Empresa) -> dict:
 
 
 @router.get("/rh/empresas")
-def listar_empresas(db: Session = Depends(get_db)) -> list[dict]:
+def listar_empresas(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> list[dict]:
     empresas = db.scalars(select(Empresa).order_by(Empresa.razao_social)).all()
     return [_dump_empresa(e) for e in empresas]
 
 
 @router.post("/rh/empresas", status_code=201)
 def criar_empresa(dados: EmpresaIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     nome = dados.razao_social.strip()
     if not nome:
         raise HTTPException(422, "Razão social obrigatória.")
@@ -91,7 +92,7 @@ def criar_empresa(dados: EmpresaIn, db: Session = Depends(get_db),
 @router.put("/rh/empresas/{empresa_id}")
 def editar_empresa(empresa_id: uuid.UUID, dados: EmpresaIn,
                    ativa: bool | None = None, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     emp = db.get(Empresa, empresa_id)
     if emp is None:
         raise HTTPException(404, "Empresa não encontrada")
@@ -120,7 +121,8 @@ class CargoTirvuIn(BaseModel):
 
 
 @router.get("/rh/cargos-tirvu")
-def listar_cargos_tirvu(db: Session = Depends(get_db)) -> list[dict]:
+def listar_cargos_tirvu(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:ler"))) -> list[dict]:
     """Cargos usados na base × ID do Tirvu já cadastrado. Junta os cargos reais
     (Candidato.cargo_funcao, com contagem) ao de-para — o RH vê quem ainda não
     tem ID (o que faz o export sair zerado)."""
@@ -149,7 +151,7 @@ def listar_cargos_tirvu(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.put("/rh/cargos-tirvu")
 def salvar_cargo_tirvu(dados: CargoTirvuIn, db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Upsert do de-para por texto de cargo. Enviar tirvu_id vazio REMOVE o
     mapeamento (o export volta a acusar pendência)."""
     from app.services.export_tirvu import normalizar_cargo
@@ -224,7 +226,8 @@ def _dump_jornada(j: Jornada) -> dict:
 
 @router.get("/rh/jornadas")
 def listar_jornadas(posto_id: uuid.UUID | None = None,
-                    db: Session = Depends(get_db)) -> list[dict]:
+                    db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> list[dict]:
     """Todas as jornadas ativas. Com `posto_id`, as daquele posto vêm PRIMEIRO
     (ordenação, nunca filtro — jornada sem posto vale para todos e precisa
     continuar visível)."""
@@ -237,7 +240,7 @@ def listar_jornadas(posto_id: uuid.UUID | None = None,
 
 @router.post("/rh/jornadas", status_code=201)
 def criar_jornada(dados: JornadaIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     desc = re.sub(r"\s+", " ", dados.descricao).strip()
     if not desc:
         raise HTTPException(422, "Descrição obrigatória.")
@@ -262,7 +265,7 @@ def criar_jornada(dados: JornadaIn, db: Session = Depends(get_db),
 def editar_jornada(jornada_id: uuid.UUID, dados: JornadaIn,
                    ativa: bool | None = None, confirmar_estrutura: bool = False,
                    db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Edita a jornada. Os campos estruturados enviados (não-None) são gravados;
     com `confirmar_estrutura=true`, carimba a confirmação humana da estruturação
     (o RH validou a proposta do parser)."""
@@ -295,7 +298,7 @@ class ConfirmarLoteIn(BaseModel):
 
 @router.post("/rh/jornadas/confirmar-lote")
 def confirmar_lote(payload: ConfirmarLoteIn, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Aplica a proposta do parser e carimba a confirmação em VÁRIAS jornadas.
 
     Medido nos dados reais (2026-07-28): das 269 jornadas da planilha de
@@ -341,7 +344,7 @@ def confirmar_lote(payload: ConfirmarLoteIn, db: Session = Depends(get_db),
 
 @router.get("/rh/jornadas-a-confirmar")
 def jornadas_a_confirmar(db: Session = Depends(get_db),
-                         _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         _rh: UsuarioRH = Depends(exige("organizacao:ler"))) -> dict:
     """As pendentes de confirmação, já com a CONFIANÇA da proposta — é o que
     permite ao RH confirmar em lote só o que o parser entendeu bem."""
     pendentes = db.scalars(select(Jornada)
@@ -360,7 +363,7 @@ def jornadas_a_confirmar(db: Session = Depends(get_db),
 
 @router.delete("/rh/jornadas/{jornada_id}", status_code=204)
 def excluir_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)):
+                    rh: UsuarioRH = Depends(exige("organizacao:escrever"))):
     """Exclui a jornada. Se algum colaborador ainda a usa, recusa (o vínculo
     quebraria) — o RH desliga a jornada (`ativa=false`) ou reatribui antes."""
     j = db.get(Jornada, jornada_id)
@@ -377,7 +380,7 @@ def excluir_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.get("/rh/jornadas/{jornada_id}/proposta")
 def proposta_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
-                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Roda o parser sobre a descrição e devolve a PROPOSTA estruturada (não
     grava). O front mostra lado a lado com a descrição e o RH confirma/corrige."""
     j = db.get(Jornada, jornada_id)
@@ -389,7 +392,7 @@ def proposta_jornada(jornada_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.get("/rh/jornadas-duplicidades")
 def jornadas_duplicidades(db: Session = Depends(get_db),
-                          _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                          _rh: UsuarioRH = Depends(exige("organizacao:ler"))) -> list[dict]:
     """Pares de jornadas SUSPEITAS de duplicidade (grafias/typos diferentes) para
     o RH revisar. NUNCA funde — só sinaliza (regra dos ~40 erros de digitação).
     Rota com hífen (não `/jornadas/duplicidades`) para não colidir com
@@ -408,7 +411,7 @@ def jornadas_duplicidades(db: Session = Depends(get_db),
 @router.post("/rh/jornadas/importar-planilha")
 async def importar_jornadas(arquivo: UploadFile = File(...),
                             db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                            rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Importa jornadas da planilha de colaboradores (.xlsx): coluna
     'Jornada de Trabalho' (a descrição CANÔNICA), casando o posto pela coluna
     'Lotação'. Idempotente por descrição normalizada (rodar 2x não duplica). Cada
@@ -515,7 +518,8 @@ def _propor_split(texto: str) -> dict | None:
 
 
 @router.get("/rh/enderecos-backfill")
-def listar_backfill(db: Session = Depends(get_db)) -> dict:
+def listar_backfill(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Endereços ainda na string única, com a proposta do parser (ou sem, se
     incerto). O RH aprova/edita na tela; nada muda sem confirmação."""
     pendentes = db.scalars(
@@ -543,7 +547,7 @@ class BackfillItem(BaseModel):
 
 @router.post("/rh/enderecos-backfill")
 def aplicar_backfill(itens: list[BackfillItem], db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Grava as separações CONFIRMADAS pelo RH. A string original permanece
     intacta (evidência do que a pessoa declarou); a ficha só troca de layout
     para quem tiver os campos novos preenchidos."""
@@ -610,7 +614,7 @@ def _abas_com_jornadas(conteudo: bytes) -> list[tuple[str, set[str]]] | None:
 
 @router.post("/rh/jornadas/importar")
 async def importar_jornadas(arquivo: UploadFile, db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                            rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Importa jornadas da planilha de escalas do Tirvu (uma aba por posto).
     Idempotente por descrição exata; NUNCA funde descrições parecidas. Casa a
     aba com um posto por nome normalizado e relata o que não casou. O arquivo
@@ -691,7 +695,7 @@ async def _texto_do_upload(arquivo: UploadFile) -> str:
 
 @router.post("/rh/tirvu-txt/preview-cargos-arquivo")
 async def preview_cargos_arquivo(arquivo: UploadFile, db: Session = Depends(get_db),
-                                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                 _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Mesmo preview de cargos, a partir do .txt salvo pelo RH.
 
     O Tirvu não tem botão de exportar cargos: o RH seleciona a tela inteira,
@@ -704,13 +708,14 @@ async def preview_cargos_arquivo(arquivo: UploadFile, db: Session = Depends(get_
 
 @router.post("/rh/tirvu-txt/preview-jornadas-arquivo")
 async def preview_jornadas_arquivo(arquivo: UploadFile, db: Session = Depends(get_db),
-                                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                   _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Mesmo preview de jornadas, a partir do .txt salvo pelo RH."""
     return preview_jornadas_tirvu(TxtIn(texto=await _texto_do_upload(arquivo)), db)
 
 
 @router.post("/rh/tirvu-txt/preview-cargos")
-def preview_cargos_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
+def preview_cargos_tirvu(dados: TxtIn, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Lê o texto colado da tela 'Cargos' do Tirvu e PROPÕE o de-para —
     não grava nada. Sinaliza cópia parcial (contagem do cabeçalho) e cargos
     homônimos com 2+ IDs ativos (o RH decide qual usar; nunca funde
@@ -776,7 +781,7 @@ class ConfirmarCargosIn(BaseModel):
 
 @router.post("/rh/tirvu-txt/confirmar-cargos")
 def confirmar_cargos_tirvu(dados: ConfirmarCargosIn, db: Session = Depends(get_db),
-                           rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                           rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Grava SÓ os itens com aplicar=True — a revisão humana já aconteceu no
     front (preview + decisão linha a linha)."""
     from app.services.export_tirvu import normalizar_cargo
@@ -808,7 +813,8 @@ def confirmar_cargos_tirvu(dados: ConfirmarCargosIn, db: Session = Depends(get_d
 
 
 @router.post("/rh/tirvu-txt/preview-jornadas")
-def preview_jornadas_tirvu(dados: TxtIn, db: Session = Depends(get_db)) -> dict:
+def preview_jornadas_tirvu(dados: TxtIn, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Lê o texto colado da tela 'Jornadas' do Tirvu e PROPÕE o de-para de
     tirvu_id — não grava nada. Casa por descrição já limpa da sujeira de
     'vínculos'; sinaliza duplicatas (nunca funde sozinho)."""
@@ -858,7 +864,7 @@ class ConfirmarJornadasIn(BaseModel):
 
 @router.post("/rh/tirvu-txt/confirmar-jornadas")
 def confirmar_jornadas_tirvu(dados: ConfirmarJornadasIn, db: Session = Depends(get_db),
-                             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                             rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Grava SÓ os itens com aplicar=True: se a jornada já existe (por
     descrição normalizada), atualiza o tirvu_id; senão CRIA a jornada nova com
     a descrição já limpa e o tirvu_id. Nunca funde duas descrições

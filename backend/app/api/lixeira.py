@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.lixeira import ItemLixeira
 from app.models.usuario_rh import UsuarioRH
@@ -86,7 +86,8 @@ def _reconstruir(item: ItemLixeira):
 
 
 @router.get("/rh/lixeira")
-def listar(db: Session = Depends(get_db)) -> dict:
+def listar(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("sistema:lixeira"))) -> dict:
     expurgar_vencidos(db)
     db.commit()
     itens = db.scalars(select(ItemLixeira)
@@ -99,7 +100,7 @@ def listar(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/lixeira/{item_id}/restaurar")
 def restaurar(item_id: uuid.UUID, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("sistema:lixeira"))) -> dict:
     item = db.get(ItemLixeira, item_id)
     if item is None or item.restaurado_em is not None:
         raise HTTPException(status_code=404, detail="item_nao_encontrado")
@@ -121,7 +122,7 @@ class ConfigLixeiraIn(BaseModel):
 
 @router.put("/rh/lixeira/config")
 def configurar(payload: ConfigLixeiraIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("sistema:lixeira"))) -> dict:
     if not (1 <= payload.dias <= 3650):
         raise HTTPException(status_code=422, detail="dias_fora_da_faixa")
     gravar_config(db, {"lixeira_dias": str(payload.dias)})

@@ -13,7 +13,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica, get_settings
 from app.core.db import get_db
 from app.models.candidato import Candidato
@@ -318,7 +318,8 @@ def _dump(t: Talento, teste: dict | None = None, tags: list | None = None,
 
 @router.get("/rh/talentos", dependencies=[Depends(requer_rh)])
 def listar(status: str | None = None, busca: str | None = None,
-           cargo: str | None = None, db: Session = Depends(get_db)) -> list[dict]:
+           cargo: str | None = None, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> list[dict]:
     consulta = select(Talento).order_by(Talento.criado_em.desc())
     if status:
         consulta = consulta.where(Talento.status == status)
@@ -390,7 +391,7 @@ class TalentoRHIn(TalentoIn):
 
 @router.post("/rh/talentos", status_code=201, dependencies=[Depends(requer_rh)])
 def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Cadastra um talento à mão, pelo painel.
 
     Por que esta rota existe: **não havia porta para o RH cadastrar uma pessoa**
@@ -472,7 +473,7 @@ def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
              dependencies=[Depends(requer_rh)])
 async def anexar_curriculo_pelo_rh(talento_id: uuid.UUID, arquivo: UploadFile,
                                    db: Session = Depends(get_db),
-                                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                   rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Anexa (ou TROCA) o currículo de um talento, pelo painel.
 
     Faltava (v2.74, cobrado pelo Bruno): o cadastro à mão da v2.73 dizia "o
@@ -499,7 +500,7 @@ async def anexar_curriculo_pelo_rh(talento_id: uuid.UUID, arquivo: UploadFile,
 
 @router.get("/rh/talentos/{talento_id}/curriculo", dependencies=[Depends(requer_rh)])
 def baixar_curriculo(talento_id: uuid.UUID, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                     rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> Response:
     """Serve o currículo original do talento (PDF/imagem/Word) para o RH conferir.
     Resolve tudo do banco ANTES de tocar o storage (armadilha DetachedInstance)."""
     t = db.get(Talento, talento_id)
@@ -560,7 +561,7 @@ class StatusIn(BaseModel):
 
 @router.put("/rh/talentos/{talento_id}/status", dependencies=[Depends(requer_rh)])
 def mudar_status(talento_id: uuid.UUID, payload: StatusIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Muda o status do talento; o motivo (quando vier) vira anotação no CRM.
 
     O RH pediu "colocar alguma observação por ocasião do arquivamento, bem como
@@ -646,7 +647,7 @@ def _aproveitar_testes_do_talento(db: Session, t: Talento,
 
 @router.post("/rh/talentos/{talento_id}/converter", dependencies=[Depends(requer_rh)])
 def converter(talento_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Converte o talento em candidato: cria o cadastro migrando nome/contato,
     emite o link mágico da admissão e (se houver e-mail) envia o convite."""
     t = db.get(Talento, talento_id)
@@ -771,7 +772,7 @@ class EnviarTesteIn(BaseModel):
 
 @router.post("/rh/talentos/{talento_id}/enviar-teste", dependencies=[Depends(requer_rh)])
 def enviar_teste(talento_id: uuid.UUID, payload: EnviarTesteIn, request: Request,
-                 db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Cria um link de testagem DEDICADO ao talento (sem convertê-lo em candidato)
     e envia o link /t/ ao e-mail dele. O resultado volta ao dash pelo talento_id."""
     import secrets
@@ -816,7 +817,8 @@ def enviar_teste(talento_id: uuid.UUID, payload: EnviarTesteIn, request: Request
 
 
 @router.get("/rh/talentos/{talento_id}/teste", dependencies=[Depends(requer_rh)])
-def teste_do_talento(talento_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def teste_do_talento(talento_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Status/resultado do teste do talento (para o dash abrir o detalhe)."""
     resumo = _resumo_teste_talento(db, talento_id)
     if resumo is None:
@@ -873,7 +875,7 @@ def _tipo_contratacao(valor: str) -> str | None:
 
 @router.post("/rh/talentos/importar-planilha", dependencies=[Depends(requer_rh)])
 async def importar_planilha(arquivo: UploadFile, db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                            rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Importa os pré-cadastros exportados do Microsoft Forms (.xlsx). Casa as
     colunas pelo cabeçalho, mapeia cargos/regiões (separados por ';') e os
     Sim/Não. Idempotente: PULA quem já existe (por e-mail; ou nome+telefone quando

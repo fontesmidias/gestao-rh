@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.models.assinatura import Assinatura, DocumentoAssinavel
@@ -105,7 +105,8 @@ def _normalizar_entrada(dados: dict) -> dict:
 
 
 @router.get("/rh/candidatos/{candidato_id}/ficha")
-def ficha_do_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ficha_do_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     from app.api.ficha import montar_ficha
     candidato = db.get(Candidato, candidato_id)
     if candidato is None:
@@ -115,7 +116,8 @@ def ficha_do_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -
 
 @router.get("/rh/candidatos/{candidato_id}/fichas/{documento}")
 def baixar_ficha_rh(candidato_id: uuid.UUID, documento: str,
-                    db: Session = Depends(get_db)):
+                    db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))):
     """PDF de qualquer ficha (fixa ou de modelo) para o RH baixar e enviar
     manualmente se preciso: a via assinada (com o bloco), se existir; senão a
     prévia com os dados atuais. Vale assinada OU não — rede de segurança."""
@@ -148,7 +150,7 @@ def editar_secao(
     payload: EdicaoSecaoIn,
     request: Request,
     db: Session = Depends(get_db),
-    rh: UsuarioRH = Depends(requer_rh),
+    rh: UsuarioRH = Depends(exige("admissao:escrever")),
 ) -> dict:
     """O RH completa/corrige dados da ficha. Validação idêntica à do candidato
     (mesmos schemas); auditoria com antes → depois; e se algum documento já
@@ -346,7 +348,7 @@ def inserir_arquivo_rh(
     arquivos: list[UploadFile] | None = None,
     origem: str = Form("whatsapp"),
     db: Session = Depends(get_db),
-    rh: UsuarioRH = Depends(requer_rh),
+    rh: UsuarioRH = Depends(exige("admissao:revisar_documento")),
 ) -> dict:
     """Documento que chegou fora do sistema (WhatsApp, e-mail, presencial):
     o RH insere no slot com etiqueta de origem — visível no painel e na
@@ -392,7 +394,8 @@ def inserir_arquivo_rh(
 
 
 @router.get("/rh/candidatos/{candidato_id}/informativos")
-def listar_informativos(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+def listar_informativos(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> list[dict]:
     """Informativos de integração do candidato e se estão liberados para assinar.
     Alimenta o botão de disparo no painel do RH."""
     from app.api.assinaturas import NOMES_DOC
@@ -414,7 +417,7 @@ def listar_informativos(candidato_id: uuid.UUID, db: Session = Depends(get_db)) 
 
 @router.post("/rh/candidatos/{candidato_id}/liberar-informativo")
 def liberar_informativo(candidato_id: uuid.UUID, db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """DISPARA o informativo de integração: libera para o candidato assinar. Só
     a partir daqui ele aparece no fluxo de assinatura (feedback do Bruno)."""
     from app.api.postos import DOCS_INFORMATIVO
@@ -438,7 +441,7 @@ def liberar_informativo(candidato_id: uuid.UUID, db: Session = Depends(get_db),
              dependencies=[Depends(travar_por("notificar"))])
 def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
                          db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Cobra o candidato por e-mail com o retrato exato do que falta: ficha
     incompleta, fichas aguardando assinatura e/ou documentos pendentes — com
     um link novo. Nasceu do incidente real: e-mail cadastrado depois, e a
@@ -494,7 +497,7 @@ def notificar_pendencias(candidato_id: uuid.UUID, request: Request,
 
 @router.post("/rh/candidatos/{candidato_id}/teams")
 def enviar_ao_teams(candidato_id: uuid.UUID, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Posta no canal do Teams a mensagem do template do RH, com as variáveis
     do candidato preenchidas ({{nome}}, {{cargo}}, {{posto}}, {{status}}…)."""
     from app.services import teams
@@ -524,7 +527,7 @@ class ReabrirIn(BaseModel):
 @router.post("/rh/slots/{slot_id}/reabrir")
 def reabrir_slot(slot_id: uuid.UUID, payload: ReabrirIn,
                  db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     """Desfaz uma aprovação/dispensa/rejeição feita por engano. Com arquivo,
     o slot volta para 'em análise'; sem arquivo, volta a 'pendente'."""
     slot = db.get(SlotDocumento, slot_id)

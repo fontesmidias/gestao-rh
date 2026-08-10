@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.crm import Tag
 from app.models.minutario import MeioEnvio, ModeloMensagem, ModeloMensagemTag
@@ -51,7 +51,8 @@ class ModeloMensagemIn(BaseModel):
 
 
 @router.get("/rh/minutario/modelos")
-def listar_modelos(incluir_inativos: bool = False, db: Session = Depends(get_db)) -> list[dict]:
+def listar_modelos(incluir_inativos: bool = False, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> list[dict]:
     q = select(ModeloMensagem).order_by(ModeloMensagem.titulo)
     if not incluir_inativos:
         q = q.where(ModeloMensagem.ativo.is_(True))
@@ -61,7 +62,7 @@ def listar_modelos(incluir_inativos: bool = False, db: Session = Depends(get_db)
 
 @router.post("/rh/minutario/modelos", status_code=201)
 def criar_modelo(payload: ModeloMensagemIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:
     titulo = payload.titulo.strip()
     if not titulo:
         raise HTTPException(status_code=422, detail="titulo_obrigatorio")
@@ -80,7 +81,7 @@ def criar_modelo(payload: ModeloMensagemIn, db: Session = Depends(get_db),
 
 @router.patch("/rh/minutario/modelos/{modelo_id}")
 def editar_modelo(modelo_id: uuid.UUID, payload: ModeloMensagemIn,
-                  db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:
     m = db.get(ModeloMensagem, modelo_id)
     if m is None:
         raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
@@ -105,7 +106,7 @@ def editar_modelo(modelo_id: uuid.UUID, payload: ModeloMensagemIn,
 
 @router.delete("/rh/minutario/modelos/{modelo_id}", status_code=204)
 def excluir_modelo(modelo_id: uuid.UUID, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> None:
+                   rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> None:
     m = db.get(ModeloMensagem, modelo_id)
     if m is None:
         raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
@@ -182,7 +183,7 @@ def _prompt_usuario(dados: ComporMensagemIn, corpo_referencia: str | None) -> st
 
 @router.post("/rh/minutario/compor")
 def compor_mensagem(payload: ComporMensagemIn, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:
     """Gera o texto a partir dos campos da vaga (+ modelo de referência,
     se indicado). O texto SEMPRE volta editável no front antes de qualquer
     envio — a IA propõe, o RH aprova."""

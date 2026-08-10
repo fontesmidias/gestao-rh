@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.crm import Anotacao, PessoaTag, Tag
 from app.models.usuario_rh import UsuarioRH
@@ -66,7 +66,8 @@ def _escopo_ou_422(talento_id, candidato_id) -> None:
 # ---------- Catálogo de tags (Configuração) ----------
 
 @router.get("/rh/crm/tags")
-def listar_tags(incluir_inativas: bool = False, db: Session = Depends(get_db)) -> list[dict]:
+def listar_tags(incluir_inativas: bool = False, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> list[dict]:
     q = select(Tag).order_by(Tag.nome)
     if not incluir_inativas:
         q = q.where(Tag.ativo.is_(True))
@@ -74,7 +75,8 @@ def listar_tags(incluir_inativas: bool = False, db: Session = Depends(get_db)) -
 
 
 @router.post("/rh/crm/tags", status_code=201)
-def criar_tag(payload: TagIn, db: Session = Depends(get_db)) -> dict:
+def criar_tag(payload: TagIn, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     nome = (payload.nome or "").strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
@@ -92,7 +94,8 @@ def criar_tag(payload: TagIn, db: Session = Depends(get_db)) -> dict:
 @router.get("/rh/crm/pessoa")
 def memoria_da_pessoa(talento_id: uuid.UUID | None = None,
                       candidato_id: uuid.UUID | None = None,
-                      db: Session = Depends(get_db)) -> dict:
+                      db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Anotações + tags da pessoa, juntando talento e candidato quando há
     vínculo (a memória feita no talento segue para o candidato)."""
     _escopo_ou_422(talento_id, candidato_id)
@@ -120,7 +123,7 @@ def memoria_da_pessoa(talento_id: uuid.UUID | None = None,
 
 @router.post("/rh/crm/anotacoes", status_code=201)
 def criar_anotacao(payload: AnotacaoIn, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     _escopo_ou_422(payload.talento_id, payload.candidato_id)
     texto = (payload.texto or "").strip()
     if not texto:
@@ -136,7 +139,7 @@ def criar_anotacao(payload: AnotacaoIn, db: Session = Depends(get_db),
 
 @router.patch("/rh/crm/anotacoes/{anotacao_id}")
 def editar_anotacao(anotacao_id: uuid.UUID, payload: EditarAnotacaoIn,
-                    db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Edita o texto — o AUTOR original nunca é sobrescrito (snapshot
     imutável); grava só quem editou e quando (feedback 2026-07-27: 'lançar OU
     EDITAR' as anotações)."""
@@ -159,7 +162,7 @@ def editar_anotacao(anotacao_id: uuid.UUID, payload: EditarAnotacaoIn,
 
 @router.post("/rh/crm/anotacoes/{anotacao_id}/anexo")
 async def anexar(anotacao_id: uuid.UUID, arquivo: UploadFile,
-                 db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     a = db.get(Anotacao, anotacao_id)
     if a is None:
         raise HTTPException(status_code=404, detail="anotacao_nao_encontrada")
@@ -187,7 +190,8 @@ async def anexar(anotacao_id: uuid.UUID, arquivo: UploadFile,
 
 
 @router.get("/rh/crm/anotacoes/{anotacao_id}/anexo")
-def baixar_anexo(anotacao_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_anexo(anotacao_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> Response:
     a = db.get(Anotacao, anotacao_id)
     if a is None or not a.anexo_key:
         raise HTTPException(status_code=404, detail="anexo_nao_encontrado")
@@ -198,7 +202,7 @@ def baixar_anexo(anotacao_id: uuid.UUID, db: Session = Depends(get_db)) -> Respo
 
 @router.delete("/rh/crm/anotacoes/{anotacao_id}", status_code=204)
 def excluir_anotacao(anotacao_id: uuid.UUID, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                     rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> Response:
     a = db.get(Anotacao, anotacao_id)
     if a is None:
         raise HTTPException(status_code=404, detail="anotacao_nao_encontrada")
@@ -216,7 +220,7 @@ def excluir_anotacao(anotacao_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.post("/rh/crm/pessoa/tags", status_code=201)
 def marcar_tag(payload: MarcarTagIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     _escopo_ou_422(payload.talento_id, payload.candidato_id)
     if db.get(Tag, payload.tag_id) is None:
         raise HTTPException(status_code=404, detail="tag_nao_encontrada")
@@ -235,7 +239,8 @@ def marcar_tag(payload: MarcarTagIn, db: Session = Depends(get_db),
 @router.delete("/rh/crm/pessoa/tags", status_code=204)
 def desmarcar_tag(tag_id: uuid.UUID, talento_id: uuid.UUID | None = None,
                   candidato_id: uuid.UUID | None = None,
-                  db: Session = Depends(get_db)) -> Response:
+                  db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> Response:
     _escopo_ou_422(talento_id, candidato_id)
     escopo = crm.escopo_pessoa(db, talento_id=talento_id, candidato_id=candidato_id)
     # remove o vínculo de qualquer lado da pessoa (talento e/ou candidato)
@@ -250,7 +255,8 @@ def desmarcar_tag(tag_id: uuid.UUID, talento_id: uuid.UUID | None = None,
 # ---------- Paramétrica de tag por ÚLTIMO (não capturar os literais acima) ----------
 
 @router.patch("/rh/crm/tags/{tag_id}")
-def editar_tag(tag_id: uuid.UUID, payload: TagIn, db: Session = Depends(get_db)) -> dict:
+def editar_tag(tag_id: uuid.UUID, payload: TagIn, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     t = db.get(Tag, tag_id)
     if t is None:
         raise HTTPException(status_code=404, detail="tag_nao_encontrada")
@@ -269,7 +275,8 @@ def editar_tag(tag_id: uuid.UUID, payload: TagIn, db: Session = Depends(get_db))
 
 
 @router.delete("/rh/crm/tags/{tag_id}", status_code=204)
-def excluir_tag(tag_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def excluir_tag(tag_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> Response:
     t = db.get(Tag, tag_id)
     if t is None:
         raise HTTPException(status_code=404, detail="tag_nao_encontrada")

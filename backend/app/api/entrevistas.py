@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import ip_do_cliente
 from app.core.db import get_db
 from app.models.assinatura_entrevista import AssinaturaEntrevista
@@ -312,7 +312,8 @@ def _exigir_pessoa(db: Session, talento_id, candidato_id) -> tuple:
 def ver_formulario(db: Session = Depends(get_db),
                    roteiro_id: uuid.UUID | None = None,
                    cargo: str | None = None,
-                   senioridade: str | None = None) -> dict:
+                   senioridade: str | None = None,
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """O instrumento: competências com âncoras, escala, variantes, recomendações
     e as perguntas de triagem. O front desenha as duas fichas a partir daqui e
     **NÃO duplica nenhum texto** (`test_entrevistas.py` varre o JSX e reprova).
@@ -344,7 +345,8 @@ def ver_formulario(db: Session = Depends(get_db),
 
 
 @router.get("/rh/entrevistas/modalidades")
-def ver_modalidades() -> dict:
+def ver_modalidades(
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Modalidades e qual campo cada uma exige — o front não duplica o rótulo."""
     return {"itens": inst.MODALIDADES}
 
@@ -352,7 +354,8 @@ def ver_modalidades() -> dict:
 @router.get("/rh/entrevistas")
 def listar(db: Session = Depends(get_db),
            vaga_id: uuid.UUID | None = None, tipo: str | None = None,
-           status: str | None = None, incluir_arquivadas: bool = False) -> dict:
+           status: str | None = None, incluir_arquivadas: bool = False,
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Lista + métricas para os cards do DashPlanilha.
 
     Arquivadas ficam FORA por padrão — é o que "sai da vista" significa
@@ -391,7 +394,8 @@ def listar(db: Session = Depends(get_db),
 
 
 @router.get("/rh/entrevistas/pendencias")
-def pendencias(db: Session = Depends(get_db)) -> dict:
+def pendencias(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Entrevistas cuja data passou e ninguém disse o que houve (cenário 2).
 
     **Nunca** vira `nao_veio` sozinha: o sistema pergunta, quem conclui é
@@ -412,7 +416,8 @@ def pendencias(db: Session = Depends(get_db)) -> dict:
 @router.get("/rh/pessoa/entrevistas")
 def entrevistas_da_pessoa(db: Session = Depends(get_db),
                           talento_id: uuid.UUID | None = None,
-                          candidato_id: uuid.UUID | None = None) -> dict:
+                          candidato_id: uuid.UUID | None = None,
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Histórico de entrevistas da PESSOA, atravessando talento↔candidato.
 
     Usa `crm.escopo_pessoa` — o mesmo que faz a anotação "seguir a pessoa". É
@@ -440,7 +445,8 @@ def entrevistas_da_pessoa(db: Session = Depends(get_db),
 
 
 @router.get("/rh/vagas/{vaga_id}/entrevistas")
-def entrevistas_da_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def entrevistas_da_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Comparação: os entrevistados daquela vaga, uma linha por pessoa, com as
     4 notas lado a lado (cenários 17 e 18). É o que atende "filtrar" e
     "alocar"."""
@@ -458,7 +464,8 @@ def entrevistas_da_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> di
 
 @router.get("/rh/vagas/{vaga_id}/entrevistados")
 def entrevistados_para_reaproveitar(vaga_id: uuid.UUID,
-                                    db: Session = Depends(get_db)) -> dict:
+                                    db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Quem foi entrevistado para esta vaga — a PRÉVIA do reaproveitamento
     (§ 14.3, cenário 30).
 
@@ -505,7 +512,7 @@ def entrevistados_para_reaproveitar(vaga_id: uuid.UUID,
 
 @router.post("/rh/entrevistas/reaproveitar")
 def reaproveitar(payload: ReaproveitarIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Aplica a tag de reaproveitamento em lote (§ 14.3).
 
     **Reusa `PessoaTag` do mini-CRM — nenhum campo novo.** As tags já aparecem e
@@ -559,7 +566,7 @@ def reaproveitar(payload: ReaproveitarIn, db: Session = Depends(get_db),
 
 @router.post("/rh/entrevistas", status_code=201)
 def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
-          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+          rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Marca uma entrevista OU registra uma que já aconteceu.
 
     `marcada_para = None` nasce direto em `realizada`: pessoa que aparece na
@@ -668,7 +675,8 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
 # --------------------------------------------------------------------------
 
 @router.get("/rh/entrevistas/{entrevista_id}")
-def ver(entrevista_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ver(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     e = db.get(Entrevista, entrevista_id)
     if e is None:
         raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
@@ -678,7 +686,7 @@ def ver(entrevista_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
 @router.put("/rh/entrevistas/{entrevista_id}")
 def preencher(entrevista_id: uuid.UUID, payload: PreencherIn,
               db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Preenche a ficha. Valida conforme o TIPO — são instrumentos diferentes.
 
     422 sempre NOMEIA o que falta: "Justifique a nota de 'Trato com público e
@@ -839,7 +847,7 @@ def _anotar_no_crm(db: Session, e: Entrevista, rh: UsuarioRH) -> None:
 @router.post("/rh/entrevistas/{entrevista_id}/desfecho")
 def desfecho(entrevista_id: uuid.UUID, payload: DesfechoIn,
              db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Fecha a entrevista sem preenchimento: não veio, remarcada ou cancelada.
 
     **Sempre um ato humano.** Nada aqui é inferido de silêncio — é justamente a
@@ -891,7 +899,7 @@ def desfecho(entrevista_id: uuid.UUID, payload: DesfechoIn,
 @router.post("/rh/entrevistas/{entrevista_id}/arquivar")
 def arquivar(entrevista_id: uuid.UUID, payload: ArquivarIn,
              db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """ARQUIVA — o registro CONTINUA existindo e consultável (§ 3.1).
 
     Nota velha não deve assombrar quem se candidata de novo dois anos depois;
@@ -917,7 +925,7 @@ def arquivar(entrevista_id: uuid.UUID, payload: ArquivarIn,
 @router.post("/rh/entrevistas/{entrevista_id}/anexo")
 async def anexar(entrevista_id: uuid.UUID, arquivo: UploadFile,
                  db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Anexo: currículo anotado, teste em papel (cenário 20). Padrão do
     mini-CRM — allowlist, teto e `close()` no `finally` (o Starlette faz spool
     em disco acima de ~1MB; sem o close sobra arquivo temporário no container).
@@ -949,7 +957,8 @@ async def anexar(entrevista_id: uuid.UUID, arquivo: UploadFile,
 
 
 @router.get("/rh/entrevistas/{entrevista_id}/anexo")
-def baixar_anexo(entrevista_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_anexo(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     e = db.get(Entrevista, entrevista_id)
     if e is None or not e.anexo_key:
         raise HTTPException(status_code=404, detail="anexo_nao_encontrado")
@@ -1019,7 +1028,7 @@ def _assinaturas_vivas(db: Session, entrevista_id) -> list:
 
 @router.get("/rh/entrevistas/{entrevista_id}/documento")
 def baixar_documento(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                     rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     """A ficha em PDF. Assinada, serve o PDF GRAVADO; senão, gera na hora.
 
     Servir o arquivo gravado (e não regerar) é o que faz o hash continuar
@@ -1066,7 +1075,7 @@ class AssinarFichaIn(BaseModel):
 @router.post("/rh/entrevistas/{entrevista_id}/assinar")
 def assinar_ficha(entrevista_id: uuid.UUID, payload: AssinarFichaIn,
                   request: Request, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("documentos:assinar"))) -> dict:
     """Assina a ficha de entrevista — **o RH que conduziu** (§ 15.3).
 
     O entrevistado NÃO assina: exigiria mandar link a quem talvez não seja
@@ -1129,7 +1138,8 @@ def assinar_ficha(entrevista_id: uuid.UUID, payload: AssinarFichaIn,
 
 @router.get("/rh/entrevistas/{entrevista_id}/assinaturas")
 def listar_assinaturas(entrevista_id: uuid.UUID,
-                       db: Session = Depends(get_db)) -> dict:
+                       db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """As vias da ficha, inclusive as SUBSTITUÍDAS — a via antiga some da vista,
     nunca do registro."""
     e = db.get(Entrevista, entrevista_id)
@@ -1155,7 +1165,7 @@ def listar_assinaturas(entrevista_id: uuid.UUID,
 
 @router.delete("/rh/entrevistas/{entrevista_id}", status_code=204)
 def excluir(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> Response:
+            rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     """Exclusão real passa pela LIXEIRA (regra da casa: toda exclusão do RH
     passa por lá, com retenção configurável). Diferente de ARQUIVAR, que é o
     fim natural pelo prazo e não tira o registro da base."""

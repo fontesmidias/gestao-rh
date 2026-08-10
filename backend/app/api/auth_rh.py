@@ -101,8 +101,11 @@ def criar_primeiro_usuario(payload: PrimeiroAcessoIn, request: Request,
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
     exigir_senha_forte(payload.senha)
 
+    # O primeiro usuário nasce SUPERADMIN (v2.86): é ele quem vai definir os
+    # papéis de todo mundo. Nascer como `rh` deixaria a instalação sem ninguém
+    # capaz de gerir permissões, e sem tela para corrigir isso.
     usuario = UsuarioRH(nome=capitalizar_nome(nome), email=str(payload.email).lower(),
-                        senha_hash=hash_senha(payload.senha))
+                        senha_hash=hash_senha(payload.senha), papel="superadmin")
     db.add(usuario)
     db.flush()
     registrar(db, "primeiro_acesso", ator="rh", ator_detalhe=usuario.email,
@@ -188,7 +191,15 @@ def requer_rh(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> UsuarioRH:
-    """Dependência para proteger endpoints /rh/*."""
+    """Autentica quem está chamando — responde só *"está logado?"*.
+
+    ⚠️ **Não use isto para proteger rota nova.** Ela autentica e nada mais;
+    quem AUTORIZA é `exige("permissao")` (abaixo). Continua aqui, e continua
+    pública, por dois motivos legítimos: as rotas de perfil próprio (`/rh/me`),
+    que qualquer usuário do painel acessa por definição, e o `exige` em si, que
+    a compõe. O `test_permissoes_declaradas.py` reprova no CI a rota `/rh/*`
+    que se proteger só com ela.
+    """
     if credentials is None:
         raise HTTPException(status_code=401, detail="nao_autenticado")
     usuario_id = validar_token_sessao(credentials.credentials)
@@ -202,3 +213,62 @@ def requer_rh(
     from app.services.contexto_log import definir_ator
     definir_ator(usuario.email)
     return usuario
+
+
+def permissoes_do_usuario(db: Session, usuario: UsuarioRH) -> frozenset[str]:
+    """Permissões efetivas de um usuário, a partir do papel dele.
+
+    A ordem é: papel gravado no banco → padrão de fábrica → **nada**. O último
+    degrau é o que importa: papel que não se resolve (removido, renomeado à mão,
+    escrito errado numa migration) devolve conjunto VAZIO, que NEGA. O contrário
+    — cair num padrão permissivo — deixaria um papel quebrado passar por
+    administrador, e o sintoma seria acesso a mais, que ninguém reporta.
+    """
+    from app.models.papel import Papel
+    from app.services import permissoes as cat
+
+    papel = (usuario.papel or "").strip()
+    if papel == cat.PAPEL_SUPERADMIN:
+        # Não consulta lista: é o que faz módulo novo nascer liberado para ele.
+        return cat.CHAVES
+
+    registro = db.scalar(select(Papel).where(Papel.chave == papel))
+    if registro is not None:
+        return frozenset(registro.permissoes or ())
+    return cat.permissoes_padrao(papel)
+
+
+def exige(permissao: str):
+    """Dependência que exige UMA permissão nomeada. É a porta das rotas `/rh/*`.
+
+        @router.post("/rh/colaboradores/{cid}/desligar")
+        def desligar(..., rh: UsuarioRH = Depends(exige("colaboradores:desligar"))):
+
+    A chave é conferida contra o catálogo **na importação do módulo**, não na
+    primeira requisição: permissão escrita errada derruba o boot com o nome do
+    erro, em vez de virar um 403 em produção que ninguém liga à causa. É a mesma
+    escolha do `_conferir_catalogo` dos documentos (v2.67).
+    """
+    from app.services import permissoes as cat
+
+    if permissao not in cat.CHAVES:
+        raise KeyError(
+            f"permissao_desconhecida: {permissao!r} — acrescente ao catálogo em "
+            "app/services/permissoes.py antes de usá-la numa rota."
+        )
+
+    def _dependencia(usuario: UsuarioRH = Depends(requer_rh),
+                     db: Session = Depends(get_db)) -> UsuarioRH:
+        concedidas = permissoes_do_usuario(db, usuario)
+        if not cat.pode(usuario.papel or "", concedidas, permissao):
+            # 403 e não 404: a rota existe e a pessoa está autenticada. O
+            # `detail` NOMEIA a permissão que falta, porque quem lê isso é o
+            # superadmin tentando entender por que a colega não consegue — sem
+            # o nome, ele procuraria no papel errado.
+            raise HTTPException(status_code=403, detail={
+                "erro": "sem_permissao", "permissao": permissao,
+                "rotulo": cat.POR_CHAVE[permissao].rotulo,
+            })
+        return usuario
+
+    return _dependencia

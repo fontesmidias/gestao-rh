@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import exigir_senha_forte, requer_rh
+from app.api.auth_rh import exige, exigir_senha_forte, requer_rh
 from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.core.security import hash_senha, verificar_senha
@@ -72,12 +72,18 @@ class UsuarioNovoIn(BaseModel):
     nome: str
     email: EmailStr
     senha: str
+    # Papel do usuário (v2.86). O padrão é `rh` — o papel operacional —, nunca
+    # `superadmin`: quem cria usuário decide conscientemente promover alguém,
+    # e um default permissivo faria todo cadastro apressado virar mais um dono
+    # do sistema.
+    papel: str = "rh"
 
 
 class UsuarioEditIn(BaseModel):
     nome: str | None = None
     email: EmailStr | None = None
     ativo: bool | None = None
+    papel: str | None = None
 
 
 class UsuarioSenhaIn(BaseModel):
@@ -86,19 +92,60 @@ class UsuarioSenhaIn(BaseModel):
 
 def _usuario_dict(u: UsuarioRH, eu: UsuarioRH) -> dict:
     return {"id": u.id, "nome": u.nome, "email": u.email, "ativo": u.ativo,
-            "criado_em": u.criado_em, "sou_eu": u.id == eu.id}
+            "papel": u.papel, "criado_em": u.criado_em, "sou_eu": u.id == eu.id}
+
+
+def _papel_valido(db: Session, chave: str) -> str:
+    """Confere que o papel existe antes de gravá-lo.
+
+    Papel escrito errado NÃO dá erro na hora: a pessoa é criada, entra no
+    sistema e simplesmente não consegue fazer nada — porque
+    `permissoes_do_usuario` nega o que não resolve. O sintoma aparece longe da
+    causa (403 em tudo, sem mensagem que fale de papel), então a hora de
+    recusar é aqui.
+    """
+    from app.models.papel import Papel
+
+    chave = (chave or "").strip().lower()
+    if db.scalar(select(Papel).where(Papel.chave == chave)) is None:
+        raise HTTPException(status_code=422, detail={
+            "erro": "papel_desconhecido", "papel": chave})
+    return chave
+
+
+def _sobraria_sem_superadmin(db: Session, alvo: UsuarioRH,
+                             novo_papel: str | None = None,
+                             desativando: bool = False) -> bool:
+    """A instalação ficaria sem NENHUM superadmin ativo depois desta mudança?
+
+    Sem esta trava, rebaixar ou desativar o último superadmin fecha a porta por
+    dentro: ninguém mais consegue gerir papéis (é `config:usuarios`, que só ele
+    tem por padrão), e não há tela para desfazer — só acesso ao banco. É a
+    mesma família do `ultimo_usuario_ativo` que já existia aqui, um degrau
+    acima.
+    """
+    from app.services.permissoes import PAPEL_SUPERADMIN
+
+    if alvo.papel != PAPEL_SUPERADMIN:
+        return False  # mexer em quem não é superadmin nunca esvazia o grupo
+    if not desativando and (novo_papel or alvo.papel) == PAPEL_SUPERADMIN:
+        return False  # continua superadmin
+    outros = db.scalars(
+        select(UsuarioRH).where(UsuarioRH.papel == PAPEL_SUPERADMIN,
+                                UsuarioRH.ativo.is_(True))).all()
+    return len([u for u in outros if u.id != alvo.id]) == 0
 
 
 @router.get("/rh/usuarios")
 def listar_usuarios(db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                    rh: UsuarioRH = Depends(exige("config:usuarios"))) -> list[dict]:
     usuarios = db.scalars(select(UsuarioRH).order_by(UsuarioRH.criado_em)).all()
     return [_usuario_dict(u, rh) for u in usuarios]
 
 
 @router.post("/rh/usuarios", status_code=201)
 def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
     nome = payload.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
@@ -106,10 +153,12 @@ def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depend
     email = payload.email.lower()
     if db.scalar(select(UsuarioRH).where(UsuarioRH.email == email)) is not None:
         raise HTTPException(status_code=409, detail="email_ja_utilizado")
-    novo = UsuarioRH(nome=nome, email=email, senha_hash=hash_senha(payload.senha))
+    papel = _papel_valido(db, payload.papel)
+    novo = UsuarioRH(nome=nome, email=email, senha_hash=hash_senha(payload.senha),
+                     papel=papel)
     db.add(novo)
     registrar(db, "usuario_rh_criado", ator="rh", ator_detalhe=rh.email,
-              detalhe={"novo_usuario": email})
+              detalhe={"novo_usuario": email, "papel": papel})
     db.commit()
 
     email_enviado = True
@@ -127,7 +176,7 @@ def criar_usuario(payload: UsuarioNovoIn, request: Request, db: Session = Depend
 @router.put("/rh/usuarios/{usuario_id}")
 def editar_usuario(usuario_id: uuid.UUID, payload: UsuarioEditIn,
                    db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
     usuario = db.get(UsuarioRH, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=404, detail="usuario_nao_encontrado")
@@ -137,6 +186,15 @@ def editar_usuario(usuario_id: uuid.UUID, payload: UsuarioEditIn,
         ativos = db.scalars(select(UsuarioRH).where(UsuarioRH.ativo == True)).all()  # noqa: E712
         if len([u for u in ativos if u.id != usuario.id]) == 0:
             raise HTTPException(status_code=422, detail="ultimo_usuario_ativo")
+        if _sobraria_sem_superadmin(db, usuario, desativando=True):
+            raise HTTPException(status_code=422, detail="ultimo_superadmin")
+    if payload.papel is not None and payload.papel != usuario.papel:
+        novo_papel = _papel_valido(db, payload.papel)
+        if _sobraria_sem_superadmin(db, usuario, novo_papel=novo_papel):
+            # Rebaixar o último superadmin deixaria a instalação sem ninguém
+            # capaz de gerir papéis — e sem tela para desfazer.
+            raise HTTPException(status_code=422, detail="ultimo_superadmin")
+        usuario.papel = novo_papel
     if payload.email and payload.email.lower() != usuario.email:
         if db.scalar(select(UsuarioRH).where(UsuarioRH.email == payload.email.lower())):
             raise HTTPException(status_code=409, detail="email_ja_utilizado")
@@ -154,7 +212,7 @@ def editar_usuario(usuario_id: uuid.UUID, payload: UsuarioEditIn,
 @router.put("/rh/usuarios/{usuario_id}/senha", status_code=204)
 def redefinir_senha_usuario(usuario_id: uuid.UUID, payload: UsuarioSenhaIn,
                             db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> None:
+                            rh: UsuarioRH = Depends(exige("config:usuarios"))) -> None:
     usuario = db.get(UsuarioRH, usuario_id)
     if usuario is None:
         raise HTTPException(status_code=404, detail="usuario_nao_encontrado")
@@ -179,7 +237,7 @@ class AssinantesIn(BaseModel):
 
 @router.get("/rh/config/assinantes")
 def ver_assinantes(db: Session = Depends(get_db),
-                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.fichas import assinantes_config
     a1, a2 = assinantes_config(db)
     return {"ass1_nome": a1[0], "ass1_cargo": a1[1], "ass1_cpf": a1[2],
@@ -188,7 +246,7 @@ def ver_assinantes(db: Session = Depends(get_db),
 
 @router.put("/rh/config/assinantes")
 def salvar_assinantes(payload: AssinantesIn, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     gravar_config(db, {
         "doc_ass1_nome": payload.ass1_nome.strip(),
         "doc_ass1_cargo": payload.ass1_cargo.strip(),
@@ -221,7 +279,7 @@ class OcrIn(BaseModel):
 
 
 @router.get("/rh/config/ocr")
-def ver_ocr(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_ocr(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.ocr_ia import chave_mistral
     from app.services.ocr_roteador import zdr_ativo
     return {"chave_definida": bool(chave_mistral(db)),
@@ -230,7 +288,7 @@ def ver_ocr(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) 
 
 @router.put("/rh/config/ocr")
 def salvar_ocr(payload: OcrIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Chave da Mistral para o OCR com IA. Chave vazia desliga (volta ao OCR
     local). A chave nunca aparece em log nem volta na resposta.
 
@@ -253,7 +311,7 @@ def salvar_ocr(payload: OcrIn, db: Session = Depends(get_db),
 
 @router.post("/rh/config/ocr/testar")
 def testar_ocr(db: Session = Depends(get_db),
-               _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.ocr_ia import chave_mistral, testar_mistral
     chave = chave_mistral(db)
     if not chave:
@@ -292,7 +350,7 @@ class OpenRouterIn(BaseModel):
 
 
 @router.get("/rh/config/groq")
-def ver_groq(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_groq(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.ia_texto import (chave_groq, chave_openrouter,
                                        modelos_configurados)
     # Os MODELOS não são segredo (ao contrário da chave) — voltam ao painel para
@@ -306,7 +364,7 @@ def ver_groq(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh))
 
 @router.put("/rh/config/groq")
 def salvar_groq(payload: GroqIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Chave da Groq (reserva da cadeia de IA). Chave vazia a desliga. A
     chave nunca aparece em log nem volta na resposta — padrão do OCR."""
     if payload.groq_api_key is not None:
@@ -326,7 +384,7 @@ def salvar_groq(payload: GroqIn, db: Session = Depends(get_db),
 
 @router.post("/rh/config/groq/testar")
 def testar_groq_rota(db: Session = Depends(get_db),
-                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.ia_texto import chave_groq, testar_groq
     chave = chave_groq(db)
     if not chave:
@@ -340,7 +398,7 @@ def testar_groq_rota(db: Session = Depends(get_db),
 
 @router.put("/rh/config/openrouter")
 def salvar_openrouter(payload: OpenRouterIn, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Chave do OpenRouter (provedor PRINCIPAL da cadeia de IA)."""
     if payload.openrouter_api_key is not None:
         gravar_config(db, {"openrouter_api_key": (payload.openrouter_api_key or "").strip()})
@@ -357,7 +415,7 @@ def salvar_openrouter(payload: OpenRouterIn, db: Session = Depends(get_db),
 
 @router.post("/rh/config/openrouter/testar")
 def testar_openrouter_rota(db: Session = Depends(get_db),
-                           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                           _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.ia_texto import chave_openrouter, testar_openrouter
     chave = chave_openrouter(db)
     if not chave:
@@ -370,7 +428,7 @@ def testar_openrouter_rota(db: Session = Depends(get_db),
 
 
 @router.get("/rh/config/smtp")
-def ver_smtp(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_smtp(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     cfg = smtp_config(db)
     return {
         "smtp_host": cfg["host"], "smtp_port": cfg["port"], "smtp_user": cfg["user"],
@@ -380,7 +438,7 @@ def ver_smtp(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh))
 
 @router.put("/rh/config/smtp")
 def salvar_smtp(payload: SmtpIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     valores = {
         "smtp_host": payload.smtp_host.strip(),
         "smtp_port": str(payload.smtp_port),
@@ -408,7 +466,7 @@ class RecrutamentoIn(BaseModel):
 
 @router.get("/rh/config/recrutamento")
 def ver_recrutamento(db: Session = Depends(get_db),
-                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """O endereço de recrutamento e o estado da metade que NÃO é código.
 
     `depende_de_send_as` existe para a tela poder dizer a coisa certa: com o
@@ -432,7 +490,7 @@ def ver_recrutamento(db: Session = Depends(get_db),
 
 @router.put("/rh/config/recrutamento")
 def salvar_recrutamento(payload: RecrutamentoIn, db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.config_dinamica import CHAVE_EMAIL_RECRUTAMENTO
 
     valor = (payload.email_recrutamento or "").strip()
@@ -450,7 +508,7 @@ def salvar_recrutamento(payload: RecrutamentoIn, db: Session = Depends(get_db),
 
 
 @router.post("/rh/config/smtp/testar")
-def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     try:
         enviar_email(
             rh.email, "✅ Teste de e-mail — Portal de Admissão Green House",
@@ -516,7 +574,7 @@ class M365In(BaseModel):
 
 @router.get("/rh/config/m365")
 def ver_m365(request: Request, db: Session = Depends(get_db),
-             _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     cfg = m365.config_m365(db)
     return {
         "client_id": cfg.get("m365_client_id", ""),
@@ -530,7 +588,7 @@ def ver_m365(request: Request, db: Session = Depends(get_db),
 
 @router.put("/rh/config/m365")
 def salvar_m365(payload: M365In, request: Request, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     valores = {"m365_client_id": payload.client_id.strip(),
                "m365_tenant_id": payload.tenant_id.strip()}
     if payload.client_secret:
@@ -543,7 +601,7 @@ def salvar_m365(payload: M365In, request: Request, db: Session = Depends(get_db)
 
 @router.get("/rh/config/m365/url-login")
 def m365_url_login(request: Request, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """URL de autorização com state assinado — o front abre em popup."""
     cfg = m365.config_m365(db)
     if not cfg.get("m365_client_id"):
@@ -581,7 +639,7 @@ def m365_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/rh/config/m365/desconectar", status_code=204)
-def m365_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> None:
+def m365_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> None:
     m365.desconectar(db)
     registrar(db, "m365_desconectado", ator="rh", ator_detalhe=rh.email)
     db.commit()
@@ -607,7 +665,7 @@ class GmailIn(BaseModel):
 
 @router.get("/rh/config/gmail")
 def ver_gmail(request: Request, db: Session = Depends(get_db),
-              _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     cfg = gmail.config_gmail(db)
     return {
         "client_id": cfg.get("gmail_client_id", ""),
@@ -620,7 +678,7 @@ def ver_gmail(request: Request, db: Session = Depends(get_db),
 
 @router.put("/rh/config/gmail")
 def salvar_gmail(payload: GmailIn, request: Request, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     valores = {"gmail_client_id": payload.client_id.strip()}
     if payload.client_secret:
         valores["gmail_client_secret"] = payload.client_secret.strip()
@@ -632,7 +690,7 @@ def salvar_gmail(payload: GmailIn, request: Request, db: Session = Depends(get_d
 
 @router.get("/rh/config/gmail/url-login")
 def gmail_url_login(request: Request, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """URL de autorização com state assinado — o front abre em popup."""
     cfg = gmail.config_gmail(db)
     if not cfg.get("gmail_client_id"):
@@ -669,7 +727,7 @@ def gmail_callback(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/rh/config/gmail/desconectar", status_code=204)
-def gmail_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> None:
+def gmail_desconectar(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> None:
     gmail.desconectar(db)
     registrar(db, "gmail_desconectado", ator="rh", ator_detalhe=rh.email)
     db.commit()
@@ -694,14 +752,14 @@ def _mascara_url(url: str) -> str:
 
 
 @router.get("/rh/config/webhook")
-def ver_webhook(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_webhook(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     url = webhook_email.url_webhook(db)
     return {"configurado": bool(url), "url_mascarada": _mascara_url(url)}
 
 
 @router.put("/rh/config/webhook")
 def salvar_webhook(payload: WebhookIn, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     url = (payload.webhook_url or "").strip()
     if url and not url.lower().startswith("https://"):
         raise HTTPException(status_code=422, detail="url_precisa_ser_https")
@@ -713,7 +771,7 @@ def salvar_webhook(payload: WebhookIn, db: Session = Depends(get_db),
 
 
 @router.post("/rh/config/webhook/testar")
-def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def testar_webhook(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     if not webhook_email.url_webhook(db):
         raise HTTPException(status_code=422, detail="webhook_nao_configurado")
     ok = webhook_email.enviar_via_webhook(
@@ -740,7 +798,7 @@ class AvisosIn(BaseModel):
 
 
 @router.get("/rh/config/avisos")
-def ver_avisos(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_avisos(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Avisos internos: o e-mail padrão + a MATRIZ evento × destinatários
     (v1.82). O padrão continua valendo para todo evento sem lista própria."""
     from app.services.config_dinamica import ler_config
@@ -754,7 +812,7 @@ def ver_avisos(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh
 
 @router.put("/rh/config/avisos")
 def salvar_avisos(payload: AvisosIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.notificacoes import gravar_matriz
     email = (payload.email_avisos_internos or "").strip()
     if email and "@" not in email:
@@ -783,7 +841,7 @@ class TeamsIn(BaseModel):
 
 
 @router.get("/rh/config/teams")
-def ver_teams(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def ver_teams(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     url = teams.url_teams(db)
     return {"configurado": bool(url), "url_mascarada": _mascara_url(url),
             "template": teams.template_teams(db)}
@@ -791,7 +849,7 @@ def ver_teams(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh)
 
 @router.put("/rh/config/teams")
 def salvar_teams(payload: TeamsIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     url = payload.webhook_url
     if url and not url.strip().lower().startswith("https://"):
         raise HTTPException(status_code=422, detail="url_precisa_ser_https")
@@ -803,7 +861,7 @@ def salvar_teams(payload: TeamsIn, db: Session = Depends(get_db),
 
 
 @router.post("/rh/config/teams/testar")
-def testar_teams(db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+def testar_teams(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     if not teams.url_teams(db):
         raise HTTPException(status_code=422, detail="teams_nao_configurado")
     if not teams.enviar_mensagem(
@@ -830,14 +888,14 @@ class EmailTemplateIn(BaseModel):
 
 @router.get("/rh/config/emails")
 def listar_emails(db: Session = Depends(get_db),
-                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                  _rh: UsuarioRH = Depends(exige("config:escrever"))) -> list[dict]:
     from app.services.email_templates import listar
     return listar(db)
 
 
 @router.get("/rh/config/emails/{chave}/versoes")
 def versoes_email(chave: str, db: Session = Depends(get_db),
-                  _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                  _rh: UsuarioRH = Depends(exige("config:escrever"))) -> list[dict]:
     from app.models.email_template import EmailTemplateVersao
     from app.services.email_templates import CATALOGO_POR_CHAVE
     if chave not in CATALOGO_POR_CHAVE:
@@ -854,7 +912,7 @@ def versoes_email(chave: str, db: Session = Depends(get_db),
 @router.post("/rh/config/emails/{chave}/preview")
 def preview_email(chave: str, payload: EmailTemplateIn,
                   db: Session = Depends(get_db),
-                  _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Renderiza o texto EM EDIÇÃO com dados de exemplo — sem salvar nada.
 
     Preview sobre o texto digitado (e não sobre o salvo) é o ponto: o RH vê o
@@ -889,7 +947,7 @@ class DestinatariosIn(BaseModel):
 @router.put("/rh/config/emails/{chave}/destinatarios")
 def salvar_destinatarios_email(chave: str, payload: DestinatariosIn,
                                db: Session = Depends(get_db),
-                               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                               rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Quem recebe um AVISO INTERNO, editado na própria tela do e-mail (v2.21).
 
     Grava na MESMA matriz de Configurações → Avisos internos — não é um segundo
@@ -930,7 +988,7 @@ def salvar_destinatarios_email(chave: str, payload: DestinatariosIn,
 @router.post("/rh/config/emails/{chave}/enviar-teste")
 def enviar_teste_email(chave: str, payload: EmailTemplateIn,
                        db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Manda o e-mail EM EDIÇÃO para a própria caixa de quem está editando.
 
     O preview mostra como fica na tela; só o envio real mostra como o Gmail/
@@ -979,7 +1037,7 @@ def enviar_teste_email(chave: str, payload: EmailTemplateIn,
 @router.put("/rh/config/emails/{chave}")
 def salvar_email(chave: str, payload: EmailTemplateIn,
                  db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Salva o texto e arquiva a versão ANTERIOR no histórico.
 
     Recusa (422) se faltar uma variável obrigatória: sem `{{codigo}}` num
@@ -1028,7 +1086,7 @@ def salvar_email(chave: str, payload: EmailTemplateIn,
 @router.post("/rh/config/emails/{chave}/restaurar")
 def restaurar_email(chave: str, versao: int | None = None,
                     db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Volta a uma versão do histórico; sem `versao`, volta ao texto de fábrica."""
     from app.models.email_template import EmailTemplate, EmailTemplateVersao
     from app.services.email_templates import CATALOGO_POR_CHAVE, modelo
@@ -1065,7 +1123,7 @@ class TetoUploadIn(BaseModel):
 
 @router.get("/rh/config/upload")
 def ver_teto_upload(db: Session = Depends(get_db),
-                    _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.services.upload_seguro import (TETO_MB_MAX, TETO_MB_MIN,
                                             EXTENSOES_DOCUMENTO, teto_bytes)
     return {"mb": teto_bytes(db) // (1024 * 1024),
@@ -1075,7 +1133,7 @@ def ver_teto_upload(db: Session = Depends(get_db),
 
 @router.put("/rh/config/upload")
 def salvar_teto_upload(payload: TetoUploadIn, db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Tamanho máximo de arquivo que o colaborador consegue enviar.
 
     Editável no painel (pedido do Bruno, 2026-08-02) porque limite chumbado no
@@ -1098,7 +1156,7 @@ def salvar_teto_upload(payload: TetoUploadIn, db: Session = Depends(get_db),
 
 
 @router.get("/rh/auditoria")
-def auditoria(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(requer_rh),
+def auditoria(db: Session = Depends(get_db), _rh: UsuarioRH = Depends(exige("dados:auditoria")),
               limite: int = 200) -> list[dict]:
     from app.models.evento import EventoAuditoria
 
@@ -1127,7 +1185,7 @@ class ExigenciaPadraoIn(BaseModel):
 
 @router.get("/rh/config/exigencias")
 def ver_exigencias(db: Session = Depends(get_db),
-                   _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """O padrão da casa, com a origem de cada item (fábrica ou casa)."""
     from app.services.exigencias import dump_para_tela
     return dump_para_tela(db)          # sem candidato: só fábrica + casa
@@ -1136,7 +1194,7 @@ def ver_exigencias(db: Session = Depends(get_db),
 @router.put("/rh/config/exigencias")
 def salvar_exigencia_padrao(payload: ExigenciaPadraoIn,
                             db: Session = Depends(get_db),
-                            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                            rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Muda o padrão para TODOS os candidatos daqui em diante.
 
     ⚠️ Vale para quem AINDA está preenchendo, não para quem já concluiu: as

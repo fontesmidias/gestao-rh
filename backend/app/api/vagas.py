@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.match import (AnaliseTalento, ProcessamentoMatch,
                               StatusProcessamento)
@@ -56,7 +56,8 @@ class VagaIn(BaseModel):
 
 
 @router.get("/rh/vagas")
-def listar_vagas(incluir_inativas: bool = False, db: Session = Depends(get_db)) -> list[dict]:
+def listar_vagas(incluir_inativas: bool = False, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> list[dict]:
     q = select(Vaga).order_by(Vaga.criado_em.desc())
     if not incluir_inativas:
         q = q.where(Vaga.ativa.is_(True))
@@ -65,7 +66,7 @@ def listar_vagas(incluir_inativas: bool = False, db: Session = Depends(get_db)) 
 
 @router.post("/rh/vagas", status_code=201)
 def criar_vaga(payload: VagaIn, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     titulo = payload.titulo.strip()
     if not titulo:
         raise HTTPException(status_code=422, detail="titulo_obrigatorio")
@@ -85,7 +86,7 @@ def criar_vaga(payload: VagaIn, db: Session = Depends(get_db),
 
 @router.patch("/rh/vagas/{vaga_id}")
 def editar_vaga(vaga_id: uuid.UUID, payload: VagaIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     v = db.get(Vaga, vaga_id)
     if v is None:
         raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
@@ -110,7 +111,7 @@ def editar_vaga(vaga_id: uuid.UUID, payload: VagaIn, db: Session = Depends(get_d
 
 @router.delete("/rh/vagas/{vaga_id}", status_code=204)
 def excluir_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> None:
+                 rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> None:
     """Exclui a vaga — **pela LIXEIRA** (v2.67, § 15.5 item 1).
 
     Até a v2.66 este era um delete FÍSICO, a única exclusão do painel que não
@@ -147,7 +148,7 @@ class RanquearIn(BaseModel):
 
 @router.post("/rh/vagas/{vaga_id}/ranquear", status_code=202)
 def ranquear(vaga_id: uuid.UUID, payload: RanquearIn, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+            rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """ENFILEIRA o ranqueamento e devolve na hora (202) — o RH continua
     usando o sistema enquanto a análise roda em segundo plano.
 
@@ -188,7 +189,8 @@ def ranquear(vaga_id: uuid.UUID, payload: RanquearIn, db: Session = Depends(get_
 
 
 @router.get("/rh/curriculos/indexacao")
-def status_indexacao(db: Session = Depends(get_db)) -> dict:
+def status_indexacao(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:ler"))) -> dict:
     """Quantos currículos já tiveram o texto extraído. O ranqueamento só
     consegue analisar quem está indexado — se este número estiver baixo, é
     aqui que está o gargalo, não na IA."""
@@ -210,7 +212,7 @@ def status_indexacao(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/curriculos/indexar", status_code=202)
 def enfileirar_backfill(db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("selecao:ler"))) -> dict:
     """Enfileira a extração de texto dos currículos que ainda não foram
     lidos (os que já estavam na base antes da v2.00). Roda em background,
     devagar — OCR tem custo."""
@@ -226,7 +228,8 @@ def enfileirar_backfill(db: Session = Depends(get_db),
 
 
 @router.get("/rh/vagas/{vaga_id}/processamentos")
-def listar_processamentos(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+def listar_processamentos(vaga_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> list[dict]:
     """Histórico de ranqueamentos da vaga (a aba Resultados lista por aqui)."""
     procs = db.scalars(select(ProcessamentoMatch)
                        .where(ProcessamentoMatch.vaga_id == vaga_id)
@@ -247,7 +250,8 @@ def _dump_processamento(p: ProcessamentoMatch) -> dict:
 
 
 @router.get("/rh/vagas/{vaga_id}/resultado")
-def resultado(vaga_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def resultado(vaga_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
     """Resultado consolidado da vaga: o processamento mais recente + a lista
     de pessoas com o MOTIVO de cada uma estar onde está.
 

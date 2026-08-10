@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
+from app.models.usuario_rh import UsuarioRH
 from app.models.candidato import Candidato
 from app.models.documento import SlotDocumento
 from app.models.evento import EventoAuditoria
@@ -34,7 +35,8 @@ def _traduzir_pendencia(p: str) -> str:
 
 
 @router.get("/rh/candidatos/{candidato_id}/diagnostico")
-def diagnostico_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def diagnostico_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> dict:
     """Retrato completo para investigar um colaborador: dados-chave, por que o
     dossiê (não) gera, situação dos documentos e a linha do tempo de auditoria."""
     from app.api.assinaturas import NOMES_DOC, _docs_exigidos, _registro
@@ -89,7 +91,8 @@ def diagnostico_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)
 
 
 @router.get("/rh/diagnostico/erros")
-def erros_recentes(limite: int = 50, db: Session = Depends(get_db)) -> list[dict]:
+def erros_recentes(limite: int = 50, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("sistema:telemetria"))) -> list[dict]:
     """Últimos erros registrados pelo sistema (falha de dossiê, de e-mail…),
     com o candidato afetado quando houver — o 'o que deu errado' do painel."""
     eventos = db.scalars(

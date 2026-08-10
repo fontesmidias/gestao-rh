@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato, PostoServico
 from app.models.desempenho import (Avaliacao, CicloAvaliacao, FatoObservado,
@@ -82,7 +82,8 @@ def _data_de(txt: str | None) -> date | None:
 @router.get("/rh/desempenho/fatos")
 def listar_fatos(candidato_id: uuid.UUID | None = None, tipo: str | None = None,
                  desde: str | None = None, ate: str | None = None,
-                 db: Session = Depends(get_db)) -> dict:
+                 db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Fatos registrados. Filtro pesado SERVER-SIDE; o DashPlanilha refina em
     memória por cima (padrão da casa — isto cresce sem parar)."""
     consulta = select(FatoObservado)
@@ -110,7 +111,7 @@ def listar_fatos(candidato_id: uuid.UUID | None = None, tipo: str | None = None,
 
 @router.post("/rh/desempenho/fatos", status_code=201)
 def criar_fato(payload: FatoIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Registra um fato. A descrição é obrigatória — sem ela não há fato, só
     rótulo, que é exatamente o que a cartilha (pág. 3) manda evitar."""
     col = db.get(Candidato, payload.candidato_id)
@@ -139,7 +140,7 @@ def criar_fato(payload: FatoIn, db: Session = Depends(get_db),
 
 @router.put("/rh/desempenho/fatos/{fato_id}")
 def editar_fato(fato_id: uuid.UUID, payload: FatoIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Só o AUTOR corrige o próprio registro, e só enquanto não foi usado numa
     avaliação — depois disso é peça de um documento fechado."""
     f = db.get(FatoObservado, fato_id)
@@ -169,7 +170,7 @@ def editar_fato(fato_id: uuid.UUID, payload: FatoIn, db: Session = Depends(get_d
 
 @router.delete("/rh/desempenho/fatos/{fato_id}", status_code=204)
 def excluir_fato(fato_id: uuid.UUID, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> None:
+                 rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> None:
     f = db.get(FatoObservado, fato_id)
     if f is None:
         raise HTTPException(status_code=404, detail="fato_nao_encontrado")
@@ -191,7 +192,7 @@ def excluir_fato(fato_id: uuid.UUID, db: Session = Depends(get_db),
 @router.post("/rh/desempenho/fatos/{fato_id}/anexo")
 async def subir_anexo(fato_id: uuid.UUID, arquivo: UploadFile,
                       db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Anexo do fato (foto, vídeo curto, documento)."""
     f = db.get(FatoObservado, fato_id)
     if f is None:
@@ -229,7 +230,8 @@ async def subir_anexo(fato_id: uuid.UUID, arquivo: UploadFile,
 
 
 @router.get("/rh/desempenho/fatos/{fato_id}/anexo")
-def baixar_anexo(fato_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_anexo(fato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> Response:
     f = db.get(FatoObservado, fato_id)
     if f is None or not f.anexo_key:
         raise HTTPException(status_code=404, detail="anexo_nao_encontrado")
@@ -276,7 +278,7 @@ def _casar_matricula(db: Session, matricula_norm: str) -> Candidato | None:
 
 @router.post("/rh/desempenho/ponto/importar")
 async def importar_ponto(arquivo: UploadFile, db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """Sobe o .xlsx de ponto do Tirvu e agrega a frequência por pessoa.
 
     O ponto entra como CONTEXTO para a avaliação — nunca nota. Casa por
@@ -332,7 +334,8 @@ async def importar_ponto(arquivo: UploadFile, db: Session = Depends(get_db),
 
 
 @router.get("/rh/desempenho/colaboradores/{candidato_id}/ponto")
-def ver_ponto(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ver_ponto(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """Resumos de ponto de uma pessoa, do mais recente para o mais antigo."""
     from app.models.desempenho import ResumoPonto
     from app.services.import_ponto import fmt_horas
@@ -360,14 +363,16 @@ def _dump_ponto(r, fmt_horas) -> dict:
 
 
 @router.get("/rh/desempenho/formulario")
-def ver_formulario() -> dict:
+def ver_formulario(
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """Escalas, indicadores, competências e recomendações da cartilha — o front
     desenha o formulário a partir daqui, sem duplicar os textos."""
     return formulario()
 
 
 @router.get("/rh/desempenho/colaboradores")
-def listar_colaboradores(db: Session = Depends(get_db)) -> dict:
+def listar_colaboradores(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """Quem pode receber fato/avaliação: colaboradores ativos."""
     linhas = []
     for c in db.scalars(select(Candidato).where(Candidato.situacao == "ativo")
@@ -406,7 +411,8 @@ class CicloIn(BaseModel):
 
 
 @router.get("/rh/desempenho/ciclos")
-def listar_ciclos(db: Session = Depends(get_db)) -> dict:
+def listar_ciclos(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     ciclos = db.scalars(select(CicloAvaliacao)
                         .order_by(CicloAvaliacao.inicio_em.desc())).all()
     return {"ciclos": [_dump_ciclo(db, x) for x in ciclos]}
@@ -414,7 +420,7 @@ def listar_ciclos(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/desempenho/ciclos", status_code=201)
 def criar_ciclo(payload: CicloIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """4 ciclos por ano (decisão do Bruno), com datas configuráveis — geral, por
     posto ou individual. O escopo vazio significa "todo mundo"."""
     inicio, fim = _data_de(payload.inicio_em), _data_de(payload.fim_em)
@@ -437,7 +443,7 @@ def criar_ciclo(payload: CicloIn, db: Session = Depends(get_db),
 
 @router.post("/rh/desempenho/ciclos/{ciclo_id}/encerrar")
 def encerrar_ciclo(ciclo_id: uuid.UUID, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("desempenho:homologar"))) -> dict:
     ciclo = db.get(CicloAvaliacao, ciclo_id)
     if ciclo is None:
         raise HTTPException(status_code=404, detail="ciclo_nao_encontrado")
@@ -525,7 +531,7 @@ class AvaliacaoIn(BaseModel):
 def listar_avaliacoes(status: str | None = None, ciclo_id: uuid.UUID | None = None,
                       candidato_id: uuid.UUID | None = None,
                       minhas: bool = False, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     consulta = select(Avaliacao)
     if status:
         consulta = consulta.where(Avaliacao.status.in_(
@@ -545,7 +551,7 @@ def listar_avaliacoes(status: str | None = None, ciclo_id: uuid.UUID | None = No
 
 @router.post("/rh/desempenho/avaliacoes", status_code=201)
 def criar_avaliacao(payload: AvaliacaoIn, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     col = db.get(Candidato, payload.candidato_id)
     if col is None:
         raise HTTPException(status_code=404, detail="colaborador_nao_encontrado")
@@ -574,7 +580,8 @@ def criar_avaliacao(payload: AvaliacaoIn, db: Session = Depends(get_db),
 
 
 @router.get("/rh/desempenho/avaliacoes/{avaliacao_id}")
-def ver_avaliacao(avaliacao_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ver_avaliacao(avaliacao_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     a = db.get(Avaliacao, avaliacao_id)
     if a is None:
         raise HTTPException(status_code=404, detail="avaliacao_nao_encontrada")
@@ -597,7 +604,7 @@ class RespostasIn(BaseModel):
 @router.put("/rh/desempenho/avaliacoes/{avaliacao_id}")
 def salvar_avaliacao(avaliacao_id: uuid.UUID, payload: RespostasIn,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Salva o preenchimento. Só o AVALIADOR mexe, e só até enviar."""
     a = db.get(Avaliacao, avaliacao_id)
     if a is None:
@@ -636,7 +643,7 @@ def salvar_avaliacao(avaliacao_id: uuid.UUID, payload: RespostasIn,
 
 @router.post("/rh/desempenho/avaliacoes/{avaliacao_id}/enviar")
 def enviar_avaliacao(avaliacao_id: uuid.UUID, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Fecha o preenchimento. Vincula os fatos do período usados — depois disso
     eles viram imutáveis, porque passam a ser peça de um documento."""
     a = db.get(Avaliacao, avaliacao_id)
@@ -673,7 +680,7 @@ class FeedbackIn(BaseModel):
 @router.post("/rh/desempenho/avaliacoes/{avaliacao_id}/feedback")
 def registrar_feedback(avaliacao_id: uuid.UUID, payload: FeedbackIn,
                        db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("desempenho:avaliar"))) -> dict:
     """Seção 8 — a CONVERSA aconteceu.
 
     Este passo não pode ser pulado: a cartilha (pág. 5) manda dar o feedback
@@ -714,7 +721,7 @@ class HomologarIn(BaseModel):
 @router.post("/rh/desempenho/avaliacoes/{avaliacao_id}/homologar")
 def homologar(avaliacao_id: uuid.UUID, payload: HomologarIn,
               db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("desempenho:homologar"))) -> dict:
     """Seção 10 + fecho. O RH homologa (decisão do Bruno).
 
     A manifestação do colaborador (seção 9) tem um PRAZO: sem ele, o direito de
@@ -748,7 +755,8 @@ def homologar(avaliacao_id: uuid.UUID, payload: HomologarIn,
 
 @router.get("/rh/desempenho/avaliadores/{email}/desvio")
 def ver_desvio(email: str, ciclo_id: uuid.UUID | None = None,
-               db: Session = Depends(get_db)) -> dict:
+               db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """Quanto este avaliador difere da média — para o HOMOLOGADOR decidir.
     Não altera nota nenhuma (ver `desvio_do_avaliador`)."""
     return {"desvio": desvio_do_avaliador(db, email, ciclo_id)}
@@ -756,7 +764,8 @@ def ver_desvio(email: str, ciclo_id: uuid.UUID | None = None,
 
 @router.get("/rh/desempenho/colaboradores/{candidato_id}/radar")
 def ver_radar(candidato_id: uuid.UUID, ciclo_id: uuid.UUID | None = None,
-              db: Session = Depends(get_db)) -> dict:
+              db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desempenho:ler"))) -> dict:
     """8 eixos da cartilha. O horizontal é suprimido com menos de 2
     respondentes — agregado de um é o individual com outro nome."""
     return radar(db, candidato_id, ciclo_id)

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.assinaturas import router as assinaturas_router
 from app.api.configuracoes import router as configuracoes_router
+from app.api.papeis import router as papeis_router
 from app.api.auth_rh import router as auth_rh_router
 from app.api.candidatos import router as candidatos_router
 from app.api.documentos import router as documentos_router
@@ -170,6 +171,7 @@ app.include_router(assinaturas_router, prefix="/api")
 app.include_router(revisao_router, prefix="/api")
 app.include_router(rh_ficha_router, prefix="/api")
 app.include_router(configuracoes_router, prefix="/api")
+app.include_router(papeis_router, prefix="/api")
 app.include_router(lixeira_router, prefix="/api")
 app.include_router(arquivo_router, prefix="/api")
 app.include_router(solicitacoes_router, prefix="/api")

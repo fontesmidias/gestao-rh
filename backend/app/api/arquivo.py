@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.assinatura import Assinatura
 from app.models.candidato import Candidato, PostoServico, StatusCandidato
@@ -123,7 +123,8 @@ def _contagens(db: Session, ids: list[uuid.UUID]) -> tuple[dict, dict, dict]:
 def inventario(posto_id: uuid.UUID | None = None, cargo: str | None = None,
                situacao: str | None = None, status: str | None = None,
                desde: str | None = None, ate: str | None = None,
-               busca: str | None = None, db: Session = Depends(get_db)) -> dict:
+               busca: str | None = None, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> dict:
     """Uma linha por pessoa com o que existe guardado (contagens), sem tocar no
     MinIO. Contagens via query agregada (sem N+1)."""
     pessoas = _filtrar_pessoas(db, posto_id=posto_id, cargo=cargo, situacao=situacao,
@@ -182,7 +183,7 @@ def _baixar(db: Session, key: str | None, nome_arquivo: str) -> Response:
 
 @router.get("/rh/arquivo/pessoa/{cid}/dossie")
 def baixar_dossie(cid: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                  rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> Response:
     c = db.get(Candidato, cid)
     if c is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
@@ -195,7 +196,7 @@ def baixar_dossie(cid: uuid.UUID, db: Session = Depends(get_db),
 @router.get("/rh/arquivo/pessoa/{cid}/assinatura/{assinatura_id}")
 def baixar_assinatura(cid: uuid.UUID, assinatura_id: uuid.UUID,
                       db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                      rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> Response:
     a = db.get(Assinatura, assinatura_id)
     if a is None or a.candidato_id != cid:
         raise HTTPException(status_code=404, detail="assinatura_nao_encontrada")
@@ -208,7 +209,7 @@ def baixar_assinatura(cid: uuid.UUID, assinatura_id: uuid.UUID,
 
 @router.get("/rh/arquivo/pessoa/{cid}/slot/{slot_id}")
 def baixar_slot(cid: uuid.UUID, slot_id: uuid.UUID, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> Response:
     s = db.get(SlotDocumento, slot_id)
     if s is None or s.candidato_id != cid:
         raise HTTPException(status_code=404, detail="documento_nao_encontrado")
@@ -243,7 +244,8 @@ def _resolver_lote(db: Session, pedido: PedidoLote) -> list[Candidato]:
 
 
 @router.post("/rh/arquivo/lote/estimativa")
-def estimativa(pedido: PedidoLote, db: Session = Depends(get_db)) -> dict:
+def estimativa(pedido: PedidoLote, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> dict:
     """Preflight: quantas pessoas, quantos arquivos e MB aproximados — para a UI
     avisar antes de um ZIP grande. Vai ao MinIO só para somar tamanhos."""
     pessoas = _resolver_lote(db, pedido)
@@ -260,7 +262,7 @@ def estimativa(pedido: PedidoLote, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/arquivo/lote")
 def exportar_lote(pedido: PedidoLote, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> StreamingResponse:
+                  rh: UsuarioRH = Depends(exige("dados:arquivo_lote"))) -> StreamingResponse:
     """Backup em lote: ZIP com dossiês/vias assinadas/documentos aprovados
     organizados por posto/pessoa + planilha XLSX. Tudo do banco é resolvido
     AGORA (o gerador do ZIP só toca o MinIO, nunca a sessão)."""
