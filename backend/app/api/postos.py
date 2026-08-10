@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.models.assinatura import FICHAS_BASE, Assinatura, DocumentoAssinavel
@@ -163,7 +163,8 @@ def _colunas(db: Session) -> list[str]:
 
 @router.get("/rh/postos")
 def listar_postos(incluir_inativos: bool = False,
-                  db: Session = Depends(get_db)) -> dict:
+                  db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     consulta = select(PostoServico).order_by(PostoServico.nome)
     if not incluir_inativos:
         consulta = consulta.where(PostoServico.ativo == True)  # noqa: E712
@@ -173,7 +174,8 @@ def listar_postos(incluir_inativos: bool = False,
 
 
 @router.get("/rh/cargos")
-def listar_cargos(db: Session = Depends(get_db)) -> dict:
+def listar_cargos(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Cargos/funções já usados na base, com quantas pessoas os ocupam (v1.82).
 
     NÃO é tabela: `cargo_funcao` continua string livre no `Candidato` — virar
@@ -195,7 +197,7 @@ def listar_cargos(db: Session = Depends(get_db)) -> dict:
 
 @router.put("/rh/postos/colunas")
 def definir_colunas(payload: dict, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Colunas dinâmicas da tabela de postos (para oportunidades futuras) —
     sem DDL: são chaves guardadas em `atributos` de cada posto."""
     import json
@@ -210,7 +212,7 @@ def definir_colunas(payload: dict, db: Session = Depends(get_db),
 
 @router.post("/rh/postos", status_code=201)
 def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     nome = payload.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
@@ -248,7 +250,7 @@ class EdicaoMassaPostosIn(BaseModel):
 # como um UUID inválido (422).
 @router.put("/rh/postos/massa")
 def editar_postos_massa(payload: EdicaoMassaPostosIn, db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Aplica os mesmos ajustes a vários postos de uma vez (CRUD em massa):
     vincular/desvincular documentos do kit, marcar direito a creche + valor,
     definir contrato. Ideal para marcar as fichas específicas de um grupo de
@@ -287,7 +289,7 @@ class AcaoMassaPostosIn(BaseModel):
 
 @router.post("/rh/postos/massa/acao")
 def acao_massa_postos(payload: AcaoMassaPostosIn, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Ação em massa nos postos selecionados:
     - "desativar": soft (ativo=False) — some das listas, colaboradores intactos;
     - "ativar": volta a aparecer;
@@ -327,7 +329,7 @@ def acao_massa_postos(payload: AcaoMassaPostosIn, db: Session = Depends(get_db),
 
 @router.put("/rh/postos/{posto_id}")
 def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     posto = db.get(PostoServico, posto_id)
     if posto is None:
         raise HTTPException(status_code=404, detail="posto_nao_encontrado")
@@ -359,7 +361,7 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
 
 @router.delete("/rh/postos/{posto_id}", status_code=204)
 def excluir_posto(posto_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+                  rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> None:
     """Exclusão SOFT (ativo=False): candidatos já vinculados a este posto e a
     auditoria continuam íntegros — o posto só some das listas de escolha."""
     posto = db.get(PostoServico, posto_id)
@@ -378,7 +380,7 @@ class ImportarPostosIn(BaseModel):
 
 @router.post("/rh/postos/importar")
 def importar_postos(payload: ImportarPostosIn, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Importa vários postos de uma vez a partir de texto colado (uma linha por
     posto, campos separados por ';' ou tab). Postos com nome já existente são
     ignorados (não duplica). Devolve o que criou e o que pulou."""
@@ -499,7 +501,7 @@ def _nome_desambiguado(apelido: str, razao: str, usados: set) -> str:
 
 @router.post("/rh/postos/importar-planilha")
 async def importar_postos_planilha(arquivo: UploadFile, db: Session = Depends(get_db),
-                                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Importa a planilha de Postos do Tirvu (.xlsx). Casa/atualiza por TIRVU_ID
     (chave natural, à prova do truncamento do apelido). Enriquece cada posto com
     razão social, CNPJ e endereço. Colisões de apelido são desambiguadas pela
@@ -619,7 +621,7 @@ class PostoCandidatoIn(BaseModel):
 @router.put("/rh/candidatos/{candidato_id}/posto")
 def definir_posto(candidato_id: uuid.UUID, payload: PostoCandidatoIn, request: Request,
                   db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Vincula o candidato ao posto. Se o posto exige documentos adicionais
     (INFRAERO), eles entram na fila de assinatura e o candidato é avisado por
     e-mail com um link novo — o mesmo código único assina tudo."""

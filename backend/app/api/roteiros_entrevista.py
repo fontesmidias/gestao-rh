@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.entrevista import Entrevista
 from app.models.roteiro_entrevista import (SENIORIDADES, RoteiroEntrevista,
@@ -98,7 +98,8 @@ def _senioridade_ou_422(valor: str | None) -> str | None:
 @router.get("/rh/roteiros-entrevista")
 def listar(db: Session = Depends(get_db),
            incluir_arquivados: bool = False,
-           tipo: str | None = None) -> dict:
+           tipo: str | None = None,
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Lista + métricas para os cards. Arquivados ficam fora por padrão.
 
     **Filtra por TIPO, com `entrevista` como padrão** (v2.67). Não é preferência
@@ -153,7 +154,7 @@ def listar(db: Session = Depends(get_db),
 
 @router.post("/rh/roteiros-entrevista", status_code=201)
 def criar(payload: RoteiroIn, db: Session = Depends(get_db),
-          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+          rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Cria um roteiro. Nasce **rascunho**, sempre — e rascunho não se usa."""
     tipo = _tipo_ou_422(payload.tipo)
     erros = _validar_por_tipo(tipo, payload.nome, payload.competencias,
@@ -193,7 +194,8 @@ def criar(payload: RoteiroIn, db: Session = Depends(get_db),
 # --------------------------------------------------------------------------
 
 @router.get("/rh/roteiros-entrevista/{roteiro_id}")
-def ver(roteiro_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ver(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     r = db.get(RoteiroEntrevista, roteiro_id)
     if r is None:
         raise HTTPException(status_code=404, detail="roteiro_nao_encontrado")
@@ -202,7 +204,7 @@ def ver(roteiro_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/rh/roteiros-entrevista/{roteiro_id}/documento")
 def documento_do_roteiro(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                         rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     """O roteiro publicado em PDF (§ 15.2) — a peça que se anexa a uma defesa.
 
     **Rascunho não gera documento** (cenário 33), e arquivado também não: um PDF
@@ -235,7 +237,7 @@ def documento_do_roteiro(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
 @router.put("/rh/roteiros-entrevista/{roteiro_id}")
 def editar(roteiro_id: uuid.UUID, payload: RoteiroIn,
            db: Session = Depends(get_db),
-           rh: UsuarioRH = Depends(requer_rh)) -> dict:
+           rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Edita o roteiro.
 
     **Publicado volta a RASCUNHO e ganha a versão seguinte** (cenário 21). Não é
@@ -305,7 +307,7 @@ def editar(roteiro_id: uuid.UUID, payload: RoteiroIn,
 
 @router.post("/rh/roteiros-entrevista/{roteiro_id}/publicar")
 def publicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """O ATO de aprovação — o que a defesa jurídica invoca.
 
     Fica na auditoria com quem publicou e quando. É por existir este ato
@@ -339,7 +341,7 @@ def publicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.post("/rh/roteiros-entrevista/{roteiro_id}/duplicar", status_code=201)
 def duplicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Cópia em rascunho — o caminho normal para criar um roteiro de cargo a
     partir do padrão, em vez de digitar quatro âncoras do zero."""
     r = db.get(RoteiroEntrevista, roteiro_id)
@@ -366,7 +368,7 @@ def duplicar(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
 @router.post("/rh/roteiros-entrevista/{roteiro_id}/arquivar")
 def arquivar(roteiro_id: uuid.UUID, payload: ArquivarRoteiroIn,
              db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Aposenta o roteiro. As entrevistas antigas seguem legíveis pelo snapshot
     (cenário 24) — arquivar o roteiro não apaga o instrumento de ninguém.
 
@@ -396,7 +398,7 @@ def arquivar(roteiro_id: uuid.UUID, payload: ArquivarRoteiroIn,
 
 @router.post("/rh/roteiros-entrevista/{roteiro_id}/tornar-padrao")
 def tornar_padrao(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
     """Elege este como o fundo da herança, e tira a marca do anterior.
 
     Existe para que "o padrão não se apaga" não vire "o padrão não se troca". O
@@ -436,7 +438,7 @@ def tornar_padrao(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.delete("/rh/roteiros-entrevista/{roteiro_id}", status_code=204)
 def excluir(roteiro_id: uuid.UUID, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> Response:
+            rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     """Exclui um roteiro que nunca foi usado. Passa pela LIXEIRA (regra da casa).
 
     **O padrão nunca** (cenário 25). E roteiro que já sustentou entrevista

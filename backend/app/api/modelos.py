@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato
 from app.models.modelo_documento import EscopoModelo, ModeloDocumento
@@ -64,7 +64,8 @@ def _aplicar(m: ModeloDocumento, payload: ModeloIn) -> None:
 
 
 @router.get("/rh/modelos-documento")
-def listar(db: Session = Depends(get_db)) -> dict:
+def listar(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     modelos = db.scalars(select(ModeloDocumento).order_by(ModeloDocumento.titulo)).all()
     return {"modelos": [_dump(m) for m in modelos],
             "variaveis": VARIAVEIS_MODELO}
@@ -72,7 +73,7 @@ def listar(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/modelos-documento", status_code=201)
 def criar(payload: ModeloIn, db: Session = Depends(get_db),
-          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+          rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     if not payload.titulo.strip() or not payload.corpo.strip():
         raise HTTPException(status_code=422, detail="titulo_e_corpo_obrigatorios")
     m = ModeloDocumento()
@@ -86,7 +87,7 @@ def criar(payload: ModeloIn, db: Session = Depends(get_db),
 
 @router.put("/rh/modelos-documento/{modelo_id}")
 def editar(modelo_id: uuid.UUID, payload: ModeloIn, db: Session = Depends(get_db),
-           rh: UsuarioRH = Depends(requer_rh)) -> dict:
+           rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     m = db.get(ModeloDocumento, modelo_id)
     if m is None:
         raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
@@ -99,7 +100,7 @@ def editar(modelo_id: uuid.UUID, payload: ModeloIn, db: Session = Depends(get_db
 
 @router.delete("/rh/modelos-documento/{modelo_id}", status_code=204)
 def excluir(modelo_id: uuid.UUID, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> None:
+            rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> None:
     m = db.get(ModeloDocumento, modelo_id)
     if m is None:
         raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
@@ -113,7 +114,8 @@ def excluir(modelo_id: uuid.UUID, db: Session = Depends(get_db),
 
 
 @router.get("/rh/modelos-documento/{modelo_id}/previa")
-def previa(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> StreamingResponse:
+def previa(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> StreamingResponse:
     """Prévia sem colaborador: as variáveis aparecem como {{...}}."""
     m = db.get(ModeloDocumento, modelo_id)
     if m is None:
@@ -135,7 +137,7 @@ def previa(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> StreamingResp
 
 
 @router.get("/rh/documentos-sistema")
-def listar_documentos_sistema(_rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+def listar_documentos_sistema(_rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> list[dict]:
     from app.services.documentos_catalogo import listar as _listar
     return _listar()
 
@@ -162,7 +164,7 @@ def _candidato_de_amostra() -> Candidato:
 
 @router.get("/rh/documentos-sistema/{chave}/previa")
 def previa_documento_sistema(chave: str, db: Session = Depends(get_db),
-                             _rh: UsuarioRH = Depends(requer_rh)) -> StreamingResponse:
+                             _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> StreamingResponse:
     """PDF de amostra do documento do sistema — o preview 'decente' pedido.
 
     Renderiza o PDF de verdade (mesmo gerador que a admissão usa) com um
@@ -222,7 +224,7 @@ class DuplicarDocumentoIn(BaseModel):
 @router.post("/rh/documentos-sistema/{chave}/duplicar", status_code=201)
 def duplicar_documento_sistema(chave: str, payload: DuplicarDocumentoIn,
                                db: Session = Depends(get_db),
-                               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                               rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     """Cria um MODELO EDITÁVEL a partir de um documento de texto do sistema.
 
     O documento original continua intacto e seguindo gerando os PDFs oficiais:
@@ -253,7 +255,8 @@ def duplicar_documento_sistema(chave: str, payload: DuplicarDocumentoIn,
 
 
 @router.get("/rh/candidatos/{candidato_id}/modelos-aplicaveis")
-def aplicaveis(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+def aplicaveis(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> list[dict]:
     """Modelos que valem para este colaborador: avulsos + do seu cargo + do seu
     posto + os anexados diretamente a ele."""
     candidato = db.get(Candidato, candidato_id)
@@ -275,7 +278,7 @@ def aplicaveis(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> list[d
 
 @router.get("/rh/candidatos/{candidato_id}/modelos/{modelo_id}/gerar")
 def gerar(candidato_id: uuid.UUID, modelo_id: uuid.UUID, db: Session = Depends(get_db),
-          rh: UsuarioRH = Depends(requer_rh)) -> StreamingResponse:
+          rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> StreamingResponse:
     """Gera o PDF do modelo com as variáveis preenchidas para o colaborador."""
     candidato = db.get(Candidato, candidato_id)
     m = db.get(ModeloDocumento, modelo_id)
@@ -301,7 +304,7 @@ class EnviarModeloIn(BaseModel):
 def enviar_para_pessoa(candidato_id: uuid.UUID, modelo_id: uuid.UUID,
                        payload: EnviarModeloIn, request: Request,
                        db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     """Envia o documento do modelo para UMA pessoa (antiga ou nova):
 
     - com assinatura: cria o registro pendente com SNAPSHOT do título/corpo
@@ -380,7 +383,8 @@ def _dump_papel(p) -> dict:
 
 
 @router.get("/rh/papeis-assinatura")
-def listar_papeis(db: Session = Depends(get_db)) -> dict:
+def listar_papeis(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.models.modelo_documento import PapelAssinatura
     papeis = db.scalars(select(PapelAssinatura)
                         .order_by(PapelAssinatura.ordem, PapelAssinatura.nome)).all()
@@ -389,7 +393,7 @@ def listar_papeis(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/papeis-assinatura", status_code=201)
 def criar_papel(payload: PapelIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.models.modelo_documento import PapelAssinatura
     nome = payload.nome.strip()
     if not nome:
@@ -407,7 +411,7 @@ def criar_papel(payload: PapelIn, db: Session = Depends(get_db),
 
 @router.put("/rh/papeis-assinatura/{papel_id}")
 def editar_papel(papel_id: uuid.UUID, payload: PapelIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     from app.models.modelo_documento import PapelAssinatura
     p = db.get(PapelAssinatura, papel_id)
     if p is None:
@@ -436,7 +440,8 @@ class EtapaPadraoIn(BaseModel):
 
 
 @router.get("/rh/modelos/{modelo_id}/roteiro-padrao")
-def ver_roteiro_padrao(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ver_roteiro_padrao(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     from app.models.solicitacao_assinatura import ModeloEtapaPadrao
     etapas = db.scalars(select(ModeloEtapaPadrao)
                         .where(ModeloEtapaPadrao.modelo_id == modelo_id)
@@ -448,7 +453,7 @@ def ver_roteiro_padrao(modelo_id: uuid.UUID, db: Session = Depends(get_db)) -> d
 @router.put("/rh/modelos/{modelo_id}/roteiro-padrao")
 def salvar_roteiro_padrao(modelo_id: uuid.UUID, payload: list[EtapaPadraoIn],
                           db: Session = Depends(get_db),
-                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                          rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
     from app.models.solicitacao_assinatura import (ModeloEtapaPadrao,
                                                    TipoSignatario)
     if db.get(ModeloDocumento, modelo_id) is None:
@@ -472,7 +477,7 @@ def salvar_roteiro_padrao(modelo_id: uuid.UUID, payload: list[EtapaPadraoIn],
 
 @router.delete("/rh/papeis-assinatura/{papel_id}", status_code=204)
 def excluir_papel(papel_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+                  rh: UsuarioRH = Depends(exige("config:escrever"))) -> None:
     from app.models.modelo_documento import PapelAssinatura
     from app.services.lixeira import mandar_para_lixeira
     p = db.get(PapelAssinatura, papel_id)

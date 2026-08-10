@@ -16,4 +16,9 @@ class UsuarioRH(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     senha_hash: Mapped[str] = mapped_column(String(300))
     ativo: Mapped[bool] = mapped_column(default=True)
+    # Chave do `Papel` (v2.86). String, não FK: o papel é resolvido pela chave
+    # estável, e um papel removido não pode arrastar o usuário junto nem deixar
+    # a coluna nula em silêncio — sem papel resolvido, `permissoes_do_usuario`
+    # devolve conjunto VAZIO, que nega em vez de liberar.
+    papel: Mapped[str] = mapped_column(String(50), default="rh", server_default="rh")
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

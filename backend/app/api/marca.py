@@ -9,7 +9,7 @@ from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.usuario_rh import UsuarioRH
 from app.services import storage
@@ -35,7 +35,8 @@ _MAX_BYTES = 2 * 1024 * 1024  # 2 MB por imagem
 
 
 @router.get("/rh/marca", dependencies=[Depends(requer_rh)])
-def ver_marca(db: Session = Depends(get_db)) -> dict:
+def ver_marca(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     d = dados_empresa(db)
     return {**{k: d[k] for k in d if not k.endswith("_key")},
             "tem_logo": bool(d["logo_key"]), "tem_favicon": bool(d["favicon_key"]),
@@ -61,7 +62,7 @@ class MarcaIn(BaseModel):
 
 @router.put("/rh/marca")
 def salvar_marca(payload: MarcaIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     # SÓ o catálogo entra. Aceitar texto livre deixaria gravar uma pilha CSS
     # arbitrária que vai para o `<style>` de TODA tela, inclusive as públicas —
     # e uma fonte que não existe não dá erro: a tela só fica estranha, sem nada
@@ -99,7 +100,7 @@ def _upload_img(db: Session, arquivo: UploadFile, chave_config: str, prefixo: st
 
 @router.post("/rh/marca/logo")
 def upload_logo(arquivo: UploadFile, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     _upload_img(db, arquivo, "empresa_logo_key", "logo")
     registrar(db, "marca_logo_atualizada", ator="rh", ator_detalhe=rh.email)
     db.commit()
@@ -108,7 +109,7 @@ def upload_logo(arquivo: UploadFile, db: Session = Depends(get_db),
 
 @router.post("/rh/marca/favicon")
 def upload_favicon(arquivo: UploadFile, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     _upload_img(db, arquivo, "empresa_favicon_key", "favicon")
     registrar(db, "marca_favicon_atualizada", ator="rh", ator_detalhe=rh.email)
     db.commit()

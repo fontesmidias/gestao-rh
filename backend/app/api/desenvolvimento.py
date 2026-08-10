@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato, PostoServico
 from app.models.desenvolvimento import (ArquivoDesenvolvimento, PrazoValidade,
@@ -79,7 +79,8 @@ def _dump(db: Session, r: RegistroDesenvolvimento) -> dict:
 
 @router.get("/rh/desenvolvimento/registros")
 def listar_registros(status: str | None = None, candidato_id: uuid.UUID | None = None,
-                     db: Session = Depends(get_db)) -> dict:
+                     db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> dict:
     """Fila do RH. Sem filtro, traz o que espera decisão (pendente + devolvido).
 
     Filtro pesado fica SERVER-SIDE (aqui) e o DashPlanilha refina em memória por
@@ -113,7 +114,7 @@ class LoteIn(BaseModel):
 
 @router.post("/rh/desenvolvimento/registros/lote/validar")
 def validar_lote(payload: LoteIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> dict:
     """Aprova em massa — só o que `pode_aprovar_em_lote` autoriza.
 
     **Documento crítico é recusado aqui, não filtrado silenciosamente**: se o RH
@@ -170,7 +171,7 @@ def _data_de(txt: str | None):
 
 @router.post("/rh/desenvolvimento/registros/{registro_id}/validar")
 def validar(registro_id: uuid.UUID, payload: ValidarIn,
-            db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+            db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> dict:
     """Valida um registro: passa a valer no histórico e no dossiê.
 
     A validade é RECALCULADA aqui com o prazo vigente (tipo → cargo → posto) e
@@ -209,7 +210,7 @@ class MotivoIn(BaseModel):
 
 @router.post("/rh/desenvolvimento/registros/{registro_id}/devolver")
 def devolver(registro_id: uuid.UUID, payload: MotivoIn,
-             db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> dict:
     """Devolve para o colaborador corrigir. O motivo é VISÍVEL para ele — por
     isso o campo é obrigatório e a tela avisa que ele lê."""
     r = db.get(RegistroDesenvolvimento, registro_id)
@@ -231,7 +232,7 @@ def devolver(registro_id: uuid.UUID, payload: MotivoIn,
 
 @router.post("/rh/desenvolvimento/registros/{registro_id}/recusar")
 def recusar(registro_id: uuid.UUID, payload: MotivoIn,
-            db: Session = Depends(get_db), rh: UsuarioRH = Depends(requer_rh)) -> dict:
+            db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> dict:
     """Recusa em definitivo (não se aplica ao cargo, documento falso, duplicado).
     Diferente de devolver: não pede correção, encerra."""
     r = db.get(RegistroDesenvolvimento, registro_id)
@@ -253,7 +254,8 @@ def recusar(registro_id: uuid.UUID, payload: MotivoIn,
 
 @router.get("/rh/desenvolvimento/registros/{registro_id}/documento/{arquivo_id}")
 def baixar_documento(registro_id: uuid.UUID, arquivo_id: uuid.UUID,
-                     db: Session = Depends(get_db)) -> Response:
+                     db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> Response:
     """Serve o documento para o RH conferir. Content-Type pela extensão — pode
     ser foto, não só PDF."""
     a = db.get(ArquivoDesenvolvimento, arquivo_id)
@@ -308,7 +310,8 @@ class TipoIn(BaseModel):
 
 
 @router.get("/rh/desenvolvimento/tipos")
-def listar_tipos(db: Session = Depends(get_db)) -> dict:
+def listar_tipos(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     tipos = db.scalars(select(TipoDesenvolvimento)
                        .order_by(TipoDesenvolvimento.nome)).all()
     return {"tipos": [_dump_tipo(db, t) for t in tipos]}
@@ -316,7 +319,7 @@ def listar_tipos(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/desenvolvimento/tipos", status_code=201)
 def criar_tipo(payload: TipoIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     nome = (payload.nome or "").strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
@@ -341,7 +344,7 @@ def criar_tipo(payload: TipoIn, db: Session = Depends(get_db),
 
 @router.put("/rh/desenvolvimento/tipos/{tipo_id}")
 def editar_tipo(tipo_id: uuid.UUID, payload: TipoIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     t = db.get(TipoDesenvolvimento, tipo_id)
     if t is None:
         raise HTTPException(status_code=404, detail="tipo_nao_encontrado")
@@ -363,7 +366,7 @@ def editar_tipo(tipo_id: uuid.UUID, payload: TipoIn, db: Session = Depends(get_d
 
 @router.delete("/rh/desenvolvimento/tipos/{tipo_id}", status_code=204)
 def excluir_tipo(tipo_id: uuid.UUID, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> None:
+                 rh: UsuarioRH = Depends(exige("config:escrever"))) -> None:
     """Recusa 409 se o tipo estiver em uso — como o DELETE de jornada. Apagar
     levaria junto o histórico de quem já enviou aquele certificado."""
     t = db.get(TipoDesenvolvimento, tipo_id)
@@ -387,7 +390,7 @@ class PrazoIn(BaseModel):
 
 @router.post("/rh/desenvolvimento/tipos/{tipo_id}/prazos", status_code=201)
 def criar_prazo(tipo_id: uuid.UUID, payload: PrazoIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Sobrescreve a validade para um cargo OU um posto (o mais específico
     vence na hora de calcular)."""
     t = db.get(TipoDesenvolvimento, tipo_id)
@@ -412,7 +415,7 @@ def criar_prazo(tipo_id: uuid.UUID, payload: PrazoIn, db: Session = Depends(get_
 
 @router.delete("/rh/desenvolvimento/prazos/{prazo_id}", status_code=204)
 def excluir_prazo(prazo_id: uuid.UUID, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> None:
+                  rh: UsuarioRH = Depends(exige("config:escrever"))) -> None:
     p = db.get(PrazoValidade, prazo_id)
     if p is None:
         raise HTTPException(status_code=404, detail="prazo_nao_encontrado")
@@ -426,7 +429,8 @@ def excluir_prazo(prazo_id: uuid.UUID, db: Session = Depends(get_db),
 
 
 @router.get("/rh/desenvolvimento/brigadistas")
-def listar_brigadistas(db: Session = Depends(get_db)) -> dict:
+def listar_brigadistas(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> dict:
     """Quem está com certificação CRÍTICA vencendo — a "consulta" que substitui
     o módulo de brigadistas.
 
@@ -475,7 +479,8 @@ def _dump_turma(t: TurmaReciclagem) -> dict:
 
 
 @router.get("/rh/desenvolvimento/turmas")
-def listar_turmas(db: Session = Depends(get_db)) -> dict:
+def listar_turmas(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> dict:
     turmas = db.scalars(select(TurmaReciclagem)
                         .where(TurmaReciclagem.encerrada == False)  # noqa: E712
                         .order_by(TurmaReciclagem.inicio_em)).all()
@@ -485,7 +490,7 @@ def listar_turmas(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/rh/desenvolvimento/turmas", status_code=201)
 def criar_turma(payload: TurmaIn, db: Session = Depends(get_db),
-                rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> dict:
     inicio = _data_de(payload.inicio_em)
     if inicio is None:
         raise HTTPException(status_code=422, detail="data_invalida")
@@ -507,7 +512,7 @@ def criar_turma(payload: TurmaIn, db: Session = Depends(get_db),
 
 @router.delete("/rh/desenvolvimento/turmas/{turma_id}", status_code=204)
 def encerrar_turma(turma_id: uuid.UUID, db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> None:
+                   rh: UsuarioRH = Depends(exige("desenvolvimento:validar"))) -> None:
     """Encerra (não apaga): a turma pode estar citada numa solicitação enviada."""
     t = db.get(TurmaReciclagem, turma_id)
     if t is None:
@@ -525,7 +530,8 @@ class RascunhoIn(BaseModel):
 
 
 @router.post("/rh/desenvolvimento/matricula/rascunho")
-def rascunho_matricula(payload: RascunhoIn, db: Session = Depends(get_db)) -> dict:
+def rascunho_matricula(payload: RascunhoIn, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> dict:
     """Monta o(s) e-mail(s) para o RH conferir ANTES de enviar.
 
     Não envia nada. Devolve também as pendências de cada pessoa — quem está
@@ -559,7 +565,7 @@ class EnviarMatriculaIn(BaseModel):
 
 @router.post("/rh/desenvolvimento/matricula/enviar")
 def enviar_matricula(payload: EnviarMatriculaIn, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> dict:
     """Envia a solicitação com os dossiês em anexo — um PDF por pessoa.
 
     O texto vem do que o RH conferiu na tela (ele pode ter editado), e é isso
@@ -631,7 +637,8 @@ def enviar_matricula(payload: EnviarMatriculaIn, db: Session = Depends(get_db),
 
 
 @router.get("/rh/desenvolvimento/registros/{registro_id}/dossie")
-def baixar_dossie(registro_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_dossie(registro_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("desenvolvimento:ler"))) -> Response:
     """Prévia do PDF que iria para a clínica — o RH confere antes de mandar."""
     from app.services import dossie_reciclagem
     r = db.get(RegistroDesenvolvimento, registro_id)

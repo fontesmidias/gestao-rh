@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.usuario_rh import UsuarioRH
 from app.services import logs as svc
@@ -28,7 +28,8 @@ router = APIRouter(tags=["logs"], dependencies=[Depends(requer_rh)])
 
 
 @router.get("/rh/logs/servicos")
-def listar_servicos(db: Session = Depends(get_db)) -> dict:
+def listar_servicos(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("dados:logs"))) -> dict:
     """Serviços com log, os dias guardados de cada um e a retenção atual."""
     nomes = svc.servicos()
     return {
@@ -43,7 +44,8 @@ def listar_servicos(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/rh/logs/{servico}")
 def ler_servico(servico: str, dia: str | None = None, busca: str | None = None,
-                nivel: str | None = None, limite: int = 500) -> dict:
+                nivel: str | None = None, limite: int = 500,
+    _rh: UsuarioRH = Depends(exige("dados:logs"))) -> dict:
     try:
         return svc.ler(servico, dia=dia, busca=busca, nivel=nivel, limite=limite)
     except ValueError as exc:
@@ -53,7 +55,7 @@ def ler_servico(servico: str, dia: str | None = None, busca: str | None = None,
 @router.get("/rh/logs/{servico}/baixar")
 def baixar(servico: str, dia: str | None = None,
            db: Session = Depends(get_db),
-           rh: UsuarioRH = Depends(requer_rh)) -> Response:
+           rh: UsuarioRH = Depends(exige("dados:logs"))) -> Response:
     """Arquivo inteiro em .txt.
 
     Fica na AUDITORIA: o arquivo carrega CPF, e-mail e nome de gente real, e
@@ -81,7 +83,7 @@ class RetencaoIn(BaseModel):
 
 @router.put("/rh/logs/retencao")
 def definir_retencao(payload: RetencaoIn, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     gravar_config(db, {"logs_retencao_dias": str(payload.dias)})
     registrar(db, "logs_retencao_alterada", ator="rh", ator_detalhe=rh.email,
               detalhe={"dias": payload.dias})
@@ -91,7 +93,7 @@ def definir_retencao(payload: RetencaoIn, db: Session = Depends(get_db),
 
 @router.post("/rh/logs/enviar-agora")
 def enviar_agora(db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("dados:logs"))) -> dict:
     """Dispara o e-mail dos logs na hora — para conferir se chega a quem deve,
     sem esperar a próxima janela de 6h."""
     from app.workers.logs_email import rodar

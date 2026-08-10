@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
@@ -95,7 +95,7 @@ def criar_candidato(
     payload: NovoCandidato,
     request: Request,
     db: Session = Depends(get_db),
-    _rh: UsuarioRH = Depends(requer_rh),
+    _rh: UsuarioRH = Depends(exige("admissao:ler")),
 ) -> ConviteOut:
     """Cadastra o candidato aprovado, emite o link mágico e envia o convite por e-mail.
     Com o posto e o regime escolhidos aqui, os documentos específicos do kit
@@ -173,7 +173,7 @@ def reenviar_link(
     request: Request,
     enviar_email_convite: bool = True,
     db: Session = Depends(get_db),
-    _rh: UsuarioRH = Depends(requer_rh),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever")),
 ) -> ConviteOut:
     """Emite um novo link mágico (o anterior continua válido até expirar).
     Com enviar_email_convite=false, só gera e devolve o link — para o RH copiar
@@ -207,7 +207,7 @@ def abrir_sessao_assistida(
     candidato_id: uuid.UUID,
     request: Request,
     db: Session = Depends(get_db),
-    rh: UsuarioRH = Depends(requer_rh),
+    rh: UsuarioRH = Depends(exige("admissao:escrever")),
 ) -> ConviteOut:
     """Abre o wizard para o RH preencher COM A PESSOA PRESENTE.
 
@@ -257,7 +257,7 @@ def abrir_sessao_assistida(
 
 @router.get("/rh/testes-vinculaveis")
 def testes_vinculaveis(busca: str | None = None, db: Session = Depends(get_db),
-                       _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                       _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> list[dict]:
     """Testes/provas concluídos e ainda não aproveitados por ninguém.
 
     Cada item vem com nome, data, qual teste e por qual link — contexto para o
@@ -276,7 +276,7 @@ class VincularTesteIn(BaseModel):
 @router.post("/rh/candidatos/{candidato_id}/testes-vinculados", status_code=201)
 def vincular_teste(candidato_id: uuid.UUID, payload: VincularTesteIn,
                    db: Session = Depends(get_db),
-                   rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                   rh: UsuarioRH = Depends(exige("admissao:ler"))) -> dict:
     """Aproveita para este candidato um teste que a pessoa já respondeu."""
     from app.services.testes_vinculaveis import resultado_do_vinculo, vincular
     candidato = db.get(Candidato, candidato_id)
@@ -302,7 +302,7 @@ def vincular_teste(candidato_id: uuid.UUID, payload: VincularTesteIn,
 @router.get("/rh/candidatos/{candidato_id}/testes-vinculados")
 def listar_testes_vinculados(candidato_id: uuid.UUID,
                              db: Session = Depends(get_db),
-                             _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                             _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> list[dict]:
     """Resultados aproveitados deste candidato — restrito ao RH.
 
     NÃO aparece para o candidato (não entra no wizard) nem no dossiê, que
@@ -321,7 +321,7 @@ def listar_testes_vinculados(candidato_id: uuid.UUID,
                status_code=204)
 def desvincular_teste(candidato_id: uuid.UUID, vinculo_id: uuid.UUID,
                       db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> None:
+                      rh: UsuarioRH = Depends(exige("admissao:ler"))) -> None:
     """Desfaz o vínculo — o RH pode ter reconhecido a pessoa errada."""
     from app.models.teste_vinculado import TesteVinculado
     v = db.get(TesteVinculado, vinculo_id)
@@ -350,7 +350,7 @@ def editar_contato(
     candidato_id: uuid.UUID,
     payload: ContatoIn,
     db: Session = Depends(get_db),
-    _rh: UsuarioRH = Depends(requer_rh),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever")),
 ) -> CandidatoOut:
     """O RH corrige e-mail/celular do candidato (caso real: cadastro sem
     e-mail → fichas e código de assinatura não chegavam). O antes e o depois

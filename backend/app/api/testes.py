@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import Candidato
 from app.models.teste import StatusTeste, TesteCandidato, TipoTeste
@@ -344,7 +344,8 @@ def _duracao_s(iniciado, concluido) -> int | None:
 
 
 @router.get("/rh/testes/dash", dependencies=[Depends(requer_rh)])
-def dash_testes(db: Session = Depends(get_db)) -> dict:
+def dash_testes(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:ler"))) -> dict:
     """Visão unificada de TODOS os testes — da admissão e da testagem avulsa —
     com status, duração, resultado resumido e comportamento (telemetria)."""
     from app.models.testagem import LinkTestagem, ParticipanteTestagem, TesteTestagem
@@ -406,7 +407,7 @@ def dash_testes(db: Session = Depends(get_db)) -> dict:
 @router.post("/rh/candidatos/{candidato_id}/testes/{tipo}/resetar")
 def resetar_teste_rh(candidato_id: uuid.UUID, tipo: str,
                      db: Session = Depends(get_db),
-                     _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Zera o teste para a pessoa refazer: volta a pendente e limpa respostas,
     resultado e telemetria. O resultado anterior fica preservado na auditoria."""
     cand = db.get(Candidato, candidato_id)
@@ -445,7 +446,7 @@ class DefinirTestesIn(BaseModel):
 @router.put("/rh/candidatos/{candidato_id}/testes")
 def definir_testes_rh(candidato_id: uuid.UUID, payload: DefinirTestesIn,
                       db: Session = Depends(get_db),
-                      _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """O RH liga/desliga os testes DEPOIS do convite (antes, só dava na criação).
     Desmarcar só remove teste ainda PENDENTE (vai para a lixeira); teste já
     iniciado/concluído é mantido — resultado não se apaga por engano."""
@@ -482,7 +483,8 @@ def definir_testes_rh(candidato_id: uuid.UUID, payload: DefinirTestesIn,
 
 @router.get("/rh/candidatos/{candidato_id}/testes",
             dependencies=[Depends(requer_rh)])
-def resultados_rh(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def resultados_rh(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     testes = db.scalars(select(TesteCandidato)
                         .where(TesteCandidato.candidato_id == candidato_id)
                         .order_by(TesteCandidato.criado_em)).all()

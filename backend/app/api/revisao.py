@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica, get_settings
 from app.core.db import get_db
 from app.models.candidato import Candidato, StatusCandidato
@@ -69,7 +69,8 @@ def _candidatos_admissao(db: Session, status: str | None, busca: str | None,
 def listar_candidatos(status: str | None = None, busca: str | None = None,
                       posto_id: uuid.UUID | None = None,
                       incluir_colaboradores: bool = False,
-                      db: Session = Depends(get_db)) -> list[dict]:
+                      db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> list[dict]:
     candidatos = _candidatos_admissao(db, status, busca, posto_id,
                                       incluir_colaboradores=incluir_colaboradores)
     slots = db.scalars(select(SlotDocumento)).all()
@@ -127,7 +128,7 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
 def exportar_admissoes(status: str | None = None, busca: str | None = None,
                        posto_id: uuid.UUID | None = None,
                        db: Session = Depends(get_db),
-                       _rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                       _rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Planilha das admissões (mesmos filtros da tela), reusando o service de
     export compartilhado."""
     from datetime import datetime, timezone
@@ -154,7 +155,7 @@ def exportar_admissoes(status: str | None = None, busca: str | None = None,
 @router.get("/rh/candidatos/{candidato_id}/exportar-tirvu")
 def exportar_tirvu_individual(candidato_id: uuid.UUID,
                               db: Session = Depends(get_db),
-                              _rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                              _rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Planilha do Tirvu com UMA admissão (botão na ficha do aprovado)."""
     from app.services.export_planilha import slug
     from app.services.export_tirvu import (linha_tirvu, montar_workbook_tirvu,
@@ -191,7 +192,8 @@ def exportar_tirvu_individual(candidato_id: uuid.UUID,
 
 
 @router.get("/rh/uniformes")
-def uniformes(pendentes: bool = False, db: Session = Depends(get_db)) -> dict:
+def uniformes(pendentes: bool = False, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("colaboradores:ler"))) -> dict:
     """Tamanhos de uniforme de quem está em admissão — a lista que o operacional
     usa para comprar (feedback 2026-07-28).
 
@@ -237,7 +239,8 @@ def uniformes(pendentes: bool = False, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/rh/metricas")
-def metricas(db: Session = Depends(get_db)) -> dict:
+def metricas(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> dict:
     """Números do painel de ADMISSÕES: só quem está em admissão (`situacao IS
     NULL`) — coerente com a tela. Antes contava TODA a base (incl. os 1156
     colaboradores importados do Tirvu), o que inflava "Candidatos" e não batia
@@ -312,7 +315,8 @@ def _atendimentos_assistidos(db: Session, candidato_id: uuid.UUID) -> list[dict]
 
 
 @router.get("/rh/candidatos/{candidato_id}")
-def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:ler"))) -> dict:
     cand = db.get(Candidato, candidato_id)
     if cand is None:
         raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
@@ -394,7 +398,8 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db)) ->
 
 
 @router.get("/rh/slots/{slot_id}/arquivo")
-def ver_arquivo(slot_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def ver_arquivo(slot_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> Response:
     slot = db.get(SlotDocumento, slot_id)
     if slot is None or slot.arquivo_pdf_key is None:
         raise HTTPException(status_code=404, detail="arquivo_nao_encontrado")
@@ -418,7 +423,7 @@ class LoteAprovarIn(BaseModel):
 
 @router.post("/rh/slots/lote/aprovar")
 def aprovar_lote(payload: LoteAprovarIn, db: Session = Depends(get_db),
-                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     aprovados = 0
     for slot_id in payload.slot_ids:
         slot = db.get(SlotDocumento, slot_id)
@@ -443,7 +448,7 @@ class LoteRejeitarIn(BaseModel):
 @router.post("/rh/slots/lote/rejeitar")
 def rejeitar_lote(payload: LoteRejeitarIn, request: Request,
                   db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     """Rejeita vários documentos; o candidato recebe UM e-mail listando tudo."""
     rejeitados_por_candidato: dict[uuid.UUID, list[SlotDocumento]] = {}
     for slot_id in payload.slot_ids:
@@ -496,7 +501,7 @@ def _slot_para_revisar(slot_id: uuid.UUID, db: Session) -> SlotDocumento:
 
 @router.post("/rh/slots/{slot_id}/aprovar")
 def aprovar(slot_id: uuid.UUID, db: Session = Depends(get_db),
-            rh: UsuarioRH = Depends(requer_rh)) -> dict:
+            rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     slot = _slot_para_revisar(slot_id, db)
     slot.status = StatusSlot.aprovado
     slot.revisado_em = datetime.now(timezone.utc)
@@ -524,7 +529,7 @@ _MOTIVO_LEGIVEL = {
 @router.post("/rh/slots/{slot_id}/rejeitar")
 def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, request: Request,
              db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     slot = _slot_para_revisar(slot_id, db)
     slot.status = StatusSlot.rejeitado
     slot.motivo_rejeicao = payload.motivo
@@ -563,7 +568,7 @@ def rejeitar(slot_id: uuid.UUID, payload: RejeicaoIn, request: Request,
 
 @router.post("/rh/slots/{slot_id}/dispensar")
 def dispensar(slot_id: uuid.UUID, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("admissao:revisar_documento"))) -> dict:
     slot = db.get(SlotDocumento, slot_id)
     if slot is None:
         raise HTTPException(status_code=404, detail="slot_nao_encontrado")
@@ -578,7 +583,8 @@ def dispensar(slot_id: uuid.UUID, db: Session = Depends(get_db),
 
 @router.post("/rh/candidatos/{candidato_id}/dossie")
 def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: bool = False,
-                          db: Session = Depends(get_db)) -> dict:
+                          db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:dossie"))) -> dict:
     """forcar=true gera o dossiê parcial mesmo com pendências (decisão do RH,
     registrada em auditoria); o status só vira 'aprovado' quando completo."""
     from app.services.idempotencia import trava
@@ -622,7 +628,8 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
 
 
 @router.get("/rh/candidatos/{candidato_id}/dossie")
-def baixar_dossie(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_dossie(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:dossie"))) -> Response:
     cand = db.get(Candidato, candidato_id)
     if cand is None or cand.dossie_pdf_key is None:
         raise HTTPException(status_code=404, detail="dossie_nao_gerado")
@@ -647,7 +654,7 @@ class PedirDocumentoIn(BaseModel):
 @router.post("/rh/candidatos/{candidato_id}/pedir-documento")
 def pedir_documento(candidato_id: uuid.UUID, payload: PedirDocumentoIn,
                     db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Cria (ou libera) UM documento para a pessoa enviar, mesmo com o envio já
     concluído ou aprovado.
 
@@ -714,7 +721,8 @@ class DocumentoEspecificoIn(BaseModel):
 
 @router.get("/rh/candidatos/{candidato_id}/documentos-especificos")
 def listar_documentos_especificos(candidato_id: uuid.UUID,
-                                  db: Session = Depends(get_db)) -> dict:
+                                  db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """O que dá para acrescentar a esta pessoa, e o que ela já tem.
 
     A tela precisa das duas listas: oferecer um documento que a pessoa já
@@ -746,7 +754,7 @@ def listar_documentos_especificos(candidato_id: uuid.UUID,
 def acrescentar_documento_especifico(candidato_id: uuid.UUID,
                                      payload: DocumentoEspecificoIn,
                                      db: Session = Depends(get_db),
-                                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                     rh: UsuarioRH = Depends(exige("admissao:ler"))) -> dict:
     """Acrescenta UM documento específico à pessoa, sem mexer no posto dela.
 
     Nasceu da COBERTURA (feedback do Bruno, 2026-08-07): *"um intermitente
@@ -867,7 +875,8 @@ def _validar_exigencia(grupo: str, chave: str) -> None:
 
 
 @router.get("/rh/candidatos/{candidato_id}/exigencias")
-def ler_exigencias(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def ler_exigencias(candidato_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """O que é exigido desta pessoa, com a ORIGEM de cada item.
 
     A origem (`fabrica` / `casa` / `pessoa` / `sistema`) é o que deixa a tela
@@ -886,7 +895,7 @@ def ler_exigencias(candidato_id: uuid.UUID, db: Session = Depends(get_db)) -> di
 @router.put("/rh/candidatos/{candidato_id}/exigencias")
 def ajustar_exigencia(candidato_id: uuid.UUID, payload: ExigenciaIn,
                       db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
     """Dispensa ou passa a exigir UM item, só para esta pessoa.
 
     O MOTIVO é obrigatório ao mudar (não ao desfazer): é ele que explica, meses

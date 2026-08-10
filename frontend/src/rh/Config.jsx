@@ -11,6 +11,10 @@ import LogsRH from './LogsRH.jsx'
 import TelemetriaRH from './TelemetriaRH.jsx'
 import RoteirosEntrevista from './RoteirosEntrevista.jsx'
 import Exigencias from './Exigencias.jsx'
+// `PapeisAcesso` (v2.86) é o papel de USUÁRIO — não confundir com o `Papeis`
+// logo abaixo neste arquivo, que é o papel com que alguém ASSINA um
+// documento (Contratado, Testemunha). Nomes iguais, domínios distintos.
+import PapeisAcesso, { SelectPapel } from './PapeisAcesso.jsx'
 import Aviso from '../Aviso.jsx'
 
 // OCR assistido por IA (Mistral): melhora muito a leitura de fotos de
@@ -359,6 +363,7 @@ function IdentidadeVisual() {
 const SUBMENUS = [
   ['geral', '👤 Geral'],
   ['equipe', '🧑‍🤝‍🧑 Equipe'],
+  ['papeis', '🔑 Papéis e permissões'],
   ['identidade', '🎨 Identidade visual'],
   ['organizacao', '🏢 Empresas e jornadas'],
   ['importacoes', '📥 Importações'],
@@ -398,6 +403,7 @@ export default function Config({ aoVoltar }) {
       </nav>
       {aba === 'geral' && <div className="rh-grid-2"><Perfil /><Senha /></div>}
       {aba === 'equipe' && <Equipe />}
+      {aba === 'papeis' && <PapeisAcesso />}
       {aba === 'identidade' && <IdentidadeVisual />}
       {aba === 'organizacao' && <>
         <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
@@ -856,7 +862,7 @@ function Equipe() {
         o histórico de auditoria do usuário é preservado.</p>
       <div className="dash-scroll">
         <table className="rh-tabela">
-          <thead><tr><th>Nome</th><th>E-mail (login)</th><th>Situação</th><th></th></tr></thead>
+          <thead><tr><th>Nome</th><th>E-mail (login)</th><th>Papel</th><th>Situação</th><th></th></tr></thead>
           <tbody>
             {usuarios.map((u) => (
               <tr key={u.id} style={u.ativo ? {} : { opacity: .55 }}>
@@ -871,6 +877,30 @@ function Equipe() {
                     <input type="email" value={editando.email}
                            onChange={(e) => setEditando({ ...editando, email: e.target.value })} />
                   ) : u.email}
+                </td>
+                <td>
+                  {/* Trocar o papel é edição na PRÓPRIA linha (padrão da casa),
+                      e vale na hora — sem um "salvar" separado que se esquece
+                      de clicar. O backend recusa rebaixar o último
+                      superadministrador, senão a instalação ficaria sem
+                      ninguém capaz de gerir permissões. */}
+                  <SelectPapel valor={u.papel} aoEscolher={async (chave) => {
+                    if (!chave || chave === u.papel) return
+                    setMsg(null)
+                    try {
+                      await api.editarUsuario(u.id, { papel: chave })
+                      await recarregar()
+                      setMsg({ tipo: 'ok', texto: `Papel de ${u.nome} atualizado.` })
+                    } catch (e) {
+                      setMsg({
+                        tipo: 'erro',
+                        texto: e.detail === 'ultimo_superadmin'
+                          ? 'Este é o último superadministrador — rebaixá-lo deixaria '
+                            + 'o sistema sem ninguém para gerir permissões.'
+                          : erroEquipe(e),
+                      })
+                    }
+                  }} />
                 </td>
                 <td>{u.ativo ? 'Ativo' : 'Desativado'}</td>
                 <td>

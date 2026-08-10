@@ -37,7 +37,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.candidato import PostoServico
 from app.models.usuario_rh import UsuarioRH
@@ -221,7 +221,8 @@ def _propor_equivalencia(item: dict, postos: list[PostoServico]) -> list[dict]:
 
 
 @router.post("/rh/incidencia/preview")
-async def preview(arquivo: UploadFile, db: Session = Depends(get_db)) -> dict:
+async def preview(arquivo: UploadFile, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Parseia a planilha e propõe, para cada linha, a equivalência com um posto
     do Tirvu — para o RH revisar e confirmar. Nada é gravado aqui."""
     try:
@@ -265,7 +266,7 @@ class ConfirmarIn(BaseModel):
 
 @router.post("/rh/incidencia/confirmar")
 def confirmar(payload: ConfirmarIn, db: Session = Depends(get_db),
-              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+              rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Aplica as equivalências CONFIRMADAS pelo RH: normaliza o nome do posto,
     grava contrato e a elegibilidade ao reembolso-creche. 'ignorar' não faz nada;
     'novo' cria um posto."""

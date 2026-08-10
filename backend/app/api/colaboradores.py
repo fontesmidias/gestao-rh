@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige
 from app.core.db import get_db
 from app.models.candidato import Candidato, PostoServico, StatusCandidato
 from app.models.ficha import (ContatoEmergencia, DadosPessoais,
@@ -25,7 +25,11 @@ from app.services.export_planilha import montar_workbook
 from app.services.idempotencia import travar_por
 from app.models.usuario_rh import UsuarioRH
 
-router = APIRouter(tags=["colaboradores-rh"], dependencies=[Depends(requer_rh)])
+# ⚠️ Sem `dependencies` global (v2.86): até aqui o MESMO router cobria o `GET`
+# que lista e o `POST .../desligar`, então quem podia consultar a base podia
+# desligar em lote e exportar 1.171 CPFs. Cada rota declara a permissão que o
+# ATO dela exige — ver `services/permissoes.py`.
+router = APIRouter(tags=["colaboradores-rh"])
 
 
 def _filtrar(db: Session, status: str | None, busca: str | None,
@@ -70,7 +74,8 @@ def _filtrar(db: Session, status: str | None, busca: str | None,
 def listar(status: str | None = None, busca: str | None = None,
            situacao: str | None = None, posto_id: uuid.UUID | None = None,
            incluir_admissao: bool = False,
-           db: Session = Depends(get_db)) -> list[dict]:
+           db: Session = Depends(get_db),
+           _rh: UsuarioRH = Depends(exige("colaboradores:ler"))) -> list[dict]:
     # incluir_admissao=True traz também quem ainda está no fluxo de admissão
     # (para o RH localizar e efetivar um aprovado, por ex.).
     candidatos = _filtrar(db, status, busca, situacao, posto_id,
@@ -119,7 +124,7 @@ def exportar(status: str | None = None, busca: str | None = None,
              situacao: str | None = None, posto_id: uuid.UUID | None = None,
              incluir_admissao: bool = False,
              db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> Response:
+             rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Excel com uma linha por colaborador e TODAS as respostas do formulário.
     Respeita os mesmos filtros da tela (só-colaboradores por padrão)."""
     candidatos = _filtrar(db, status, busca, situacao, posto_id,
@@ -164,7 +169,8 @@ def _colaboradores_para_tirvu(db: Session, status: str | None, busca: str | None
 def pendencias_tirvu(status: str | None = None, busca: str | None = None,
                      situacao: str | None = None, posto_id: uuid.UUID | None = None,
                      ids: str | None = None, incluir_importados: bool = False,
-                     db: Session = Depends(get_db)) -> dict:
+                     db: Session = Depends(get_db),
+           _rh: UsuarioRH = Depends(exige("colaboradores:ler"))) -> dict:
     """Pré-checagem do export: o Tirvu RECUSA linha sem CTPS/PIS. O front avisa
     ANTES do download — melhor saber aqui do que descobrir lá."""
     from app.services.export_tirvu import linha_tirvu, pendencias_linha
@@ -184,7 +190,7 @@ def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
                          situacao: str | None = None, posto_id: uuid.UUID | None = None,
                          ids: str | None = None, incluir_importados: bool = False,
                          db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                         rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Planilha no layout de importação de admissões do Tirvu (28 colunas em
     ordem fixa). É o artefato mais sensível do sistema (CPF+PIS+salário em
     massa): auditoria sempre, com quem baixou, quantas linhas e quais postos."""
@@ -226,7 +232,8 @@ def exportar_tirvu_massa(status: str | None = None, busca: str | None = None,
 def pendencias_dexion(status: str | None = None, busca: str | None = None,
                       situacao: str | None = None, posto_id: uuid.UUID | None = None,
                       ids: str | None = None, incluir_importados: bool = False,
-                      db: Session = Depends(get_db)) -> dict:
+                      db: Session = Depends(get_db),
+           _rh: UsuarioRH = Depends(exige("colaboradores:ler"))) -> dict:
     """O que falta para o Dexion aceitar cada linha, ANTES de baixar.
 
     O Dexion é rígido, e uma coluna faltando pode ser aceita CALADA (entrando
@@ -251,7 +258,7 @@ def exportar_dexion_massa(status: str | None = None, busca: str | None = None,
                           situacao: str | None = None, posto_id: uuid.UUID | None = None,
                           ids: str | None = None, incluir_importados: bool = False,
                           db: Session = Depends(get_db),
-                          rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                          rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Planilha no layout de conversão de trabalhadores do Dexion (97 colunas).
 
     Como o do Tirvu, é artefato sensível — CPF, PIS, salário e endereço de
@@ -343,7 +350,7 @@ def _casar_posto(db: Session, cache: dict, lotacao: str) -> uuid.UUID | None:
 @router.post("/rh/colaboradores/importar")
 async def importar_colaboradores(arquivo: UploadFile,
                                  db: Session = Depends(get_db),
-                                 rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                 rh: UsuarioRH = Depends(exige("colaboradores:escrever"))) -> dict:
     """Importa a base de colaboradores ativos a partir da planilha (.xlsx) do
     Tirvu. Idempotente por CPF: linha cujo CPF já existe é ATUALIZADA, não
     duplicada. Colunas conhecidas viram campos; as demais entram em dados_tirvu.
@@ -539,7 +546,7 @@ class LoteEfetivarIn(BaseModel):
 # /{cid}/efetivar, senão "lote" é interpretado como um UUID inválido (422).
 @router.post("/rh/colaboradores/lote/efetivar")
 def efetivar_lote(payload: LoteEfetivarIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("colaboradores:efetivar"))) -> dict:
     """Efetiva vários candidatos de uma vez. Já-colaboradores são pulados."""
     efetivados, pulados = 0, 0
     for cid in payload.ids:
@@ -565,7 +572,7 @@ class AcaoMassaColabIn(BaseModel):
 
 @router.post("/rh/colaboradores/lote/acao")
 def acao_massa_colaboradores(payload: AcaoMassaColabIn, db: Session = Depends(get_db),
-                             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                             rh: UsuarioRH = Depends(exige("colaboradores:desligar"))) -> dict:
     """Ação em massa nos colaboradores selecionados: desligar (com data) ou
     reativar. Não há exclusão — registro trabalhista não se apaga; desligar é o
     correto. Só age sobre quem já é colaborador (tem situação)."""
@@ -629,7 +636,7 @@ def _validar_reverter(destino: str, motivo: str) -> StatusCandidato:
 # Específica ANTES da paramétrica /{cid}/... (senão "lote" vira UUID inválido).
 @router.post("/rh/colaboradores/lote/reverter")
 def reverter_lote(payload: LoteReverterIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("colaboradores:reverter"))) -> dict:
     """Reverte vários colaboradores a candidatos de uma vez. Só age sobre quem
     JÁ é colaborador (tem situação); candidatos em admissão são pulados. O aviso
     de indício-Tirvu é responsabilidade do front (nunca bloqueia — decisão do
@@ -657,7 +664,7 @@ def reverter_lote(payload: LoteReverterIn, db: Session = Depends(get_db),
 
 @router.post("/rh/colaboradores/{cid}/reverter")
 def reverter(cid: uuid.UUID, payload: ReverterIn, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("colaboradores:reverter"))) -> dict:
     """Reverte um colaborador a candidato (converteu por engano, ou precisa
     reprocessar). Preserva matrícula e dados; motivo é obrigatório."""
     alvo = _validar_reverter(payload.destino, payload.motivo)
@@ -676,7 +683,7 @@ def reverter(cid: uuid.UUID, payload: ReverterIn, db: Session = Depends(get_db),
 @router.post("/rh/colaboradores/{cid}/efetivar",
              dependencies=[Depends(travar_por("efetivar"))])
 def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("colaboradores:efetivar"))) -> dict:
     """Transforma um candidato aprovado em colaborador ativo (mesmo registro)."""
     c = _get_colab(db, cid)
     _efetivar_um(db, c)
@@ -689,7 +696,7 @@ def efetivar(cid: uuid.UUID, db: Session = Depends(get_db),
 
 @router.post("/rh/colaboradores/{cid}/desligar")
 def desligar(cid: uuid.UUID, payload: DesligamentoIn, db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> dict:
+             rh: UsuarioRH = Depends(exige("colaboradores:desligar"))) -> dict:
     c = _get_colab(db, cid)
     c.situacao = "desligado"  # vínculo; `status` (fluxo) não muda
     c.data_desligamento = payload.data_desligamento.strip() or None
@@ -705,7 +712,7 @@ def desligar(cid: uuid.UUID, payload: DesligamentoIn, db: Session = Depends(get_
 
 @router.post("/rh/colaboradores/{cid}/transferir")
 def transferir(cid: uuid.UUID, payload: TransferenciaIn, db: Session = Depends(get_db),
-               rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               rh: UsuarioRH = Depends(exige("colaboradores:escrever"))) -> dict:
     c = _get_colab(db, cid)
     posto = db.get(PostoServico, payload.posto_id)
     if posto is None:
@@ -784,7 +791,7 @@ def _resumo_decisao(d) -> dict:
 
 @router.post("/rh/colaboradores/vinculos/preview")
 async def preview_vinculos(arquivo: UploadFile, db: Session = Depends(get_db),
-                           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                           _rh: UsuarioRH = Depends(exige("colaboradores:escrever"))) -> dict:
     """Lê a planilha de Colaboradores do Tirvu e PROPÕE os vínculos. Não grava.
 
     Devolve o que está pronto (campo vazio no portal), o que DIVERGE (valor
@@ -841,7 +848,7 @@ class AplicarVinculosIn(BaseModel):
 
 @router.post("/rh/colaboradores/vinculos/aplicar")
 def aplicar_vinculos(payload: AplicarVinculosIn, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("colaboradores:escrever"))) -> dict:
     """Grava os vínculos que o RH confirmou. Só toca o que veio na lista.
 
     O PCD é dado de saúde e vem da base do Tirvu, não de declaração da pessoa:
@@ -945,7 +952,8 @@ def _sugerir_postos(lotacao: str, postos: list) -> list[dict]:
 
 
 @router.get("/rh/postos/de-para")
-def listar_de_para_lotacao(db: Session = Depends(get_db)) -> list[dict]:
+def listar_de_para_lotacao(db: Session = Depends(get_db),
+           _rh: UsuarioRH = Depends(exige("organizacao:ler"))) -> list[dict]:
     """O que já foi decidido — para o RH conferir e corrigir sem reimportar."""
     from app.models.candidato import LotacaoTirvu
 
@@ -960,7 +968,7 @@ def listar_de_para_lotacao(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/rh/postos/de-para/preview")
 async def preview_de_para_lotacao(arquivo: UploadFile, db: Session = Depends(get_db),
-                                  _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                                  _rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Lotações da planilha que ainda não têm posto, com candidatos ordenados.
 
     Ordena pela quantidade de PESSOAS afetadas, não alfabeticamente: resolver
@@ -1011,7 +1019,7 @@ class DeParaLotacaoIn(BaseModel):
 
 @router.post("/rh/postos/de-para/confirmar")
 def confirmar_de_para_lotacao(payload: DeParaLotacaoIn, db: Session = Depends(get_db),
-                              rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                              rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
     """Grava as escolhas do RH. Reenviar a mesma lotação ATUALIZA o destino —
     corrigir um de-para errado não pode exigir apagar e recriar."""
     from app.models.candidato import LotacaoTirvu
@@ -1056,7 +1064,7 @@ class MatriculaIn(BaseModel):
 @router.put("/rh/colaboradores/{cid}/matricula")
 def trocar_matricula(cid: uuid.UUID, payload: MatriculaIn,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("colaboradores:matricula"))) -> dict:
     """Troca o número da matrícula, guardando o anterior.
 
     Pedido do Bruno em 2026-08-01. O cuidado não é burocracia: a matrícula é a

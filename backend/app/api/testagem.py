@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.config import base_url_publica, ip_do_cliente
 from app.core.db import get_db
 from app.models.teste import StatusTeste, TipoTeste
@@ -300,7 +300,7 @@ def _dump_link(db: Session, link: LinkTestagem, base_url: str) -> dict:
 
 @router.get("/rh/testagem/links")
 def listar_links(request: Request, db: Session = Depends(get_db),
-                 _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                 _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     base = base_url_publica(request)
     links = db.scalars(select(LinkTestagem).order_by(LinkTestagem.criado_em.desc())).all()
     return {"links": [_dump_link(db, l, base) for l in links]}
@@ -314,7 +314,7 @@ class NovoLinkIn(BaseModel):
 
 @router.post("/rh/testagem/links", status_code=201)
 def criar_link(payload: NovoLinkIn, request: Request, db: Session = Depends(get_db),
-               _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+               _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     nome = payload.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
@@ -341,7 +341,7 @@ class EditarLinkIn(BaseModel):
 @router.put("/rh/testagem/links/{link_id}")
 def editar_link(link_id: uuid.UUID, payload: EditarLinkIn, request: Request,
                 db: Session = Depends(get_db),
-                _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     link = db.get(LinkTestagem, link_id)
     if link is None:
         raise HTTPException(status_code=404, detail="link_nao_encontrado")
@@ -364,7 +364,7 @@ def editar_link(link_id: uuid.UUID, payload: EditarLinkIn, request: Request,
 
 @router.post("/rh/testagem/participantes/{pid}/testes/{tipo}/resetar")
 def resetar_teste_testagem(pid: uuid.UUID, tipo: str, db: Session = Depends(get_db),
-                           _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                           _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     """Zera o teste do participante para refazer (resultado antigo na auditoria)."""
     p = db.get(ParticipanteTestagem, pid)
     if p is None:
@@ -387,7 +387,7 @@ def resetar_teste_testagem(pid: uuid.UUID, tipo: str, db: Session = Depends(get_
 
 @router.get("/rh/testagem/links/{link_id}/participantes")
 def participantes_do_link(link_id: uuid.UUID, db: Session = Depends(get_db),
-                          _rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                          _rh: UsuarioRH = Depends(exige("selecao:provas"))) -> dict:
     link = db.get(LinkTestagem, link_id)
     if link is None:
         raise HTTPException(status_code=404, detail="link_nao_encontrado")

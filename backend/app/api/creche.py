@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.auth_rh import requer_rh
+from app.api.auth_rh import exige, requer_rh
 from app.core.db import get_db
 from app.models.beneficio import BeneficioCreche, CriancaCreche, StatusBeneficio
 from app.models.candidato import Candidato, PostoServico
@@ -180,7 +180,8 @@ def _postos_elegiveis(db: Session) -> list[PostoServico]:
 
 
 @router.get("/rh/creche/resumo")
-def resumo(db: Session = Depends(get_db)) -> dict:
+def resumo(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     """Panorama do benefício: total de postos elegíveis e de colaboradores
     ativos alocados neles, quebrado por posto (com o valor de cada contrato)."""
     postos = _postos_elegiveis(db)
@@ -237,7 +238,7 @@ def resumo(db: Session = Depends(get_db)) -> dict:
 
 @router.get("/rh/creche/pendentes-resposta")
 def pendentes_resposta(db: Session = Depends(get_db),
-                       _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                       _rh: UsuarioRH = Depends(exige("creche:ler"))) -> list[dict]:
     """Colaboradores ATIVOS em postos elegíveis que ainda NÃO responderam ao
     levantamento (não têm benefício, ou têm um em `levantamento` que nunca foi
     enviado). É a prova, para os órgãos (CNMP/ANATEL, prazo de 5 dias), de que
@@ -272,7 +273,7 @@ def pendentes_resposta(db: Session = Depends(get_db),
 
 @router.get("/rh/creche/exportar")
 def exportar(db: Session = Depends(get_db),
-             rh: UsuarioRH = Depends(requer_rh)) -> Response:
+             rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
     """Excel do levantamento: um colaborador ativo por linha, em postos que dão
     direito ao benefício, com o valor do reembolso do contrato. É a relação
     nominal que os órgãos pedem para instruir a repactuação."""
@@ -470,7 +471,8 @@ def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
 
 @router.get("/rh/creche/levantamentos")
 def listar_levantamentos(status: str | None = None,
-                         db: Session = Depends(get_db)) -> list[dict]:
+                         db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> list[dict]:
     """Adesões ao benefício. Por padrão as que precisam de ação (em análise);
     aceita filtro por status."""
     q = select(BeneficioCreche).order_by(BeneficioCreche.enviado_em.desc().nullslast())
@@ -482,7 +484,8 @@ def listar_levantamentos(status: str | None = None,
 # ROTA LITERAL antes da paramétrica `/{beneficio_id}`, senão "vigencia" seria
 # lido como UUID e viraria 422 (armadilha registrada no CLAUDE.md).
 @router.get("/rh/creche/vigencia")
-def vigencia(db: Session = Depends(get_db)) -> dict:
+def vigencia(db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     """Quem faz jus AGORA, quem deixou de fazer, e até quando cada um faz.
 
     Pedido do Bruno (2026-08-02): *"com base na data de nascimento da pessoa,
@@ -594,7 +597,8 @@ def vigencia(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}")
-def detalhe_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+def detalhe_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
@@ -619,7 +623,7 @@ _HIST_ROTULO = {
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}/historico")
 def historico_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
-                           _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                           _rh: UsuarioRH = Depends(exige("creche:ler"))) -> list[dict]:
     """Linha do tempo das decisões do benefício (auditoria 2026-07-22): antes o
     RH só via o estado atual e o último revisor. Lê os eventos `creche_*` do
     colaborador, mais recente primeiro, com data/ator/motivo."""
@@ -641,7 +645,7 @@ def historico_levantamento(beneficio_id: uuid.UUID, db: Session = Depends(get_db
 
 @router.get("/rh/creche/tentativas-sem-acesso")
 def tentativas_sem_acesso(db: Session = Depends(get_db),
-                          _rh: UsuarioRH = Depends(requer_rh)) -> list[dict]:
+                          _rh: UsuarioRH = Depends(exige("creche:ler"))) -> list[dict]:
     """Relatório das tentativas de acesso ao creche que NÃO resultaram em código
     enviado — para o RH distinguir "CPF realmente fora da base" de bug/dado
     errado (feedback 2026-07-27: colaboradores reais relataram 'CPF não está na
@@ -709,7 +713,7 @@ class AtivarIn(BaseModel):
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/ativar")
 def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Aprova o benefício. Se aguardar_repactuacao=True, fica em
     'aguardando_repactuacao'; senão vai a 'ativo' e o colaborador recebe as
     orientações da entrega mensal (com o prazo)."""
@@ -805,7 +809,7 @@ class DecisaoCriancaIn(BaseModel):
 @router.post("/rh/creche/levantamentos/{beneficio_id}/criancas/{crianca_id}/decidir")
 def decidir_crianca(beneficio_id: uuid.UUID, crianca_id: uuid.UUID,
                     payload: DecisaoCriancaIn, db: Session = Depends(get_db),
-                    rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                    rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     """Defere ou indefere UMA criança, sem decidir o benefício inteiro.
 
     Feedback 2026-08-02: *"se a pessoa tem mais de um filho e um eu defiro e
@@ -860,7 +864,7 @@ class IndeferirIn(BaseModel):
 @router.post("/rh/creche/levantamentos/{beneficio_id}/indeferir")
 def indeferir_beneficio(beneficio_id: uuid.UUID, payload: IndeferirIn,
                         db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
@@ -886,7 +890,7 @@ class DevolverIn(BaseModel):
 @router.post("/rh/creche/levantamentos/{beneficio_id}/devolver")
 def devolver_beneficio(beneficio_id: uuid.UUID, payload: DevolverIn,
                        db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                       rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Devolve o levantamento ao colaborador para correção (feedback
     2026-07-21). O status volta a `levantamento` — o que reabre a edição no link
     público e permite reenviar — com um motivo VISÍVEL ao colaborador. Limpa o
@@ -934,7 +938,7 @@ class ReenviarLinkIn(BaseModel):
 @router.post("/rh/creche/levantamentos/{beneficio_id}/reenviar-link")
 def reenviar_link_creche(beneficio_id: uuid.UUID, payload: ReenviarLinkIn,
                          db: Session = Depends(get_db),
-                         rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                         rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Destrava o colaborador que não consegue entrar (feedback 2026-07-22): e-mail
     não chegou, código expirou, ou o e-mail na base está errado. O RH pode
     corrigir o e-mail (com auditoria) e reenvia o código 2FA. Sem e-mail, não há
@@ -972,7 +976,7 @@ def _marcar_sem_direito(db: Session, ben: BeneficioCreche, por: str) -> None:
 
 @router.post("/rh/creche/colaboradores/{colaborador_id}/sem-direito")
 def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_db),
-                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                          rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     """O RH registra que o colaborador (elegível por posto) declarou não ter
     dependentes que dão direito — para quem respondeu por fora (WhatsApp,
     pessoalmente). Cria o benefício se ainda não existir. Fica no relatório
@@ -1001,7 +1005,7 @@ def rh_marcar_sem_direito(colaborador_id: uuid.UUID, db: Session = Depends(get_d
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/reabrir")
 def reabrir_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
-                      rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                      rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Devolve o benefício a `levantamento` para o colaborador refazer/completar.
 
     Cobre três casos (feedback 2026-07-22):
@@ -1053,7 +1057,7 @@ class EncerrarIn(BaseModel):
 @router.post("/rh/creche/levantamentos/{beneficio_id}/suspender")
 def suspender_beneficio(beneficio_id: uuid.UUID, payload: EncerrarIn,
                         db: Session = Depends(get_db),
-                        rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                        rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Tira um benefício ATIVO de circulação: suspende (criança passou de 5a11m,
     pendência) ou encerra (desligamento). Para o ciclo mensal e avisa o
     colaborador — sem isso o RH seguia orientado a reembolsar quem já não tem
@@ -1088,7 +1092,7 @@ class PrazoMassaIn(BaseModel):
 
 @router.put("/rh/creche/prazos")
 def editar_prazos(payload: PrazoMassaIn, db: Session = Depends(get_db),
-                  rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                  rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     """Ajusta o dia de entrega mensal de vários benefícios de uma vez (ou de um,
     passando um id só)."""
     dia = max(1, min(28, payload.dia_entrega_mensal))
@@ -1112,7 +1116,7 @@ class CondicoesIn(BaseModel):
 @router.put("/rh/creche/levantamentos/{beneficio_id}/condicoes")
 def editar_condicoes(beneficio_id: uuid.UUID, payload: CondicoesIn,
                      db: Session = Depends(get_db),
-                     rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                     rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Corrige o dia de entrega e o VALOR de um benefício já aprovado.
 
     Pedido do Bruno (2026-08-02): *"para os reembolso creche que já obtiveram a
@@ -1287,7 +1291,7 @@ def _email_indeferimento(db: Session, ben: BeneficioCreche, col: Candidato) -> N
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/dossie")
 def gerar_dossie_endpoint(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
-                          rh: UsuarioRH = Depends(requer_rh)) -> dict:
+                          rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
     """(Re)gera o dossiê do benefício sob demanda."""
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
@@ -1300,7 +1304,8 @@ def gerar_dossie_endpoint(beneficio_id: uuid.UUID, db: Session = Depends(get_db)
 
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}/dossie")
-def baixar_dossie(beneficio_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
+def baixar_dossie(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> Response:
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
@@ -1324,7 +1329,7 @@ _CT_POR_EXT = {
 @router.get("/rh/creche/levantamentos/{beneficio_id}/crianca/{crianca_id}/documento/{tipo}")
 def baixar_doc_crianca(beneficio_id: uuid.UUID, crianca_id: uuid.UUID, tipo: str,
                        db: Session = Depends(get_db),
-                       rh: UsuarioRH = Depends(requer_rh)) -> Response:
+                       rh: UsuarioRH = Depends(exige("creche:ler"))) -> Response:
     """Serve o documento (certidão/guarda) enviado para uma criança, para o RH
     conferir individualmente — aos moldes dos documentos cadastrais."""
     if tipo not in ("certidao", "guarda"):
@@ -1351,7 +1356,8 @@ def baixar_doc_crianca(beneficio_id: uuid.UUID, crianca_id: uuid.UUID, tipo: str
 
 
 @router.get("/rh/creche/levantamentos/{beneficio_id}/documento/{tipo}")
-def previa_documento(beneficio_id: uuid.UUID, tipo: str, db: Session = Depends(get_db)) -> Response:
+def previa_documento(beneficio_id: uuid.UUID, tipo: str, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("creche:ler"))) -> Response:
     """Prévia do requerimento preenchido (tipo=requerimento) ou da declaração
     modelo (tipo=declaracao) no timbrado."""
     from app.services.creche_pdf import (gerar_declaracao_modelo,

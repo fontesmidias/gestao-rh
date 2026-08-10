@@ -95,9 +95,14 @@ jobs:
           # derrubava a tela inteira de Entrevistas no ErrorBoundary, e o
           # `.catch(() => {})` ao lado não protegia: `undefined()` é TypeError
           # SÍNCRONO. Stdlib pura, lê arquivos, roda em segundos.
+          # `test_permissoes_declaradas` (v2.86): reprova rota /rh/* que não
+          # declara permissão. Sem ele, módulo novo nasce aberto a qualquer
+          # pessoa com login — e o defeito não aparece na tela: a rota
+          # funciona, devolve 200, e só se descobre quando alguém acha a URL.
           for t in test_design_system test_upload_multipart test_versao test_nomes \
                    test_migration_insert_cru test_anti_prompt_injection \
-                   test_api_front_existe test_campo_variaveis; do
+                   test_api_front_existe test_campo_variaveis \
+                   test_permissoes_declaradas; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
@@ -224,7 +229,8 @@ jobs:
                    test_entrevista_anexo test_lixeira_restaura \
                    test_talento_cadastro_rh test_entrevista_sem_vaga \
                    test_documento_especifico test_exigencias \
-                   test_uniforme_planilha test_fonte_configuravel; do
+                   test_uniforme_planilha test_fonte_configuravel \
+                   test_permissoes_efeito; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
