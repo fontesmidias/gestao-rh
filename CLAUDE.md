@@ -128,6 +128,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   permissão nova, acrescente ao `PERMISSOES` **antes** de usá-la: o `exige`
   confere a chave na IMPORTAÇÃO do módulo (derruba o boot nomeando o erro, em
   vez de virar 403 em produção que ninguém liga à causa).
+- **As DUAS portas do primeiro usuário precisam do MESMO papel** (v2.86, pego
+  pelo CI): o primeiro admin nasce de `auth_rh.py::criar_primeiro_usuario` (tela)
+  OU de `core/bootstrap.py::criar_admin_inicial` (`.env`, provisionamento
+  automatizado) — as duas dividem o portão "a tabela está vazia". Acertei o
+  papel só na primeira, e o admin do `.env` caiu no default `rh`: instalação
+  provisionada **sem ninguém capaz de gerir papéis**, e sem tela para corrigir,
+  porque `config:usuarios` é justamente o que falta. Localmente passou (meu banco
+  não tinha o admin do `.env`); no CI o `test_email_templates` levou 403 em
+  `config:escrever`. Ao mexer no papel/atributo do primeiro usuário, confira os
+  DOIS pontos — e note que **usuário criado em teste também precisa de `papel`**:
+  `dependency_overrides[requer_rh]` continua alcançando o `exige` (que depende
+  dele), mas o objeto devolvido sem papel faz `permissoes_do_usuario` devolver
+  conjunto vazio e negar tudo. O `preparar_ambiente_local.py` corrige o papel
+  inclusive de usuário ANTIGO, senão um banco local pré-v2.86 responde 403 em
+  metade das telas e o sintoma parece defeito de layout (v2.60).
 - **Papel de fábrica é PADRÃO, não estado — o que o superadmin editou fica**
   (v2.86): `PAPEIS_PADRAO` alimenta só a semeadura; a lista escolhida mora em
   `Papel.permissoes`. Módulo novo **não** concede acesso sozinho a papel que

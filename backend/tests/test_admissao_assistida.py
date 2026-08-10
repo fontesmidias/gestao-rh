@@ -55,7 +55,11 @@ from app.services.fichas import gerar_ficha_cadastro  # noqa: E402
 
 FALHAS = []
 OPERADOR = "rh.maria@exemplo.com.br"
-_RH = UsuarioRH(email=OPERADOR, nome="Maria RH", senha_hash="x")
+# `papel` é obrigatório desde a v2.86: o override alcança o `exige`
+# (que depende de `requer_rh`), mas sem papel resolvido
+# `permissoes_do_usuario` devolve conjunto vazio e NEGA tudo.
+_RH = UsuarioRH(email=OPERADOR, nome="Maria RH", senha_hash="x",
+                papel="superadmin")
 app.dependency_overrides[requer_rh] = lambda: _RH
 cli = TestClient(app)
 db = SessionLocal()

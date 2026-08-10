@@ -11,6 +11,28 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.86.1] — 2026-08-10 — O admin do .env nascia sem poder gerir papéis
+
+O CI pegou o que a máquina de quem desenvolve escondeu. O primeiro
+administrador nasce por **duas portas** que dividem o mesmo portão ("a tabela
+está vazia"): a tela de primeiro acesso e o `.env` (provisionamento
+automatizado, `core/bootstrap.py`). A v2.86.0 acertou o papel só na primeira, e
+a segunda caía no default `rh` — que não tem `config:escrever` nem
+`config:usuarios`.
+
+O resultado seria uma instalação provisionada **sem ninguém capaz de gerir
+papéis**, e sem tela para corrigir, porque `config:usuarios` é justamente o que
+falta. Localmente passou (o banco de desenvolvimento não tinha o admin do
+`.env`); no CI, o `test_email_templates` levou 403.
+
+Junto: o `preparar_ambiente_local.py` passou a corrigir o papel inclusive de
+usuário ANTIGO — banco local anterior à v2.86 responderia 403 em metade das
+telas, e o sintoma apareceria como defeito de layout (a confusão da v2.60).
+Quatro testes que criam `UsuarioRH` ganharam `papel`: os que usam
+`dependency_overrides[requer_rh]` seguem valendo (o `exige` depende dele), mas
+o objeto sem papel faz `permissoes_do_usuario` devolver conjunto vazio e negar
+tudo.
+
 ## [2.86.0] — 2026-08-10 — Nem todo mundo pode tudo
 
 Até aqui o painel respondia UMA pergunta na porta: *"está logado?"*. O
