@@ -11,6 +11,52 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.89.0] — 2026-08-10 — A data do papel é a do ato, não a da impressão
+
+Primeira parte do item que faltava do P1: **a data dos documentos**.
+
+Ao abrir o código, o diagnóstico mudou o escopo. Os geradores já resolviam a
+data como `assinatura.assinado_em if assinado else date.today()` — ou seja,
+**documento assinado já carregava a data do ato**, congelada. O `date.today()`
+só valia para não assinados, e era recalculado a cada download: quem gerasse o
+papel na quarta veria a data de quarta, ainda que a integração fosse de segunda.
+
+Agora `Candidato.data_documentos` define a data que os documentos **não
+assinados** daquela pessoa carimbam. Nula = o dia da geração, o comportamento
+anterior. O campo fica na ficha, ao lado do informativo de integração — é ali
+que se decide o que a pessoa vai assinar.
+
+**A regra virou uma função só** (`fichas.data_do_documento`), com precedência
+explícita: assinatura > escolha do RH > hoje. Eram **sete cópias** do mesmo
+`assinado if ... else date.today()` espalhadas pelos geradores; bastaria uma
+passar despercebida para o mesmo candidato ter dois documentos com datas
+diferentes no mesmo dossiê, sem nada na tela denunciando.
+
+**Documento assinado não muda, e não tem como mudar**: o `hash_sha256` do ato é
+calculado sobre o PDF, e todo manifesto emitido aponta para ele. Se a data
+configurada vazasse para um assinado, o PDF deixaria de se reproduzir e a
+verificação passaria a acusar divergência — na peça que se usa em disputa
+trabalhista, sem nada na tela denunciando. A resposta da rota **diz quantos já
+estão assinados**, para o RH não achar que a correção alcançou o dossiê inteiro.
+
+Data futura é recusada (422): quase sempre é o ano digitado errado, e documento
+datado do futuro é papel que não se sustenta.
+
+**Dois defeitos pegos por medir, não por ler o código**: (1) a mensagem da tela
+mostrava **02/08 para uma data salva como 03/08** — `new Date("2026-08-03")` é
+lido como UTC meia-noite e, convertido para São Paulo (UTC-3), volta um dia; o
+banco estava certo o tempo todo. Data PURA se converte por texto (`isoParaBR`),
+nunca por `Date`. (2) A primeira versão do teste procurava a data em `pages[0]`
+e acusou "não encontrada" num PDF **correto** — ela fica na página 3.
+
+Validado por duas mutações: tirar a precedência da assinatura e ignorar a data
+escolhida. Ambas reprovam nomeando a consequência.
+
+Fica para a próxima leva a segunda parte do item: editar os CAMPOS do corpo dos
+documentos. Decisão do Bruno para os 12 que não são texto corrido (formulários e
+híbridos): **só data e dados; o layout fica** — formulário oficial tem campos
+posicionados, tabelas e loops, e virá-lo texto editável destruiria o papel.
+
 ## [2.88.0] — 2026-08-10 — Dá para voltar
 
 Três feedbacks de campo do dia 10/08, mais a pendência que ficou da v2.86.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmtData, fmtDataHora } from '../fmt.js'
+import { fmtData, fmtDataHora, isoParaBR } from '../fmt.js'
 import { rh as api } from '../api.js'
 import { statusInfo } from '../status.js'
 import { DICAS } from '../tooltips.js'
@@ -863,6 +863,69 @@ function DocumentosEspecificos({ id, setMsg }) {
   )
 }
 
+// Data que os documentos NÃO assinados desta pessoa carimbam (v2.89, feedback
+// do Bruno: o papel costuma sair dias depois do ato — a integração aconteceu
+// segunda e o documento é impresso na quarta, saindo com a data da impressão).
+//
+// Mora ao lado do informativo porque é ali que se decide o que a pessoa vai
+// assinar; e a mensagem diz quantos documentos JÁ estão assinados, porque eles
+// não mudam — silêncio faria parecer que a correção alcançou o dossiê inteiro.
+function DataDosDocumentos({ id, valorInicial, setMsg }) {
+  const [data, setData] = useState(valorInicial || '')
+  const [salvando, setSalvando] = useState(false)
+
+  const salvar = async (nova) => {
+    setSalvando(true)
+    try {
+      const r = await api.definirDataDocumentos(id, nova)
+      setData(r.data || '')
+      setMsg?.({
+        tipo: 'ok',
+        texto: r.data
+          // `isoParaBR`, NÃO `fmtData`: esta é uma data PURA (aaaa-mm-dd, sem
+          // hora), e `new Date("2026-08-03")` é lido como UTC meia-noite —
+          // convertido para São Paulo (UTC-3) vira 02/08 às 21h. O banco
+          // guardava 03/08 e a tela dizia 02/08. Converter por TEXTO não passa
+          // por fuso nenhum.
+          ? `Documentos passam a sair com a data ${isoParaBR(r.data)}.`
+            + (r.assinados_inalterados
+               ? ` Os ${r.assinados_inalterados} já assinados mantêm a data em que foram assinados.`
+               : '')
+          : 'Voltou ao padrão: os documentos saem com a data do dia em que forem gerados.',
+      })
+    } catch (e) {
+      setMsg?.({
+        tipo: 'erro',
+        texto: e.detail === 'data_futura'
+          ? 'A data não pode estar no futuro — confira o ano digitado.'
+          : `Não foi possível salvar (${e.detail || e.message}).`,
+      })
+    } finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="campo">
+      <span className="rotulo">Data dos documentos</span>
+      <div className="rh-lote" style={{ margin: 0 }}>
+        <InputData valor={data} onChange={setData} />
+        <button className="btn-secundario btn-mini" disabled={salvando}
+                onClick={() => salvar(data)}>
+          {salvando ? 'Salvando…' : 'Salvar data'}</button>
+        {data && (
+          <button className="btn-link" disabled={salvando}
+                  onClick={() => { setData(''); salvar(null) }}>usar a data de hoje</button>
+        )}
+      </div>
+      <small className="explica">
+        Em branco, cada documento sai com a data do dia em que for gerado. Use
+        quando o papel for emitido depois do ato — a integração de segunda
+        impressa na quarta. <strong>Documento já assinado não muda</strong>:
+        ele carrega a data em que foi assinado.
+      </small>
+    </div>
+  )
+}
+
 function PainelInformativo({ id, setMsg }) {
   const [itens, setItens] = useState(null)
   const [liberando, setLiberando] = useState(false)
@@ -1118,6 +1181,7 @@ export default function Detalhe({ id, aoVoltar }) {
       {/* Informativo de integração: ação (liberar), não consulta — fica junto
           do trabalho. Some quando o candidato não tem informativo. */}
       <PainelInformativo id={id} setMsg={setMsg} />
+      <DataDosDocumentos id={id} valorInicial={dados.data_documentos} setMsg={setMsg} />
 
       {/* Documento específico avulso: ação, fica junto do trabalho (regra da
           v2.47 — trabalho e consulta em faixas separadas). */}

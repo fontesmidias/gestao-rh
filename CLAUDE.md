@@ -107,6 +107,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Data PURA (`aaaa-mm-dd`) não passa por `new Date()` — volta um dia** (v2.89):
+  a tela dizia **02/08** para uma data salva como **03/08**, e o banco estava
+  certo o tempo todo. `new Date("2026-08-03")` é lido como UTC meia-noite e,
+  convertido para São Paulo (UTC-3), vira 02/08 às 21h — que é o que o `fmtData`
+  faz. Para data sem hora use `isoParaBR` (converte por TEXTO). O `fmtData`
+  continua certo para `datetime` com fuso; o erro é aplicá-lo a data pura.
+  Sintoma que engana: parece defeito de gravação, e manda procurar no backend.
+- **A data do documento é UMA função, e a assinatura tem precedência** (v2.89,
+  `fichas.data_do_documento`): assinatura > escolha do RH (`data_documentos`) >
+  hoje. Eram SETE cópias de `assinado if ... else date.today()` nos geradores —
+  bastaria uma passar despercebida para o mesmo candidato ter dois documentos
+  com datas diferentes no mesmo dossiê, sem nada na tela denunciando. ⚠️ **Nada
+  passa por cima do assinado**: o `hash_sha256` do ato é calculado sobre o PDF
+  (`api/assinaturas.py`) e todo manifesto emitido aponta para ele; data
+  configurada vazando para um assinado faria o PDF deixar de se reproduzir e a
+  verificação acusar divergência — na peça usada em disputa trabalhista. Ao
+  acrescentar gerador novo, chame a função em vez de repetir o `else`.
+- **PDF se confere em TODAS as páginas** (v2.89, corolário da v2.55): o teste
+  procurou a data em `pages[0]` e acusou "não encontrada" num PDF **correto** —
+  ela fica na página 3 do acordo. Extraia o texto de todas as páginas antes de
+  afirmar que algo não está lá (é a v2.56 numa variação: lá a quebra de linha
+  escondia a frase, aqui a paginação).
 - **`min-width: 0` NÃO quebra texto enquanto houver `white-space: nowrap`**
   (v2.88, o rótulo que saiu por cima da coluna vizinha): ao pôr a lista de
   exigências em grade, "Certidão de nascimento do dependente" mediu **303px numa

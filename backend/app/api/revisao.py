@@ -353,6 +353,8 @@ def detalhe_candidato(candidato_id: uuid.UUID, db: Session = Depends(get_db),
         "data_admissao": cand.data_admissao,
         "data_desligamento": cand.data_desligamento,
         "dossie_gerado_em": cand.dossie_gerado_em,
+        # Data que os documentos NÃO assinados carimbam; nula = o dia da geração.
+        "data_documentos": cand.data_documentos,
         "posto_servico_id": cand.posto_servico_id,
         "cargo_funcao": cand.cargo_funcao,
         "salario_base": cand.salario_base,

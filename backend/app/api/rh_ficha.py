@@ -12,11 +12,11 @@ aparece voltam para o candidato assinar — a operação não para).
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
@@ -391,6 +391,54 @@ def inserir_arquivo_rh(
     db.commit()
     return _slot_out(slot) | {"origem_envio": slot.origem_envio,
                               "origem_envio_obs": slot.origem_envio_obs}
+
+
+class DataDocumentosIn(BaseModel):
+    # `None` volta ao padrão (o dia da geração). Vazio TEM que ser um valor
+    # válido, senão não há como desfazer o que se configurou — a lição da
+    # v2.68, onde `EmailStr` recusava a string vazia e deixava o RH preso.
+    data: date | None = None
+
+
+@router.put("/rh/candidatos/{candidato_id}/data-documentos")
+def definir_data_documentos(candidato_id: uuid.UUID, payload: DataDocumentosIn,
+                            db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
+    """Data que os documentos NÃO ASSINADOS desta pessoa vão carimbar (v2.89).
+
+    Existe porque o papel costuma sair dias depois do ato: a integração
+    aconteceu segunda e o documento é impresso na quarta, saindo com a data da
+    impressão. Nulo = o dia da geração, que era o comportamento único.
+
+    ⚠️ **Não toca em documento assinado** — nem tem como: `data_do_documento`
+    dá precedência ao `assinado_em`, e o PDF assinado está gravado no MinIO com
+    o hash do ato. A resposta DIZ quantos já estão assinados, para o RH não
+    achar que mudou algo que não mudou: silêncio aqui faria parecer que a
+    correção alcançou o dossiê inteiro.
+    """
+    candidato = db.get(Candidato, candidato_id)
+    if candidato is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+
+    # Data futura é quase sempre engano de digitação (2027 no lugar de 2026), e
+    # um documento datado do futuro é papel que não se sustenta. Recusar aqui é
+    # mais barato que descobrir depois de impresso e assinado.
+    if payload.data and payload.data > date.today():
+        raise HTTPException(status_code=422, detail="data_futura")
+
+    anterior = candidato.data_documentos
+    candidato.data_documentos = payload.data
+    assinados = db.scalar(select(func.count()).select_from(Assinatura).where(
+        Assinatura.candidato_id == candidato_id,
+        Assinatura.assinado_em.is_not(None),
+        Assinatura.invalidada_em.is_(None))) or 0
+
+    registrar(db, "data_documentos_definida", ator="rh", ator_detalhe=rh.email,
+              candidato_id=candidato_id,
+              detalhe={"de": str(anterior) if anterior else None,
+                       "para": str(payload.data) if payload.data else None})
+    db.commit()
+    return {"data": candidato.data_documentos, "assinados_inalterados": assinados}
 
 
 @router.get("/rh/candidatos/{candidato_id}/informativos")
