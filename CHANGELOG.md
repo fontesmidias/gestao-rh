@@ -11,6 +11,51 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.91.0] — 2026-08-11 — Carteira de Processos: quem responde quando alguém sai
+
+O módulo que o Bruno pediu: *"caso haja algum funcionário substituído, indo
+embora do RH ou qualquer outra coisa, tenha uma organização de processos"*.
+
+A carteira dele (31 processos em 9 fases, dois cenários de efetivo) entra pela
+**importação da planilha RACI**, com prévia e confirmação — nada de digitar de
+novo, e a planilha continua servindo de referência. Reimportar ATUALIZA: a
+carteira é revisada por trimestre, e importação que duplica a cada revisão
+inutilizaria o módulo em três meses.
+
+**A titularidade é do CARGO, não da pessoa** — decisão do Bruno, e o próprio
+documento dele já dizia: *"a titularidade dos processos acompanha a função, não
+a pessoa"*. É isso que faz o módulo responder à pergunta que a planilha não
+responde: **ao esvaziar quem ocupa uma função, os processos dela passam na hora
+para o próximo da cadeia**, sem ninguém redistribuir nada. A tela mostra titular
+e "responde hoje" lado a lado, com a marca "assumiu" quando são diferentes.
+
+O que a planilha não conseguia dizer, e agora aparece sozinho:
+
+- **Processo sem dono** — ninguém da cadeia está ocupado. É o defeito que a
+  carteira existe para impedir, e é silencioso: processo órfão não reclama.
+- **Cadeia curta** — uma pessoa só. Pesa mais nos ritmos críticos: a CAT tem
+  prazo legal contado em HORAS.
+- **Carga por função**, com titularidade e apoio SEPARADOS: são naturezas
+  diferentes (quem é dono responde por prazo; quem apoia entra quando chamado),
+  e somar num número só esconderia o que a Coordenação usa para redistribuir.
+
+**Dois casos da planilha real que o código trata explicitamente**: os processos
+9.1 e 9.2 têm "Escala diária (rodízio)" como titular — não são órfãos, giram
+entre a equipe, e acusá-los seria alarme falso (alarme falso ensina a ignorar o
+alarme). E o 9.3 (Indicadores) existe SÓ no cenário 2, porque nasce com o
+Analista Jr: a tela diz "previsto para o outro cenário", que é a resposta de
+dimensionamento, não um erro.
+
+⚠️ **Defeito pego contra a planilha real**: a coluna do titular se chama
+"Titular (Dono)", e o parser a procurava por igualdade exata — ela caía fora, a
+cadeia começava no 2º apoio e todo processo aparecia com o titular ERRADO, sem
+erro nenhum. Só apareceu ao conferir que o 1.1 deveria ser da Fátima. Casamento
+por PREFIXO resolveu.
+
+Validado por mutação contra o arquivo real: a cadeia que para no titular e o
+rodízio voltando a ser acusado de órfão — ambas reprovam nomeando a
+consequência.
+
 ## [2.90.0] — 2026-08-10 — Os textos dos documentos passam a ser da empresa
 
 Segunda parte do item do P1: *"tornar os demais documentos editáveis, conforme o
