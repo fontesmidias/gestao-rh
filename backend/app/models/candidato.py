@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -273,6 +273,18 @@ class Candidato(Base):
     # Todas as demais colunas do Tirvu (52 no total) que não viram campo fixo
     # entram aqui como {rótulo legível: valor}. É o CRUD de colunas dinâmicas.
     dados_tirvu: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Data que os documentos NÃO ASSINADOS desta pessoa devem carimbar (v2.89).
+    # Nula = o dia em que o PDF é gerado, que era o comportamento único.
+    #
+    # Existe porque o papel costuma sair DIAS depois do ato: a integração
+    # aconteceu segunda e o documento é impresso na quarta, saindo com a data
+    # da impressão em vez da data em que a coisa aconteceu.
+    #
+    # ⚠️ NÃO afeta documento assinado. Os geradores já resolvem a data como
+    # `assinatura.assinado_em if assinado else <padrão>` — o assinado carrega a
+    # data do ato, congelada, e é sobre AQUELE PDF que o hash foi calculado.
+    # Este campo só troca o `<padrão>`; ver `fichas.py::data_do_documento`.
+    data_documentos: Mapped[date | None] = mapped_column(Date, nullable=True)
     nome_completo: Mapped[str] = mapped_column(String(200))
     # E-mail e celular são opcionais no convite (o RH pode só copiar o link e
     # mandar por WhatsApp); o candidato completa na ficha — e o e-mail passa a

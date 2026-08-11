@@ -637,6 +637,12 @@ export const rh = {
   editarFicha: (id, secao, dados, motivo) =>
     req(`/rh/candidatos/${id}/ficha/${secao}`,
         { method: 'PUT', headers: authRH(), body: JSON.stringify({ dados, motivo }) }),
+  // Data que os documentos NÃO assinados desta pessoa carimbam (v2.89).
+  // `data` nula volta ao padrão (o dia da geração) — vazio precisa ser valor
+  // válido, senão não há como desfazer o que se configurou.
+  definirDataDocumentos: (cid, data) =>
+    req(`/rh/candidatos/${cid}/data-documentos`, { method: 'PUT', headers: authRH(),
+                                                  body: JSON.stringify({ data: data || null }) }),
   informativos: (cid) => req(`/rh/candidatos/${cid}/informativos`, { headers: authRH() }),
   liberarInformativo: (cid) =>
     req(`/rh/candidatos/${cid}/liberar-informativo`, { method: 'POST', headers: authRH() }),

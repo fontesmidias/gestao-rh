@@ -730,13 +730,39 @@ def _data_extenso(d) -> str:
     return f"Brasília, DF, {d.day:02d} de {_MESES_PT[d.month - 1]} de {d.year}."
 
 
+def data_do_documento(candidato: Candidato | None,
+                      assinatura: Assinatura | None = None) -> date:
+    """Que data este documento carimba (v2.89) — a regra, num lugar só.
+
+    A precedência é, do mais forte para o mais fraco:
+
+    1. **A data da ASSINATURA**, quando o documento está assinado. É o ato
+       real, e é sobre AQUELE PDF que o `hash_sha256` foi calculado
+       (`api/assinaturas.py`) — mudar a data de um documento assinado faria o
+       manifesto emitido apontar para um arquivo que não se reproduz mais,
+       destruindo a prova. Nenhuma configuração passa por cima disto.
+    2. **A data escolhida pelo RH** (`Candidato.data_documentos`), quando há.
+       Existe porque o papel costuma sair DIAS depois do ato: a integração
+       aconteceu segunda e o documento é impresso na quarta.
+    3. **Hoje** — o comportamento único até aqui.
+
+    A regra vive aqui, e não repetida em cada gerador, porque eram sete cópias
+    de `assinado if ... else date.today()`: bastaria uma passar despercebida
+    para o mesmo candidato ter dois documentos com datas diferentes no mesmo
+    dossiê, sem nada na tela denunciando.
+    """
+    if assinatura is not None and assinatura.assinado_em:
+        return assinatura.assinado_em.date()
+    escolhida = getattr(candidato, "data_documentos", None) if candidato else None
+    return escolhida or date.today()
+
+
 def gerar_oficio_cartao_cidadao(db: Session, candidato: Candidato,
                                 assinatura: Assinatura | None = None,
                                 base_url: str | None = None) -> bytes:
     contrato, cargo = _dados_posto(db, candidato)
     d = db.get(DocumentosIdentificacao, candidato.id)
-    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
-              else date.today())
+    quando = data_do_documento(candidato, assinatura)
 
     pdf = _OficioPDF("Ofício - Cartão Cidadão")
     pdf.set_font("helvetica", "", 10.5)
@@ -802,8 +828,7 @@ def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
                                   base_url: str | None = None) -> bytes:
     contrato, _cargo = _dados_posto(db, candidato)
     d = db.get(DocumentosIdentificacao, candidato.id)
-    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
-              else date.today())
+    quando = data_do_documento(candidato, assinatura)
 
     pdf = _OficioPDF("Informações ao Trabalhador")
     pdf.set_font("helvetica", "B", 12)
@@ -862,8 +887,7 @@ def gerar_termo_lgpd_infraero(db: Session, candidato: Candidato,
     """Anexo 04 — Termo de consentimento LGPD do sistema de credenciamento
     (INFRAERO). Texto fiel ao modelo oficial, com nome/CPF preenchidos."""
     d = db.get(DocumentosIdentificacao, candidato.id)
-    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
-              else date.today())
+    quando = data_do_documento(candidato, assinatura)
 
     pdf = _OficioPDF("Termo de Consentimento - LGPD")
     pdf.ln(4)
@@ -1036,8 +1060,7 @@ def gerar_acordo_confidencialidade(db: Session, candidato: Candidato,
     uniforme no papel timbrado e gramática revisada."""
     d = db.get(DocumentosIdentificacao, candidato.id)
     p = db.get(DadosPessoais, candidato.id)
-    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
-              else date.today())
+    quando = data_do_documento(candidato, assinatura)
 
     cpf_txt = (f"{d.cpf[:3]}.{d.cpf[3:6]}.{d.cpf[6:9]}-{d.cpf[9:]}"
                if d and d.cpf and len(d.cpf) == 11 else "___.___.___-__")
@@ -1155,7 +1178,8 @@ def _contexto_modelo(db: Session, candidato: Candidato | None) -> dict:
     aplicar_marca(db)  # a variável {{empresa}} e o timbrado usam a marca atual
     if candidato is None:
         return {k: f"{{{{{k}}}}}" for k in VARIAVEIS_MODELO} | {
-            "data": date.today().strftime("%d/%m/%Y"), "empresa": EMPRESA_RAZAO}
+            "data": data_do_documento(candidato).strftime("%d/%m/%Y"),
+            "empresa": EMPRESA_RAZAO}
     contrato, cargo = _dados_posto(db, candidato)
     posto = db.get(PostoServico, candidato.posto_servico_id) \
         if candidato.posto_servico_id else None
@@ -1169,7 +1193,7 @@ def _contexto_modelo(db: Session, candidato: Candidato | None) -> dict:
         "posto": posto.nome if posto else "-",
         "contrato": contrato,
         "salario": candidato.salario_base or "-",
-        "data": date.today().strftime("%d/%m/%Y"),
+        "data": data_do_documento(candidato).strftime("%d/%m/%Y"),
         "empresa": EMPRESA_RAZAO,
     }
 
@@ -1574,8 +1598,7 @@ def gerar_oficio_apresentacao_presidencia(db: Session, candidato: Candidato,
     # pontinhos é o último recurso — quem preenchia no formato atual caía nela
     # com o endereço inteiro guardado no banco ao lado.
     endereco = endereco_completo(e) or "................................"
-    quando = (assinatura.assinado_em.date() if assinatura and assinatura.assinado_em
-              else date.today())
+    quando = data_do_documento(candidato, assinatura)
 
     pdf = _OficioPDF("Ofício de Apresentação — Presidência da República")
     pdf.set_font("helvetica", "", 10.5)
