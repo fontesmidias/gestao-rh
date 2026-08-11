@@ -11,6 +11,41 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.89.1] — 2026-08-10 — O cadastro de talento que recusava sem dizer por quê
+
+Defeito de campo, com o log em mãos: não dava para cadastrar talento à mão.
+`StringDataRightTruncation` numa `varchar(60)` com **106 caracteres** —
+"Técnico em Secretariado / Secretário Executivo; Inglês avançado (cursando,
+Centro de Idiomas de Ceilândia)".
+
+**Eram dois defeitos, e o segundo é o pior.**
+
+A coluna `talento.escolaridade` nasceu dimensionada para o formulário PÚBLICO,
+onde a escolaridade sai de uma lista curta ("Ensino médio completo"). No
+cadastro pelo RH o campo é texto livre, e o real não cabia. Passou para 300.
+**Coluna dimensionada para o caminho de entrada mais estreito quebra no dia em
+que aparece o outro** — e neste sistema quase todo dado tem dois caminhos
+(público × RH, wizard × importação).
+
+Mas o que fez a pessoa perder a tarde foi o resto: o erro virava **HTTP 500 em
+texto puro**. A tela dizia "não foi possível" e o RH refazia o cadastro inteiro
+**sem saber qual campo encurtar** — de novo a família do "não salva e não diz o
+motivo" (v1.96). Agora é 422 dizendo o campo, o limite e o tamanho recebido, com
+os limites lidos do PRÓPRIO modelo (`Talento.__table__`): repetir os números à
+mão faria a mensagem envelhecer torto na primeira migration que alargasse uma
+coluna, e "máximo 60" onde já cabem 300 é pior que não dizer nada.
+
+O `except DataError` vem **antes** de `registrar()`, que faz `flush()` e deixaria
+a sessão em rollback pendente — o erro real ficaria escondido atrás de um
+`PendingRollbackError` (a armadilha que o CLAUDE.md já registra).
+
+O `downgrade` da migration **recusa** voltar a 60 se houver texto maior, em vez
+de truncar em silêncio: dado de gente real não se perde num rollback.
+
+Coberto por `test_talento_campos_longos.py`, com o texto REAL que falhou, e
+validado por mutação (tirar o `except` faz o teste reprovar dizendo que voltou
+o 500).
+
 ## [2.89.0] — 2026-08-10 — A data do papel é a do ato, não a da impressão
 
 Primeira parte do item que faltava do P1: **a data dos documentos**.
