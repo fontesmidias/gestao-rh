@@ -234,6 +234,12 @@ def permissoes_do_usuario(db: Session, usuario: UsuarioRH) -> frozenset[str]:
 
     registro = db.scalar(select(Papel).where(Papel.chave == papel))
     if registro is not None:
+        # Papel INATIVO não concede nada (v2.87). A checagem mora AQUI, e não na
+        # tela, porque desativar tem que cortar o acesso de fato — esconder o
+        # botão deixaria a rota respondendo 200 para quem souber a URL, que é a
+        # diferença entre controle e aparência de controle.
+        if not registro.ativo:
+            return frozenset()
         return frozenset(registro.permissoes or ())
     return cat.permissoes_padrao(papel)
 

@@ -26,6 +26,8 @@ os.environ.setdefault("DATABASE_URL",
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from sqlalchemy import select  # noqa: E402
+
 from app.core.db import SessionLocal  # noqa: E402
 from app.core.security import hash_senha  # noqa: E402
 from app.main import app  # noqa: E402
@@ -155,6 +157,68 @@ def main() -> int:
                 falhas.append(
                     f"editar o papel superadmin deveria dar 409, veio {e.status_code}")
 
+        # --- Duplicar e ativar/desativar (v2.87) ---------------------------
+        # 11. A cópia nasce INATIVA e com as mesmas permissões. Nascer ativa
+        #     faria um papel de acesso passar a valer no instante em que é
+        #     criado, antes de alguém revisar o que ele concede.
+        base = cliente.get("/api/rh/papeis", headers=cab_su).json()
+        rh_papel = next(p for p in base if p["chave"] == "rh")
+        r = cliente.post(f"/api/rh/papeis/{rh_papel['id']}/duplicar", headers=cab_su)
+        if r.status_code != 201:
+            falhas.append(f"duplicar papel deveria dar 201, veio {r.status_code}")
+        else:
+            copia = r.json()
+            if copia["ativo"]:
+                falhas.append("a cópia do papel nasceu ATIVA — deveria nascer "
+                              "inativa, para ser revisada antes de valer.")
+            if sorted(copia["permissoes"]) != sorted(rh_papel["permissoes"]):
+                falhas.append("a cópia não herdou as permissões do original.")
+
+            # 12. Papel INATIVO não concede nada — e a checagem tem que estar no
+            #     servidor, não só escondendo o botão na tela.
+            email_c, senha_c = _criar(db, copia["chave"])
+            cab_c = {"Authorization": f"Bearer {_token(email_c, senha_c)}"}
+            r = cliente.get("/api/rh/colaboradores", headers=cab_c)
+            if r.status_code != 403:
+                falhas.append(
+                    f"papel inativo deveria negar (403), veio {r.status_code} — "
+                    "desativar não está cortando o acesso de fato.")
+
+            # 13. Desativar papel EM USO recusa e devolve os destinos, para a
+            #     escolha acontecer na mesma tela do bloqueio.
+            cliente.put(f"/api/rh/papeis/{copia['id']}/ativo", headers=cab_su,
+                        json={"ativo": True})
+            r = cliente.put(f"/api/rh/papeis/{copia['id']}/ativo", headers=cab_su,
+                            json={"ativo": False})
+            det = (r.json() or {}).get("detail") or {}
+            if r.status_code != 409 or not det.get("destinos"):
+                falhas.append(
+                    f"desativar papel em uso deveria dar 409 COM destinos, veio "
+                    f"{r.status_code}/{det!r} — sem os destinos, quem opera fica "
+                    "com o bloqueio e sem a saída.")
+
+            # 14. Com destino, move as pessoas E desativa no mesmo ato — e a
+            #     asserção é sobre o ESTADO, não só sobre o status (v2.84).
+            r = cliente.put(f"/api/rh/papeis/{copia['id']}/ativo", headers=cab_su,
+                            json={"ativo": False, "migrar_para": "rh"})
+            if r.status_code != 200:
+                falhas.append(f"desativar com migração falhou: {r.status_code}")
+            else:
+                db.expire_all()
+                movido = db.scalar(select(UsuarioRH).where(UsuarioRH.email == email_c))
+                if movido is None or movido.papel != "rh":
+                    falhas.append(
+                        f"a pessoa não foi migrada: papel={getattr(movido, 'papel', None)!r} "
+                        "— desativar teria cortado o acesso dela em silêncio.")
+
+        # 15. O superadmin não se desativa, pelo mesmo motivo de não se editar.
+        r = cliente.put(f"/api/rh/papeis/{ids['superadmin']}/ativo", headers=cab_su,
+                        json={"ativo": False})
+        if r.status_code != 409:
+            falhas.append(
+                f"desativar o superadmin deveria dar 409, veio {r.status_code} — "
+                "sem ele, ninguém gere papéis e não há tela para desfazer.")
+
         # 10. Papel inexistente é recusado na ATRIBUIÇÃO: gravá-lo deixaria a
         #     pessoa sem acesso nenhum, com 403 em tudo e nada explicando.
         r = cliente.post("/api/rh/usuarios", headers=cab_su, json={
@@ -171,8 +235,8 @@ def main() -> int:
         for f in falhas:
             print("  •", f)
         return 1
-    print("OK — 10 asserções: a permissão nega, libera, nomeia o que falta,\n"
-          "     e as travas de administração de papéis seguram.")
+    print("OK — 15 asserções: a permissão nega, libera, nomeia o que falta,\n"
+          "     e as travas de duplicar/ativar/migrar seguram.")
     return 0
 
 

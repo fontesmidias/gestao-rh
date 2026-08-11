@@ -20,6 +20,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy.sql import expression
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,5 +41,15 @@ class Papel(Base):
     # Papel de fábrica não se apaga: a instalação ficaria sem "superadmin" e sem
     # como voltar atrás. O superadmin ainda edita as permissões dos demais.
     de_fabrica: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Papel INATIVO existe, aparece na tela e não concede NADA (v2.87). São dois
+    # usos distintos: a cópia recém-criada, que ainda está sendo ajustada e não
+    # deve valer no instante em que nasce; e o papel aposentado, que se guarda em
+    # vez de excluir — excluir apagaria o registro de que ele existiu, e a
+    # auditoria antiga passaria a citar um papel que ninguém mais encontra.
+    #
+    # ⚠️ A checagem de `ativo` mora em `permissoes_do_usuario`, NÃO na tela:
+    # desativar precisa cortar o acesso de fato, não só esconder o botão.
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True,
+                                        server_default=expression.true())
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True),
                                                 server_default=func.now())

@@ -107,6 +107,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **DUPLICAR é o caminho normal de criar — e a cópia nasce SEM VALER** (v2.87,
+  padrão cravado pelo Bruno: *"a possibilidade de duplicar um existente e, a
+  partir dessa duplicata, editarmos o que tiver que editar para daí sim
+  ativarmos"*). Já existia em provas, questões, roteiros e documentos do
+  sistema; virou regra: **todo cadastro reusável ganha `POST .../duplicar`**.
+  Quem começa numa tela em branco erra por excesso ou falta e só descobre no
+  uso; partir de algo que funciona é mais seguro. ⚠️ **A cópia nasce inativa /
+  em rascunho** — o `duplicar` de provas herda `ativa=p.ativa` e por isso já
+  vale no instante em que é criada, o que num PAPEL seria conceder acesso antes
+  de alguém revisar. Corolários pagos na v2.87: a cópia do superadmin precisa
+  materializar o catálogo INTEIRO (ele guarda lista vazia porque `pode()` não a
+  consulta — copiar o campo cru daria um papel que não concede NADA com o
+  rótulo dizendo o contrário); a chave se resolve por sufixo incremental
+  (`rh-copia`, `rh-copia-2`) porque `chave` é `unique`; e duplicar deve **abrir
+  a cópia para edição na hora**, já que quem clica quer ajustar algo.
+- **Desativar em massa RECUSA oferecendo a saída — nunca só o bloqueio** (v2.87,
+  `papeis.py::alternar_ativo`): papel inativo não concede nada, então desativar
+  um papel EM USO cortaria o acesso de várias pessoas de uma vez e em silêncio
+  (o sintoma seria "403 em tudo", longe da causa). O 409 vem com
+  `destinos` — os papéis ativos e o que cada um concede — e a rota aceita
+  `migrar_para`, movendo as pessoas e desativando **no mesmo ato**, para não
+  existir a janela em que elas ficam num papel que já não vale. Recusar sem a
+  saída deixa quem opera com o problema na mão: teria de sair da tela, conferir
+  os papéis um a um e voltar. Vale para qualquer bloqueio de "X está em uso" —
+  a alternativa cabe no mesmo lugar onde o bloqueio apareceu. ⚠️ **A checagem
+  de `ativo` mora em `permissoes_do_usuario`, não na tela**: esconder o botão
+  deixaria a rota respondendo 200 a quem souber a URL, que é a diferença entre
+  controle e aparência de controle.
 - **Rota nova sob `/rh/` DECLARA a permissão — `requer_rh` só autentica**
   (v2.86, `services/permissoes.py` + `auth_rh.py::exige`): até aqui a única
   proteção de 476 rotas respondia *"está logado?"*, então quem entrasse no
