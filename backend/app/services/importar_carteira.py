@@ -43,12 +43,19 @@ class Previa:
     # que falha, porque ninguém confere o que não foi avisado.
     ignoradas: list[dict] = field(default_factory=list)
     cenarios: list[str] = field(default_factory=list)
+    # {chave_normalizada: {"pessoa", "funcao"}} — vem da aba "Legenda e Regras".
+    equipe: dict = field(default_factory=dict)
 
     def resumo(self) -> dict:
         return {
             "processos_novos": self.processos_novos,
             "processos_alterados": self.processos_alterados,
-            "funcoes_novas": self.funcoes_novas,
+            # Mostra "Pessoa (Função)" quando a legenda tem o par: quem
+            # confere a importação precisa ver que vai entrar um CARGO.
+            "funcoes_novas": [
+                (f"{n} — {self.equipe[k]['funcao']}"
+                 if (k := normalizar(n)) in self.equipe else n)
+                for n in self.funcoes_novas],
             "ignoradas": self.ignoradas,
             "cenarios": self.cenarios,
             "total": len(self.processos_novos) + len(self.processos_alterados),
@@ -102,9 +109,48 @@ def _colunas_de_apoio(mapa: dict[str, int]) -> list[int]:
     return [idx for _, idx in sorted(achados)]
 
 
+def equipe_da_legenda(abas: dict[str, list[list[str]]]) -> dict[str, dict]:
+    """Pessoa → função, lido da aba "Legenda e Regras" (v2.91.1).
+
+    As colunas das abas Matriz trazem **pessoas** ("Fátima Sampaio"), não
+    funções. Sem esta leitura, a carteira importada mostrava "Fátima Sampaio"
+    na coluna FUNÇÃO — e o módulo inteiro se apoia em *"a titularidade
+    acompanha a função, não a pessoa"*. Com a função nomeada como pessoa, a
+    promessa não se cumpre: trocar quem ocupa o cargo exigiria renomear a
+    própria função, que é exatamente o trabalho que o módulo existe para evitar.
+
+    A aba tem o par pronto: `Bruno Fontes | Coordenação / Gestão de RH | C1 e C2`.
+    """
+    equipe: dict[str, dict] = {}
+    for aba, linhas in abas.items():
+        if "legenda" not in normalizar(aba):
+            continue
+        dentro = False
+        for linha in linhas:
+            celulas = [(c or "").strip() for c in linha]
+            primeira = celulas[0] if celulas else ""
+            # A seção começa em "EQUIPE" e termina no próximo título em caixa
+            # alta (RITMO, REGRAS). Delimitar assim, e não por intervalo de
+            # linhas, porque a planilha ganha seções com o tempo.
+            if normalizar(primeira) == "equipe":
+                dentro = True
+                continue
+            if dentro and primeira.isupper() and len(primeira) > 3:
+                break
+            if not dentro or not primeira:
+                continue
+            funcao = celulas[1] if len(celulas) > 1 else ""
+            if funcao:
+                equipe[normalizar(primeira)] = {"pessoa": primeira, "funcao": funcao}
+    return equipe
+
+
 def analisar(abas: dict[str, list[list[str]]], db: Session) -> Previa:
     """Lê as abas e devolve o que entraria — sem gravar nada."""
     p = Previa()
+    # Pessoa → função, da aba de legenda. É o que faz a coluna FUNÇÃO mostrar
+    # "Assistente de RH Júnior" em vez de repetir o nome da pessoa (v2.91.1).
+    p.equipe = equipe_da_legenda(abas)
     existentes = {x.codigo: x for x in db.scalars(select(Processo)).all()}
     funcoes = {normalizar(f.nome): f.nome
                for f in db.scalars(select(FuncaoRH)).all()}
@@ -181,20 +227,41 @@ def analisar(abas: dict[str, list[list[str]]], db: Session) -> Previa:
 def aplicar(db: Session, previa: Previa) -> dict:
     """Grava o que a prévia mostrou. Idempotente: reimportar ATUALIZA."""
     funcoes = {normalizar(f.nome): f for f in db.scalars(select(FuncaoRH)).all()}
+    # Índice auxiliar por PESSOA: as colunas da Matriz trazem pessoas, e é por
+    # elas que se acha a função já criada numa importação anterior.
+    por_pessoa = {normalizar(f.pessoa_nome): f
+                  for f in funcoes.values() if (f.pessoa_nome or "").strip()}
 
     def funcao_de(nome: str) -> FuncaoRH:
+        """A função de quem está escrito na célula da Matriz.
+
+        A célula traz a PESSOA; o nome da FUNÇÃO vem da aba de legenda. Sem
+        isso, a coluna "Função" da tela repetia o nome da pessoa — e o módulo
+        se apoia justamente em titularidade por CARGO: com a função chamada
+        "Fátima Sampaio", trocar quem ocupa o cargo exigiria renomear a função.
+        Sem par na legenda (nome que só aparece na Matriz), cai no próprio
+        nome — melhor uma função com nome provisório, que o RH renomeia na
+        tela, do que perder a linha.
+        """
         chave = normalizar(nome)
-        if chave not in funcoes:
-            # A função nasce com a PESSOA preenchida com o próprio nome da
-            # planilha: ali as colunas trazem pessoas ("Fátima Sampaio"), e é o
-            # que o Bruno ajusta depois na tela, dizendo qual é o cargo dela.
-            # Nascer vazia faria a carteira importada parecer inteira sem dono.
-            f = FuncaoRH(nome=nome.strip()[:120], pessoa_nome=nome.strip()[:200],
-                         ordem=len(funcoes))
-            db.add(f)
-            db.flush()
-            funcoes[chave] = f
-        return funcoes[chave]
+        par = previa.equipe.get(chave)
+        rotulo = (par or {}).get("funcao") or nome
+        pessoa = (par or {}).get("pessoa") or nome
+
+        existente = funcoes.get(normalizar(rotulo)) or por_pessoa.get(chave)
+        if existente is not None:
+            # Reimportar não recria: atualiza o rótulo se a legenda mudou.
+            if par and existente.nome != rotulo.strip()[:120]:
+                existente.nome = rotulo.strip()[:120]
+            return existente
+
+        f = FuncaoRH(nome=rotulo.strip()[:120], pessoa_nome=pessoa.strip()[:200],
+                     ordem=len(funcoes))
+        db.add(f)
+        db.flush()
+        funcoes[normalizar(f.nome)] = f
+        por_pessoa[normalizar(pessoa)] = f
+        return f
 
     criados = atualizados = vinculos = 0
     for item in previa.processos_novos + previa.processos_alterados:
@@ -230,3 +297,57 @@ def aplicar(db: Session, previa: Previa) -> dict:
     return {"criados": criados, "atualizados": atualizados,
             "vinculos": vinculos, "funcoes": len(funcoes),
             "ignoradas": len(previa.ignoradas)}
+
+
+def escala_da_planilha(abas: dict[str, list[list[str]]]) -> list[dict]:
+    """Lê a aba "Escala Diária": quem atende cada canal em cada dia (v2.91.1).
+
+    A aba é uma sequência de blocos — um cabeçalho de cenário, depois "Semana
+    N" com uma linha por dia útil e uma coluna por posto (Demandas, E-mail,
+    Teams, WhatsApp, Retaguarda). Os POSTOS vêm da linha "Dia | ..." de cada
+    bloco, não de uma lista fixa aqui: o Bruno pode acrescentar um canal, e uma
+    lista chumbada o descartaria em silêncio.
+    """
+    itens: list[dict] = []
+    for aba, linhas in abas.items():
+        if "escala" not in normalizar(aba):
+            continue
+        cenario, semana, postos = "C1", 0, []
+        for linha in linhas:
+            celulas = [(c or "").strip() for c in linha]
+            primeira = celulas[0] if celulas else ""
+            chave = normalizar(primeira)
+            if chave.startswith("cenario"):
+                # "Cenário 2 — Projeção com a Analista…" → C2
+                cenario = "C2" if "2" in primeira.split("—")[0] else "C1"
+                continue
+            if chave.startswith("semana"):
+                digitos = "".join(c for c in primeira if c.isdigit())
+                semana = int(digitos) if digitos else semana + 1
+                continue
+            if chave == "dia":
+                postos = [c for c in celulas[1:] if c]
+                continue
+            if not postos or not primeira or not semana:
+                continue
+            for i, posto in enumerate(postos, start=1):
+                pessoa = celulas[i] if i < len(celulas) else ""
+                if pessoa:
+                    itens.append({"cenario": cenario, "semana": semana,
+                                  "dia": primeira, "posto": posto,
+                                  "pessoa": pessoa})
+    return itens
+
+
+def aplicar_escala(db: Session, itens: list[dict]) -> int:
+    """Reescreve a escala. Substituir é o certo: a planilha é a fonte, e manter
+    linhas antigas ao lado das novas deixaria dois nomes no mesmo posto do mesmo
+    dia — a pergunta "quem está no WhatsApp hoje?" com duas respostas."""
+    from app.models.processo import EscalaCanal
+
+    for velha in db.scalars(select(EscalaCanal)).all():
+        db.delete(velha)
+    db.flush()
+    for i in itens:
+        db.add(EscalaCanal(**i))
+    return len(itens)

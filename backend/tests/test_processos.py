@@ -119,6 +119,34 @@ def main() -> int:
                     "o 9.1 (rodízio) foi acusado de 'sem dono' — alarme falso "
                     "ensina a ignorar o alarme.")
 
+        # 5. A FUNÇÃO tem nome de CARGO, não de pessoa (v2.91.1, defeito que o
+        #    Bruno viu na tela: "a função está repetindo o nome"). As colunas da
+        #    Matriz trazem pessoas; o cargo vem da aba de legenda. Sem isso, o
+        #    módulo contradiz a própria tese — titularidade por CARGO com a
+        #    função chamada "Fátima Sampaio" obrigaria a renomear a função para
+        #    trocar quem a ocupa.
+        equipe = imp.equipe_da_legenda(abas)
+        if not equipe:
+            falhas.append("a aba de legenda não foi lida — as funções vão nascer "
+                          "com nome de pessoa.")
+        else:
+            for f in db.scalars(select(FuncaoRH)).all():
+                if sv.eh_rodizio(f.nome):
+                    continue
+                if sv.normalizar(f.nome) == sv.normalizar(f.pessoa_nome):
+                    falhas.append(
+                        f"a função {f.nome!r} tem o nome da própria pessoa — "
+                        "deveria ser o CARGO (da aba 'Legenda e Regras').")
+
+        # 6. A ESCALA de canais entra na mesma importação: é ela que responde
+        #    pelos processos 9.1/9.2, e sem ela a tela diz "Escala do dia" sem
+        #    saber dizer quem.
+        itens = imp.escala_da_planilha(abas)
+        if len(itens) < 100:
+            falhas.append(f"a escala de canais veio incompleta: {len(itens)} linha(s)")
+        elif not {i["posto"] for i in itens} >= {"Demandas", "E-mail", "WhatsApp"}:
+            falhas.append(f"faltam postos na escala: {sorted({i['posto'] for i in itens})}")
+
         # A carga precisa distinguir titularidade de apoio: somar os dois
         # esconderia o que a Coordenação usa para redistribuir.
         carga = sv.carga_por_funcao(db, "C1")

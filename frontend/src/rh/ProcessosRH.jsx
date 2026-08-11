@@ -24,6 +24,9 @@ export default function ProcessosRH() {
   const [msg, setMsg] = useState(null)
   const [importando, setImportando] = useState(false)
   const [previa, setPrevia] = useState(null)     // {resumo, arquivo}
+  // A escala de canais (v2.91.1): é ela quem responde pelos processos 9.1/9.2,
+  // e sem mostrá-la a tela dizia "Escala do dia" sem saber dizer quem.
+  const [escala, setEscala] = useState(null)
 
   const carregar = (c = cenario) => api.processos(c).then(setDados)
 
@@ -32,6 +35,7 @@ export default function ProcessosRH() {
     // "Carregando…" para sempre, sem como tentar de novo.
     api.processos(cenario).then(setDados).catch(() => setErro(true))
     api.funcoesRH().then(setFuncoes).catch(() => setFuncoes([]))
+    api.escalaCanais(cenario).then(setEscala).catch(() => setEscala(null))
   }, [cenario])
 
   if (erro) {
@@ -68,8 +72,10 @@ export default function ProcessosRH() {
       const r = await api.processosImportar(previa.arquivo)
       setPrevia(null)
       await carregar()
+      setEscala(await api.escalaCanais(cenario).catch(() => null))
       setMsg({ tipo: 'ok', texto: `${r.criados} processo(s) criado(s), `
-        + `${r.atualizados} atualizado(s), ${r.vinculos} vínculo(s) de cadeia.` })
+        + `${r.atualizados} atualizado(s), ${r.vinculos} vínculo(s) de cadeia`
+        + (r.escala ? ` e ${r.escala} linha(s) de escala.` : '.') })
     } catch (e) {
       setMsg({ tipo: 'erro', texto: `Falha ao importar (${e.detail || e.message}).` })
     } finally { setImportando(false) }
@@ -194,6 +200,41 @@ export default function ProcessosRH() {
           { rotulo: 'Pessoas', valor: dados.carga.filter((c) => !c.vaga_aberta).length },
         ]}
       />
+
+      {escala?.semanas?.length > 0 && (
+        <div className="rh-card">
+          <h3>Escala rotativa de canais</h3>
+          <p className="explica">
+            Avança um posto por dia útil e recomeça. É esta escala que responde
+            pelos processos <strong>9.1</strong> (Conferência do Módulo de
+            Demandas) e <strong>9.2</strong> (Gestão de Canais) — por isso eles
+            aparecem com “Escala do dia” no lugar de um titular fixo.
+          </p>
+          {escala.semanas.map((sem) => (
+            <details key={sem.semana} open={sem.semana === 1}>
+              <summary>Semana {sem.semana}</summary>
+              <div className="dash-scroll">
+                <table className="rh-tabela">
+                  <thead><tr>
+                    <th>Dia</th>
+                    {escala.postos.map((p) => <th key={p}>{p}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {sem.dias.map((d) => (
+                      <tr key={d.dia}>
+                        <td><strong>{d.dia}</strong></td>
+                        {escala.postos.map((p) => (
+                          <td key={p} className="dash-quebra">{d.postos[p] || '—'}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
 
       <div className="rh-card">
         <h3>Quem é quem, e quanto cada um carrega</h3>
