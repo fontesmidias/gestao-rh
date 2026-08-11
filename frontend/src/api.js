@@ -824,6 +824,12 @@ export const rh = {
     req(`/rh/modelos-documento/${id}`, { method: 'DELETE', headers: authRH() }),
   // Catálogo dos DOCUMENTOS do sistema (v2.16): ver todos, pré-visualizar em
   // PDF, baixar e — nos de texto corrido — criar um modelo editável a partir.
+  // Trechos editáveis dos documentos (v2.90). Texto vazio VOLTA ao padrão de
+  // fábrica — é o caminho de desfazer, não um documento sem texto.
+  textosDocumentos: () => req('/rh/documentos-sistema/textos', { headers: authRH() }),
+  salvarTextoDocumento: (chave, texto) =>
+    req(`/rh/documentos-sistema/textos/${chave}`, { method: 'PUT', headers: authRH(),
+                                                   body: JSON.stringify({ texto }) }),
   documentosSistema: () => req('/rh/documentos-sistema', { headers: authRH() }),
   previaDocumentoSistema: (chave) =>
     req(`/rh/documentos-sistema/${chave}/previa`, { headers: authRH() }),

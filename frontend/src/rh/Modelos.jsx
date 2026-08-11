@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
 import CampoComVariaveis from '../CampoComVariaveis.jsx'
+import Aviso from '../Aviso.jsx'
 
 // 📝 Modelos de documento — página exclusiva (Configurações → Modelos).
 // CRUD completo + prévia + duplicar + opções de envio (e-mail / assinatura
@@ -283,6 +284,7 @@ export default function Modelos() {
       <Msg msg={msg} />
       </div>
       <DocumentosDoSistema aoDuplicar={recarregar} />
+      <TextosDosDocumentos />
     </main>
   )
 }
@@ -632,6 +634,111 @@ const FORMATO_ROTULO = {
   texto: ['Texto', 'Documento de texto corrido — dá para criar um modelo a partir dele'],
   formulario: ['Formulário', 'Formulário com campos e tabelas da ficha'],
   hibrido: ['Misto', 'Texto com um trecho estruturado (tabela ou condição)'],
+}
+
+// Trechos dos documentos que o RH reescreve (v2.90) — segunda parte do pedido
+// "tornar os demais documentos editáveis".
+//
+// O que se edita aqui é TEXTO DE NEGÓCIO (direitos do trabalhador, ciclos de
+// pagamento), não o layout: formulário oficial tem campos posicionados e
+// tabelas, e virá-lo texto destruiria o papel. Vale para o que for gerado daqui
+// em diante; documento já assinado carrega a via que a pessoa leu — é isso que
+// faz a verificação de autenticidade continuar batendo.
+export function TextosDosDocumentos() {
+  const [itens, setItens] = useState(null)
+  const [erro, setErro] = useState(null)
+  const [edit, setEdit] = useState(null)      // {chave, texto}
+  const [salvando, setSalvando] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const carregar = () => api.textosDocumentos().then(setItens)
+  useEffect(() => {
+    // Estado de erro SEPARADO do carregando (v2.46): sem isso, falha de rede
+    // deixa "Carregando…" para sempre, sem como tentar de novo.
+    api.textosDocumentos().then(setItens).catch(() => setErro(true))
+  }, [])
+
+  if (erro) {
+    return (
+      <div className="rh-card">
+        <p className="alerta">Não foi possível carregar os textos.</p>
+        <button className="btn-secundario btn-mini"
+                onClick={() => { setErro(false); carregar().catch(() => setErro(true)) }}>
+          Tentar de novo</button>
+      </div>
+    )
+  }
+  if (!itens) return <div className="rh-card"><p>Carregando…</p></div>
+
+  const salvar = async (chave, texto) => {
+    setSalvando(true); setMsg(null)
+    try {
+      const r = await api.salvarTextoDocumento(chave, texto)
+      await carregar()
+      setEdit(null)
+      setMsg({ tipo: 'ok', texto: r.personalizado
+        ? 'Texto salvo. Vale para os documentos gerados daqui em diante — os já assinados não mudam.'
+        : 'Voltou ao texto padrão do sistema.' })
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${e.detail || e.message}).` })
+    } finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      {msg && <Aviso tipo={msg.tipo} texto={msg.texto} aoFechar={() => setMsg(null)} />}
+      <h3>Textos dos documentos</h3>
+      <p className="explica">
+        Trechos que a empresa pode reescrever — direitos, ciclos de pagamento.
+        Valem para os documentos <strong>gerados daqui em diante</strong>:
+        quem já assinou carrega a via que leu, e é isso que mantém a verificação
+        de autenticidade funcionando.
+      </p>
+
+      {itens.map((i) => (
+        <div key={i.chave} className="rh-conferencia">
+          <div className="rh-topo">
+            <div>
+              <strong>{i.rotulo}</strong>
+              {i.personalizado && <> <span className="chip" style={{ '--chip-cor': 'var(--ambar)' }}>
+                personalizado</span></>}
+              <p className="explica" style={{ margin: '.2rem 0 0' }}>
+                Aparece em: {i.onde}
+              </p>
+            </div>
+            {edit?.chave !== i.chave && (
+              <button className="btn-secundario btn-mini"
+                      onClick={() => setEdit({ chave: i.chave, texto: i.texto })}>
+                Editar</button>
+            )}
+          </div>
+
+          {edit?.chave === i.chave ? (
+            <>
+              <p className="explica">{i.ajuda}</p>
+              <textarea rows={i.por_linha ? 12 : 6} value={edit.texto}
+                        onChange={(e) => setEdit({ ...edit, texto: e.target.value })} />
+              <div className="navegacao">
+                <button className="btn-principal" disabled={salvando}
+                        onClick={() => salvar(i.chave, edit.texto)}>
+                  {salvando ? 'Salvando…' : 'Salvar texto'}</button>
+                <button className="btn-secundario" onClick={() => setEdit(null)}>Cancelar</button>
+                {i.personalizado && (
+                  // Voltar ao padrão é limpar: sem esse caminho, o RH fica
+                  // preso ao que escreveu (v2.68).
+                  <button className="btn-link" disabled={salvando}
+                          onClick={() => salvar(i.chave, '')}>voltar ao texto padrão</button>
+                )}
+              </div>
+            </>
+          ) : (
+            <pre className="dash-corta" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+              {i.texto}</pre>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function DocumentosDoSistema({ aoDuplicar }) {

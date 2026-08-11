@@ -171,6 +171,48 @@ def listar_documentos_sistema(_rh: UsuarioRH = Depends(exige("documentos:modelos
     return _listar()
 
 
+class TextoDocumentoIn(BaseModel):
+    # `None`/vazio volta ao padrão de fábrica — é o caminho de desfazer, não um
+    # estado de documento sem texto (v2.68).
+    texto: str | None = None
+
+
+@router.get("/rh/documentos-sistema/textos")
+def listar_textos(db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> list[dict]:
+    """Trechos dos documentos que o RH pode reescrever (v2.90)."""
+    from app.services import textos_documentos
+    return textos_documentos.listar(db)
+
+
+@router.put("/rh/documentos-sistema/textos/{chave}")
+def salvar_texto(chave: str, payload: TextoDocumentoIn,
+                 db: Session = Depends(get_db),
+                 rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
+    """Reescreve um trecho. Vale para o que for GERADO daqui em diante.
+
+    ⚠️ **Não alcança documento já assinado** — nem deve: o `hash_sha256` do ato
+    foi calculado sobre aquele PDF, que está gravado no MinIO. Quem assinou
+    carrega a via que leu, e é isso que faz o `/verificar` continuar batendo.
+    """
+    from app.services import textos_documentos
+
+    try:
+        antes = textos_documentos.texto(db, chave)
+        saida = textos_documentos.salvar(db, chave, payload.texto)
+    except KeyError:
+        raise HTTPException(status_code=422, detail={
+            "erro": "texto_desconhecido", "chave": chave})
+
+    # A auditoria guarda o texto ANTERIOR: é documento que gente assina, e "o
+    # que estava escrito antes de mudarem" é a pergunta que se faz depois.
+    registrar(db, "texto_documento_editado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"chave": chave, "antes": antes[:2000],
+                       "voltou_ao_padrao": not saida["personalizado"]})
+    db.commit()
+    return saida
+
+
 def _candidato_de_amostra() -> Candidato:
     """Candidato FICTÍCIO, só em memória, para a prévia dos documentos.
 
@@ -273,7 +315,7 @@ def duplicar_documento_sistema(chave: str, payload: DuplicarDocumentoIn,
     d = documento(chave)
     m = ModeloDocumento(
         titulo=(payload.titulo or f"{d.rotulo} (cópia)").strip()[:200],
-        corpo=corpo_editavel(chave),
+        corpo=corpo_editavel(chave, db),
         escopo=EscopoModelo.avulso)
     db.add(m)
     registrar(db, "modelo_criado_de_documento", ator="rh", ator_detalhe=rh.email,
