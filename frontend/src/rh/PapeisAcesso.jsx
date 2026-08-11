@@ -26,6 +26,10 @@ export default function PapeisAcesso() {
   const [editando, setEditando] = useState(null)   // {id?, chave, rotulo, descricao, permissoes:Set}
   const [salvando, setSalvando] = useState(false)
   const [aviso, setAviso] = useState(null)
+  // Desativar papel em uso: o backend recusa e devolve os destinos possíveis.
+  // Guardamos aqui para perguntar PARA ONDE mover, na mesma tela — o bloqueio
+  // e a saída no mesmo lugar.
+  const [migrando, setMigrando] = useState(null)  // {papel, usuarios, nomes, destinos, escolha}
 
   const recarregar = () => api.papeisAcesso().then(setPapeis)
 
@@ -81,6 +85,48 @@ export default function PapeisAcesso() {
     } finally { setSalvando(false) }
   }
 
+  const duplicar = async (p) => {
+    try {
+      const novo = await api.duplicarPapelAcesso(p.id)
+      await recarregar()
+      // Abre a cópia para edição na hora: duplicar é meio, não fim — quem
+      // clica quer ajustar algo. Parar na lista obrigaria a procurar a cópia.
+      abrir({ ...novo })
+      setAviso({ tipo: 'ok', texto: `Cópia criada e INATIVA. Ajuste o que precisar e ative quando estiver pronta.` })
+    } catch (e) {
+      setAviso({ tipo: 'erro', texto: e.amigavel || 'Não foi possível duplicar.' })
+    }
+  }
+
+  const alternarAtivo = async (p, migrarPara) => {
+    try {
+      const r = await api.ativarPapelAcesso(p.id, !p.ativo, migrarPara)
+      setMigrando(null)
+      await recarregar()
+      setAviso({
+        tipo: 'ok',
+        texto: p.ativo
+          ? `"${p.rotulo}" desativado${r.migrados ? ` · ${r.migrados} pessoa(s) movida(s)` : ''}.`
+          : `"${p.rotulo}" ativado.`,
+      })
+    } catch (e) {
+      const d = e.dados || e.detail || {}
+      if (d.erro === 'papel_em_uso') {
+        // Não é erro para ler e fechar: é uma pergunta. Abre a escolha de
+        // destino com o que cada papel concede, ali mesmo.
+        setMigrando({ papel: p, ...d, escolha: '' })
+        return
+      }
+      setAviso({
+        tipo: 'erro',
+        texto: e.detail === 'superadmin_nao_desativavel'
+          ? 'O superadministrador não pode ser desativado — é ele que garante existir '
+            + 'alguém capaz de desfazer qualquer engano.'
+          : (e.amigavel || 'Não foi possível concluir.'),
+      })
+    }
+  }
+
   const excluir = async (p) => {
     try {
       await api.excluirPapelAcesso(p.id)
@@ -119,11 +165,12 @@ export default function PapeisAcesso() {
       <div className="dash-scroll">
         <table className="rh-tabela">
           <thead>
-            <tr><th>Papel</th><th>O que faz</th><th>Permissões</th><th>Pessoas</th><th></th></tr>
+            <tr><th>Papel</th><th>O que faz</th><th>Permissões</th><th>Pessoas</th>
+              <th>Situação</th><th></th></tr>
           </thead>
           <tbody>
             {papeis.map((p) => (
-              <tr key={p.id}>
+              <tr key={p.id} style={p.ativo ? {} : { opacity: .55 }}>
                 <td><strong>{p.rotulo}</strong>{p.de_fabrica && <> <span className="chip">padrão</span></>}</td>
                 <td className="dash-quebra">{p.descricao || '—'}</td>
                 <td>
@@ -135,13 +182,30 @@ export default function PapeisAcesso() {
                       )}</>}
                 </td>
                 <td>{p.usuarios}</td>
+                <td>
+                  {p.ativo ? 'Ativo'
+                    : <span title="Não concede nenhum acesso enquanto estiver assim">Inativo</span>}
+                </td>
                 <td className="acoes-candidato">
+                  {/* Duplicar vale para TODOS, inclusive os de fábrica e o
+                      superadmin: partir de um papel que já funciona é o caminho
+                      normal de criar outro, e é justamente o de fábrica que
+                      serve de base. */}
+                  <button className="btn-secundario btn-mini" onClick={() => duplicar(p)}
+                          title="Cria uma cópia inativa para você ajustar">Duplicar</button>
                   {p.tudo ? (
                     <span className="explica" title="Faz tudo por definição — e é o que garante existir quem possa desfazer qualquer engano">
                       não editável</span>
                   ) : (
                     <>
                       <button className="btn-secundario btn-mini" onClick={() => abrir(p)}>Editar</button>
+                      <button className="btn-secundario btn-mini" onClick={() => alternarAtivo(p)}
+                              title={p.ativo
+                                ? 'Deixa de conceder acesso; quem usa precisa ser movido antes'
+                                : 'Volta a conceder o que está marcado'}>
+                        {/* Rótulo diz o que ACONTECE ao clicar, nunca o estado
+                            atual (regra da v2.78). */}
+                        {p.ativo ? 'Desativar' : 'Ativar'}</button>
                       {!p.de_fabrica && (
                         <button className="btn-remover btn-mini" onClick={() => excluir(p)}>Excluir</button>
                       )}
@@ -153,6 +217,39 @@ export default function PapeisAcesso() {
           </tbody>
         </table>
       </div>
+
+      {migrando && (
+        <div className="rh-conferencia">
+          <h4 className="rh-conferencia-bloco-titulo">
+            Desativar “{migrando.papel.rotulo}”: para onde vão as pessoas?
+          </h4>
+          <p className="explica">
+            {migrando.usuarios} pessoa(s) usam este papel
+            {migrando.nomes?.length ? ` (${migrando.nomes.join(', ')})` : ''}.
+            Papel inativo não concede nenhum acesso — sem escolher um destino,
+            elas ficariam sem conseguir fazer nada, e sem nada na tela
+            explicando por quê. As duas coisas acontecem juntas: as pessoas são
+            movidas e o papel é desativado no mesmo ato.
+          </p>
+          <label className="campo"><span className="rotulo">Migrar para</span>
+            <SelectBusca valor={migrando.escolha}
+                         aoEscolher={(v) => setMigrando({ ...migrando, escolha: v })}
+                         opcoes={(migrando.destinos || []).map((d) => ({
+                           valor: d.chave, rotulo: d.rotulo,
+                           // O `extra` mostra o que o destino CONCEDE: escolher
+                           // sem saber isso é mover gente às cegas.
+                           extra: d.tudo ? 'faz tudo'
+                             : `${d.permissoes} permissões${d.descricao ? ` · ${d.descricao}` : ''}`,
+                         }))} />
+          </label>
+          <div className="navegacao">
+            <button className="btn-principal" disabled={!migrando.escolha}
+                    onClick={() => alternarAtivo(migrando.papel, migrando.escolha)}>
+              Mover {migrando.usuarios} pessoa(s) e desativar</button>
+            <button className="btn-secundario" onClick={() => setMigrando(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {editando && (
         <div className="rh-conferencia">

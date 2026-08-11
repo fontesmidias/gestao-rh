@@ -1380,6 +1380,14 @@ export const rh = {
     req(`/rh/papeis/${id}`, { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   excluirPapelAcesso: (id) =>
     req(`/rh/papeis/${id}`, { method: 'DELETE', headers: authRH() }),
+  duplicarPapelAcesso: (id) =>
+    req(`/rh/papeis/${id}/duplicar`, { method: 'POST', headers: authRH() }),
+  // `migrar_para` só é necessário ao DESATIVAR um papel que tem gente dentro —
+  // sem ele a rota recusa e devolve os destinos possíveis, para a escolha
+  // acontecer na mesma tela em que o bloqueio apareceu.
+  ativarPapelAcesso: (id, ativo, migrarPara) =>
+    req(`/rh/papeis/${id}/ativo`, { method: 'PUT', headers: authRH(),
+                                    body: JSON.stringify({ ativo, migrar_para: migrarPara || null }) }),
 
   usuarios: () => req('/rh/usuarios', { headers: authRH() }),
   criarUsuario: (dados) =>

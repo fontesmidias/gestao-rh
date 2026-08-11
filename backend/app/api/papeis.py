@@ -46,9 +46,36 @@ def _dump(p: Papel, em_uso: int = 0) -> dict:
         "permissoes": (sorted(cat.CHAVES) if p.chave == cat.PAPEL_SUPERADMIN
                        else sorted(p.permissoes or [])),
         "de_fabrica": p.de_fabrica,
+        "ativo": p.ativo,
         "tudo": p.chave == cat.PAPEL_SUPERADMIN,
         "usuarios": em_uso,
     }
+
+
+def _usuarios_do_papel(db: Session, chave: str) -> list[UsuarioRH]:
+    return list(db.scalars(select(UsuarioRH).where(UsuarioRH.papel == chave)).all())
+
+
+def _destinos_de_migracao(db: Session, exceto: str) -> list[dict]:
+    """Papéis para onde as pessoas podem ser movidas, com o que cada um concede.
+
+    Vai junto do 409 de propósito: recusar dizendo apenas "há 4 pessoas usando"
+    deixa quem lê com o problema na mão e sem a saída — teria de sair da tela,
+    conferir os papéis um a um e voltar. A escolha continua sendo de quem
+    opera; o que muda é que ela cabe no mesmo lugar onde o bloqueio apareceu.
+    """
+    destinos = []
+    for p in db.scalars(select(Papel).order_by(Papel.criado_em)).all():
+        if p.chave == exceto or not p.ativo:
+            continue  # migrar para papel inativo recriaria o mesmo problema
+        destinos.append({
+            "chave": p.chave, "rotulo": p.rotulo,
+            "descricao": p.descricao,
+            "permissoes": (len(cat.CHAVES) if p.chave == cat.PAPEL_SUPERADMIN
+                           else len(p.permissoes or [])),
+            "tudo": p.chave == cat.PAPEL_SUPERADMIN,
+        })
+    return destinos
 
 
 @router.get("/rh/permissoes/minhas")
@@ -152,6 +179,123 @@ def editar(papel_id: uuid.UUID, payload: PapelIn, db: Session = Depends(get_db),
     return _dump(p)
 
 
+@router.post("/rh/papeis/{papel_id}/duplicar", status_code=201)
+def duplicar(papel_id: uuid.UUID, db: Session = Depends(get_db),
+             rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
+    """Cópia INATIVA — o caminho normal para criar um papel novo (v2.87).
+
+    Partir de um papel parecido e ajustar é mais seguro do que montar do zero:
+    quem começa numa tela em branco com 40 caixas tende a marcar demais (para
+    a pessoa "não ficar travada") ou de menos, e o erro só aparece depois, no
+    uso. Duplicar dá um ponto de partida que já funciona.
+
+    **A cópia nasce inativa**, ao contrário do `duplicar` de provas — que herda
+    `ativa=p.ativa` e por isso já vale no instante em que é criada. Aqui isso
+    seria perigoso: um papel é permissão de acesso, e a cópia existe justamente
+    para ser revisada ANTES de valer. Segue a semântica do roteiro de
+    entrevista, cuja cópia nasce em rascunho.
+    """
+    p = db.get(Papel, papel_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="papel_nao_encontrado")
+
+    # Chave livre a partir da original: `rh` → `rh-copia`, `rh-copia-2`…
+    base = f"{p.chave}-copia"[:46]
+    chave, n = base, 1
+    while db.scalar(select(Papel).where(Papel.chave == chave)) is not None:
+        n += 1
+        chave = f"{base}-{n}"[:50]
+
+    # O superadmin guarda lista vazia (`pode()` não a consulta), então copiar o
+    # campo cru produziria um papel que não concede NADA — com o rótulo dizendo
+    # o contrário. A cópia dele nasce com o catálogo inteiro, explícito.
+    permissoes = (sorted(cat.CHAVES) if p.chave == cat.PAPEL_SUPERADMIN
+                  else sorted(p.permissoes or []))
+
+    novo = Papel(chave=chave, rotulo=f"{p.rotulo} (cópia)"[:100],
+                 descricao=p.descricao, permissoes=permissoes,
+                 de_fabrica=False, ativo=False)
+    db.add(novo)
+    db.flush()
+    registrar(db, "papel_duplicado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"papel": chave, "de": p.chave,
+                       "permissoes": len(permissoes)})
+    db.commit()
+    db.refresh(novo)
+    return _dump(novo)
+
+
+class AtivacaoIn(BaseModel):
+    ativo: bool
+    # Para onde mover quem usa o papel, quando se desativa um papel em uso.
+    # Opcional: sem ele a rota RECUSA e devolve os destinos possíveis, para a
+    # escolha acontecer na mesma tela.
+    migrar_para: str | None = None
+
+
+@router.put("/rh/papeis/{papel_id}/ativo")
+def alternar_ativo(papel_id: uuid.UUID, payload: AtivacaoIn,
+                   db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
+    """Ativa ou desativa um papel. Desativar com gente dentro exige migração.
+
+    Papel inativo não concede nada (ver `permissoes_do_usuario`), então
+    desativar um papel em uso tiraria o acesso de várias pessoas **de uma vez e
+    em silêncio** — o sintoma seria "403 em tudo", longe da causa. A rota
+    recusa e devolve os destinos possíveis; com `migrar_para`, move as pessoas
+    e desativa no MESMO ato, para não existir a janela em que elas ficam num
+    papel que já não vale.
+    """
+    p = db.get(Papel, papel_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="papel_nao_encontrado")
+
+    if payload.ativo:
+        p.ativo = True
+        registrar(db, "papel_ativado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"papel": p.chave})
+        db.commit()
+        db.refresh(p)
+        return _dump(p, len(_usuarios_do_papel(db, p.chave)))
+
+    # --- Desativando -------------------------------------------------------
+    if p.chave == cat.PAPEL_SUPERADMIN:
+        # Mesma razão de ele não ser editável: sem superadmin ativo, ninguém
+        # gere papéis e não há tela para desfazer.
+        raise HTTPException(status_code=409, detail="superadmin_nao_desativavel")
+
+    usuarios = _usuarios_do_papel(db, p.chave)
+    if usuarios and not payload.migrar_para:
+        raise HTTPException(status_code=409, detail={
+            "erro": "papel_em_uso",
+            "usuarios": len(usuarios),
+            "nomes": [u.nome for u in usuarios[:8]],
+            # A saída vai JUNTO do bloqueio: quem lê decide na mesma tela.
+            "destinos": _destinos_de_migracao(db, p.chave),
+        })
+
+    migrados = 0
+    if usuarios:
+        destino = db.scalar(select(Papel).where(Papel.chave == payload.migrar_para))
+        if destino is None or not destino.ativo:
+            raise HTTPException(status_code=422, detail={
+                "erro": "destino_invalido", "papel": payload.migrar_para})
+        for u in usuarios:
+            u.papel = destino.chave
+            migrados += 1
+
+    p.ativo = False
+    # Auditoria nomeia PARA ONDE cada um foi: "por que a Fátima está como RH?"
+    # é a pergunta que se faz depois, e o estado final não a responde.
+    registrar(db, "papel_desativado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"papel": p.chave, "migrados": migrados,
+                       "para": payload.migrar_para,
+                       "usuarios": [u.email for u in usuarios]})
+    db.commit()
+    db.refresh(p)
+    return {**_dump(p), "migrados": migrados}
+
+
 @router.delete("/rh/papeis/{papel_id}", status_code=204)
 def excluir(papel_id: uuid.UUID, db: Session = Depends(get_db),
             rh: UsuarioRH = Depends(exige("config:usuarios"))) -> None:
@@ -165,11 +309,14 @@ def excluir(papel_id: uuid.UUID, db: Session = Depends(get_db),
     # não resolve e — pela regra de `permissoes_do_usuario` — perderia TODO o
     # acesso, em silêncio, sem nada na tela dizendo por quê. O 409 diz quantas
     # pessoas seriam afetadas, para o superadmin movê-las antes.
-    em_uso = db.scalars(select(UsuarioRH).where(UsuarioRH.papel == p.chave)).all()
+    em_uso = _usuarios_do_papel(db, p.chave)
     if em_uso:
         raise HTTPException(status_code=409, detail={
             "erro": "papel_em_uso", "usuarios": len(em_uso),
-            "nomes": [u.nome for u in em_uso[:5]]})
+            "nomes": [u.nome for u in em_uso[:8]],
+            # Mesma saída oferecida na desativação: excluir também trava aqui,
+            # e o caminho para destravar é o mesmo (mover as pessoas antes).
+            "destinos": _destinos_de_migracao(db, p.chave)})
 
     registrar(db, "papel_excluido", ator="rh", ator_detalhe=rh.email,
               detalhe={"papel": p.chave})

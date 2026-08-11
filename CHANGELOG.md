@@ -11,6 +11,52 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.87.0] — 2026-08-10 — Duplicar, ajustar, então ativar
+
+Pedido do Bruno olhando a tela de papéis, e cravado como **padrão** para o que
+vier: *"a possibilidade de duplicar um existente e, a partir dessa duplicata,
+editarmos o que tiver que editar para daí sim ativarmos"*.
+
+Duplicar já existia em quatro lugares (provas, questões, roteiros de entrevista
+e documentos do sistema) — só não era regra. Agora é: todo cadastro reusável
+ganha `POST .../duplicar`. Quem começa numa tela em branco com 40 caixas de
+permissão tende a marcar demais (para a pessoa "não ficar travada") ou de menos,
+e o erro só aparece depois, no uso. Partir de um papel que já funciona é mais
+seguro do que montar do zero.
+
+**A cópia nasce INATIVA** — diferente do `duplicar` de provas, que herda
+`ativa=p.ativa` e por isso já vale no instante em que é criada. Num papel isso
+seria conceder acesso antes de alguém revisar o que ele concede. Segue a
+semântica do roteiro de entrevista, cuja cópia nasce em rascunho.
+
+**Ativar e desativar** (`papel.ativo`): papel inativo existe, aparece na tela e
+**não concede nada**. Serve à cópia em ajuste e ao papel aposentado, que se
+guarda em vez de excluir — excluir apagaria o registro de que ele existiu, e a
+auditoria antiga passaria a citar um papel que ninguém mais encontra. A checagem
+mora em `permissoes_do_usuario`, não na tela: esconder o botão deixaria a rota
+respondendo 200 a quem souber a URL.
+
+**Desativar papel EM USO recusa oferecendo a saída.** Foi o aprimoramento que o
+Bruno pediu sobre a proposta original: recusar é seguro, mas deixa quem opera
+com o problema na mão — teria de sair da tela, conferir os papéis um a um e
+voltar. Agora o 409 vem com os **destinos possíveis e o que cada um concede**, e
+a rota aceita `migrar_para`: as pessoas são movidas e o papel é desativado **no
+mesmo ato**, sem a janela em que ficariam num papel que já não vale. A auditoria
+registra para onde cada uma foi — "por que a Fátima está como RH?" é a pergunta
+que se faz depois, e o estado final não a responde.
+
+Três armadilhas pagas na implementação: a cópia do superadmin precisa
+materializar o catálogo INTEIRO (ele guarda lista vazia porque `pode()` não a
+consulta — copiar o campo cru daria um papel que não concede nada com o rótulo
+dizendo o contrário); a chave se resolve por sufixo incremental (`rh-copia-2`)
+porque é `unique`; e migrar para um papel inativo é recusado, senão o destino
+recriaria o mesmo problema.
+
+**Validado por três mutações**, cada uma reprovando com a mensagem do defeito
+real: papel inativo voltando a conceder ("veio 200 — desativar não está cortando
+o acesso de fato"), cópia nascendo ativa e migração que não move ninguém ("a
+pessoa não foi migrada — desativar teria cortado o acesso dela em silêncio").
+
 ## [2.86.1] — 2026-08-10 — O admin do .env nascia sem poder gerir papéis
 
 O CI pegou o que a máquina de quem desenvolve escondeu. O primeiro
