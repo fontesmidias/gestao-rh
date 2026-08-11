@@ -123,3 +123,36 @@ class AtribuicaoProcesso(Base):
         ForeignKey("funcao_rh.id", ondelete="CASCADE"), index=True)
     cenario: Mapped[str] = mapped_column(String(4), default="C1", index=True)
     posicao: Mapped[int] = mapped_column(Integer)   # 1 = titular
+
+
+class EscalaCanal(Base):
+    """A escala rotativa de canais: quem atende o quê em cada dia útil.
+
+    A carteira do Bruno tem uma aba própria para isto — 5 postos (Demandas,
+    E-mail, Teams, WhatsApp, Retaguarda) girando entre a equipe num ciclo de 4
+    semanas, por cenário. É ela que responde pelos processos 9.1 e 9.2, cujo
+    "titular" é a própria escala.
+
+    Sem importá-la, a tela dizia "Escala do dia" e não sabia dizer QUEM — que é
+    justamente a informação que alguém procura ao olhar a carteira numa
+    terça-feira. Uma linha por (cenário, semana, dia, posto): é a forma que
+    permite responder "quem está no WhatsApp hoje?" com um índice, e é a mesma
+    granularidade da planilha, o que mantém a reimportação simples.
+    """
+
+    __tablename__ = "escala_canal"
+    __table_args__ = (
+        UniqueConstraint("cenario", "semana", "dia", "posto",
+                         name="uq_escala_posto"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True,
+                                          default=uuid.uuid4)
+    cenario: Mapped[str] = mapped_column(String(4), default="C1", index=True)
+    semana: Mapped[int] = mapped_column(Integer)          # 1..4 (o ciclo)
+    # Guardado como TEXTO ("Segunda"), não como número: é o que a planilha traz
+    # e o que a tela mostra. Converter para índice exigiria mapear de volta em
+    # dois lugares, e o ganho seria nenhum.
+    dia: Mapped[str] = mapped_column(String(20))
+    posto: Mapped[str] = mapped_column(String(40))        # Demandas, E-mail…
+    pessoa: Mapped[str] = mapped_column(String(200))

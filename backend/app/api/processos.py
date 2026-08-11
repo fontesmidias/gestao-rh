@@ -56,6 +56,32 @@ def listar(cenario: str = "C1", db: Session = Depends(get_db),
     }
 
 
+@router.get("/rh/processos/escala")
+def escala(cenario: str = "C1", db: Session = Depends(get_db),
+           _rh: UsuarioRH = Depends(exige("processos:ler"))) -> dict:
+    """A escala rotativa de canais — quem atende o quê em cada dia útil."""
+    from app.models.processo import EscalaCanal
+
+    linhas = db.scalars(select(EscalaCanal)
+                        .where(EscalaCanal.cenario == cenario)
+                        .order_by(EscalaCanal.semana)).all()
+    postos, semanas = [], {}
+    for l in linhas:
+        if l.posto not in postos:
+            postos.append(l.posto)
+        semanas.setdefault(l.semana, {}).setdefault(l.dia, {})[l.posto] = l.pessoa
+    # A ordem dos dias vem da planilha (segunda→sexta); ordenar alfabeticamente
+    # daria "Quarta, Quinta, Segunda…", que ninguém lê como escala.
+    ordem_dia = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
+    return {
+        "postos": postos,
+        "semanas": [{"semana": n,
+                     "dias": [{"dia": d, "postos": semanas[n][d]}
+                              for d in ordem_dia if d in semanas[n]]}
+                    for n in sorted(semanas)],
+    }
+
+
 @router.get("/rh/processos/funcoes")
 def listar_funcoes(db: Session = Depends(get_db),
                    _rh: UsuarioRH = Depends(exige("processos:ler"))) -> list[dict]:
@@ -250,11 +276,12 @@ async def importar_preview(arquivo: UploadFile, db: Session = Depends(get_db),
     if not abas:
         raise HTTPException(status_code=422, detail="planilha_ilegivel")
     previa = importar_carteira.analisar(abas, db)
+    escala = importar_carteira.escala_da_planilha(abas)
     if not previa.cenarios:
         raise HTTPException(status_code=422, detail={
             "erro": "sem_abas_matriz",
             "abas_encontradas": list(abas.keys())})
-    return previa.resumo()
+    return {**previa.resumo(), "escala": len(escala)}
 
 
 @router.post("/rh/processos/importar")
@@ -275,6 +302,11 @@ async def importar(arquivo: UploadFile, db: Session = Depends(get_db),
         raise HTTPException(status_code=422, detail="planilha_ilegivel")
     previa = importar_carteira.analisar(abas, db)
     resultado = importar_carteira.aplicar(db, previa)
+    # A escala de canais vem na MESMA importação: ela é quem responde pelos
+    # processos 9.1/9.2, e trazer a carteira sem ela deixaria a tela dizendo
+    # "Escala do dia" sem saber dizer quem.
+    resultado["escala"] = importar_carteira.aplicar_escala(
+        db, importar_carteira.escala_da_planilha(abas))
     registrar(db, "carteira_processos_importada", ator="rh", ator_detalhe=rh.email,
               detalhe=resultado)
     db.commit()

@@ -11,6 +11,36 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.91.1] — 2026-08-11 — A função é o cargo, e a escala entra junto
+
+Dois defeitos que o Bruno viu na primeira importação real.
+
+**"A função está repetindo o nome."** A coluna Função mostrava *"Fátima
+Sampaio"* onde deveria mostrar *"Assistente de RH Júnior"*. As colunas das abas
+Matriz trazem PESSOAS, e o importador criava uma função com o nome de cada uma
+— enquanto o par pessoa→cargo estava pronto na aba **Legenda e Regras**, que eu
+não estava lendo.
+
+Não era um defeito estético: o módulo inteiro se apoia em *"a titularidade
+acompanha a função, não a pessoa"*, e com a função chamada "Fátima Sampaio"
+trocar quem ocupa o cargo exigiria renomear a própria função — exatamente o
+trabalho que o módulo existe para evitar.
+
+**"Não apareceu a escala de rodízio diário."** A aba *Escala Diária* tem 5
+postos (Demandas, E-mail, Teams, WhatsApp, Retaguarda) girando entre a equipe
+num ciclo de 4 semanas, por cenário — **200 linhas** que eu simplesmente não
+importava. É ela que responde pelos processos 9.1 e 9.2, então a tela dizia
+"Escala do dia" sem saber dizer QUEM: justamente a informação que se procura ao
+abrir a carteira numa terça-feira.
+
+Agora a escala entra na mesma importação e aparece na tela, com as quatro
+semanas (a primeira aberta, as demais recolhidas) e os postos lidos do
+cabeçalho da planilha — não de uma lista fixa no código, que descartaria em
+silêncio um canal novo.
+
+Validado por mutação contra o arquivo real: voltar a usar o nome da pessoa como
+função e deixar de ler a aba de escala. Ambas reprovam nomeando o defeito.
+
 ## [2.91.0] — 2026-08-11 — Carteira de Processos: quem responde quando alguém sai
 
 O módulo que o Bruno pediu: *"caso haja algum funcionário substituído, indo

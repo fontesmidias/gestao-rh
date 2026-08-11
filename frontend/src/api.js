@@ -353,6 +353,8 @@ export const rh = {
   processos: (cenario = 'C1') =>
     req(`/rh/processos?cenario=${cenario}`, { headers: authRH() }),
   processosOpcoes: () => req('/rh/processos/opcoes', { headers: authRH() }),
+  escalaCanais: (cenario = 'C1') =>
+    req(`/rh/processos/escala?cenario=${cenario}`, { headers: authRH() }),
   funcoesRH: () => req('/rh/processos/funcoes', { headers: authRH() }),
   criarFuncaoRH: (dados) =>
     req('/rh/processos/funcoes', { method: 'POST', headers: authRH(),
