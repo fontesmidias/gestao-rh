@@ -11,6 +11,59 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.88.0] — 2026-08-10 — Dá para voltar
+
+Três feedbacks de campo do dia 10/08, mais a pendência que ficou da v2.86.
+
+**"Estava escrevendo o endereço e não conseguiu mais voltar para editar."** O
+mais grave dos três, e o diagnóstico surpreendeu: **o backend sempre permitiu** —
+`_candidato_do_token` só barra `expurgado` e `aprovado`. Quem não oferecia o
+caminho era a TELA: depois de confirmar os dados, o app ia para a assinatura e
+não havia porta de volta; reabrir o link caía direto lá de novo. Agora existe
+"← Preciso corrigir meus dados antes de assinar", ao lado do botão de assinar —
+é ali que a pessoa relê o que preencheu e percebe o erro, e um link no rodapé
+seria achado depois de ela já ter assinado. Só antes da assinatura: documento
+assinado é peça de prova, e corrigir depois é o RH quem reabre. Não aparece em
+reassinatura, onde os documentos vieram do RH e o formulário não é o que se
+corrige.
+
+**Nome social: pergunta antes do campo.** *"Tem pessoas preenchendo sem
+necessidade."* O campo existia vazio ao lado dos outros — e campo vazio num
+formulário de admissão parece coisa a preencher, então as pessoas repetiam ali o
+nome civil. A explicação existia, mas só no tooltip, e `title` não abre no
+celular (v2.77), que é onde o candidato preenche. Agora: *"Você usa nome
+social?"*, padrão **Não**, e o campo aparece só ao responder Sim. O texto afirma
+o direito (Decreto 8.727/2016) em vez de pedir justificativa — a pergunta é
+sobre COMO a pessoa quer ser chamada, não sobre quem ela é. Responder "Não"
+LIMPA o que estiver escrito: valor guardado que a tela não mostra sairia nos
+documentos que a pessoa assina sem ela ver, e o wizard salva a cada 900ms.
+
+**O quadro "o que é obrigatório para esta pessoa" em colunas.** São ~12
+documentos e ~12 campos; em coluna única, uma rolagem longa para conferir o que
+cabe numa tela. `auto-fit` + `minmax` faz a contagem sair da largura, não de
+media query: **4 colunas em 1440px, 3 em 1150px, 1 em 390px** — e continua certo
+dentro do painel estreito onde o bloco vive. ⚠️ **`min-width: 0` não bastou**: o
+`.campo-check` é `white-space: nowrap`, então "Certidão de nascimento do
+dependente" mediu **303px numa coluna de 246px** e foi impresso POR CIMA da
+coluna vizinha. Enquanto o `nowrap` valer, não há onde quebrar. Só apareceu no
+PRINT — o teste de largura passava, porque overflow contido não alarga a página
+(v2.76.1).
+
+**Pendência da v2.86 fechada**: o menu do painel agora esconde o que a pessoa
+não pode. Cada item declara a permissão da tela que abre; grupo sem item visível
+não deixa o título órfão. Medido: superadmin vê 18 itens, gestor vê 5, recepção
+vê 0 — e **menu vazio DIZ que está vazio**, porque barra em branco parece
+sistema quebrado e a pessoa liga achando que não carregou. Esconder é cortesia,
+não segurança (quem protege é o `exige` de cada rota); o motivo de fazê-lo é que
+botão que sempre responde 403 ensina a equipe a ignorar mensagem de erro.
+Enquanto as permissões carregam — ou se a consulta falhar — o menu aparece
+INTEIRO: erro de rede não pode parecer perda de acesso.
+
+Fica para leva própria, por decisão do Bruno: tornar editáveis as datas e os
+campos dos documentos gerados (21 pontos de `date.today()`, 15 documentos no
+catálogo). Os **já assinados ficam intactos** — o hash é calculado sobre o PDF e
+é o que prova que ninguém alterou depois da assinatura.
+
 ## [2.87.1] — 2026-08-10 — Duplicar em postos, vagas, modelos e minutário
 
 Replica o padrão da v2.87 nos quatro cadastros que o Bruno marcou. Em todos, a

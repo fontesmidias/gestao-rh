@@ -1575,6 +1575,43 @@ body[data-rh-ocupado] { cursor: progress; }
 .fichas-status li { padding: .25rem 0; }
 .fichas-status small { color: var(--tinta-suave); }
 
+/* Lista de marcação em COLUNAS (v2.88, pedido do Bruno sobre o quadro "o que é
+   obrigatório para esta pessoa"): são ~12 documentos e ~12 campos, e em coluna
+   única viram uma rolagem longa para conferir o que cabe numa tela.
+   `auto-fit` + `minmax` faz a contagem sair da LARGURA disponível, em vez de
+   ser chumbada por media query: 3 colunas no desktop, 2 no meio, 1 no celular
+   — e continua certo dentro de um painel estreito, que é onde este bloco vive
+   (o `<details>` da ficha da pessoa). Modificadora, não regra nova em
+   `.fichas-status`: a mesma classe serve a listas de UMA coluna em outros dois
+   pontos do Detalhe, que ficariam estranhas espalhadas. */
+.fichas-status.em-colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0 var(--esp-3);
+}
+/* `min-width: 0` porque item de grid usa o tamanho do CONTEÚDO como piso: sem
+   isso, um rótulo longo estoura a coluna em vez de quebrar.
+   ⚠️ Só o `li` NÃO basta, e o print prova: "Certidão de nascimento do
+   dependente" passava POR CIMA da coluna vizinha. Quem tem o texto é o
+   `.campo-check`, que é `display: flex` — e item de flex também usa o conteúdo
+   como piso. Sem soltar os dois, o rótulo não quebra em lugar nenhum e vaza
+   para o lado, ilegível e sobreposto ao vizinho. É a pegadinha clássica do
+   flexbox que a v2.60 já registrou para as barras de ação. */
+.fichas-status.em-colunas li { min-width: 0; }
+/* ⚠️ O `.campo-check` é `white-space: nowrap` — certo na barra de ações, onde
+   um rótulo curto ao lado da caixa não deve partir; ERRADO aqui, onde "Certidão
+   de nascimento do dependente" mediu 303px numa coluna de 246px e foi impresso
+   POR CIMA da coluna vizinha. `min-width: 0` sozinho não resolve: enquanto o
+   `nowrap` valer, não há onde quebrar. Medido no navegador, não deduzido — o
+   teste de largura passava, porque overflow contido não alarga a página
+   (v2.76.1). Só nesta lista: a regra global segue valendo onde faz sentido. */
+.fichas-status.em-colunas .campo-check {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+  align-items: flex-start;
+}
+
 /* Correção de ficha pelo RH + etiqueta de origem */
 .etiqueta-rh { color: var(--verde); font-weight: 600; }
 .ficha-rh-secao { margin: .5rem 0; border: 1px solid var(--borda);

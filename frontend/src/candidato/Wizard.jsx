@@ -265,6 +265,11 @@ function Select({ valor, onChange, opcoes, vazio = 'Selecione…' }) {
 
 export default function Wizard({ token, estado, recarregar, aoConcluir }) {
   const [etapa, setEtapa] = useState(0)
+  // Nasce ligado para quem JÁ tem nome social gravado: o padrão "Não" é para
+  // quem chega agora, mas quem voltar ao link precisa continuar vendo o próprio
+  // nome — a pergunta esconderia o campo e o dado pareceria perdido.
+  const [temNomeSocial, setTemNomeSocial] = useState(
+    Boolean((estado.pessoais?.nome_social || '').trim()))
   const [dados, setDados] = useState({
     pessoais: { ...estado.pessoais },
     endereco: { ...(estado.endereco || {}) },
@@ -415,10 +420,41 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
         }} />
         <Campo rotulo="Nome completo"><input value={p.nome_completo || ''}
           onChange={(e) => setSec('pessoais', 'nome_completo', e.target.value)} /></Campo>
-        <Campo rotulo="Nome social (se tiver)"
-               ajuda="Preencha apenas se você deseja ser chamado(a) por um nome diferente do que está no seu registro civil (Decreto 8.727/2016). Ele aparecerá nos seus documentos junto ao nome civil. Se não for o seu caso, deixe em branco.">
-          <input value={p.nome_social || ''}
-                 onChange={(e) => setSec('pessoais', 'nome_social', e.target.value)} /></Campo>
+        {/* Nome social: PERGUNTA antes do campo (v2.88, feedback do Bruno —
+            "tem pessoas preenchendo sem necessidade").
+            O campo existia vazio ao lado dos outros, e campo vazio num
+            formulário de admissão parece coisa a preencher: as pessoas
+            repetiam ali o nome civil. A explicação existia, mas só no tooltip —
+            e `title` não abre no celular (v2.77), que é onde o candidato
+            preenche. A pergunta explícita, com o padrão em "Não", resolve as
+            duas coisas: quem não usa nome social entende que não é para ele em
+            uma linha; quem usa acha o campo sem precisar saber que existe.
+            O texto afirma o direito (Decreto 8.727/2016) em vez de pedir
+            justificativa — a pergunta é sobre COMO a pessoa quer ser chamada,
+            não sobre quem ela é. */}
+        <Campo rotulo="Você usa nome social?"
+               ajuda="Nome social é o nome pelo qual você é conhecido(a) e quer ser tratado(a), quando ele é diferente do que está no seu registro civil. É um direito garantido pelo Decreto 8.727/2016.">
+          <SelectBusca valor={temNomeSocial ? 'sim' : 'nao'}
+                       aoEscolher={(v) => {
+                         const usa = v === 'sim'
+                         setTemNomeSocial(usa)
+                         // Ao dizer "não", LIMPA o que estiver escrito: deixar
+                         // um valor guardado que a tela não mostra faria o nome
+                         // social aparecer nos documentos que a pessoa assina
+                         // sem ela ver — e o wizard salva a cada 900ms, então o
+                         // resíduo persistiria.
+                         if (!usa && p.nome_social) setSec('pessoais', 'nome_social', '')
+                       }}>
+            <option value="nao">Não</option>
+            <option value="sim">Sim</option>
+          </SelectBusca>
+        </Campo>
+        {temNomeSocial && (
+          <Campo rotulo="Nome social"
+                 ajuda="Ele aparecerá nos seus documentos junto ao nome civil, como manda o Decreto 8.727/2016.">
+            <input value={p.nome_social || ''} autoFocus
+                   onChange={(e) => setSec('pessoais', 'nome_social', e.target.value)} /></Campo>
+        )}
         <Campo rotulo="Nome completo da sua mãe"
                ajuda="Como está nos seus documentos (certidão de nascimento ou RG).">
           <input value={p.nome_mae || ''}

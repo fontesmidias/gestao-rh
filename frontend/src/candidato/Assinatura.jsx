@@ -10,7 +10,7 @@ const NOMES = {
 }
 
 // fase: revisar → enviando → codigo → assinando → concluido
-export default function Assinatura({ token, email, aoConcluir }) {
+export default function Assinatura({ token, email, aoConcluir, aoVoltarAoFormulario }) {
   const [fichas, setFichas] = useState(null)
   const [fase, setFase] = useState('revisar')
   const [emailAtual, setEmailAtual] = useState(email || '')
@@ -200,6 +200,23 @@ export default function Assinatura({ token, email, aoConcluir }) {
           <button className="btn-principal" disabled={fase === 'enviando'} onClick={pedirCodigo}>
             {fase === 'enviando' ? '📨 Enviando o código para o seu e-mail…' : 'Assinar os documentos'}
           </button>
+          {/* Voltar a corrigir os dados (v2.88, feedback de campo: "estava
+              escrevendo o endereço e não conseguiu mais voltar para editar").
+              O backend SEMPRE permitiu — `_candidato_do_token` só barra
+              `expurgado` e `aprovado` —, quem não oferecia o caminho era a
+              tela: depois de confirmar, o app ia para cá e não havia porta de
+              volta. Fica ao lado do botão de assinar porque é AQUI que a
+              pessoa relê o que preencheu e percebe o erro; um link no rodapé
+              seria achado depois de ela já ter assinado.
+              Só aparece antes da assinatura: documento assinado é peça de
+              prova, e corrigir dado depois disso é outra conversa (o RH
+              reabre). */}
+          {aoVoltarAoFormulario && (
+            <button className="btn-link" onClick={aoVoltarAoFormulario}
+                    style={{ display: 'block', margin: '.8rem auto 0' }}>
+              ← Preciso corrigir meus dados antes de assinar
+            </button>
+          )}
           {fase === 'enviando' && <Espera texto="Preparando e enviando seu código…" />}
         </>
       )}

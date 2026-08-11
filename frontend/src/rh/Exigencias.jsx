@@ -102,7 +102,7 @@ export default function Exigencias({ candidatoId, setMsg }) {
   const bloco = (titulo, grupo, itens) => (
     <div className="rh-card">
       <strong>{titulo}</strong>
-      <ul className="fichas-status" style={{ marginTop: '.4rem' }}>
+      <ul className="fichas-status em-colunas" style={{ marginTop: '.4rem' }}>
         {itens.map((i) => {
           // A origem que MERECE ser mostrada: `fabrica` é o padrão e não
           // informa nada. Na tela do padrão da casa, "casa" também é o esperado
