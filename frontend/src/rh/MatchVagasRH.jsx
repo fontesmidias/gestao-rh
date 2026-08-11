@@ -50,6 +50,16 @@ export default function MatchVagasRH() {
     catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível excluir (${e.detail || e.message}).` }) }
   }
 
+  const duplicar = async (v) => {
+    try {
+      const nova = await api.duplicarVaga(v.id)
+      carregar()
+      // Nasce INATIVA de propósito: a original costuma estar aberta, e a cópia
+      // passaria a receber candidatura antes de alguém revisar os requisitos.
+      setMsg({ tipo: 'ok', texto: `"${nova.titulo}" criada INATIVA. Ajuste e ative quando estiver pronta.` })
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível duplicar (${e.detail || e.message}).` }) }
+  }
+
   const ranquear = async (v, reanalisar = false) => {
     setMsg(null)
     try {
@@ -121,6 +131,8 @@ export default function MatchVagasRH() {
                         {' · '}
                         <button className="btn-link" onClick={() => setEditando(v)}>editar</button>
                         {' · '}
+                        <button className="btn-link" onClick={() => duplicar(v)}
+                                title="Cria uma cópia inativa para você ajustar">duplicar</button>
                         <button className="btn-link" onClick={() => excluir(v)}>excluir</button>
                       </td>
                     </tr>

@@ -109,6 +109,35 @@ def editar_vaga(vaga_id: uuid.UUID, payload: VagaIn, db: Session = Depends(get_d
     return _dump_vaga(v)
 
 
+@router.post("/rh/vagas/{vaga_id}/duplicar", status_code=201)
+def duplicar_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> dict:
+    """Cópia INATIVA da vaga — reabrir processo parecido sem recadastrar (v2.87).
+
+    A cópia **não** herda `ativa` (a vaga original costuma estar aberta, e a
+    cópia passaria a receber candidatura antes de alguém revisar descrição e
+    requisitos), nem as ANÁLISES de match: elas são por (vaga, talento) e
+    descrevem o julgamento feito para AQUELA vaga. Trazê-las daria um ranking
+    pronto para uma vaga cujos requisitos ainda vão mudar — parecendo analisado
+    quando ninguém analisou.
+    """
+    v = db.get(Vaga, vaga_id)
+    if v is None:
+        raise HTTPException(status_code=404, detail="vaga_nao_encontrada")
+    nova = Vaga(
+        titulo=f"{v.titulo} (cópia)"[:160], descricao=v.descricao,
+        requisitos_obrigatorios=v.requisitos_obrigatorios,
+        requisitos_desejaveis=v.requisitos_desejaveis,
+        cargo=v.cargo, regiao=v.regiao, regime=v.regime,
+        salario_min=v.salario_min, salario_max=v.salario_max, ativa=False)
+    db.add(nova)
+    db.flush()
+    registrar(db, "vaga_duplicada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"vaga": str(nova.id), "de": str(v.id)})
+    db.commit()
+    return _dump_vaga(nova)
+
+
 @router.delete("/rh/vagas/{vaga_id}", status_code=204)
 def excluir_vaga(vaga_id: uuid.UUID, db: Session = Depends(get_db),
                  rh: UsuarioRH = Depends(exige("selecao:escrever"))) -> None:

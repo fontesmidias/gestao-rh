@@ -140,13 +140,13 @@ export default function Modelos() {
   const duplicar = async (m) => {
     setMsg(null)
     try {
-      await api.criarModelo({
-        titulo: `${m.titulo} (cópia)`, corpo: m.corpo, escopo: m.escopo,
-        cargo_alvo: m.cargo_alvo, posto_alvo_id: m.posto_alvo_id,
-        candidato_alvo_id: m.candidato_alvo_id, enviar_por_email: m.enviar_por_email,
-        exige_assinatura: m.exige_assinatura, papel_assinatura: m.papel_assinatura,
-      })
-      setMsg({ tipo: 'ok', texto: `Cópia de "${m.titulo}" criada.` })
+      // Rota dedicada (v2.87), não `criarModelo` remontando o payload aqui: a
+      // versão anterior copiava também o ALVO (cargo, posto, pessoa), e o
+      // resultado eram dois modelos disputando o mesmo destino — com
+      // `modelos-aplicaveis` devolvendo os dois e ninguém sabendo qual vale.
+      // Duplicar existe justamente para apontar a variação a OUTRO alvo.
+      await api.duplicarModelo(m.id)
+      setMsg({ tipo: 'ok', texto: `Cópia de "${m.titulo}" criada. Escolha a quem ela se aplica.` })
       await recarregar()
     } catch (e) {
       setMsg({ tipo: 'erro', texto: `Não foi possível duplicar (${e.detail || e.message}).` })

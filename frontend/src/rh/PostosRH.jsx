@@ -260,6 +260,16 @@ export default function PostosRH() {
                         da_direito_creche: !!p.da_direito_creche,
                         valor_reembolso_creche: p.valor_reembolso_creche || '',
                       })}>{editando ? 'Fechar' : 'Editar'}</button>
+                      {/* Duplicar (v2.87): a cópia nasce INATIVA e sem ID do
+                          Tirvu, herdando o kit de documentos e o creche — que é
+                          o trabalho de verdade ao abrir contrato parecido. */}
+                      <button className="btn-link" onClick={async () => {
+                        try {
+                          const novo = await api.duplicarPosto(p.id)
+                          await recarregar()
+                          setMsg({ tipo: 'ok', texto: `"${novo.nome}" criado INATIVO, sem ID do Tirvu. Revise e ative.` })
+                        } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível duplicar (${e.detail || e.message}).` }) }
+                      }}>duplicar</button>
                       {p.ativo && (
                         <button className="btn-link" onClick={async () => {
                           if (!window.confirm(`Desativar o posto "${p.nome}"? Ele some das listas de escolha (colaboradores já vinculados seguem intactos).`)) return

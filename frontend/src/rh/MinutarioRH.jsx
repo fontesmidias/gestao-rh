@@ -25,6 +25,16 @@ export default function MinutarioRH() {
     api.crmTags().then(setTags).catch(() => {})
   }, [])
 
+  const duplicar = async (m) => {
+    try {
+      const novo = await api.minutarioDuplicarModelo(m.id)
+      carregar()
+      // Nasce INATIVO: a cópia existe para ser ajustada, e um modelo de
+      // mensagem ativo já aparece para quem vai disparar.
+      setMsg({ tipo: 'ok', texto: `"${novo.titulo}" criado INATIVO. Ajuste e ative.` })
+    } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível duplicar (${e.detail || e.message}).` }) }
+  }
+
   const excluir = async (m) => {
     if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
     try { await api.minutarioExcluirModelo(m.id); carregar() }
@@ -70,6 +80,8 @@ export default function MinutarioRH() {
                   <td>
                     <button className="btn-link" onClick={() => setEditando(m)}>editar</button>
                     {' · '}
+                    <button className="btn-link" onClick={() => duplicar(m)}
+                            title="Cria uma cópia inativa para você ajustar">duplicar</button>
                     <button className="btn-link" onClick={() => excluir(m)}>excluir</button>
                   </td>
                 </tr>
