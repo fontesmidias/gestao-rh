@@ -359,6 +359,50 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
     return _dump_posto(posto)
 
 
+@router.post("/rh/postos/{posto_id}/duplicar", status_code=201)
+def duplicar_posto(posto_id: uuid.UUID, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> dict:
+    """Cópia INATIVA do posto — abrir contrato parecido sem recadastrar (v2.87).
+
+    Herda o que descreve o SERVIÇO (kit de documentos, creche, jornada,
+    INFRAERO, endereço) — que é o trabalho de verdade, e onde um esquecimento
+    custa caro: posto sem `documentos_kit` significa gente admitida sem assinar
+    o termo de VT.
+
+    ⚠️ **O `tirvu_id` NÃO é copiado.** Ele é a chave com que a planilha de
+    Postos do Tirvu casa o cadastro; dois postos com o mesmo ID fariam a
+    importação atualizar o posto errado — em silêncio, porque ela casa por ID e
+    não tem como saber qual dos dois é o certo. A cópia nasce sem ID, e o RH o
+    cadastra quando o posto existir de fato lá.
+    """
+    p = db.get(PostoServico, posto_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="posto_nao_encontrado")
+
+    # `nome` é `unique`: sufixo incremental, como no duplicar de papéis.
+    base = f"{p.nome} (cópia)"[:200]
+    nome, n = base, 1
+    while db.scalar(select(PostoServico).where(PostoServico.nome == nome)) is not None:
+        n += 1
+        nome = f"{p.nome} (cópia {n})"[:200]
+
+    novo = PostoServico(
+        nome=nome, sigla=p.sigla, razao_social=p.razao_social, cnpj=p.cnpj,
+        contrato_ref=p.contrato_ref, endereco=p.endereco, cidade=p.cidade,
+        uf=p.uf, cep=p.cep, exige_docs_infraero=p.exige_docs_infraero,
+        documentos_kit=list(p.documentos_kit or []),
+        atributos=dict(p.atributos or {}),
+        da_direito_creche=p.da_direito_creche,
+        valor_reembolso_creche=p.valor_reembolso_creche,
+        ativo=False, tirvu_id=None)
+    db.add(novo)
+    db.flush()
+    registrar(db, "posto_duplicado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"posto": str(novo.id), "de": str(p.id), "nome": nome})
+    db.commit()
+    return _dump_posto(novo)
+
+
 @router.delete("/rh/postos/{posto_id}", status_code=204)
 def excluir_posto(posto_id: uuid.UUID, db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(exige("organizacao:escrever"))) -> None:

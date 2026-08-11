@@ -122,6 +122,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   rótulo dizendo o contrário); a chave se resolve por sufixo incremental
   (`rh-copia`, `rh-copia-2`) porque `chave` é `unique`; e duplicar deve **abrir
   a cópia para edição na hora**, já que quem clica quer ajustar algo.
+  **O que NÃO se copia** (v2.87.1, ao levar o padrão a posto/vaga/modelo/
+  minutário): (a) o campo que IDENTIFICA no sistema externo —
+  `PostoServico.tirvu_id` fora, senão dois postos com o mesmo ID fazem a
+  importação do Tirvu atualizar o posto ERRADO, calada, porque ela casa por ID
+  e não sabe qual dos dois é o certo; (b) o ALVO (`cargo_alvo`/`posto_alvo_id`/
+  `candidato_alvo_id` do modelo de documento), senão ficam dois modelos
+  disputando o mesmo destino e `modelos-aplicaveis` devolve os dois; (c) o
+  JULGAMENTO feito sobre o original (as análises de match da vaga), que
+  pareceria analisado sem ninguém ter analisado. **O que SE copia é o
+  trabalho**: corpo do modelo, `documentos_kit` e creche do posto (posto sem
+  kit = gente admitida sem assinar o termo de VT), tags do minutário (sem elas
+  a cópia some dos filtros onde o original aparece). Coberto por
+  `test_duplicar.py`, validado por 4 mutações.
 - **Desativar em massa RECUSA oferecendo a saída — nunca só o bloqueio** (v2.87,
   `papeis.py::alternar_ativo`): papel inativo não concede nada, então desativar
   um papel EM USO cortaria o acesso de várias pessoas de uma vez e em silêncio

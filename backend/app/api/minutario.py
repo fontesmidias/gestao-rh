@@ -79,6 +79,30 @@ def criar_modelo(payload: ModeloMensagemIn, db: Session = Depends(get_db),
     return _dump_modelo(m, _tags_do_modelo(db, m.id))
 
 
+@router.post("/rh/minutario/modelos/{modelo_id}/duplicar", status_code=201)
+def duplicar_modelo(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:
+    """Cópia INATIVA do modelo de mensagem (v2.87).
+
+    As TAGS vão junto: elas classificam o modelo (a que assunto ele serve), e a
+    cópia serve ao mesmo assunto — perdê-las faria a cópia sumir dos filtros
+    onde o original aparece, e alguém a daria por não criada.
+    """
+    m = db.get(ModeloMensagem, modelo_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
+    novo = ModeloMensagem(titulo=f"{m.titulo} (cópia)"[:160], meio=m.meio,
+                          corpo_base=m.corpo_base, ativo=False)
+    db.add(novo)
+    db.flush()
+    for t in _tags_do_modelo(db, m.id):
+        db.add(ModeloMensagemTag(modelo_id=novo.id, tag_id=t.id))
+    registrar(db, "minutario_modelo_duplicado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"modelo": str(novo.id), "de": str(m.id)})
+    db.commit()
+    return _dump_modelo(novo, _tags_do_modelo(db, novo.id))
+
+
 @router.patch("/rh/minutario/modelos/{modelo_id}")
 def editar_modelo(modelo_id: uuid.UUID, payload: ModeloMensagemIn,
                   db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:

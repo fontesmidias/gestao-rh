@@ -11,6 +11,41 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.87.1] — 2026-08-10 — Duplicar em postos, vagas, modelos e minutário
+
+Replica o padrão da v2.87 nos quatro cadastros que o Bruno marcou. Em todos, a
+cópia nasce **sem valer** (inativa) — a exceção é o modelo de documento, que não
+tem campo de ativação e por isso já é inofensivo até ser apontado a um alvo.
+
+O que **não** se copia, e por quê:
+
+- **`PostoServico.tirvu_id`** — é a chave com que a planilha de Postos do Tirvu
+  casa o cadastro. Dois postos com o mesmo ID fazem a importação atualizar o
+  posto ERRADO, em silêncio, porque ela casa por ID e não tem como saber qual
+  dos dois é o certo. O `documentos_kit` e o creche, ao contrário, VÃO junto:
+  são o trabalho de verdade, e posto sem kit significa gente admitida sem
+  assinar o termo de VT.
+- **O alvo do modelo de documento** (cargo, posto ou pessoa) — herdá-lo cria
+  dois modelos disputando o mesmo destino, com `modelos-aplicaveis` devolvendo
+  os dois e ninguém sabendo qual vale. Duplicar existe justamente para apontar
+  a variação a outro alvo.
+- **As análises de match da vaga** — são por (vaga, talento) e descrevem o
+  julgamento feito para AQUELA vaga. Trazê-las daria um ranking pronto para uma
+  vaga cujos requisitos ainda vão mudar: pareceria analisado sem ninguém ter
+  analisado.
+
+Já as **tags do minutário** vão junto: classificam a que assunto o modelo serve,
+e a cópia serve ao mesmo — sem elas, a cópia sumiria dos filtros onde o original
+aparece e alguém a daria por não criada.
+
+**Defeito corrigido de passagem**: o "duplicar" de modelos de documento já
+existia, mas era feito NO CLIENTE, remontando o payload — e copiava o alvo
+(`cargo_alvo`, `posto_alvo_id`, `candidato_alvo_id`), produzindo exatamente os
+dois modelos concorrentes descritos acima. Agora aponta para a rota dedicada.
+
+`test_duplicar.py` entra no CI, validado por quatro mutações: posto herdando o
+`tirvu_id`, posto perdendo o kit, vaga nascendo ativa e modelo herdando o alvo.
+
 ## [2.87.0] — 2026-08-10 — Duplicar, ajustar, então ativar
 
 Pedido do Bruno olhando a tela de papéis, e cravado como **padrão** para o que

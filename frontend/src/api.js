@@ -676,6 +676,10 @@ export const rh = {
     req(`/rh/postos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
   // Cargos já usados na base ({ nome, pessoas }), mais frequentes primeiro.
   cargos: () => req('/rh/cargos', { headers: authRH() }),
+  // Duplicar (v2.87): cópia INATIVA e SEM `tirvu_id` — dois postos com o
+  // mesmo ID fariam a importação do Tirvu atualizar o posto errado.
+  duplicarPosto: (id) =>
+    req(`/rh/postos/${id}/duplicar`, { method: 'POST', headers: authRH() }),
   criarPosto: (dados) =>
     req('/rh/postos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarPosto: (id, dados) =>
@@ -758,6 +762,8 @@ export const rh = {
   // Minutário de mensagens (v1.98)
   minutarioModelos: (incluirInativos) =>
     req(`/rh/minutario/modelos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
+  minutarioDuplicarModelo: (id) =>
+    req(`/rh/minutario/modelos/${id}/duplicar`, { method: 'POST', headers: authRH() }),
   minutarioCriarModelo: (dados) =>
     req('/rh/minutario/modelos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   minutarioEditarModelo: (id, dados) =>
@@ -769,6 +775,8 @@ export const rh = {
   // Match de Vagas × Banco de Talentos (v1.99)
   vagas: (incluirInativas) =>
     req(`/rh/vagas${incluirInativas ? '?incluir_inativas=true' : ''}`, { headers: authRH() }),
+  duplicarVaga: (id) =>
+    req(`/rh/vagas/${id}/duplicar`, { method: 'POST', headers: authRH() }),
   criarVaga: (dados) =>
     req('/rh/vagas', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarVaga: (id, dados) =>
@@ -800,6 +808,8 @@ export const rh = {
     req('/rh/config/recrutamento', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   // Modelos de documento (CRUD + geração)
   modelos: () => req('/rh/modelos-documento', { headers: authRH() }),
+  duplicarModelo: (id) =>
+    req(`/rh/modelos-documento/${id}/duplicar`, { method: 'POST', headers: authRH() }),
   criarModelo: (dados) =>
     req('/rh/modelos-documento', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   editarModelo: (id, dados) =>

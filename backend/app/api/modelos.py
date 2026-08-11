@@ -85,6 +85,35 @@ def criar(payload: ModeloIn, db: Session = Depends(get_db),
     return _dump(m)
 
 
+@router.post("/rh/modelos-documento/{modelo_id}/duplicar", status_code=201)
+def duplicar_modelo(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+                    rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
+    """Cópia do modelo, para variar por posto/cargo sem redigitar o corpo (v2.87).
+
+    O corpo é o trabalho: são páginas de texto com `{{variáveis}}`, e recriar à
+    mão para mudar duas cláusulas é onde nasce a divergência entre documentos
+    que deveriam ser irmãos.
+
+    A cópia herda o ESCOPO mas **não o alvo** (posto, cargo ou pessoa): duplicar
+    existe justamente para apontar a variação a outro destino, e herdar o alvo
+    criaria dois modelos concorrendo pelo mesmo — com o `modelos-aplicaveis`
+    devolvendo os dois e ninguém sabendo qual vale.
+    """
+    m = db.get(ModeloDocumento, modelo_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
+    novo = ModeloDocumento(
+        titulo=f"{m.titulo} (cópia)"[:200], corpo=m.corpo, escopo=m.escopo,
+        enviar_por_email=m.enviar_por_email, exige_assinatura=m.exige_assinatura,
+        papel_assinatura=m.papel_assinatura)
+    db.add(novo)
+    db.flush()
+    registrar(db, "modelo_documento_duplicado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"modelo": str(novo.id), "de": str(m.id)})
+    db.commit()
+    return _dump(novo)
+
+
 @router.put("/rh/modelos-documento/{modelo_id}")
 def editar(modelo_id: uuid.UUID, payload: ModeloIn, db: Session = Depends(get_db),
            rh: UsuarioRH = Depends(exige("documentos:modelos"))) -> dict:
