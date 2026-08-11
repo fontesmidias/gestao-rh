@@ -404,36 +404,47 @@ const acoesAdmissao = (c, abrir) => (<>
 // hover/recolher ficou bugada — logo cortada, sem rolagem, itens demais soltos).
 // Cada grupo tem um título curto; a <nav> rola sozinha quando não cabe. No
 // celular vira gaveta pelo hambúrguer, retraindo ao escolher uma opção.
+// O 4º item é a PERMISSÃO que a tela exige (v2.88). Esconder o que a pessoa
+// não pode é CORTESIA, não segurança — quem protege é o `exige` de cada rota,
+// no servidor. Mas deixar visível um menu que sempre responde 403 ensina a
+// equipe a ignorar mensagem de erro, e é justamente a mensagem de erro que
+// precisa ser levada a sério quando algo quebra de verdade.
+//
+// ⚠️ A permissão aqui tem que ser a MESMA da rota que a tela chama ao abrir.
+// Escolher uma permissão "parecida" esconde o menu de quem poderia usar, ou —
+// pior — mostra o menu de quem vai levar 403 ao clicar.
 const GRUPOS = [
   ['Admissão', [
-    ['inicio', '📋', 'Admissões'],
-    ['colaboradores', '👥', 'Colaboradores'],
-    ['postos', '🏢', 'Postos'],
-    ['jornadas', '🕒', 'Jornadas'],
-    ['uniformes', '👕', 'Uniformes'],
+    ['inicio', '📋', 'Admissões', 'admissao:ler'],
+    ['colaboradores', '👥', 'Colaboradores', 'colaboradores:ler'],
+    ['postos', '🏢', 'Postos', 'organizacao:ler'],
+    ['jornadas', '🕒', 'Jornadas', 'organizacao:escrever'],
+    ['uniformes', '👕', 'Uniformes', 'colaboradores:ler'],
   ]],
   ['Documentos', [
-    ['modelos', '📝', 'Modelos'],
-    ['assinaturas', '✍️', 'Assinaturas'],
-    ['arquivo', '🗄️', 'Arquivo'],
+    ['modelos', '📝', 'Modelos', 'documentos:modelos'],
+    ['assinaturas', '✍️', 'Assinaturas', 'documentos:assinar'],
+    ['arquivo', '🗄️', 'Arquivo', 'dados:arquivo_lote'],
   ]],
   ['Avaliação', [
-    ['testagem', '🧪', 'Testes'],
-    ['desenvolvimento', '🎓', 'Desenvolvimento'],
-    ['desempenho', '📌', 'Fatos Observados'],
-    ['avaliacoes', '⭐', 'Avaliações'],
+    ['testagem', '🧪', 'Testes', 'selecao:provas'],
+    ['desenvolvimento', '🎓', 'Desenvolvimento', 'desenvolvimento:ler'],
+    ['desempenho', '📌', 'Fatos Observados', 'desempenho:avaliar'],
+    ['avaliacoes', '⭐', 'Avaliações', 'desempenho:avaliar'],
   ]],
   ['Benefícios', [
-    ['creche', '🍼', 'Reembolso-Creche'],
+    ['creche', '🍼', 'Reembolso-Creche', 'creche:ler'],
   ]],
   ['Recrutamento', [
-    ['talentos', '🎯', 'Banco de Talentos'],
-    ['minutario', '💬', 'Minutário de Mensagens'],
-    ['match-vagas', '🧩', 'Match de Vagas'],
-    ['entrevistas', '🗣️', 'Entrevistas'],
+    ['talentos', '🎯', 'Banco de Talentos', 'selecao:ler'],
+    ['minutario', '💬', 'Minutário de Mensagens', 'documentos:minutario'],
+    ['match-vagas', '🧩', 'Match de Vagas', 'selecao:escrever'],
+    ['entrevistas', '🗣️', 'Entrevistas', 'selecao:entrevistar'],
   ]],
   ['Sistema', [
-    ['config', '⚙️', 'Configurações'],
+    // Configurações abre em abas; a de perfil próprio serve a qualquer um, por
+    // isso a permissão exigida aqui é a de LEITURA, não a de escrita.
+    ['config', '⚙️', 'Configurações', 'config:ler'],
   ]],
 ]
 
@@ -443,6 +454,22 @@ const GRUPOS = [
 // passam a funcionar de graça: o React Router intercepta só o clique simples.
 function Sidebar({ aoSair, aoRever }) {
   const [movelAberto, setMovelAberto] = useState(false)
+  // `null` = ainda carregando. Enquanto não sabemos o que a pessoa pode, o
+  // menu aparece INTEIRO — esconder por precaução faria os itens surgirem um a
+  // um depois da resposta, e alguém concluiria que "sumiu do sistema". O
+  // servidor nega de qualquer forma; aqui é só cortesia.
+  const [permissoes, setPermissoes] = useState(null)
+  useEffect(() => {
+    api.minhasPermissoes()
+      .then((r) => setPermissoes(r.superadmin ? 'tudo' : new Set(r.permissoes)))
+      // Falha ao consultar NÃO esconde nada, pelo mesmo motivo: um erro de rede
+      // não pode parecer perda de acesso.
+      .catch(() => setPermissoes('tudo'))
+  }, [])
+
+  const podeVer = (permissao) =>
+    permissoes === null || permissoes === 'tudo' || permissoes.has(permissao)
+
   const nome = localStorage.getItem('rh_nome') || ''
   return (
     <>
@@ -460,10 +487,15 @@ function Sidebar({ aoSair, aoRever }) {
           )}
         </div>
         <nav>
-          {GRUPOS.map(([titulo, itens]) => (
+          {GRUPOS.map(([titulo, itens]) => {
+            const visiveis = itens.filter(([, , , perm]) => podeVer(perm))
+            // Grupo inteiro sem item visível não deixa o TÍTULO órfão na
+            // barra: "Benefícios" sozinho sugeriria uma tela que não abre.
+            if (!visiveis.length) return null
+            return (
             <div className="rh-sidebar-grupo" key={titulo}>
               <span className="rh-sidebar-grupo-titulo">{titulo}</span>
-              {itens.map(([id, icone, rotulo]) => (
+              {visiveis.map(([id, icone, rotulo]) => (
                 <NavLink key={id} to={id === 'inicio' ? '/rh' : `/rh/${id}`} end
                          className={({ isActive }) => `rh-sidebar-item ${isActive ? 'ativo' : ''}`}
                          onClick={() => setMovelAberto(false)}>
@@ -472,7 +504,21 @@ function Sidebar({ aoSair, aoRever }) {
                 </NavLink>
               ))}
             </div>
-          ))}
+            )
+          })}
+          {/* Menu vazio precisa DIZER que está vazio (v2.88): a barra em branco
+              parece sistema quebrado, e a pessoa liga para o RH achando que não
+              carregou. Acontece de verdade com papéis estreitos — a recepção,
+              por exemplo, não tem nenhuma das telas atuais (o módulo dela ainda
+              vai nascer). Dizer o motivo transforma "quebrou" em "ainda não é
+              para mim", que é a informação certa. */}
+          {permissoes !== null && permissoes !== 'tudo'
+            && !GRUPOS.some(([, itens]) => itens.some(([, , , p]) => permissoes.has(p))) && (
+            <p className="explica" style={{ padding: 'var(--esp-3)' }}>
+              Seu acesso ainda não inclui nenhuma tela. Fale com quem administra
+              o sistema para liberar o que você precisa.
+            </p>
+          )}
         </nav>
         <div className="rh-sidebar-rodape">
           <span className="rh-sidebar-user" title={`Conectado(a) como ${nome}`}>

@@ -107,6 +107,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`min-width: 0` NÃO quebra texto enquanto houver `white-space: nowrap`**
+  (v2.88, o rótulo que saiu por cima da coluna vizinha): ao pôr a lista de
+  exigências em grade, "Certidão de nascimento do dependente" mediu **303px numa
+  coluna de 246px** e foi impresso SOBRE a coluna ao lado. Soltar o piso do item
+  (`min-width: 0` no `li` e no `.campo-check`) não resolve sozinho — sem lugar
+  onde quebrar, o texto continua numa linha só. O `.campo-check` é `nowrap` de
+  propósito (certo na barra de ações, onde rótulo curto não deve partir), então
+  a correção é `white-space: normal` **só na lista em colunas**. Mordeu duas
+  vezes na mesma leva porque **o teste de largura passava**: overflow CONTIDO
+  não alarga a página (v2.76.1) e só apareceu no PRINT. Ao pôr em colunas algo
+  que era lista vertical, meça a borda direita de cada item contra a do
+  container — e olhe a tela.
+- **Menu que esconde o que a pessoa não pode é CORTESIA — e menu vazio precisa
+  DIZER que está vazio** (v2.88, `RHApp.jsx`): quem protege é o `exige` de cada
+  rota, no servidor; esconder no front não acrescenta segurança nenhuma. O
+  motivo de fazê-lo é outro: item que sempre responde 403 ensina a equipe a
+  ignorar mensagem de erro, e é justamente a mensagem de erro que precisa ser
+  levada a sério quando algo quebra. Três regras: (1) a permissão do item tem
+  que ser a MESMA da rota que a tela chama ao abrir — uma "parecida" esconde o
+  menu de quem poderia usar, ou mostra o de quem vai levar 403; (2) enquanto as
+  permissões carregam, **e se a consulta falhar**, o menu aparece INTEIRO —
+  erro de rede não pode parecer perda de acesso; (3) papel estreito pode zerar
+  o menu (medido: recepção vê 0 itens), e barra em branco parece sistema
+  quebrado — a explicação transforma "quebrou" em "ainda não é para mim".
 - **DUPLICAR é o caminho normal de criar — e a cópia nasce SEM VALER** (v2.87,
   padrão cravado pelo Bruno: *"a possibilidade de duplicar um existente e, a
   partir dessa duplicata, editarmos o que tiver que editar para daí sim

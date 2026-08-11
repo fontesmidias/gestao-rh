@@ -220,6 +220,13 @@ export default function CandidatoApp() {
             </div>
           )}
           <Assinatura token={token} email={estado.pessoais?.email}
+                      // Volta ao formulário para corrigir antes de assinar
+                      // (v2.88). Só quando NÃO é reassinatura: ali os
+                      // documentos vieram do RH e o formulário não é o que se
+                      // corrige. Nada é desfeito — o candidato segue em
+                      // `aguardando_assinatura` e o wizard reabre no passo 1.
+                      aoVoltarAoFormulario={reassinatura ? null
+                        : () => { setTela('formulario'); window.scrollTo(0, 0) }}
                       aoConcluir={() => setTela(
                         reassinatura && estado.status !== 'aguardando_assinatura'
                           ? (estado.status === 'docs_pendentes' ? 'documentos' : 'acompanhamento')
