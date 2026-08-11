@@ -231,7 +231,7 @@ jobs:
                    test_documento_especifico test_exigencias \
                    test_uniforme_planilha test_fonte_configuravel \
                    test_permissoes_efeito test_duplicar test_data_documentos \
-                   test_talento_campos_longos; do
+                   test_talento_campos_longos test_textos_documentos; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

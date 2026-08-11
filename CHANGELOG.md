@@ -11,6 +11,47 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.90.0] — 2026-08-10 — Os textos dos documentos passam a ser da empresa
+
+Segunda parte do item do P1: *"tornar os demais documentos editáveis, conforme o
+caso"* — com a ressalva que o próprio Bruno cravou: *"os que já foram assinados,
+obviamente que não"*.
+
+O que passou a ser editável em Configurações → Modelos → **Textos dos
+documentos**: a lista de **direitos do trabalhador** (que sai no ofício da
+INFRAERO e nas fichas de integração) e os quatro **ciclos de pagamento** — VT e
+VA, por regime. São os textos que mudam por decisão da empresa ou por mudança de
+norma, e que até aqui exigiam deploy.
+
+**O layout continua fora do alcance**, como decidido: formulário oficial tem
+campos posicionados, tabelas e loops (a ficha cadastral tem 49 chamadas de
+campo), e virá-lo texto destruiria o papel. Para os 12 documentos que não são
+texto corrido vale a escolha do Bruno: *"só a data e os dados; o layout fica"*.
+
+Três garantias que sustentam isso:
+
+1. **Documento assinado não muda.** O `hash_sha256` do ato foi calculado sobre
+   aquele PDF, gravado no MinIO; quem assinou carrega a via que leu. Editar aqui
+   muda o que SERÁ gerado daqui em diante — é o que mantém o `/verificar`
+   batendo.
+2. **Vazio volta ao padrão de fábrica.** Sem registro, com texto em branco ou
+   com erro de leitura, vale a constante do código, e `texto()` nunca levanta:
+   documento é papel que a pessoa assina, não pode deixar de sair porque a
+   consulta de configuração falhou (a regra do `avisar()`).
+3. **A fonte continua ÚNICA.** O corpo que o RH copia para criar um modelo
+   (`documentos_texto.py`) lê o MESMO texto que o gerador do PDF — editar muda
+   os dois juntos. Duplicar faria a amostra divergir do documento oficial, que
+   é o defeito da v2.19 (a cópia à mão perdeu 6% do VT e 8% do FGTS).
+
+Validado por duas mutações: o gerador voltando a ler a constante (a edição não
+teria efeito no papel) e o corpo copiável voltando a ela (a amostra divergiria
+do oficial). Ambas reprovam nomeando a consequência.
+
+⚠️ Achado ao escrever o teste: a primeira asserção conferia que a frase antiga
+sumira do PDF — e ela CONTINUAVA lá, corretamente, porque pertence ao
+vale-ALIMENTAÇÃO, outro bloco. Ao afirmar sobre ausência num documento longo,
+confira a que seção o trecho pertence.
+
 ## [2.89.1] — 2026-08-10 — O cadastro de talento que recusava sem dizer por quê
 
 Defeito de campo, com o log em mãos: não dava para cadastrar talento à mão.

@@ -107,6 +107,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Texto de documento editável mora em `services/textos_documentos.py` — e a
+  constante continua sendo o PADRÃO** (v2.90): direitos do trabalhador e os
+  quatro ciclos de VT/VA saíram do código para o painel, mas `DIREITOS_TRABALHADOR`
+  e `_CICLO_VT`/`_CICLO_VA` continuam em `fichas.py` como fábrica — vazio ou erro
+  de leitura cai neles, e `texto()` NUNCA levanta (documento é papel que a pessoa
+  assina; não pode deixar de sair porque a consulta de config falhou). Ao tornar
+  outro trecho editável: acrescente ao `BLOCOS`, ligue o gerador **e** o corpo
+  copiável de `documentos_texto.py` — os dois leem a MESMA fonte, e deixar um
+  para trás faz a amostra que o RH duplica divergir do documento oficial (o
+  defeito da v2.19, que perdeu 6% do VT e 8% do FGTS numa cópia à mão). ⚠️ **O
+  LAYOUT não entra**: formulário oficial tem campos posicionados, tabelas e loops
+  (a ficha cadastral tem 49 chamadas de campo) — decisão do Bruno é *"só a data e
+  os dados; o layout fica"*. E **documento assinado nunca muda**: o hash do ato
+  foi calculado sobre aquele PDF.
+- **Afirmar AUSÊNCIA em documento longo exige saber a que SEÇÃO o trecho
+  pertence** (v2.90): o teste conferiu que "dia 1 ao dia 30" sumira do PDF depois
+  de editar o ciclo do VT — e a frase continuava lá, CORRETAMENTE, porque
+  pertence ao vale-ALIMENTAÇÃO, outro bloco. Asserção de ausência sobre texto
+  extraído de PDF casa com qualquer seção; recorte antes de afirmar.
 - **Coluna dimensionada para o caminho MAIS ESTREITO quebra no outro** (v2.89.1,
   defeito de campo): `talento.escolaridade` era `varchar(60)` porque o
   formulário PÚBLICO oferece uma LISTA curta ("Ensino médio completo") — mas no

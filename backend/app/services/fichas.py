@@ -29,6 +29,7 @@ from app.models.ficha import (
 from app.services.endereco import cep_formatado
 from app.services.endereco import completo as endereco_completo
 from app.services.endereco import rua as endereco_rua
+from app.services import textos_documentos
 from sqlalchemy import select
 
 VERDE = (140, 198, 63)
@@ -846,7 +847,9 @@ def gerar_informacoes_trabalhador(db: Session, candidato: Candidato,
                   "Leis Trabalhistas (CLT) e pelas Convenções/Acordos Coletivos de "
                   "Trabalho. Assim, listamos abaixo alguns desses direitos:")
     pdf.set_font("helvetica", "", 10.5)
-    for item in DIREITOS_TRABALHADOR:
+    # Lê do painel (v2.90); sem personalização, cai em
+    # `DIREITOS_TRABALHADOR` — a constante logo acima continua sendo o padrão.
+    for item in textos_documentos.linhas(db, "texto_direitos_trabalhador"):
         pdf.set_x(18)
         pdf.multi_cell(182, 5.6, item)
         pdf.ln(1)
@@ -1465,7 +1468,7 @@ def _gerar_informativo_integracao(db: Session, candidato: Candidato,
         "(cinco) dias úteis, a partir da data da assinatura do contrato de trabalho, por meio "
         "de pix. Neste primeiro momento, o valor será calculado de forma proporcional, da data "
         "de admissão até o dia 19 do respectivo mês.\n"
-        + _CICLO_VT[regime])
+        + textos_documentos.texto(db, f"texto_ciclo_vt_{regime}"))
 
     pdf.secao("VALE ALIMENTAÇÃO")
     pdf.set_font("helvetica", "", 9.5)
@@ -1475,7 +1478,7 @@ def _gerar_informativo_integracao(db: Session, candidato: Candidato,
         "assinatura do respectivo recibo. Após o envio do recibo devidamente assinado ao "
         "Departamento Pessoal (e-mail: departamentopessoal@greenhousedf.com.br ou WhatsApp: "
         "61-99834-2311), será realizado o crédito do benefício no cartão.\n"
-        + _CICLO_VA[regime])
+        + textos_documentos.texto(db, f"texto_ciclo_va_{regime}"))
 
     pdf.secao("CONTA SALÁRIO")
     pdf.campo("Banco", b.banco if b else None)

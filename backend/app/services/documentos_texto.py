@@ -26,7 +26,7 @@ from __future__ import annotations
 # imprime "{{rg}}" cru, porque o contexto não a conhece.
 
 
-def _acordo_confidencialidade() -> str:
+def _acordo_confidencialidade(db=None) -> str:
     """Reaproveita as cláusulas de `fichas._ACORDO_CLAUSULAS` (fonte única)."""
     from app.services.fichas import (EMPRESA_CNPJ, EMPRESA_ENDERECO,
                                      _ACORDO_CLAUSULAS)
@@ -49,7 +49,7 @@ def _acordo_confidencialidade() -> str:
     return "\n\n".join(partes)
 
 
-def _termo_lgpd_infraero() -> str:
+def _termo_lgpd_infraero(db=None) -> str:
     return "\n\n".join([
         "TERMO DE CONSENTIMENTO PARA TRATAMENTO DE DADOS PESSOAIS",
         "SISTEMA DE CREDENCIAMENTO",
@@ -62,7 +62,7 @@ def _termo_lgpd_infraero() -> str:
     ])
 
 
-def _informacoes_trabalhador() -> str:
+def _informacoes_trabalhador(db=None) -> str:
     """Importa a lista REAL de `fichas.DIREITOS_TRABALHADOR` (fonte única).
 
     A primeira versão deste texto foi escrita à mão e o fiscal barrou a
@@ -72,7 +72,7 @@ def _informacoes_trabalhador() -> str:
     a contrato com órgão público, isso é grave — e silencioso, porque o texto
     inventado era plausível.
     """
-    from app.services.fichas import DIREITOS_TRABALHADOR
+    from app.services import textos_documentos
 
     return "\n\n".join([
         "INFORMAÇÕES AO TRABALHADOR",
@@ -82,7 +82,10 @@ def _informacoes_trabalhador() -> str:
         "direitos garantidos pela Constituição Federal, pela Consolidação das "
         "Leis Trabalhistas (CLT) e pelas Convenções/Acordos Coletivos de "
         "Trabalho. Assim, listamos abaixo alguns desses direitos:",
-        *DIREITOS_TRABALHADOR,
+        # Lê o texto em vigor (v2.90) — o mesmo que o gerador do PDF usa.
+        # Importar a constante aqui faria a amostra congelar no padrão
+        # enquanto o documento oficial já saísse editado (v2.19).
+        *textos_documentos.linhas(db, "texto_direitos_trabalhador"),
         "3. Informa, ainda, que a Infraero disponibiliza aos trabalhadores de "
         "empresas contratadas um canal para registro de reclamações (Ouvidoria "
         "Interna) relativas às questões trabalhistas decorrentes da prestação "
@@ -98,12 +101,17 @@ _CORPOS = {
 }
 
 
-def corpo_editavel(chave: str) -> str:
-    """Texto de partida do modelo criado a partir do documento `chave`."""
+def corpo_editavel(chave: str, db=None) -> str:
+    """Texto de partida do modelo criado a partir do documento `chave`.
+
+    `db` é opcional: sem ele vale o padrão de fábrica — o que mantém válidas as
+    chamadas que não têm sessão à mão. COM ele, o corpo reflete o texto que o
+    RH editou, que é o mesmo que o PDF oficial usa.
+    """
     fabrica = _CORPOS.get(chave)
     if fabrica is None:
         raise KeyError(f"'{chave}' não tem corpo editável definido")
-    return fabrica()
+    return fabrica(db)
 
 
 def tem_corpo(chave: str) -> bool:
