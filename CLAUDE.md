@@ -107,6 +107,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Coluna dimensionada para o caminho MAIS ESTREITO quebra no outro** (v2.89.1,
+  defeito de campo): `talento.escolaridade` era `varchar(60)` porque o
+  formulário PÚBLICO oferece uma LISTA curta ("Ensino médio completo") — mas no
+  cadastro pelo RH o campo é texto livre, e o real tinha **106 caracteres**.
+  Neste sistema quase todo dado tem DUAS portas (público × RH, wizard ×
+  importação, formulário × planilha): ao criar coluna de texto, dimensione pela
+  porta mais LARGA. E o defeito pior não era o tamanho: **o erro virava HTTP 500
+  em texto puro**, então a tela dizia "não foi possível" e o RH refazia o
+  cadastro inteiro sem saber qual campo encurtar. Rota que grava texto livre
+  precisa de `except DataError` devolvendo 422 que NOMEIA campo, limite e
+  tamanho — e os limites se leem do próprio modelo (`Model.__table__.columns`),
+  nunca de uma lista à mão que envelhece na primeira migration. ⚠️ O `except`
+  vem ANTES de `registrar()`: a auditoria faz `flush()` e deixaria a sessão em
+  rollback pendente, escondendo a causa atrás de `PendingRollbackError`.
 - **Data PURA (`aaaa-mm-dd`) não passa por `new Date()` — volta um dia** (v2.89):
   a tela dizia **02/08** para uma data salva como **03/08**, e o banco estava
   certo o tempo todo. `new Date("2026-08-03")` é lido como UTC meia-noite e,

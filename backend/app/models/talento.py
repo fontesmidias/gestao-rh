@@ -33,7 +33,13 @@ class Talento(Base):
     cargos_interesse: Mapped[list | None] = mapped_column(JSON)   # múltipla escolha (Forms)
     regioes: Mapped[list | None] = mapped_column(JSON)            # regiões onde pode trabalhar
     cidade: Mapped[str | None] = mapped_column(String(120))
-    escolaridade: Mapped[str | None] = mapped_column(String(60))
+    # 300, não 60 (v2.89.1, defeito de campo): o formulário público oferece uma
+    # LISTA curta ("Ensino médio completo"), e 60 bastava para ela — mas quando
+    # o RH cadastra à mão o campo é texto livre, e o real tem 104 caracteres:
+    # "Técnico em Secretariado / Secretário Executivo; Inglês avançado
+    # (cursando, Centro de Idiomas de Ceilândia)". Coluna dimensionada para o
+    # caminho de entrada mais estreito quebra no dia em que aparece o outro.
+    escolaridade: Mapped[str | None] = mapped_column(String(300))
     resumo: Mapped[str | None] = mapped_column(Text)   # experiência/apresentação
     # PROCEDÊNCIA do cadastro: "Importação (Forms)", "Currículo por e-mail",
     # "Indicação"… (o comentário antigo dizia "como soube da empresa", mas o uso

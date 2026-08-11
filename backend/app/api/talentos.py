@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Upload
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
 from app.api.auth_rh import exige, requer_rh
@@ -363,6 +364,26 @@ def marcar_em_analise(db: Session, talento: Talento) -> bool:
     return True
 
 
+def _campos_longos(dados: dict) -> list[dict]:
+    """Quais campos passaram do tamanho da coluna, com o limite e o que veio.
+
+    Lê os limites do PRÓPRIO modelo (`Talento.__table__`), em vez de repeti-los
+    numa lista aqui: cópia à mão passa a divergir na primeira migration que
+    alargar uma coluna, e o RH leria "máximo 60" onde já cabem 300 — pior que
+    não dizer nada, porque parece informação.
+    """
+    achados = []
+    for nome, valor in (dados or {}).items():
+        if not isinstance(valor, str):
+            continue
+        coluna = Talento.__table__.columns.get(nome)
+        limite = getattr(getattr(coluna, "type", None), "length", None)
+        if limite and len(valor) > limite:
+            achados.append({"campo": nome, "limite": limite,
+                            "tamanho": len(valor)})
+    return achados
+
+
 class TalentoRHIn(TalentoIn):
     """Cadastro FEITO PELO RH (v2.73).
 
@@ -458,7 +479,21 @@ def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
     talento.cadastrado_por_id = rh.id
     talento.cadastrado_por_nome = rh.nome or rh.email
     db.add(talento)
-    db.flush()
+    try:
+        db.flush()
+    except DataError as e:
+        # Texto maior que a coluna virava HTTP 500 em texto puro: a tela dizia
+        # "não foi possível" e o RH refazia o cadastro inteiro sem saber QUAL
+        # campo encurtar (defeito de campo, v2.89.1 — 104 caracteres numa
+        # coluna de 60). É a família do "não salva e não diz o motivo" da
+        # v1.96, e o `except` tem que vir ANTES de `registrar()`, que faz
+        # `flush()` e deixaria a sessão em rollback pendente, escondendo o erro
+        # real atrás de um `PendingRollbackError`.
+        db.rollback()
+        raise HTTPException(status_code=422, detail={
+            "erro": "campo_muito_longo",
+            "campos": _campos_longos(dados),
+        }) from e
     registrar(db, "talento_cadastrado_pelo_rh", ator="rh", ator_detalhe=rh.email,
               detalhe={"talento": str(talento.id), "nome": talento.nome,
                        "origem": talento.origem, "forcado": forcar})
