@@ -107,6 +107,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Lista suspensa abre para o lado que CABE — e o teste precisa ABRIR a lista**
+  (v2.92, defeito visto pelo Bruno na tela): o `SelectBusca` abria com
+  `top: calc(100% + 4px)` FIXO, então na última linha de uma tabela o painel
+  saía pelo fim do card e a opção ficava ilegível — no caso, a que decide o
+  ACESSO da pessoa. O § 5 do sistema de design já mandava ("nada estoura a
+  tela") e a regra estava sendo violada em todo seletor perto do fim de um
+  container. Hoje o lado é decidido MEDINDO o espaço no `onClick`: media query
+  não serve, porque o corte depende de ONDE o campo está na página. ⚠️ **As
+  réguas existentes não pegavam**: `tabelas-cabem-na-tela` mede a LARGURA, e
+  overflow contido não alarga a página (v2.76.1) — faltava medir a borda do
+  painel ABERTO contra o container que o recorta, e nenhum teste abria a lista.
+  Ao mexer em popup/dropdown, meça-o ABERTO e na ÚLTIMA linha; testar na
+  primeira passa sempre e não prova nada.
 - **Carteira de Processos: a titularidade é do CARGO, e a cadeia responde
   SOZINHA** (v2.91, `models/processo.py` + `services/processos.py`): 31
   processos em 9 fases, dois cenários de efetivo, importados da planilha RACI do

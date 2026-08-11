@@ -11,6 +11,39 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.92.0] — 2026-08-11 — A lista suspensa não é mais cortada, e o minutário mostra a mensagem
+
+**A lista de papel saía pela borda** (defeito de campo, com print): o Bruno foi
+trocar o papel da Fátima — a ÚLTIMA linha da tabela de usuários — e a lista
+abriu para baixo, saindo pelo fim do card. A opção que decide o ACESSO da pessoa
+ficava ilegível.
+
+O `SelectBusca` abria com `top: calc(100% + 4px)` **fixo**, desde sempre. O § 5
+do sistema de design já mandava o contrário — *"nada estoura a tela"* — e a
+regra estava sendo violada em todo seletor perto do fim de um container; só não
+tinha aparecido porque ninguém abrira uma lista na última linha de uma tabela.
+
+Agora o painel MEDE o espaço abaixo do campo ao abrir e sobe quando não cabe.
+Medir é necessário: media query não resolveria, porque o corte depende de ONDE
+o campo está na página, não do tamanho da tela.
+
+⚠️ **Por que as réguas existentes não pegaram**: `tabelas-cabem-na-tela` mede a
+LARGURA da página, e overflow contido não alarga nada (v2.76.1). O que faltava
+era medir a borda do painel ABERTO contra o container que o recorta — e isso só
+existe com a lista aberta, o que nenhum teste fazia.
+`lista-suspensa-nao-corta.spec.js` faz, na última linha (onde o espaço acaba;
+testar na primeira passaria sempre). Validado por mutação: sem a correção, o
+painel passa **114px** do fim da janela.
+
+**Minutário: ver e copiar** (pedido do Bruno). Ler o texto de um modelo exigia
+abrir "editar" — o que põe quem só queria conferir a um Enter de alterar um
+modelo em uso. Agora cada linha tem **ver** e **copiar**, e o visualizador traz
+o botão de copiar ao lado do texto: é ali que a pessoa está olhando quando
+decide levá-la para o WhatsApp (a regra da distância, v2.47). O `<pre>` preserva
+as quebras de linha — a mensagem que se cola tem a formatação que se lê. Se o
+navegador recusar a área de transferência (contexto não seguro), o visualizador
+ABRE com o texto à vista, em vez de falhar calado.
+
 ## [2.91.1] — 2026-08-11 — A função é o cargo, e a escala entra junto
 
 Dois defeitos que o Bruno viu na primeira importação real.

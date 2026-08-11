@@ -64,6 +64,11 @@ export default function SelectBusca({ opcoes, children, valor, aoEscolher,
   const [aberto, setAberto] = useState(false)
   const [busca, setBusca] = useState('')
   const [foco, setFoco] = useState(0)
+  // Para CIMA quando não cabe embaixo (v2.92, defeito de campo: na última
+  // linha da tabela de usuários a lista abria para baixo e era CORTADA pelo
+  // fim do card — a opção ficava ilegível, e é a que decide o acesso da
+  // pessoa). O § 5 do sistema de design já mandava: nada estoura a tela.
+  const [paraCima, setParaCima] = useState(false)
   const ref = useRef(null)
 
   // Children viram opções; a opção de valor vazio (`<option value="">`) assume
@@ -109,7 +114,20 @@ export default function SelectBusca({ opcoes, children, valor, aoEscolher,
       <button type="button" className="select-busca-campo" id={id} title={titulo}
               aria-haspopup="listbox" aria-expanded={aberto}
               disabled={desabilitado}
-              onClick={() => { if (!desabilitado) { setAberto(!aberto); setFoco(0) } }}
+              onClick={(e) => {
+                if (desabilitado) return
+                // Decide o LADO na hora de abrir, medindo o espaço real abaixo
+                // do campo. Fixo para baixo, o painel era cortado pelo fim do
+                // card na última linha de uma tabela (v2.92).
+                if (!aberto) {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const abaixo = window.innerHeight - r.bottom
+                  // 260px é o `max-height` da lista no CSS; abrir para cima só
+                  // quando embaixo não cabe E em cima cabe mais.
+                  setParaCima(abaixo < 300 && r.top > abaixo)
+                }
+                setAberto(!aberto); setFoco(0)
+              }}
               // Sem campo de busca, as setas ainda navegam: o teclado funciona
               // igual nos dois modos.
               onKeyDown={(e) => { if (!comBusca && aberto) aoTeclar(e) }}>
@@ -118,7 +136,7 @@ export default function SelectBusca({ opcoes, children, valor, aoEscolher,
         <span className="select-busca-seta" aria-hidden="true">▾</span>
       </button>
       {aberto && !desabilitado && (
-        <div className="select-busca-painel">
+        <div className={`select-busca-painel ${paraCima ? 'para-cima' : ''}`}>
           {comBusca && (
             <input className="select-busca-input" autoFocus value={busca} placeholder={placeholder}
                    aria-label={placeholder}

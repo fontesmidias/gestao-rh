@@ -860,6 +860,12 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
    teclado sem NENHUMA indicação, na barra de filtros de todo o painel. O foco
    passa a ser a própria borda inferior, reforçada. */
 .select-busca-input:focus { outline: none; border-bottom: 2px solid var(--verde); }
+/* Abre para CIMA quando não cabe embaixo (v2.92). O painel é `absolute` e
+   abria sempre para baixo: na última linha de uma tabela ele era cortado pelo
+   fim do card, e a opção que decide o acesso da pessoa ficava ilegível. O lado
+   é decidido no JSX, medindo o espaço real — media query não resolveria, já
+   que depende de ONDE o campo está na página, não do tamanho da tela. */
+.select-busca-painel.para-cima { top: auto; bottom: calc(100% + 4px); }
 .select-busca-lista { list-style: none; margin: 0; padding: .25rem; max-height: 260px; overflow-y: auto; }
 .select-busca-item { padding: .45rem .6rem; border-radius: 6px; cursor: pointer;
                      font-size: .9rem; color: var(--tinta); }
