@@ -17,7 +17,26 @@ export default function MinutarioRH() {
   const [tags, setTags] = useState([])
   const [compondo, setCompondo] = useState(false)
   const [editando, setEditando] = useState(null) // modelo em edição no modal, ou {} para novo
+  // Ver a mensagem sem entrar no modo de edição (v2.92, pedido do Bruno): ler
+  // o texto era possível só abrindo "editar", o que põe quem só queria
+  // conferir a um Enter de alterar um modelo em uso.
+  const [vendo, setVendo] = useState(null)
   const [msg, setMsg] = useState(null)
+
+  const copiarTexto = async (m) => {
+    try {
+      await navigator.clipboard.writeText(m.corpo_base || '')
+      setMsg({ tipo: 'ok', texto: `"${m.titulo}" copiado. Cole no WhatsApp ou no e-mail.` })
+    } catch {
+      // `clipboard` exige contexto seguro (https ou localhost) e permissão do
+      // navegador. Falhar calado deixaria a pessoa colando o nada — melhor
+      // dizer o que resolve: o texto está à vista no visualizador.
+      setVendo(m)
+      setMsg({ tipo: 'erro',
+               texto: 'O navegador não deixou copiar. O texto está aberto abaixo — '
+                      + 'selecione e copie com Ctrl+C.' })
+    }
+  }
 
   const carregar = () => api.minutarioModelos(true).then(setModelos).catch(() => setModelos([]))
   useEffect(() => {
@@ -78,6 +97,8 @@ export default function MinutarioRH() {
                   ))}</td>
                   <td>{m.ativo ? 'Ativo' : <em>Inativo</em>}</td>
                   <td>
+                    <button className="btn-link" onClick={() => setVendo(m)}>ver</button>
+                    <button className="btn-link" onClick={() => copiarTexto(m)}>copiar</button>
                     <button className="btn-link" onClick={() => setEditando(m)}>editar</button>
                     {' · '}
                     <button className="btn-link" onClick={() => duplicar(m)}
@@ -89,6 +110,30 @@ export default function MinutarioRH() {
             </table>
           </div>
         )}
+
+      {/* Visualizar (v2.92): mostra a mensagem como ela é, com o botão de
+          copiar ao lado do texto — é ali que a pessoa está olhando quando
+          decide levá-la para o WhatsApp (a regra da distância, v2.47). O
+          `<pre>` preserva as quebras de linha: em `<p>` o texto viraria um
+          parágrafo só, e a mensagem que se cola tem a formatação que se lê. */}
+      {vendo && (
+        <Modal titulo={`${vendo.titulo}`} aoFechar={() => setVendo(null)}>
+          <p className="explica">
+            {(MEIOS.find(([v]) => v === vendo.meio) || [null, vendo.meio])[1]}
+            {vendo.tags?.length > 0 && ` · ${vendo.tags.map((t) => t.nome).join(', ')}`}
+            {!vendo.ativo && ' · inativo'}
+          </p>
+          <pre className="bloco-codigo" style={{ whiteSpace: 'pre-wrap' }}>
+            {vendo.corpo_base}</pre>
+          <div className="navegacao">
+            <button className="btn-principal" onClick={() => copiarTexto(vendo)}>
+              📋 Copiar mensagem</button>
+            <button className="btn-secundario"
+                    onClick={() => { setEditando(vendo); setVendo(null) }}>Editar</button>
+            <button className="btn-link" onClick={() => setVendo(null)}>Fechar</button>
+          </div>
+        </Modal>
+      )}
 
       {compondo && (
         <Modal titulo="✨ Compor mensagem com IA" aoFechar={() => setCompondo(false)}>
