@@ -349,6 +349,43 @@ const tokenRH = () => localStorage.getItem('rh_token')
 const authRH = () => ({ Authorization: `Bearer ${tokenRH()}` })
 
 export const rh = {
+  // --- Carteira de Processos (v2.91) ---
+  processos: (cenario = 'C1') =>
+    req(`/rh/processos?cenario=${cenario}`, { headers: authRH() }),
+  processosOpcoes: () => req('/rh/processos/opcoes', { headers: authRH() }),
+  funcoesRH: () => req('/rh/processos/funcoes', { headers: authRH() }),
+  criarFuncaoRH: (dados) =>
+    req('/rh/processos/funcoes', { method: 'POST', headers: authRH(),
+                                   body: JSON.stringify(dados) }),
+  editarFuncaoRH: (id, dados) =>
+    req(`/rh/processos/funcoes/${id}`, { method: 'PUT', headers: authRH(),
+                                         body: JSON.stringify(dados) }),
+  criarProcesso: (dados) =>
+    req('/rh/processos', { method: 'POST', headers: authRH(),
+                           body: JSON.stringify(dados) }),
+  editarProcesso: (id, dados) =>
+    req(`/rh/processos/${id}`, { method: 'PUT', headers: authRH(),
+                                 body: JSON.stringify(dados) }),
+  definirCadeia: (id, cenario, funcoes) =>
+    req(`/rh/processos/${id}/cadeia`, { method: 'PUT', headers: authRH(),
+                                        body: JSON.stringify({ cenario, funcoes }) }),
+  excluirProcesso: (id) =>
+    req(`/rh/processos/${id}`, { method: 'DELETE', headers: authRH() }),
+  // Upload NUNCA passa pelo `req()`: ele força Content-Type JSON e o navegador
+  // precisa escrever o `boundary` do multipart (v2.39.1).
+  processosImportarPreview: async (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/processos/importar-preview`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r); return r.json()
+  },
+  processosImportar: async (arquivo) => {
+    const fd = new FormData(); fd.append('arquivo', arquivo)
+    const r = await buscar(`${BASE}/rh/processos/importar`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r); return r.json()
+  },
+
   logado: () => Boolean(tokenRH()),
   login: async (email, senha) => {
     const r = await req('/rh/auth/login', { method: 'POST', body: JSON.stringify({ email, senha }) })

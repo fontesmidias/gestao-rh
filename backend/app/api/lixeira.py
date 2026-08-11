@@ -44,6 +44,7 @@ def classes_restauraveis() -> dict:
     from app.models.candidato import PostoServico
     from app.models.entrevista import Entrevista
     from app.models.modelo_documento import ModeloDocumento, PapelAssinatura
+    from app.models.processo import Processo
     from app.models.prova import ItemBanco, ProvaCargo
     from app.models.roteiro_entrevista import RoteiroEntrevista
     from app.models.teste import TesteCandidato
@@ -58,6 +59,7 @@ def classes_restauraveis() -> dict:
         "roteiro_entrevista": RoteiroEntrevista,
         "teste_candidato": TesteCandidato,
         "entrevista": Entrevista,
+        "processo_rh": Processo,
     }
 
 

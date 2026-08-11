@@ -107,6 +107,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Carteira de Processos: a titularidade é do CARGO, e a cadeia responde
+  SOZINHA** (v2.91, `models/processo.py` + `services/processos.py`): 31
+  processos em 9 fases, dois cenários de efetivo, importados da planilha RACI do
+  Bruno. `FuncaoRH` é a unidade que POSSUI processos; a pessoa é um atributo
+  dela (texto livre, **não** FK para `UsuarioRH` — a carteira precisa descrever
+  quem ainda não tem conta, como o "Analista Jr a contratar"). Esvaziar
+  `pessoa_nome` faz `responsavel_atual` percorrer a cadeia e devolver o próximo
+  — é a razão de existir do módulo, e há mutação cobrindo. **Dois casos da
+  planilha real que NÃO são defeito**: 9.1/9.2 têm "Escala diária (rodízio)"
+  como titular (giram entre a equipe — acusá-los de órfãos é alarme falso, e
+  alarme falso ensina a ignorar o alarme); e o 9.3 só existe no C2, porque nasce
+  com o Analista Jr. ⚠️ **A coluna do titular chama-se "Titular (Dono)"** — o
+  parser casava por igualdade exata, ela caía fora, a cadeia começava no 2º
+  apoio e TODO processo saía com o titular errado, sem erro nenhum. Casar por
+  PREFIXO (`_coluna`) e conferir contra o arquivo real, não contra um montado à
+  mão (v2.54).
 - **Texto de documento editável mora em `services/textos_documentos.py` — e a
   constante continua sendo o PADRÃO** (v2.90): direitos do trabalhador e os
   quatro ciclos de VT/VA saíram do código para o painel, mas `DIREITOS_TRABALHADOR`

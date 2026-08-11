@@ -26,6 +26,7 @@ import Assinaturas from './Assinaturas.jsx'
 import MinutarioRH from './MinutarioRH.jsx'
 import MatchVagasRH from './MatchVagasRH.jsx'
 import EntrevistasRH from './EntrevistasRH.jsx'
+import ProcessosRH from './ProcessosRH.jsx'
 import logo from '../assets/logo.png'
 import InputSenha from '../InputSenha.jsx'
 import BarraAtividade from '../BarraAtividade.jsx'
@@ -441,6 +442,9 @@ const GRUPOS = [
     ['match-vagas', '🧩', 'Match de Vagas', 'selecao:escrever'],
     ['entrevistas', '🗣️', 'Entrevistas', 'selecao:entrevistar'],
   ]],
+  ['Governança', [
+    ['processos', '🗂️', 'Carteira de Processos', 'processos:ler'],
+  ]],
   ['Sistema', [
     // Configurações abre em abas; a de perfil próprio serve a qualquer um, por
     // isso a permissão exigida aqui é a de LEITURA, não a de escrita.
@@ -678,6 +682,7 @@ function PainelConteudo({ aoSair }) {
         {pagina === 'match-vagas' && <MatchVagasRH />}
         {pagina === 'entrevistas' && <EntrevistasRH aoVoltar={() => navegar('inicio')}
                                                     abrirPessoa={abrirPessoa} />}
+        {pagina === 'processos' && <ProcessosRH />}
         {selecionado && (
           <Detalhe id={selecionado} aoVoltar={voltarDaPessoa} />
         )}
