@@ -52,6 +52,18 @@ services:
       - logs-data:/var/log/gestao-rh
     networks: [internal]
     restart: unless-stopped
+    # Marca a API como saudável só quando ela RESPONDE — `restart: unless-stopped`
+    # sozinho só reage a processo morto, e container vivo e travado continuaria
+    # "no ar". Usa PYTHON de propósito: a imagem não tem curl nem wget, e um
+    # healthcheck com curl marcaria o container como unhealthy para sempre.
+    # `start_period` cobre a subida (as migrations rodam no entrypoint).
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).status == 200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
   worker:
     image: ghcr.io/fontesmidias/gestao-rh-api:latest
