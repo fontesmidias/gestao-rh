@@ -1,8 +1,14 @@
 # Gravação e transcrição de entrevistas — viabilidade e desenho
 
-> Status: **análise de viabilidade, com decisões do Bruno travadas** (2026-08-11,
-> party mode). Não implementado. O que estiver em desacordo com o § 3 é
-> regressão, não melhoria.
+> Status: **IMPLEMENTADO na v2.97** (gravação, fila, transcrição, tela). O que
+> estiver em desacordo com o § 3 é regressão, não melhoria. Diarização segue
+> fora, pelo motivo do § 4.3.
+>
+> **O que existe hoje** (§ 11 no fim, com o que mudou do desenho):
+> `models/gravacao_entrevista.py` · `services/gravacao_entrevista.py` ·
+> `workers/transcricao.py` · 6 rotas em `api/entrevistas.py` ·
+> `rh/GravacaoEntrevista.jsx` · container `transcricao` nos dois arquivos de
+> deploy · `tests/test_gravacao_entrevista.py` no CI.
 
 ## 1. O pedido
 
@@ -165,3 +171,67 @@ registrado em vez de alisado:
 
 Resolução adotada: **decide agora, constrói depois** — que é o que este documento
 é.
+
+---
+
+## 11. O que a implementação (v2.97) mudou ou acrescentou ao desenho
+
+**Fila PRÓPRIA, não a `default`.** O desenho dizia "usa a fila que já existe".
+Ao implementar ficou claro que não podia: transcrever leva minutos e, na mesma
+fila, seguraria atrás de si o ranqueamento do Match e a indexação de currículo,
+que levam segundos. O `fila.enfileirar` ganhou `fila_nome`, e o container
+`transcricao` consome a fila homônima.
+
+**Imagem PRÓPRIA (`gestao-rh-transcricao`).** O `faster-whisper` traz CTranslate2
+e o modelo ocupa ~500 MB. Pôr isso na imagem da API engordaria todo deploy por
+uma função que a API nunca executa — e o `worker` comum, que usa a MESMA imagem
+da API, herdaria o peso. Entrou na matriz do `ci.yml`: **sem isso o
+`portainer-stack.yml` apontaria para uma imagem inexistente e o container nunca
+subiria.**
+
+**`ffmpeg` na imagem.** O `MediaRecorder` do navegador entrega WebM/Opus, e é o
+ffmpeg que decodifica. Sem ele a transcrição falharia com erro de formato — num
+áudio perfeito.
+
+**Volume `whisper-cache`.** Sem ele, cada restart rebaixa o modelo e a primeira
+transcrição depois de todo deploy demora muito mais do que deveria.
+
+**Estado `nao_perguntado`, que o desenho não previa.** O § 8 listava seis
+estados, todos posteriores à decisão. Faltava o anterior: *ninguém foi
+consultado* — que é diferente de *disse não*, e é a diferença que prova que a
+pessoa foi perguntada (v2.34). São oito estados.
+
+**Retirar consentimento com áudio existente RECUSA, oferecendo a saída.** Não
+estava no desenho e apareceu ao escrever a transição: aceitar a troca sem apagar
+deixaria um áudio existindo sob um registro dizendo que a pessoa não autorizou —
+a pior das duas mentiras. O 409 diz o que resolve (excluir), em vez de só
+bloquear (v2.87/v2.93).
+
+**A exclusão NÃO passa pela lixeira.** Toda exclusão do RH passa (regra da casa),
+menos esta: áudio é dado biométrico, e a retenção de 60 dias da lixeira seria o
+oposto do que se quer quando alguém retira o consentimento. O **registro** fica —
+é a prova de que a pessoa foi consultada; o **áudio** sai do storage de verdade.
+
+**O bloco fica ANTES do formulário na ficha.** A conversa vem antes do
+preenchimento: quem grava, grava enquanto entrevista. Depois do formulário, o
+botão só seria achado quando já não servisse.
+
+### Verificado, não presumido
+
+- Fluxo completo em 9 cenários pela API: recusa sem consentimento (409 nos dois
+  sentidos), formato inválido nomeando os aceitos, upload válido indo para a
+  fila, retirada de consentimento barrada, exclusão apagando o objeto no MinIO.
+- Tela em desktop e celular: os dois botões do consentimento têm a **mesma
+  classe** (`btn-secundario`) — medido, não presumido —, e zero vazamento
+  lateral.
+- `test_gravacao_entrevista.py` no CI, **3 mutações, 3 pegas**: remover a trava
+  de consentimento, esquecer de apagar o áudio do storage, permitir retirar o
+  consentimento com áudio existente.
+
+### O que ainda NÃO foi feito
+
+- **Exibição no módulo de Arquivo** (o § 7 pede nos dois lugares; hoje só no card
+  da entrevista). A rota `/gravacao/texto` já existe e serve o `.txt`.
+- **Retenção do áudio** — quanto tempo o áudio fica antes de o expurgo o apagar.
+  Precisa de decisão do Bruno; a transcrição pode sobreviver ao áudio.
+- **Diarização** — fora por desenho (§ 4.3), e a reavaliação exige áudio real.

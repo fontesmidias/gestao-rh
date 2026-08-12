@@ -26,8 +26,17 @@ jobs:
         include:
           - servico: api
             contexto: ./backend
+            arquivo: ./backend/Dockerfile
           - servico: frontend
             contexto: ./frontend
+            arquivo: ./frontend/Dockerfile
+          # Transcrição de entrevistas (v2.97): imagem PRÓPRIA porque o
+          # faster-whisper pesa ~500 MB e nem a API nem o worker o executam.
+          # ⚠️ Sem esta entrada, o `portainer-stack.yml` apontaria para uma
+          # imagem que não existe e o container nunca subiria em produção.
+          - servico: transcricao
+            contexto: ./backend
+            arquivo: ./backend/Dockerfile.transcricao
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +60,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.contexto }}
+          file: ${{ matrix.arquivo }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -234,7 +244,7 @@ jobs:
                    test_permissoes_efeito test_duplicar test_data_documentos \
                    test_talento_campos_longos test_textos_documentos \
                    test_processos test_dossie_pdf_ilegivel \
-                   test_token_automacao; do
+                   test_token_automacao test_gravacao_entrevista; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

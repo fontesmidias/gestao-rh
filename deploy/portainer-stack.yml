@@ -89,6 +89,37 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  # Transcrição de entrevistas (v2.97). IMAGEM PRÓPRIA (`-transcricao`): o
+  # faster-whisper pesa ~500 MB e nem a API nem o worker o executam. FILA
+  # própria: áudio leva minutos e seguraria atrás de si o Match e a indexação
+  # de currículo, que levam segundos.
+  # ⚠️ Este serviço TEM que existir aqui E no `docker-compose.base.yml` — worker
+  # declarado num só dos dois não roda em produção e não gera erro nenhum, só
+  # silêncio (v2.66).
+  transcricao:
+    image: ghcr.io/fontesmidias/gestao-rh-transcricao:latest
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-admissao}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: transcricao
+      TZ: America/Sao_Paulo
+    depends_on:
+      - redis
+      - minio
+    volumes:
+      - logs-data:/var/log/gestao-rh
+      # Sem este volume, cada restart rebaixa o modelo (~500 MB) e a primeira
+      # transcrição depois de todo deploy demora muito mais do que deveria.
+      - whisper-cache:/root/.cache/huggingface
+    networks: [internal]
+    restart: unless-stopped
+
   expurgo:
     image: ghcr.io/fontesmidias/gestao-rh-api:latest
     entrypoint: ["/bin/sh", "-c"]
@@ -209,3 +240,5 @@ volumes:
   # Logs dos serviços em arquivo (v2.29): o `docker logs` morre no restart
   # do container, e é dele que sai o diagnóstico quando alguém trava.
   logs-data:
+  # Modelo do faster-whisper (v2.97): baixa uma vez, sobrevive ao restart.
+  whisper-cache:

@@ -107,6 +107,27 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Consentimento em conversa ASSIMÉTRICA precisa ser recusável, e a recusa é um
+  REGISTRO** (v2.97, gravação de entrevista): voz é dado pessoal e há
+  entendimento de que é biométrico; numa entrevista de emprego, de um lado está
+  quem decide e do outro quem precisa do emprego. Se "autorizar" for um botão
+  verde grande e "recusar" um link cinza, a pessoa clica no primeiro por não
+  sentir que pode recusar — isso é teatro de consentimento, não consentimento.
+  Os dois botões usam a MESMA classe, e a tela DIZ que recusar não afeta a
+  avaliação. São **oito** estados, não seis: faltava `nao_perguntado`, que é
+  diferente de `recusado` — sem a distinção não se prova que a pessoa foi
+  consultada (v2.34). Três travas que não devem ser afrouxadas: a checagem de
+  consentimento vive no SERVIÇO (v2.66); **retirar o consentimento com áudio
+  existente RECUSA** dizendo o que resolve (aceitar deixaria áudio guardado sob
+  um registro dizendo que a pessoa não autorizou); e a exclusão **não passa pela
+  lixeira** — reter 60 dias dado biométrico é o oposto do que se pede ao retirar
+  consentimento; o registro fica, o áudio sai do storage (v2.35).
+- **Container novo precisa entrar na matriz do `ci.yml`, não só nos dois
+  composes** (v2.97): a armadilha da v2.66 (declarar worker nos DOIS arquivos de
+  deploy) tem um terceiro arquivo quando a imagem é PRÓPRIA — sem a entrada em
+  `jobs.imagens.strategy.matrix`, o `portainer-stack.yml` aponta para uma imagem
+  que o CI nunca publicou e o container não sobe em produção. A matriz ganhou o
+  campo `arquivo` para suportar Dockerfile alternativo.
 - **Tela de TRABALHO sobre um registro segue o § 8c do design — é OBRIGATÓRIO**
   (v2.96.1, validado no uso real antes de virar regra): impedimento no topo com
   o atalho que resolve; um trabalho por vez em ABAS por natureza (`hidden`, não

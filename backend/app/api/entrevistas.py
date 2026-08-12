@@ -19,6 +19,7 @@ Duas regras de produto que o código sustenta e que não devem ser afrouxadas:
   salva (cenário 16) — 422 NOMEANDO o que falta.
 """
 import hashlib
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -36,6 +37,7 @@ from app.models.candidato import Candidato, PostoServico
 from app.models.crm import Anotacao, PessoaTag, Tag
 from app.models.entrevista import (STATUS_TERMINAIS, Entrevista,
                                    StatusEntrevista, TipoEntrevista)
+from app.models.gravacao_entrevista import GravacaoEntrevista
 from app.models.talento import Talento
 from app.models.usuario_rh import UsuarioRH
 from app.models.vaga import Vaga
@@ -1186,3 +1188,224 @@ def excluir(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
               detalhe={"entrevista": str(entrevista_id), "pessoa": pessoa["nome"]})
     db.commit()
     return Response(status_code=204)
+
+
+# ==========================================================================
+# GRAVAÇÃO e TRANSCRIÇÃO da entrevista (v2.97)
+#
+# Desenho em `docs/planejamento/14-transcricao-de-entrevistas.md`. Três coisas
+# que NÃO devem ser afrouxadas ao mexer aqui:
+#
+# 1. **Sem consentimento não se grava.** A checagem está também no serviço
+#    (`marcar_para_transcrever`), não só nestas rotas — "a rota não deixa" não
+#    é garantia (v2.66): migration, acerto no banco e teste não passam por rota.
+# 2. **Áudio de entrevista NÃO SAI DE CASA.** Decisão do Bruno: self-hosted,
+#    sem API paga. O `faster-whisper` roda no container `transcricao`.
+# 3. **NADA disto entra no dossiê de admissão.** Tabela própria, fora das três
+#    fontes que o `services/dossie.py` varre — a mesma contenção da ficha de
+#    entrevista assinada (v2.67, § 15.4). O dossiê CIRCULA: vai para o cliente
+#    e para a pasta física.
+# ==========================================================================
+
+_log_grav = logging.getLogger(__name__)
+
+
+class ConsentimentoIn(BaseModel):
+    consentiu: bool
+
+
+def _gravacao_de(db: Session, entrevista_id: uuid.UUID):
+    """A entrevista e a gravação dela. 404 só quando a ENTREVISTA não existe —
+    gravação ausente é um ESTADO ('ainda não perguntado'), não um erro."""
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    g = db.scalar(select(GravacaoEntrevista).where(
+        GravacaoEntrevista.entrevista_id == e.id))
+    return e, g
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/gravacao")
+def ver_gravacao(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Estado da gravação. Nunca 404 por não haver registro: devolver erro faria
+    a tela esconder o bloco — justamente o bloco que existe para a pergunta do
+    consentimento ser feita."""
+    from app.services.gravacao_entrevista import resumo
+    _e, g = _gravacao_de(db, entrevista_id)
+    return resumo(g)
+
+
+@router.put("/rh/entrevistas/{entrevista_id}/gravacao/consentimento")
+def registrar_consentimento_rota(
+        entrevista_id: uuid.UUID, payload: ConsentimentoIn,
+        db: Session = Depends(get_db),
+        rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Registra o que a pessoa respondeu quando foi perguntada.
+
+    **A recusa é um ATO registrado, não um vazio.** Numa entrevista de emprego a
+    conversa é assimétrica — de um lado quem decide, do outro quem precisa do
+    emprego —, então "não foi perguntado" e "disse não" precisam ser
+    distinguíveis; senão não se prova que a pessoa foi consultada (v2.34).
+    """
+    from app.services.gravacao_entrevista import (GravacaoRecusada, obter_ou_criar,
+                                                  registrar_consentimento, resumo)
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    g = obter_ou_criar(db, e)
+    try:
+        registrar_consentimento(db, g, payload.consentiu, rh.email)
+    except GravacaoRecusada as exc:
+        raise HTTPException(status_code=409, detail={
+            "erro": exc.erro, "mensagem": exc.detalhe}) from exc
+    registrar(db, "entrevista_gravacao_consentimento", ator="rh", ator_detalhe=rh.email,
+              detalhe={"entrevista": str(entrevista_id), "consentiu": payload.consentiu})
+    db.commit()
+    return resumo(g)
+
+
+@router.post("/rh/entrevistas/{entrevista_id}/gravacao", status_code=201)
+async def subir_audio(entrevista_id: uuid.UUID, arquivo: UploadFile,
+                      duracao_s: int | None = None,
+                      db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Guarda o áudio e enfileira a transcrição.
+
+    Enfileira em vez de transcrever aqui porque o `faster-whisper` leva minutos e
+    o nginx corta em 60s (v2.00). Se o Redis estiver fora, o áudio FICA guardado
+    e o estado permanece `aguardando` — perder a gravação de uma entrevista que
+    já aconteceu seria o pior desfecho possível, e ela não se refaz.
+    """
+    from app.services.gravacao_entrevista import (AUDIO_MAX_BYTES, EXTENSOES_AUDIO,
+                                                  GravacaoRecusada,
+                                                  marcar_para_transcrever,
+                                                  obter_ou_criar, resumo)
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    g = obter_ou_criar(db, e)
+    if not g.pode_gravar:
+        raise HTTPException(status_code=409, detail={
+            "erro": "sem_consentimento",
+            "mensagem": "Registre a autorização da pessoa antes de enviar o áudio."})
+
+    nome = arquivo.filename or ""
+    ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+    if ext not in EXTENSOES_AUDIO:
+        raise HTTPException(status_code=422, detail={
+            "erro": "formato_nao_suportado", "recebido": ext or "(sem extensao)",
+            "aceitos": sorted(EXTENSOES_AUDIO)})
+    try:
+        dados = await arquivo.read()
+        if len(dados) > AUDIO_MAX_BYTES:
+            raise HTTPException(status_code=413, detail={
+                "erro": "arquivo_grande",
+                "limite_mb": AUDIO_MAX_BYTES // (1024 * 1024)})
+        if g.audio_key:            # regravou: o anterior não pode virar órfão
+            try:
+                storage.remover(g.audio_key)
+            except Exception:      # noqa: BLE001
+                _log_grav.exception("Áudio anterior não removido: %s", g.audio_key)
+        key = f"entrevistas/{e.id}/audio.{ext}"
+        storage.salvar(key, dados, arquivo.content_type or "application/octet-stream")
+        try:
+            marcar_para_transcrever(db, g, key=key, bytes_=len(dados),
+                                    tipo=arquivo.content_type or "",
+                                    duracao_s=duracao_s)
+        except GravacaoRecusada as exc:
+            raise HTTPException(status_code=409, detail={
+                "erro": exc.erro, "mensagem": exc.detalhe}) from exc
+        registrar(db, "entrevista_audio_enviado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"entrevista": str(entrevista_id), "bytes": len(dados)})
+        db.commit()
+    finally:
+        await arquivo.close()
+
+    from app.services import fila
+    try:
+        fila.enfileirar("app.workers.transcricao.transcrever", str(g.id),
+                        timeout=60 * 60, fila_nome=fila.NOME_FILA_TRANSCRICAO)
+    except Exception:              # noqa: BLE001
+        # Fila fora: o áudio está salvo e o estado é `aguardando`. A tela mostra
+        # isso e o botão "tentar de novo" reenfileira — nada se perde.
+        _log_grav.exception("Não foi possível enfileirar a transcrição de %s", g.id)
+    return resumo(g)
+
+
+@router.post("/rh/entrevistas/{entrevista_id}/gravacao/transcrever")
+def retranscrever(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+                  rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Tenta de novo. Existe porque falha de transcrição costuma ser transitória
+    (fila fora, container reiniciando), e sem isto o RH ficaria com um áudio
+    guardado e nenhum caminho — teria de reenviar o arquivo que já está lá."""
+    from app.models.gravacao_entrevista import StatusGravacao
+    from app.services import fila
+    from app.services.gravacao_entrevista import resumo
+    _e, g = _gravacao_de(db, entrevista_id)
+    if g is None or not g.audio_key:
+        raise HTTPException(status_code=404, detail="sem_audio")
+    g.status = StatusGravacao.aguardando
+    g.erro = None
+    db.commit()
+    try:
+        fila.enfileirar("app.workers.transcricao.transcrever", str(g.id),
+                        timeout=60 * 60, fila_nome=fila.NOME_FILA_TRANSCRICAO)
+    except Exception as exc:       # noqa: BLE001
+        _log_grav.exception("Não foi possível enfileirar a transcrição de %s", g.id)
+        raise HTTPException(status_code=503, detail={
+            "erro": "fila_indisponivel",
+            "mensagem": "O serviço de transcrição não respondeu. O áudio está "
+                        "guardado; tente de novo em alguns minutos."}) from exc
+    return resumo(g)
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/gravacao/audio")
+def baixar_audio(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
+    _e, g = _gravacao_de(db, entrevista_id)
+    if g is None or not g.audio_key:
+        raise HTTPException(status_code=404, detail="sem_audio")
+    return Response(content=storage.ler(g.audio_key),
+                    media_type=g.audio_tipo or "audio/webm",
+                    headers={"Content-Disposition":
+                             'inline; filename="entrevista.webm"'})
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/gravacao/texto")
+def baixar_texto(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
+    """A transcrição em .txt. Pedido do Bruno: aparece no card da entrevista E
+    no módulo de Arquivo."""
+    from app.services.export_planilha import slug
+    e, g = _gravacao_de(db, entrevista_id)
+    if g is None or not g.texto:
+        raise HTTPException(status_code=404, detail="sem_transcricao")
+    pessoa = _pessoa_de(db, e)
+    # `slug()` e não o nome cru: nome é texto livre e vira caminho de arquivo
+    # (a regra do `export_planilha`, contra path traversal).
+    nome = slug(f"transcricao-{pessoa['nome']}")
+    return Response(content=g.texto.encode("utf-8"),
+                    media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}.txt"'})
+
+
+@router.delete("/rh/entrevistas/{entrevista_id}/gravacao")
+def excluir_gravacao(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Apaga áudio e transcrição de verdade, e volta a `recusado`.
+
+    **NÃO passa pela lixeira**, ao contrário do resto das exclusões do RH: áudio
+    é dado biométrico, e a retenção de 60 dias seria o oposto do que se quer
+    quando alguém retira o consentimento. O REGISTRO fica — é a prova de que a
+    pessoa foi consultada; o ÁUDIO sai do storage.
+    """
+    from app.services.gravacao_entrevista import excluir, resumo
+    _e, g = _gravacao_de(db, entrevista_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="sem_gravacao")
+    excluir(db, g)
+    registrar(db, "entrevista_gravacao_excluida", ator="rh", ator_detalhe=rh.email,
+              detalhe={"entrevista": str(entrevista_id)})
+    db.commit()
+    return resumo(g)
