@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.95.0] — 2026-08-11 — O que trava a admissão aparece primeiro
+
+Primeiros dois passos do **redesenho da ficha da pessoa**, validado pelo Bruno em
+protótipo antes de virar código. O pedido foi *"não tô achando muito intuitivo,
+o RH não tá achando certas coisas, parece muita poluição visual"*.
+
+**Medi antes de opinar** (Playwright, 1440×900 e 390×844): a ficha tem **109
+controles clicáveis**, **54 caixas de marcação**, **14 blocos** de mesmo peso
+visual e **15 tamanhos de fonte**. O diagnóstico não é "está feio" — é que a tela
+não distingue o que se faz todo dia do que se faz uma vez por ano. "Aprovar a
+CTPS" e "definir quais campos são obrigatórios para esta pessoa" têm a mesma
+borda, o mesmo fundo e a mesma área.
+
+**1 · O impedimento sobe para o topo** (`Detalhe.jsx::ImpedimentoDaFicha`). A
+informação já existia — `GET /rh/candidatos/{id}/diagnostico` devolve
+`dossie.pendencias` —, mas só aparecia dentro do bloco de Diagnóstico, no FIM da
+página, atrás de um `<details>`, depois de ~65 linhas de telemetria. **A resposta
+estava pronta e ninguém a via**: em 11/08 isso custou 54 minutos e três exigências
+médicas desmarcadas por engano (v2.93). Três decisões: silêncio quando não há
+impedimento (bloco verde em toda ficha seria mais um cartão competindo por
+atenção); **falha de carga não vira alarme** (dizer "não foi possível verificar"
+no topo de toda ficha ensinaria a ignorar a faixa vermelha — v2.88); e nomes de
+verdade em vez de enum.
+
+⚠️ **`_traduzir_pendencia` fazia `valor.replace("_", " ")`**, o que produzia
+"ficha emergencia" e "termo vt" — sem acento nem maiúscula. Só apareceu ao ver a
+tela renderizada (regra da v2.47). Agora deriva de `NOMES_DOC` e de
+`exigencias.ROTULOS`, os dois mapas que já existiam: a terceira lista à mão
+envelheceria torto e em silêncio (v2.69).
+
+**2 · As 54 caixas dizem em PALAVRAS o que fugiu do padrão**
+(`Exigencias.jsx::ResumoDasExcecoes`). Três caixas desmarcadas no meio de 54
+idênticas são invisíveis — foi exatamente o caso de ontem. Agora a ficha mostra
+*"Esta pessoa tem 3 exceções: Dispensados: Usa medicamento contínuo, Condições
+médicas, Contato de emergência."* ⚠️ **O resumo mora FORA do `<details>`**: dentro
+dele só apareceria para quem abrisse, e o problema que ele resolve é ninguém
+abrir — `<details>` fechado nem renderiza o conteúdo (v2.76.2), então ele tem
+consulta própria. Marcar o item alterado em âmbar (que já existia) não bastava:
+exige varrer a grade item a item.
+
+⚠️ **`--atencao-suave` não tinha par no tema escuro** — era `#fdf3e2` fixo, âmbar
+CLARO nos dois temas. É a armadilha da v2.46, achada ao usar o token pela
+primeira vez fora do `.chip`. Contraste medido depois da correção: **10,85:1** no
+resumo e **7,64:1** no impedimento (mínimo AA é 4,5:1).
+
+Verificado na tela, não só no código: claro e escuro, desktop e celular (zero
+vazamento lateral em 390px; o impedimento cai a 295px do topo, dentro da primeira
+tela). As 13 réguas de `tabelas-cabem-na-tela` e `lista-suspensa-nao-corta`
+continuam verdes. O levantamento que produziu os números fica em
+`frontend/tests/e2e/_levantamento-densidade.spec.js` (prefixo `_`: roda à mão,
+não no CI) para medir de novo e comparar.
+
+Faltam os passos 3 (abas) e 4 (um verde por tela) — serão outra leva, com nova
+medição antes e depois.
+
 ## [2.94.0] — 2026-08-11 — A automação entra pela porta da frente
 
 Primeiro degrau do **MCP do portal** (desenho em

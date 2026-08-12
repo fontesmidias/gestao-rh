@@ -107,6 +107,27 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Redesenho se valida em PROTÓTIPO, medindo antes e depois** (v2.95, método
+  cravado pelo Bruno: *"se tudo de design for validar assim, vamos em frente"*).
+  A queixa era *"não tô achando intuitivo, parece muita poluição visual"* — que é
+  impressão, e impressão não se discute. O que se discute é contagem: a ficha
+  tinha **109 controles, 54 caixas de marcação, 14 blocos de mesmo peso e 15
+  tamanhos de fonte** (medido com Playwright em 1440×900 e 390×844;
+  `frontend/tests/e2e/_levantamento-densidade.spec.js`, prefixo `_` = roda à mão,
+  fora do CI). O ciclo é: **medir → protótipo (HTML, antes/depois, desktop E
+  celular) → o Bruno valida → aplicar em UMA tela → medir de novo → só então
+  cravar como padrão**. Não inverta: aplicar antes de validar é como as telas
+  ficaram assim. E **as decisões que mudam o resultado se perguntam ANTES**
+  (aba × rolagem, qual aba abre, o que nasce fechado) — com preview visual, não
+  no abstrato.
+- **A informação que resolve o problema já existia — estava no fim da página**
+  (v2.95): `dossie.pendencias` (a única frase que responde *"por que esta pessoa
+  não fechou?"*) vivia dentro do bloco de Diagnóstico, atrás de um `<details>`,
+  depois de ~65 linhas de telemetria. Em 11/08 isso custou 54 minutos. Ao
+  investigar "o RH não acha X", pergunte primeiro **se X já está na tela e onde**
+  — quase sempre está, no lugar errado. Corolário: **resumo de bloco recolhido
+  mora FORA do `<details>`** (fechado ele nem renderiza — v2.76.2), senão só o
+  vê quem abre, e o problema é ninguém abrir.
 - **Credencial de MÁQUINA não é token de sessão — e a pergunta que decide é "se
   vazar hoje à noite, como eu corto?"** (v2.94, `services/token_automacao.py`):
   o token do painel é `itsdangerous` STATELESS com TTL de 12h, e as duas coisas o
