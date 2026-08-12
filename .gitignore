@@ -65,3 +65,6 @@ docs/*
 
 # Ferramentas locais BMAD
 _bmad/
+
+# Resíduo do Playwright rodado a partir da RAIZ (o de frontend/ já é ignorado).
+test-results/
