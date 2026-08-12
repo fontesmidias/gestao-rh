@@ -2532,3 +2532,5 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
                flex-wrap: wrap; padding: var(--esp-2) 0;
                border-top: 1px solid var(--borda-suave); }
 .bloco-linha:first-of-type { border-top: 0; }
+.gravacao-lista { display: flex; flex-direction: column; gap: var(--esp-1);
+                  align-items: flex-start; }

@@ -11,6 +11,34 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.2] — 2026-08-12 — A gravação acompanha a pessoa, e aparece onde ela é
+
+Pedido do Bruno: *"o áudio da entrevista acompanha o colaborador quando ele
+deixar de ser candidato"* — e a correção do endereço: **não é na ficha da
+entrevista, é na tela de Admissão e na de Colaborador**.
+
+O dado já atravessava: `Entrevista` tem as DUAS FKs (`talento_id` e
+`candidato_id`, v2.64) e a gravação pendura na entrevista, então ela segue a
+pessoa sozinha. **O que faltava era a tela dar caminho para ele** —
+`EntrevistasDaPessoa` era uma tabela que listava a entrevista e não levava a
+lugar nenhum.
+
+Agora a listagem tem a coluna **Gravação**, com player e link da transcrição. A
+mesma tela (`Detalhe.jsx`) serve Admissões e Colaboradores, então vale nos dois.
+
+**Provado na prática, não presumido**: uma entrevista gravada com a pessoa ainda
+TALENTO continuou acessível — com áudio e status — depois de convertê-la em
+candidato.
+
+⚠️ **Carga em LOTE** (`gravacoes_por_entrevista`): duas consultas para todas as
+entrevistas da pessoa, não uma por linha. É o N+1 que a v2.15 já cobrou neste
+mesmo arquivo (43 consultas para 39 talentos). O resumo traz só o que a LISTA
+precisa — status, se há áudio/texto e quantos blocos; quem quer o detalhe abre a
+ficha.
+
+A contagem de blocos vai junto porque o front precisa saber qual URL de áudio
+usar (arquivo único × primeiro trecho) — sem ela, adivinharia.
+
 ## [2.98.1] — 2026-08-12 — Gravar, pausar, retomar — e ouvir na própria tela
 
 Segunda parte da gravação em blocos: agora ela funciona ponta a ponta.

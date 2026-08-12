@@ -187,8 +187,40 @@ def _aguardando_desfecho(e: Entrevista, agora: datetime | None = None) -> bool:
     return e.marcada_para < (agora or datetime.now(timezone.utc))
 
 
-def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None) -> dict:
+def gravacoes_por_entrevista(db: Session, entrevistas) -> dict:
+    """Resumo da gravação de VÁRIAS entrevistas, em UMA consulta.
+
+    Em lote e não uma por linha: com 74 entrevistas na tela, uma consulta por
+    linha é o N+1 que a v2.15 já cobrou aqui do lado (43 consultas para 39
+    talentos). Devolve só o que a LISTA precisa — status e se há áudio/texto —,
+    não os blocos: quem quer o detalhe abre a ficha.
+    """
+    from app.models.gravacao_entrevista import GravacaoEntrevista
+    ids = [e.id for e in entrevistas]
+    if not ids:
+        return {}
+    from app.models.bloco_gravacao import BlocoGravacao
+    linhas = db.scalars(select(GravacaoEntrevista).where(
+        GravacaoEntrevista.entrevista_id.in_(ids))).all()
+    # Quantos blocos cada gravação tem — na MESMA leva, para o front saber qual
+    # URL de áudio usar (arquivo único × primeiro trecho) sem adivinhar.
+    contagem = dict(db.execute(
+        select(BlocoGravacao.gravacao_id, func.count())
+        .where(BlocoGravacao.gravacao_id.in_([g.id for g in linhas]))
+        .group_by(BlocoGravacao.gravacao_id)).all()) if linhas else {}
+    return {g.entrevista_id: {"status": g.status.value,
+                              "blocos": contagem.get(g.id, 0),
+                              "tem_audio": bool(g.audio_key) or bool(contagem.get(g.id)),
+                              "tem_texto": bool(g.texto)} for g in linhas}
+
+
+def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None,
+          gravacao: dict | None = None) -> dict:
     return {
+        # Gravação (v2.98.2): a LISTA diz se há áudio/transcrição, para o RH
+        # chegar nela a partir da admissão e do colaborador — sem abrir a ficha
+        # de cada entrevista para descobrir que não há nada.
+        "gravacao": gravacao,
         "id": e.id,
         "pessoa": pessoa["nome"],
         "talento_id": pessoa["talento_id"], "candidato_id": pessoa["candidato_id"],
@@ -441,8 +473,11 @@ def entrevistas_da_pessoa(db: Session = Depends(get_db),
         select(Entrevista).where(or_(*cond))
         .order_by(Entrevista.criada_em.desc())))
     pessoas = _pessoas_em_lote(db, linhas)
+    # Em LOTE: uma consulta para todas as entrevistas da pessoa, não uma por
+    # linha (o N+1 que a v2.15 já cobrou neste mesmo arquivo).
+    gravs = gravacoes_por_entrevista(db, linhas)
     agora = datetime.now(timezone.utc)
-    return {"itens": [_dump(e, pessoas[e.id], agora) for e in linhas],
+    return {"itens": [_dump(e, pessoas[e.id], agora, gravs.get(e.id)) for e in linhas],
             "total": len(linhas)}
 
 
