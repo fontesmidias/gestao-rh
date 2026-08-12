@@ -1794,6 +1794,15 @@ body[data-rh-ocupado] { cursor: progress; }
                   margin-bottom: -2px; padding: .55rem .9rem; cursor: pointer; font-weight: 600;
                   color: var(--tinta-suave); border-radius: 0; width: auto; min-height: 0; }
 .rh-abas button.ativa { color: var(--verde-escuro); border-bottom-color: var(--verde); }
+/* Contador na aba (v2.95): diz o que TEM dentro, para ninguém abrir e descobrir
+   que não havia nada. Âmbar porque é pendência — algo esperando ação.
+   Mesma mecânica do `.chip` (color-mix sobre a cor semântica): texto na cor e
+   fundo diluído funcionam nos DOIS temas sem par de token nem hex literal. */
+.ficha-aba-conta { display: inline-block; margin-left: .35rem; padding: 0 .45rem;
+                   border-radius: var(--raio-chip); color: var(--ambar);
+                   background: color-mix(in srgb, var(--ambar) 18%, transparent);
+                   font-size: var(--fs-mini); font-weight: 700;
+                   vertical-align: middle; }
 
 /* ---------- Link público do Reembolso-Creche ---------- */
 .creche-publico { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }

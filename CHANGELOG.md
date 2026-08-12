@@ -11,6 +11,58 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.96.0] — 2026-08-11 — Um trabalho por vez na ficha da pessoa
+
+Passos 3 e 4 do redesenho aprovado no protótipo. Fecha a leva iniciada na v2.95.
+
+**Quatro abas em vez de 14 blocos empilhados** — Documentos · Cadastro ·
+Contratação · Histórico. A v2.47 já havia agrupado a tela por NATUREZA e isso
+resolveu o "muito rolar" da época; o que sobrou é que as três faixas continuavam
+na MESMA coluna, com o mesmo peso visual. Decisões do Bruno, perguntadas antes de
+codar: **Documentos abre por padrão** (é o trabalho diário), e **Contratação sai
+de dentro de "cadastro"** porque definir posto/salário é outro ato, feito uma vez.
+
+Três decisões técnicas que sustentam isso:
+
+- **`hidden`, não desmontar.** Trocar de aba não pode perder o que está sendo
+  digitado na outra — e o estado dos componentes filhos (63 `useState` nesta
+  tela) se perderia com montagem condicional.
+- **A aba NÃO se guarda em `localStorage`.** Abrir a ficha de alguém é começar um
+  trabalho novo; herdar a aba da pessoa ANTERIOR abriria a tela em Histórico sem
+  ninguém pedir. (Em Config, guardar faz sentido — lá é preferência de uma tela
+  só, não estado de outra pessoa.)
+- **Reusa `.rh-abas`**, a primitiva que já existe (Creche etc.), em vez de
+  inventar classe nova — a lição da v2.65: passar no teste estrutural não é
+  seguir o padrão, e o padrão certo já estava escrito.
+
+**Um verde por tela.** Eram seis botões `btn-principal` competindo pelo papel de
+ação principal; "Efetivar" (irreversível) tinha o mesmo peso de "Salvar data".
+Liberar informativo, acrescentar documento e salvar posto viraram secundários. O
+verde cheio fica no ato que FECHA o trabalho — "Efetivar", e "Aprovar" dentro da
+aba de documentos, que é o que fecha aquela unidade. **Medido: 2 → 1** botão
+primário visível.
+
+**Resultado medido** (mesmo critério antes e depois — `checkVisibility()`, que
+resolve `<details>` fechado e `[hidden]`, coisa que `getBoundingClientRect` não
+faz):
+
+| | antes | depois |
+|---|---|---|
+| Altura da página (desktop) | 1815px | **1363px** (−25%) |
+| Altura da página (celular) | 2360px | **1535px** (−35%) |
+| Controles visíveis | 43 | **36** |
+| Botões verdes cheios | 2 | **1** |
+| Tamanhos de fonte | 13 | **12** |
+
+⚠️ **Defeito de campo achado na medição, não no código**: "✅ Efetivar como
+colaborador" saía **CORTADO** no celular — o rótulo não cabe em 165px e o
+`text-overflow` escondia o corte em vez de denunciá-lo (v2.78). Corrigido com
+`.so-desktop`, que encurta para "✅ Efetivar" no celular: encurtar rótulo é o
+degrau ANTES de esconder, e ação nunca se esconde (v2.76.1).
+
+Verificado nas quatro abas, claro e escuro, desktop e celular: zero vazamento
+lateral, nenhum botão cortado. As 21 réguas de layout continuam verdes.
+
 ## [2.95.0] — 2026-08-11 — O que trava a admissão aparece primeiro
 
 Primeiros dois passos do **redesenho da ficha da pessoa**, validado pelo Bruno em
