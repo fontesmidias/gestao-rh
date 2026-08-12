@@ -1539,6 +1539,31 @@ export const rh = {
   },
   urlAnexoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/anexo`,
 
+  // ---- Gravação e transcrição da entrevista (v2.97) ----
+  // Áudio de entrevista NÃO sai de casa: o faster-whisper roda no container
+  // `transcricao`. Nada disto entra no dossiê de admissão (§ 15.4).
+  gravacaoEntrevista: (id) =>
+    req(`/rh/entrevistas/${id}/gravacao`, { headers: authRH() }),
+  consentirGravacao: (id, consentiu) =>
+    req(`/rh/entrevistas/${id}/gravacao/consentimento`,
+        { method: 'PUT', headers: authRH(), body: JSON.stringify({ consentiu }) }),
+  // Upload por `buscar`, nunca por `req` — ver o comentário do anexo acima.
+  subirAudioEntrevista: async (id, arquivo, duracaoS) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const q = duracaoS ? `?duracao_s=${Math.round(duracaoS)}` : ''
+    const r = await buscar(`${BASE}/rh/entrevistas/${id}/gravacao${q}`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  retranscreverEntrevista: (id) =>
+    req(`/rh/entrevistas/${id}/gravacao/transcrever`, { method: 'POST', headers: authRH() }),
+  excluirGravacaoEntrevista: (id) =>
+    req(`/rh/entrevistas/${id}/gravacao`, { method: 'DELETE', headers: authRH() }),
+  urlAudioEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/audio`,
+  urlTextoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/texto`,
+
   // ---- Roteiros de entrevista (v2.66, § 14.1) ----
   // O catálogo do instrumento. Rascunho → publicado: só publicado se usa, e é
   // isso que sustenta "o roteiro foi aprovado ANTES de ser usado".

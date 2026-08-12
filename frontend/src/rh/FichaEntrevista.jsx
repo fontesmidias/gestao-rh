@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { rh as api } from '../api.js'
 import SelectBusca from '../SelectBusca.jsx'
 import VisualizadorArquivo from '../VisualizadorArquivo.jsx'
+import GravacaoEntrevista from './GravacaoEntrevista.jsx'
 import { fmtDataHora } from '../fmt.js'
 
 // A ficha da entrevista — DUAS naturezas, um componente.
@@ -166,6 +167,12 @@ export default function FichaEntrevista({ entrevistaId, form, aoMudar }) {
             Dois controles para a mesma ação é o que o Bruno reprovou duas vezes
             seguidas. */}
       </div>
+
+      {/* Gravação (v2.97): fica ANTES do formulário porque a conversa vem antes
+          do preenchimento — quem grava, grava enquanto entrevista, e o valor do
+          módulo é justamente não escrever durante a conversa. Depois do
+          formulário, o botão só seria achado quando já não servisse. */}
+      <GravacaoEntrevista entrevistaId={entrevistaId} encerrada={encerrada} />
 
       {/* Entrevista que passou da data e ninguém fechou: o sistema PERGUNTA.
           Nunca marca `nao_veio` sozinho — silêncio não é falta. */}

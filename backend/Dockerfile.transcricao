@@ -1,0 +1,39 @@
+# Container de TRANSCRIÇÃO de entrevistas (v2.97).
+#
+# Imagem SEPARADA da API de propósito. Duas razões:
+#
+# 1. **Peso.** `faster-whisper` traz CTranslate2 + tokenizers e o modelo baixado
+#    ocupa ~500 MB no `small`. Pôr isso na imagem da API engordaria todo deploy
+#    do sistema por uma função que a API nunca executa — e o `worker` comum, que
+#    usa a MESMA imagem da API, herdaria o peso junto.
+# 2. **Isolamento de recurso.** Transcrever consome CPU por minutos. No mesmo
+#    container da API competiria com requisição de gente real; no `worker`
+#    comum, seguraria a fila do Match e da indexação de currículo atrás de si.
+#
+# Ele consome a MESMA fila RQ (`default`) que já existe desde a v1.83 — não há
+# fila nova nem infraestrutura nova, só um consumidor a mais.
+FROM python:3.12-slim
+
+# ffmpeg: o `MediaRecorder` do navegador entrega WebM/Opus, e é o ffmpeg que o
+# decodifica. Sem ele a transcrição falha com erro de formato — num áudio que
+# está perfeito.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir . \
+    && pip install --no-cache-dir "faster-whisper>=1.0,<2"
+
+COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
+
+# ⚠️ NÃO usa o `docker-entrypoint.sh` da API: quem aplica as migrations é a API,
+# e dois processos correndo `alembic upgrade` ao mesmo tempo no mesmo banco é
+# corrida de migration em produção.
+#
+# Fila `transcricao`, não `default`: áudio leva minutos e seguraria atrás de si
+# o ranqueamento do Match e a indexação de currículo, que levam segundos.
+CMD ["rq", "worker", "--url", "redis://redis:6379/0", "transcricao"]

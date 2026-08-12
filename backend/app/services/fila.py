@@ -25,6 +25,9 @@ from app.core.config import get_settings
 log = logging.getLogger(__name__)
 
 NOME_FILA = "default"          # a mesma que o container `worker` escuta
+# Fila do container `transcricao` (v2.97): trabalho de minutos, separado para
+# não segurar atrás de si tarefas de segundos.
+NOME_FILA_TRANSCRICAO = "transcricao"
 _TIMEOUT_TAREFA = 60 * 60      # 1h: ranqueamento de centenas de talentos com
                                # espera de cota pode ser demorado, e tudo bem
 
@@ -33,10 +36,17 @@ def _conexao() -> Redis:
     return Redis.from_url(get_settings().redis_url)
 
 
-def enfileirar(funcao, *args, timeout: int | None = None, **kwargs):
+def enfileirar(funcao, *args, timeout: int | None = None,
+               fila_nome: str = NOME_FILA, **kwargs):
     """Põe a tarefa na fila e devolve o job. NÃO engole erro de conexão — se
-    o Redis estiver fora, o RH precisa saber que o trabalho não foi aceito."""
-    fila = Queue(NOME_FILA, connection=_conexao(),
+    o Redis estiver fora, o RH precisa saber que o trabalho não foi aceito.
+
+    `fila_nome` existe para separar trabalho LENTO do resto (v2.97): a
+    transcrição de uma entrevista leva minutos e, na mesma fila, seguraria atrás
+    de si o ranqueamento do Match e a indexação de currículo, que levam segundos.
+    Cada fila tem o próprio consumidor — ver `NOME_FILA_TRANSCRICAO`.
+    """
+    fila = Queue(fila_nome, connection=_conexao(),
                  default_timeout=timeout or _TIMEOUT_TAREFA)
     job = fila.enqueue(funcao, *args, **kwargs)
     log.info("Tarefa enfileirada: %s (job=%s)", getattr(funcao, "__name__", funcao), job.id)

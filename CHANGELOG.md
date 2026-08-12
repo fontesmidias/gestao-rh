@@ -11,6 +11,76 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.97.0] — 2026-08-12 — A entrevista se grava, com autorização
+
+Módulo de gravação e transcrição de entrevistas, desenhado na 22ª leva
+(`docs/planejamento/14-transcricao-de-entrevistas.md`) e priorizado pelo Bruno.
+O *job* não é "ter o áudio": é **não perder o que foi dito** e **não escrever
+enquanto entrevista** — hoje o entrevistador divide atenção entre conduzir e
+anotar, e quem paga é a justificativa que ele assina depois.
+
+**Decisões do Bruno, cumpridas:** fila, container separado, **self-hosted sem
+API paga** (`faster-whisper`), resultado para baixar. Sem diarização — atribuir
+fala errada numa ficha que a pessoa assina é risco jurídico, não ruído.
+
+> **Áudio de entrevista não sai de casa.** Está escrito aqui e no documento
+> porque, sem registro, alguém "otimiza" trocando por um serviço pago daqui a
+> seis meses e desfaz a decisão sem saber que ela existiu.
+
+**O consentimento é a parte que decide se isto pode existir.** Gravação de voz é
+dado pessoal e há entendimento de que voz é dado biométrico. Numa entrevista de
+emprego a conversa é a mais assimétrica que existe — de um lado quem decide, do
+outro quem precisa do emprego. Por isso:
+
+- A tela **pergunta**, com "Ela autorizou" e "Ela não autorizou" na **mesma
+  classe de botão** (medido na tela, não presumido). Se um fosse verde grande e o
+  outro um link cinza, a pessoa clicaria no primeiro por não sentir que pode
+  recusar — e isso é teatro de consentimento.
+- A tela **diz** que o áudio não vai a serviço externo e que **recusar não afeta
+  em nada a avaliação**.
+- **A recusa é um ATO registrado**, com quem registrou e quando. Sem
+  manifestação gravada, "não foi perguntado" e "disse não" são a mesma linha em
+  branco (v2.34) — e são estados distintos: são **oito**, não os seis do
+  desenho, porque faltava `nao_perguntado`.
+- **Sem consentimento, o serviço recusa** — a checagem vive em
+  `marcar_para_transcrever`, não só na rota: "as rotas não deixam" não é
+  garantia (v2.66).
+
+**Três decisões que apareceram ao implementar, não no desenho:**
+
+1. **Fila própria** (`transcricao`), não a `default`: áudio leva minutos e
+   seguraria atrás de si o Match e a indexação de currículo, que levam segundos.
+2. **Retirar o consentimento com áudio existente RECUSA, oferecendo a saída** —
+   aceitar deixaria um áudio existindo sob um registro dizendo que a pessoa não
+   autorizou, a pior das duas mentiras. O 409 diz o que resolve (excluir), em vez
+   de só bloquear (v2.87/v2.93).
+3. **A exclusão NÃO passa pela lixeira**, ao contrário de toda exclusão do RH:
+   áudio é dado biométrico, e reter 60 dias seria o oposto do que se quer quando
+   alguém retira o consentimento. O **registro** fica (é a prova da consulta); o
+   **áudio** sai do storage — "some da tela" não é "foi apagado" (v2.35).
+
+**Infra:** imagem própria `gestao-rh-transcricao` (o `faster-whisper` pesa
+~500 MB e nem a API nem o worker o executam), com `ffmpeg` — o `MediaRecorder`
+entrega WebM/Opus e sem ffmpeg a transcrição falharia num áudio perfeito — e
+volume `whisper-cache`, senão cada restart rebaixa o modelo. Container nos
+**dois** arquivos de deploy (v2.66) **e** na matriz do `ci.yml`: sem esta última,
+o `portainer-stack.yml` apontaria para uma imagem inexistente.
+
+⚠️ **A transcrição não tem caminho para o dossiê** (§ 15.4). O `dossie.py` varre
+`SolicitacaoAssinatura` sem filtrar origem, então fluxo novo entra nele POR
+PADRÃO — e o dossiê circula: vai ao cliente e à pasta física. Há asserção
+cobrando isso.
+
+Verificado: 9 cenários pela API rodando (recusa nos dois sentidos, formato
+inválido nomeando os aceitos, exclusão apagando o objeto no MinIO), tela em
+desktop e celular com zero vazamento, e `test_gravacao_entrevista.py` no CI com
+**3 mutações, 3 pegas** (remover a trava de consentimento; esquecer de apagar o
+áudio; permitir retirar o consentimento com áudio existente).
+
+**Ainda não feito**, registrado no § 11 do documento: exibição no módulo de
+Arquivo (hoje só no card da entrevista) e a **retenção do áudio**, que precisa de
+decisão — a transcrição pode sobreviver ao áudio.
+
 ## [2.96.1] — 2026-08-12 — O padrão da tela de trabalho vira obrigatório
 
 O Bruno usou a ficha redesenhada e confirmou: *"funcionou"*. Só agora o padrão
