@@ -25,12 +25,24 @@ ACOES_ERRO = ("dossie_falhou", "reset_senha_email_falhou")
 
 
 def _traduzir_pendencia(p: str) -> str:
+    """Nome que o RH lê, não o valor do enum.
+
+    `valor.replace("_", " ")` (como era) produz "ficha emergencia" e "termo vt" —
+    sem acento e sem maiúscula, no bloco que agora abre a ficha (v2.95). Os nomes
+    de verdade já existem em DOIS mapas do projeto; usá-los evita a terceira
+    lista à mão, que envelheceria torto e em silêncio (a lição do enum reescrito
+    da v2.69). Valor desconhecido cai no texto cru — nunca some.
+    """
+    from app.api.assinaturas import NOMES_DOC
+    from app.services.exigencias import ROTULOS
+
     tipo, _, valor = p.partition(":")
-    nome = valor.replace("_", " ")
     if tipo == "ficha":
+        nome = next((n for d, n in NOMES_DOC.items() if d.value == valor),
+                    valor.replace("_", " "))
         return f"Ficha não assinada: {nome}"
     if tipo == "documento":
-        return f"Documento obrigatório não aprovado: {nome}"
+        return f"Documento obrigatório não aprovado: {ROTULOS.get(valor, valor.replace('_', ' '))}"
     return p
 
 

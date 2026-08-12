@@ -39,6 +39,9 @@ backend/.venv/
 # Playwright
 frontend/test-results/
 frontend/playwright-report/
+# Screenshots do levantamento de densidade (_levantamento-densidade.spec.js):
+# são retrato de um momento, regerados quando se quer medir de novo.
+frontend/tests/e2e/_retrato/
 
 # Subpastas de docs tambem podem ter dados sensiveis (repo publico!)
 docs/**/*.docx

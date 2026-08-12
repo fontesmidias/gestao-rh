@@ -8,7 +8,7 @@ import RoteiroAssinatura from './RoteiroAssinatura.jsx'
 import Ajuda from '../Ajuda.jsx'
 import PdfViewer from '../PdfViewer.jsx'
 import SelectBusca from '../SelectBusca.jsx'
-import Exigencias from './Exigencias.jsx'
+import Exigencias, { ResumoDasExcecoes } from './Exigencias.jsx'
 import InputData from '../InputData.jsx'
 import MemoriaPessoa from './MemoriaPessoa.jsx'
 import EntrevistasDaPessoa from './EntrevistasDaPessoa.jsx'
@@ -34,6 +34,61 @@ const MOTIVOS = [
 // eu consigo marcar isso após um candidato iniciar seu cadastro?"*. Sim, e a
 // marca vale do clique em diante — o que é correto (não se carimba como
 // presencial um documento assinado em casa), mas precisava estar VISÍVEL.
+// O que TRAVA esta admissão, no topo da ficha e em uma frase (v2.95).
+//
+// A informação já existia — `GET /rh/candidatos/{id}/diagnostico` devolve
+// `dossie.pendencias` desde a v1.x —, mas só aparecia dentro do bloco de
+// Diagnóstico, no FIM da página, atrás de um `<details>`, depois de ~65 linhas
+// de telemetria. Ou seja: a resposta estava pronta e ninguém a via.
+//
+// Três decisões deste bloco:
+//   1. **Silêncio quando não há impedimento.** Um bloco verde dizendo "pode
+//      gerar" em toda ficha seria mais um cartão competindo por atenção — e a
+//      tela já tinha 14. Só aparece quando há o que resolver.
+//   2. **Falha de carga NÃO vira alarme.** Se o diagnóstico não responde, o
+//      bloco some em silêncio: dizer "não foi possível verificar" no topo de
+//      toda ficha ensinaria a equipe a ignorar a faixa vermelha, que é
+//      justamente o que ela precisa levar a sério (v2.88).
+//   3. **Nomeia o documento, não o código.** `documento:ctps_digital` vira
+//      "CTPS digital" — o RH não deveria traduzir enum.
+function ImpedimentoDaFicha({ id, recarga }) {
+  const [pend, setPend] = useState(null)
+
+  useEffect(() => {
+    let vivo = true
+    api.diagnostico(id)
+      .then((d) => { if (vivo) setPend(d?.dossie?.pode_gerar ? [] : (d?.dossie?.pendencias || [])) })
+      .catch(() => { if (vivo) setPend([]) })   // ver decisão 2
+    return () => { vivo = false }
+  }, [id, recarga])
+
+  if (!pend || pend.length === 0) return null
+  return (
+    <div className="ficha-impedimento">
+      <strong>{pend.length === 1
+        ? 'Falta 1 item para o dossiê gerar:'
+        : `Faltam ${pend.length} itens para o dossiê gerar:`}</strong>
+      <ul>{pend.map((p, i) => <li key={i}>{p}</li>)}</ul>
+    </div>
+  )
+}
+
+// Busca própria só para o resumo das exceções (v2.95). Ele mora FORA do
+// `<details>`, e `<details>` fechado não renderiza o conteúdo — então não dá
+// para reaproveitar a consulta que o `Exigencias` faz lá dentro.
+function ResumoExigenciasDaPessoa({ id }) {
+  const [dados, setDados] = useState(null)
+  useEffect(() => {
+    let vivo = true
+    api.exigenciasDoCandidato(id)
+      .then((d) => { if (vivo) setDados(d) })
+      .catch(() => { if (vivo) setDados(null) })
+    return () => { vivo = false }
+  }, [id])
+  if (!dados) return null
+  return <ResumoDasExcecoes dados={dados} />
+}
+
 function AtendimentoAssistido({ lista }) {
   if (!lista || lista.length === 0) return null
   const emCurso = lista.find((a) => a.em_curso)
@@ -1183,6 +1238,15 @@ export default function Detalhe({ id, aoVoltar }) {
       </p>
       {msg && <div className={msg.tipo === 'erro' ? 'alerta' : 'sucesso'}>{msg.texto}</div>}
 
+      {/* O IMPEDIMENTO vem antes de tudo (v2.95, redesenho validado pelo Bruno).
+          Ele já existia — dentro do Diagnóstico, no FIM da página, atrás de um
+          dobrável, depois de ~65 linhas de telemetria. É a única frase da tela
+          que responde "por que esta pessoa ainda não fechou?", que é a razão de
+          alguém abrir a ficha. Em 11/08/2026 isso custou 54 minutos: a analista
+          tomou o erro do dossiê 8× sem nunca ver esta linha, e foi desmarcar
+          exigências médicas achando que a culpa era delas. */}
+      <ImpedimentoDaFicha id={id} recarga={dados.dossie_gerado_em} />
+
       {/* Atendimento presencial (v2.58): fica no TOPO, não num histórico lá
           embaixo — quem abre a ficha precisa saber, antes de qualquer coisa,
           que aquela admissão foi (ou está sendo) preenchida pelo RH com a
@@ -1211,7 +1275,12 @@ export default function Detalhe({ id, aoVoltar }) {
 
       {/* O que ESTA pessoa precisa entregar (v2.80). Recolhido: o padrão serve
           quase todo mundo, e um bloco sempre aberto com ~50 itens competiria
-          com o trabalho diário desta tela. */}
+          com o trabalho diário desta tela.
+          ⚠️ O RESUMO das exceções fica FORA do `<details>` (v2.95): dentro, ele
+          só apareceria para quem abrisse — e o problema que ele resolve é
+          justamente ninguém abrir. `<details>` fechado nem renderiza o conteúdo
+          (v2.76.2), então o resumo precisa de consulta própria. */}
+      <ResumoExigenciasDaPessoa id={id} />
       <details>
         <summary>☑️ O que é obrigatório para esta pessoa</summary>
         <Exigencias candidatoId={id} setMsg={setMsg} />

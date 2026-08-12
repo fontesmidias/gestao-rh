@@ -141,8 +141,39 @@ export default function Exigencias({ candidatoId, setMsg }) {
           ? 'Vale só para esta pessoa. O que estiver marcado aqui é o que ela precisa entregar para concluir a admissão.'
           : 'Vale para TODOS os candidatos daqui em diante. Quem já concluiu a admissão não é afetado — e cada pessoa pode ter exceção própria, na ficha dela.'}
       </p>
+      {/* O resumo das exceções NÃO se renderiza aqui: na ficha da pessoa ele
+          mora FORA do `<details>` (senão só apareceria para quem abrisse, e o
+          problema que ele resolve é ninguém abrir). Na tela do padrão da casa
+          não há "exceção da pessoa" para resumir. Dois resumos na mesma tela
+          seria a duplicação que a v2.75 proíbe. */}
       {bloco('📎 Documentos', 'documentos', dados.documentos)}
       {bloco('📝 Campos da ficha', 'campos', dados.campos)}
     </>
+  )
+}
+
+// O que fugiu do padrão, DITO EM PALAVRAS (v2.95).
+//
+// São 54 caixas de marcação, quase todas marcadas. Três desmarcadas no meio
+// delas são invisíveis — foi exatamente o que aconteceu em 11/08/2026: a
+// analista dispensou "condições médicas", "medicamento contínuo" e "contato de
+// emergência" tentando destravar um dossiê (a causa real era um PDF corrompido),
+// e nada na tela dizia que aquela pessoa tinha ficado sem contato de emergência.
+//
+// Marcar em âmbar o item ALTERADO — que já existia — não basta: exige varrer a
+// grade item a item para achar o que mudou. A frase aparece sem ninguém procurar.
+export function ResumoDasExcecoes({ dados }) {
+  const excecoes = [...(dados.documentos || []), ...(dados.campos || [])]
+    .filter((i) => i.origem === 'pessoa')
+  if (excecoes.length === 0) return null
+
+  const dispensados = excecoes.filter((i) => !i.obrigatorio).map((i) => i.rotulo)
+  const exigidos = excecoes.filter((i) => i.obrigatorio).map((i) => i.rotulo)
+  return (
+    <div className="exigencias-resumo">
+      <strong>Esta pessoa tem {excecoes.length === 1 ? '1 exceção' : `${excecoes.length} exceções`}:</strong>
+      {dispensados.length > 0 && <div>Dispensados: {dispensados.join(', ')}.</div>}
+      {exigidos.length > 0 && <div>Exigidos a mais: {exigidos.join(', ')}.</div>}
+    </div>
   )
 }

@@ -116,6 +116,11 @@
   --cinza-txt: #9ab3a3;
   --fundo: #0e1613;
   --erro-suave: #391b1d;
+  /* Par escuro que faltava (v2.95): sem ele o `--atencao-suave` ficava com o
+     âmbar CLARO (#fdf3e2) nos dois temas — texto escuro sobre fundo claro
+     dentro de uma tela escura. É a armadilha da v2.46 (token sem par no
+     escuro), achada ao usar este token pela primeira vez fora do `.chip`. */
+  --atencao-suave: #33280f;
   --texto: #d3e3d8;
   --cartao: #17221b;
   --borda: #2b3d32;
@@ -1617,6 +1622,27 @@ body[data-rh-ocupado] { cursor: progress; }
   overflow-wrap: break-word;
   align-items: flex-start;
 }
+
+/* O que TRAVA a admissão — topo da ficha (v2.95).
+   Faixa lateral em vez de caixa vermelha inteira: ela precisa ser o elemento
+   mais forte da tela sem virar um bloco de erro que se aprende a ignorar. Usa
+   os tokens `--erro`/`--erro-suave`, que já têm par no tema escuro. */
+.ficha-impedimento { border-left: 4px solid var(--erro);
+                     background: var(--erro-suave); color: var(--alerta-txt);
+                     border-radius: var(--raio-input);
+                     padding: var(--esp-3) var(--esp-4); margin: var(--esp-3) 0; }
+.ficha-impedimento ul { margin: var(--esp-1) 0 0; padding-left: 1.1rem; }
+.ficha-impedimento li { margin: var(--esp-1) 0; }
+
+/* Exceções de exigência, ditas em PALAVRAS (v2.95) — âmbar, não vermelho:
+   dispensar um documento é decisão legítima do RH, não erro. O que estava
+   faltando era ser VISÍVEL sem varrer 54 caixas de marcação. */
+.exigencias-resumo { border-left: 4px solid var(--ambar);
+                     background: var(--atencao-suave); color: var(--texto);
+                     border-radius: var(--raio-input);
+                     padding: var(--esp-2) var(--esp-3); margin: var(--esp-2) 0;
+                     font-size: var(--fs-apoio); }
+.exigencias-resumo div { margin-top: var(--esp-1); color: var(--texto-suave); }
 
 /* Correção de ficha pelo RH + etiqueta de origem */
 .etiqueta-rh { color: var(--verde); font-weight: 600; }
