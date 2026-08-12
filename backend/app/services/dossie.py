@@ -1,6 +1,7 @@
 """Montagem do dossiê único: fichas assinadas (1-3) + documentos aprovados na ordem oficial."""
 
 import io
+import unicodedata
 from datetime import datetime, timezone
 
 from pypdf import PdfReader, PdfWriter, Transformation
@@ -81,6 +82,28 @@ class DossiePecasIlegiveis(Exception):
     def __init__(self, ilegiveis: list[str]):
         self.ilegiveis = ilegiveis
         super().__init__(", ".join(ilegiveis))
+
+
+def nome_arquivo_dossie(nome_pessoa: str) -> str:
+    """`DOCS ADM - KATIA POLIANE.pdf` — o padrão que o RH usa na pasta física
+    (pedido do Bruno, 2026-08-12).
+
+    Existe como função ÚNICA porque o dossiê é baixado de QUATRO lugares (a ficha
+    no front, a rota individual, o Arquivo e o ZIP em lote) e cada um montava o
+    nome à mão. Quatro cópias divergem na primeira mudança — e o sintoma seria o
+    RH recebendo arquivos com dois padrões de nome sem saber por quê.
+
+    Caixa alta e sem acento: o header HTTP `Content-Disposition` só carrega ASCII
+    com segurança (nome com acento chega truncado ou codificado em alguns
+    clientes), e a pasta do RH é toda em caixa alta.
+    """
+    limpo = unicodedata.normalize("NFKD", nome_pessoa or "").encode("ascii", "ignore").decode()
+    # Barra e dois-pontos viram caminho/stream alternativo no Windows; o resto do
+    # saneamento é o mesmo do `export_planilha.slug()`.
+    for proibido in '\\/:*?"<>|':
+        limpo = limpo.replace(proibido, " ")
+    limpo = " ".join(limpo.split()).upper()
+    return f"DOCS ADM - {limpo}" if limpo else "DOCS ADM"
 
 
 def _rotulo(doc) -> str:

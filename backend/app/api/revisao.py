@@ -19,7 +19,7 @@ from app.services import storage
 from app.services import telemetria as telemetria_svc
 from app.services.auditoria import registrar
 from app.services.dossie import (DossieIncompleto, DossiePecasIlegiveis,
-                                 gerar_dossie)
+                                 gerar_dossie, nome_arquivo_dossie)
 from app.services.email import enviar_email
 from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
@@ -658,7 +658,7 @@ def baixar_dossie(candidato_id: uuid.UUID, db: Session = Depends(get_db),
         content=storage.ler(cand.dossie_pdf_key),
         media_type="application/pdf",
         headers={"Content-Disposition":
-                 f'attachment; filename="dossie-{_ascii(cand.nome_completo)}.pdf"'},
+                 f'attachment; filename="{nome_arquivo_dossie(cand.nome_completo)}.pdf"'},
     )
 
 

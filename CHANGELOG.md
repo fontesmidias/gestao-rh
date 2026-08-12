@@ -11,6 +11,66 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.0] — 2026-08-12 — O dossiê tem o nome certo, e a gravação vira blocos
+
+**Nome do dossiê: `DOCS ADM - KATIA POLIANE.pdf`** (pedido do Bruno) — caixa
+alta, sem acento, o padrão da pasta física do RH. Virou função ÚNICA
+(`dossie.nome_arquivo_dossie`) porque o dossiê é baixado de **quatro** lugares
+(a ficha no front, a rota individual, o Arquivo e o ZIP em lote) e cada um
+montava o nome à mão. Quatro cópias divergem na primeira mudança, e o sintoma
+seria o RH recebendo arquivos com dois padrões sem saber por quê. ASCII por
+necessidade: o header `Content-Disposition` não carrega acento com segurança em
+todos os clientes.
+
+**Primeiro passo da gravação em BLOCOS** — base estrutural, com o resto vindo na
+sequência desta leva.
+
+Uma entrevista real dura 40–90 min, e o arquivo único tem três problemas
+concretos: se o navegador cair aos 32 minutos **perde-se a conversa inteira** (e
+ela não se refaz); o upload de 90 min arrisca o `proxy_read_timeout` do nginx
+justamente no fim; e a transcrição só começa depois de tudo terminar. Com blocos
+de **10 min (configurável em `transcricao_bloco_min`)**, o que já subiu está
+salvo e o texto do começo aparece enquanto o fim ainda roda.
+
+⚠️ **A divisão é automática e invisível** — decisão do Bruno, confirmada: o
+entrevistador clica em Gravar, conversa, e clica em Encerrar. Nunca escolhe
+blocos.
+
+⚠️ **A ordem é o `indice`, jamais a listagem do storage**: ela é lexicográfica e
+põe `bloco-10` antes de `bloco-2`, o que colocaria o meio da conversa no lugar
+errado — e ninguém perceberia lendo o texto (é a armadilha da v2.35, onde o
+verso do RG aparecia como frente). `UniqueConstraint(gravacao_id, indice)`:
+reenviar um bloco SUBSTITUI, em vez de criar um fantasma no meio da conversa —
+e reenviar é exatamente o que a rede instável provoca.
+
+Três regras de consolidação, cada uma com o custo que evita:
+
+- **Bloco ainda rodando ⇒ a gravação segue `processando`.** Marcar `pronta` com
+  metade da conversa faria o RH ler um texto truncado achando que é tudo.
+- **Um bloco mudo NÃO contamina os outros** — silêncio enquanto a pessoa lê um
+  documento é normal. Só é `audio_inaudivel` se TODOS forem.
+- **Bloco falho ⇒ o texto sai, com o aviso de QUAL faltou.** Recusar tudo por 10
+  minutos perdidos jogaria fora os outros 80; apresentar como completo esconderia
+  o buraco (a lição do dossiê, v2.93).
+
+**Nomes de download com DATA**: `ENTREVISTA 12-08-2026 - KATIA POLIANE.webm` (e
+`- PARTE 2` nos blocos). A data entra porque a mesma pessoa pode ser
+entrevistada mais de uma vez, e dois arquivos de nome idêntico na pasta de
+Downloads viram `(1)` e `(2)`, que não dizem qual é qual.
+
+**Retenção configurável** (`transcricao_retencao_dias`, padrão **120** — decisão
+do Bruno): o áudio expira, o TEXTO permanece. `0` = nunca expurgar, mesma
+convenção do log (v2.29) — ⚠️ trocar `<= 0` por `is not None` transformaria
+"guardar para sempre" em "apagar tudo hoje", em silêncio. O expurgo em si vem no
+próximo passo.
+
+⚠️ **`resumo()` passou a exigir a sessão** para listar os blocos. As 5 chamadas
+foram corrigidas: sem o `db`, a lista voltaria VAZIA em silêncio — a tela diria
+que não há blocos numa entrevista que os tem.
+
+Migration reversível testada (upgrade → downgrade → upgrade). Sem regressão:
+`test_gravacao_entrevista`, `test_entrevistas` e `test_design_system` verdes.
+
 ## [2.97.0] — 2026-08-12 — A entrevista se grava, com autorização
 
 Módulo de gravação e transcrição de entrevistas, desenhado na 22ª leva
