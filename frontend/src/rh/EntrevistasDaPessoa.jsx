@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { fmtData } from '../fmt.js'
+import PlayerAudio from './PlayerAudio.jsx'
 
 // Histórico de entrevistas da PESSOA (fase 2, § 8.5).
 //
@@ -59,6 +60,7 @@ export default function EntrevistasDaPessoa({ talentoId, candidatoId }) {
               <th>Nota</th>
               <th>Desfecho</th>
               <th>Entrevistador</th>
+              <th>Gravação</th>
             </tr>
           </thead>
           <tbody>
@@ -88,6 +90,34 @@ export default function EntrevistasDaPessoa({ talentoId, candidatoId }) {
                     : (e.recomendacao ? e.recomendacao.replace(/_/g, ' ') : '—')}
                 </td>
                 <td>{e.entrevistador}</td>
+                {/* Gravação (v2.98.2, pedido do Bruno): a lista da ADMISSÃO e a
+                    do COLABORADOR precisam chegar ao áudio e à transcrição —
+                    a entrevista atravessa talento↔candidato pelas duas FKs, e
+                    o áudio vai junto. Sem isto, o dado existia e a tela não
+                    dava caminho para ele. */}
+                <td>{!e.gravacao || (!e.gravacao.tem_audio && !e.gravacao.tem_texto)
+                  ? '—'
+                  : (
+                    <div className="gravacao-lista">
+                      {e.gravacao.tem_audio && (
+                        // `tem_audio` cobre os DOIS caminhos: arquivo único
+                        // (`audio_key`) e blocos. Na lista mostra-se o primeiro
+                        // trecho; o resto está na ficha da entrevista.
+                        <PlayerAudio
+                          url={e.gravacao.blocos
+                            ? api.urlBlocoEntrevista(e.id, 1)
+                            : api.urlAudioEntrevista(e.id)}
+                          nome={`entrevista-${e.id}`} />
+                      )}
+                      {e.gravacao.tem_texto && (
+                        <a className="btn-link" href={api.urlTextoEntrevista(e.id)}>
+                          ⬇ transcrição</a>
+                      )}
+                      {['aguardando', 'processando'].includes(e.gravacao.status) && (
+                        <span className="chip">transcrevendo…</span>
+                      )}
+                    </div>
+                  )}</td>
               </tr>
             ))}
           </tbody>
