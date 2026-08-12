@@ -190,7 +190,8 @@ def baixar_dossie(cid: uuid.UUID, db: Session = Depends(get_db),
     registrar(db, "arquivo_exportado_individual", ator="rh", ator_detalhe=rh.email,
               candidato_id=cid, detalhe={"tipo": "dossie"})
     db.commit()
-    return _baixar(db, c.dossie_pdf_key, f"dossie-{slug(c.nome_completo)}.pdf")
+    return _baixar(db, c.dossie_pdf_key,
+                   f"{nome_arquivo_dossie(c.nome_completo)}.pdf")
 
 
 @router.get("/rh/arquivo/pessoa/{cid}/assinatura/{assinatura_id}")
@@ -303,7 +304,8 @@ def exportar_lote(pedido: PedidoLote, db: Session = Depends(get_db),
     for c in pessoas:
         base = _pasta(c)
         if "dossie" in tipos and c.dossie_pdf_key:
-            _add(f"{base}/dossie.pdf", c.dossie_pdf_key, f"{c.nome_completo}: dossiê")
+            _add(f"{base}/{nome_arquivo_dossie(c.nome_completo)}.pdf",
+                 c.dossie_pdf_key, f"{c.nome_completo}: dossiê")
         if "assinados" in tipos:
             for a in db.scalars(select(Assinatura).where(
                     Assinatura.candidato_id == c.id, Assinatura.assinado_em.isnot(None),

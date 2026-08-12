@@ -1193,7 +1193,10 @@ export default function Detalhe({ id, aoVoltar }) {
     const blob = await api.baixarDossie(id)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `dossie-${dados.nome_completo}.pdf`
+    // `DOCS ADM - NOME` (v2.98, padrão da pasta física do RH). O nome vem do
+    // header `Content-Disposition` da rota; aqui é o mesmo cálculo para o caso
+    // de o navegador preferir o atributo `download`.
+    a.download = `DOCS ADM - ${(dados.nome_completo || '').toUpperCase()}.pdf`
     a.click()
   }
 

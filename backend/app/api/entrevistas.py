@@ -1233,7 +1233,7 @@ def ver_gravacao(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
     consentimento ser feita."""
     from app.services.gravacao_entrevista import resumo
     _e, g = _gravacao_de(db, entrevista_id)
-    return resumo(g)
+    return resumo(g, db)
 
 
 @router.put("/rh/entrevistas/{entrevista_id}/gravacao/consentimento")
@@ -1262,7 +1262,7 @@ def registrar_consentimento_rota(
     registrar(db, "entrevista_gravacao_consentimento", ator="rh", ator_detalhe=rh.email,
               detalhe={"entrevista": str(entrevista_id), "consentiu": payload.consentiu})
     db.commit()
-    return resumo(g)
+    return resumo(g, db)
 
 
 @router.post("/rh/entrevistas/{entrevista_id}/gravacao", status_code=201)
@@ -1330,7 +1330,7 @@ async def subir_audio(entrevista_id: uuid.UUID, arquivo: UploadFile,
         # Fila fora: o áudio está salvo e o estado é `aguardando`. A tela mostra
         # isso e o botão "tentar de novo" reenfileira — nada se perde.
         _log_grav.exception("Não foi possível enfileirar a transcrição de %s", g.id)
-    return resumo(g)
+    return resumo(g, db)
 
 
 @router.post("/rh/entrevistas/{entrevista_id}/gravacao/transcrever")
@@ -1357,7 +1357,7 @@ def retranscrever(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
             "erro": "fila_indisponivel",
             "mensagem": "O serviço de transcrição não respondeu. O áudio está "
                         "guardado; tente de novo em alguns minutos."}) from exc
-    return resumo(g)
+    return resumo(g, db)
 
 
 @router.get("/rh/entrevistas/{entrevista_id}/gravacao/audio")
@@ -1408,4 +1408,4 @@ def excluir_gravacao(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
     registrar(db, "entrevista_gravacao_excluida", ator="rh", ator_detalhe=rh.email,
               detalhe={"entrevista": str(entrevista_id)})
     db.commit()
-    return resumo(g)
+    return resumo(g, db)
