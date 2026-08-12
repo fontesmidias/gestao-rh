@@ -189,10 +189,18 @@ def gerar_dossie(db: Session, candidato: Candidato, ignorar_pendencias: bool = F
     for slot in aprovados:
         _juntar(slot.arquivo_pdf_key, _rotulo(slot.tipo))
 
-    # Nenhuma página entrou: TODAS as peças eram ilegíveis. Gravar aqui
-    # substituiria o dossiê anterior por um PDF de zero página — o RH baixaria
-    # um arquivo que não abre e o `dossie_gerado_em` diria que está pronto.
-    if len(writer.pages) == 0:
+    # Nenhuma página E houve falha de leitura: TODAS as peças eram ilegíveis.
+    # Gravar aqui substituiria o dossiê anterior por um PDF de zero página — o
+    # RH baixaria um arquivo que não abre e o `dossie_gerado_em` diria que está
+    # pronto.
+    #
+    # ⚠️ O `and ilegiveis` NÃO é redundante: dossiê vazio por AUSÊNCIA (parcial
+    # de quem ainda não entregou nada) é caso legítimo e sempre existiu — quem
+    # pediu `ignorar_pendencias` quer exatamente "monte com o que houver". Sem
+    # essa metade, o parcial de um candidato sem documento nenhum passaria a
+    # estourar. Os dois casos dão zero página; o que os separa é ter havido
+    # FALHA, não o total.
+    if len(writer.pages) == 0 and ilegiveis:
         raise DossiePecasIlegiveis(ilegiveis)
 
     key = f"candidatos/{candidato.id}/dossie.pdf"
