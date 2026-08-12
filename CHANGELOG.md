@@ -56,6 +56,16 @@ O que mudou:
   ao `except: pass`; remover o guard de PDF vazio; contar sem nomear) — as três
   reprovam.
 
+⚠️ **Regressão pega pelo próprio CI, registrada porque a lição é geral**: a
+primeira versão do guard recusava com zero página **sem olhar se houve falha**, e
+quebrou o `test_entrevista_documentos` — que monta um candidato sem documento
+nenhum e pede o parcial. **Dossiê vazio por AUSÊNCIA e vazio por CORRUPÇÃO dão o
+mesmo total; o que os separa é ter havido falha de leitura.** Quem pede
+`ignorar_pendencias` quer exatamente *"monte com o que houver"*, inclusive nada.
+O guard virou `len(writer.pages) == 0 and ilegiveis`, e o teste ganhou o 4º caso
+que faltava — a lacuna existia porque eu só havia coberto o caminho do defeito,
+não o caminho legítimo que se parece com ele.
+
 **Healthcheck da API** nos DOIS arquivos de deploy (a armadilha da v2.66: só num
 deles não vale em produção). Usa **Python**, não `curl` — a imagem não tem curl
 nem wget, e um healthcheck com curl marcaria o container como *unhealthy* para

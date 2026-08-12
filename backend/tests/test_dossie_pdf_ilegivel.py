@@ -187,6 +187,35 @@ def main() -> int:
     checar(cand2.dossie_pdf_key is None,
            "não grava dossiê nenhum quando não há página (não sobrescreve o anterior)")
 
+    print("\n=== 4. Dossiê VAZIO por ausência continua sendo caso legítimo ===")
+    # Regressão pega pelo CI: a primeira versão recusava com zero página SEM
+    # olhar se houve falha, e quebrou o `test_entrevista_documentos`, que monta
+    # um candidato sem documento nenhum e pede o parcial. Zero página por
+    # AUSÊNCIA (ninguém entregou nada ainda) e zero por CORRUPÇÃO dão o mesmo
+    # total — o que os separa é ter havido falha de leitura.
+    marca3 = uuid.uuid4().hex[:8]
+    cand3 = Candidato(
+        nome_completo=f"Teste Dossiê Sem Nada {marca3}",
+        cpf=f"222{marca3[:8]}"[:11],
+        email=f"dossie.semnada.{marca3}@exemplo.com.br",
+        cargo_funcao="Auxiliar",
+        status=StatusCandidato.envio_concluido,
+    )
+    db.add(cand3)
+    db.commit()
+
+    vazio_ok = False
+    try:
+        gerar_dossie(db, cand3, ignorar_pendencias=True)
+        vazio_ok = True
+    except DossiePecasIlegiveis:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"        (levantou {type(exc).__name__}: {exc})")
+
+    checar(vazio_ok,
+           "parcial de quem não entregou NADA ainda não é recusado como ilegível")
+
     db.rollback()
     db.close()
 
