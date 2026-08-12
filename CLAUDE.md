@@ -107,6 +107,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Credencial de MÁQUINA não é token de sessão — e a pergunta que decide é "se
+  vazar hoje à noite, como eu corto?"** (v2.94, `services/token_automacao.py`):
+  o token do painel é `itsdangerous` STATELESS com TTL de 12h, e as duas coisas o
+  desqualificam para automação. Stateless **não se revoga** (a assinatura é a
+  única prova; cortá-lo exigiria trocar o `SECRET_KEY` e derrubar a sessão de
+  todo mundo), e 12h obrigaria a guardar a SENHA do usuário no desktop para
+  renovar — senha vale para sempre e abre o painel inteiro. O desenho: segredo
+  sorteado, mostrado UMA vez, guardado só como `sha256` (quem tem o banco não tem
+  a credencial), prefixo `mcp_…` reconhecível para ser identificado se vazar,
+  **revogar MARCA e não apaga** (a linha é prova de que existiu e de quando
+  deixou de valer) e **usuário inativo corta a credencial junto** — senão
+  desligar alguém deixaria o token dele vivo. ⚠️ **Entra pelo MESMO `requer_rh`
+  e segue para o `exige(...)`**: porta paralela que autenticasse sem passar pela
+  checagem furaria o modelo de papéis inteiro (v2.86) sem nada na tela
+  denunciando. O papel `automacao` é de MÁQUINA (4 permissões contra as 27 do
+  `rh`), e cada ausência é decisão registrada — ao acrescentar ferramenta ao MCP,
+  pergunte se a permissão nova é de DIAGNÓSTICO; se for de ação, provavelmente
+  não pertence a este papel. Coberto por `test_papel_automacao.py` e
+  `test_token_automacao.py`, 3 mutações cada.
+- **Antes de construir módulo novo, procure o que já existe** (v2.94, duas vezes
+  na mesma leva): o MCP ia ganhar seis rotas de diagnóstico — e
+  `api/diagnostico.py` **já respondia quatro delas** (nasceu do dossiê da Kátia,
+  só leitura, com dados-chave, pendências, documentos e linha do tempo); a porta
+  de escrita ia ser criada, e `POST /rh/talentos` (v2.73) **já existia**, já
+  nascida para *"currículo que chega por e-mail"* e já recusando duplicata
+  nomeando quem é. O que faltava de verdade não era ferramenta, era CREDENCIAL —
+  e isso só apareceu porque alguém abriu o código antes de escrever. `grep` pela
+  rota antes de desenhar a rota.
 - **Recusa que não oferece a SAÍDA faz quem opera consertar a coisa errada**
   (v2.93, caso de campo 11/08/2026 — o mais caro do gênero até aqui): um PDF de
   "nada consta" emitido por site de governo não abria no `pypdf`, e

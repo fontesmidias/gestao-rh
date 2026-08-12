@@ -165,6 +165,27 @@ para impedir.
 > **Quando o RH pede velocidade, conferir antes se a fila não está cheia de
 > ruído — velocidade em fila errada multiplica erro.**
 
+### 7.1 O recorte por data é do RH, não do código
+
+Decisão do Bruno (2026-08-11): **o intervalo de datas é customizável**, escolhido
+por quem opera a cada rodada.
+
+Isso resolve, sem arbitrar, a pergunta que a análise levantou: currículo de 2019
+é dado pessoal que a pessoa provavelmente não espera que a empresa ainda tenha, e
+trazer 14 mil de uma vez incluiria essa cauda inteira sem ninguém decidir. Chumbar
+um corte no código (*"só os últimos 24 meses"*) seria decidir no lugar do RH uma
+questão que muda por vaga: para um cargo escasso, currículo antigo ainda vale.
+
+Regras que seguem daí:
+
+- O intervalo é **parâmetro de entrada**, nunca constante no código.
+- Ele fica **registrado na auditoria** de cada rodada — *"importados 50 talentos
+  de e-mails entre 01/01/2026 e 30/06/2026"* —, senão não se sabe depois o que já
+  foi varrido e o que ficou para trás.
+- **Sem padrão silencioso**: rodada sem intervalo informado recusa, em vez de
+  assumir "tudo". Assumir tudo é justamente o caso que esta decisão existe para
+  não deixar acontecer por acidente.
+
 Casos que aparecerão às centenas em 14 mil, e que precisam de decisão explícita
 antes do primeiro lote:
 
@@ -201,9 +222,33 @@ Descrição ruim = ferramenta errada chamada. Três peças:
 
 ## 10. Ordem de execução
 
-1. Papel `mcp-automacao` + token + auditoria marcada (§ 5.1–5.3).
-2. As seis ferramentas de **leitura** — valor imediato no diagnóstico, risco
-   baixo, e provam o contrato antes de existir escrita.
+1. ✅ **Papel `automacao` + credencial revogável + auditoria marcada** (§ 5.1–5.3)
+   — entregue na v2.94.
+2. As ferramentas de **leitura** — ver § 11: são menos do que parecia.
 3. `cadastrar_talento` como casca sobre a rota existente (§ 3).
 4. **Lote-piloto de 50 currículos**, medido e relatado (§ 7).
 5. Só então decidir sobre volume maior e sobre promover para (B).
+
+## 11. O que a v2.94 descobriu ao implementar o passo 1
+
+Duas correções ao § 6 deste documento, achadas abrindo o código:
+
+**As seis ferramentas de leitura são menos do que parecia.** `api/diagnostico.py`
+já existe — nasceu do dossiê da Kátia que não gerava, é só leitura, e
+`GET /rh/candidatos/{id}/diagnostico` já devolve dados-chave, por que o dossiê
+não gera, situação dos documentos e linha do tempo. Isso cobre
+`pendencias_admissao`, `status_documentos` e `diagnostico_dossie` **numa rota
+só**; `buscar_candidato` é `GET /rh/candidatos`. Sobram, como rotas realmente
+novas: nenhuma. As ferramentas MCP serão **cascas finas** sobre o que já existe.
+
+**O que faltava não era ferramenta, era credencial.** As rotas do painel são de
+sessão de navegador (login com senha, token de 12h). Sem uma credencial de
+máquina, revogável e de vida longa, nenhuma ferramenta funcionaria por mais de um
+dia — e a saída óbvia (guardar a senha no desktop) é o que não se deve fazer.
+
+Entregue na v2.94: papel `automacao` (4 permissões), tabela `token_automacao`
+(segredo só como `sha256`, revogável, prefixo `mcp_…`), gestão em
+`/rh/tokens-automacao` e o ator saindo no log como `automacao:<e-mail>`.
+
+> **Lição para o próximo passo:** antes de escrever a ferramenta, `grep` pela
+> rota. Duas vezes nesta leva o trabalho já estava feito.
