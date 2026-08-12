@@ -87,6 +87,20 @@ def _data(dt: datetime | None) -> str:
     return f"{_brasilia(dt).strftime('%d/%m/%Y')}" if dt else "—"
 
 
+def _duracao(segundos: int | None) -> str:
+    """`1h05` / `38 min` / `45 s` — a unidade acompanha o número, como o
+    `fmtDuracao` do front (v2.51)."""
+    if not segundos:
+        return "—"
+    if segundos < 60:
+        return f"{segundos} s"
+    minutos, s = divmod(int(segundos), 60)
+    if minutos < 60:
+        return f"{minutos} min"
+    h, m = divmod(minutos, 60)
+    return f"{h}h{m:02d}"
+
+
 def _secao_junta(pdf, nome: str, altura_minima: float = 34) -> None:
     """Faixa de seção que NÃO fica órfã no pé da página.
 
@@ -527,4 +541,86 @@ def gerar_roteiro(db: Session, r) -> bytes:
         "e iguais para todos os candidatos à mesma vaga; cada nota exige "
         "justificativa escrita, ancorada em comportamento observável.",
         new_x="LMARGIN", new_y="NEXT")
+    return bytes(pdf.output())
+
+
+def gerar_transcricao(db: Session, e, pessoa_nome: str, gravacao,
+                      blocos=None) -> bytes:
+    """A transcrição da entrevista em papel TIMBRADO (v2.98.5).
+
+    Existe além do `.txt` porque os dois servem a coisas diferentes: o texto puro
+    é para copiar um trecho e colar na justificativa; o PDF é para **arquivar e
+    circular** — e um documento que circula precisa dizer de quem é, de quando, e
+    para qual vaga. Um `.txt` solto numa pasta, meses depois, é um arquivo sem
+    dono.
+
+    Reusa o `_OficioPDF` das fichas (timbre, marca d'água, rodapé) pelo mesmo
+    motivo da ficha de entrevista: inventar um segundo papel timbrado faria os
+    dois divergirem na primeira mudança da marca.
+
+    ⚠️ **NÃO entra no dossiê de admissão** (§ 15.4). Como toda peça deste módulo,
+    ele é gerado sob demanda e não é gravado nas três fontes que o
+    `services/dossie.py` varre — o dossiê circula para o cliente e para a pasta
+    física, e a conversa da entrevista não vai junto.
+    """
+    from app.services.gravacao_entrevista import ROTULOS as ROTULOS_GRAV
+
+    pdf = _OficioPDF("TRANSCRIÇÃO DE ENTREVISTA")
+    pdf.set_y(46)
+
+    # O cabeçalho é o MESMO da ficha: quem lê os dois lado a lado não deveria
+    # ter de reaprender onde cada coisa está.
+    _cabecalho_pessoa(pdf, e, pessoa_nome)
+
+    pdf.secao("SOBRE ESTA TRANSCRIÇÃO")
+    if gravacao is not None:
+        if gravacao.duracao_s:
+            pdf.campo("Duração do áudio", _duracao(gravacao.duracao_s))
+        pdf.campo("Transcrita em", _data_hora(gravacao.transcrito_em))
+        # O consentimento é impresso no documento, não só no banco: é ele que
+        # sustenta a legalidade da gravação, e quem lê a transcrição meses
+        # depois precisa ver que ela foi autorizada (v2.97).
+        if gravacao.consentimento_em:
+            pdf.campo("Gravação autorizada em", _data_hora(gravacao.consentimento_em))
+        if gravacao.consentimento_por:
+            pdf.campo("Autorização registrada por", gravacao.consentimento_por)
+        if blocos:
+            pdf.campo("Trechos", f"{len(blocos)} trecho(s) de gravação")
+
+    # Transcrição PARCIAL avisa no papel, não só na tela: um documento que
+    # circula não pode se apresentar como completo quando não é (v2.93).
+    if gravacao is not None and gravacao.erro:
+        pdf.ln(1)
+        pdf.set_font("helvetica", "B", 9.5)
+        pdf.multi_cell(0, 5, f"Atenção: {gravacao.erro}")
+        pdf.set_font("helvetica", "", 10.5)
+
+    pdf.ln(2)
+    pdf.secao("O QUE FOI DITO")
+
+    # Aviso de método, e ele NÃO é formalidade: a transcrição é automática, sai
+    # com erros de reconhecimento, e **não identifica quem falou** (sem
+    # diarização, por decisão de desenho — atribuir fala errada numa peça que
+    # circula é pior que não atribuir). Quem lê precisa saber disso ANTES de
+    # citar um trecho como se fosse fala literal da pessoa.
+    pdf.set_font("helvetica", "I", 9)
+    pdf.multi_cell(0, 4.8,
+                   "Transcrição gerada automaticamente a partir do áudio. Pode "
+                   "conter erros de reconhecimento e NÃO identifica quem falou "
+                   "cada trecho. Em caso de dúvida, consulte o áudio original.")
+    pdf.set_font("helvetica", "", 10.5)
+    pdf.ln(3)
+
+    texto = (gravacao.texto if gravacao is not None else None) or ""
+    if not texto.strip():
+        pdf.paragrafo("(sem transcrição disponível)")
+    else:
+        # Quebra em parágrafos: o `multi_cell` de um texto de 6.000 palavras num
+        # bloco só estoura o `auto_page_break` de forma feia (a lição do título
+        # órfão, v2.67). Parágrafo a parágrafo, a paginação fica natural.
+        for trecho in texto.split("\n\n"):
+            trecho = trecho.strip()
+            if trecho:
+                pdf.paragrafo(trecho)
+
     return bytes(pdf.output())

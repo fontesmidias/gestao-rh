@@ -11,6 +11,45 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.5] — 2026-08-12 — A transcrição em papel timbrado
+
+O PDF que o Bruno escolheu no protótipo, ao lado do `.txt` que já existia. Os
+dois servem a coisas diferentes: **o texto puro é para copiar um trecho** e colar
+na justificativa; **o PDF é para arquivar e circular** — e documento que circula
+precisa dizer de quem é, de quando e para qual vaga. Um `.txt` solto numa pasta,
+meses depois, é um arquivo sem dono.
+
+Reusa o `_OficioPDF` das fichas (timbre, marca d'água, rodapé) e o MESMO
+cabeçalho de identificação da ficha de entrevista — quem lê os dois lado a lado
+não deveria ter de reaprender onde cada coisa está. Inventar um segundo papel
+timbrado faria os dois divergirem na primeira mudança da marca (v2.65).
+
+Três decisões do conteúdo:
+
+- **O consentimento é impresso no documento**, não fica só no banco: é ele que
+  sustenta a legalidade da gravação, e quem lê a transcrição meses depois precisa
+  ver que ela foi autorizada, por quem e quando.
+- **Transcrição parcial avisa no PAPEL**, não só na tela: um documento que
+  circula não pode se apresentar como completo quando um trecho falhou (v2.93).
+- **Aviso de método, e não é formalidade**: a transcrição é automática, sai com
+  erros de reconhecimento e **não identifica quem falou** (sem diarização, por
+  decisão de desenho). Quem lê precisa saber disso ANTES de citar um trecho como
+  fala literal da pessoa.
+
+⚠️ Gerado SOB DEMANDA, nunca gravado — não entra nas três fontes que o
+`services/dossie.py` varre, e portanto não entra no dossiê de admissão (§ 15.4).
+
+Verificado: A4, 3 imagens na página (timbre + marca d'água), as quatro seções
+presentes.
+
+⚠️ **Correção do CI, e o erro foi meu**: a edição que acrescentou
+`test_blocos_gravacao` ao `ci.yml` gravou `
+` LITERAL no lugar da quebra de
+linha, e o shell leu isso como um teste chamado `n` —
+`python: can't open file '/app/tests/n.py'`. Todos os 27 testes passavam; o
+pipeline caía no nome inventado. Corrigido e **verificado simulando a expansão
+do loop**: 27 nomes, nenhum inválido.
+
 ## [2.98.4] — 2026-08-12 — Baixar transcrição volta a funcionar
 
 **Defeito visto pelo Bruno na tela**: clicar em "⬇ Baixar transcrição (.txt)"

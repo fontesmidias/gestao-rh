@@ -1588,3 +1588,29 @@ def baixar_bloco(entrevista_id: uuid.UUID, indice: int,
                     media_type=b.audio_tipo or "audio/webm",
                     headers={"Content-Disposition": f'inline; filename="{nome}.{ext}"',
                              "Accept-Ranges": "bytes"})
+
+@router.get("/rh/entrevistas/{entrevista_id}/gravacao/pdf")
+def baixar_transcricao_pdf(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
+    _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
+    """A transcrição em papel TIMBRADO (v2.98.5).
+
+    Existe além do `.txt` porque os dois servem a coisas diferentes: o texto puro
+    é para copiar um trecho; o PDF é para arquivar e circular — e um documento
+    que circula precisa dizer de quem é, de quando e para qual vaga.
+
+    ⚠️ Gerado SOB DEMANDA, nunca gravado: não entra nas três fontes que o
+    `services/dossie.py` varre, e portanto não entra no dossiê de admissão
+    (§ 15.4). O dossiê vai para o cliente e para a pasta física.
+    """
+    from app.services.entrevista_pdf import gerar_transcricao
+    from app.services.gravacao_entrevista import blocos_de, nome_arquivo
+    e, g = _gravacao_de(db, entrevista_id)
+    if g is None or not g.texto:
+        raise HTTPException(status_code=404, detail="sem_transcricao")
+    pessoa = _pessoa_de(db, e)
+    pdf = gerar_transcricao(db, e, pessoa["nome"], g, blocos_de(db, g))
+    nome = nome_arquivo(pessoa["nome"],
+                        e.realizada_em or e.marcada_para or e.criada_em)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{nome}.pdf"'})
