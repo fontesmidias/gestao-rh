@@ -107,6 +107,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Tela de TRABALHO sobre um registro segue o § 8c do design — é OBRIGATÓRIO**
+  (v2.96.1, validado no uso real antes de virar regra): impedimento no topo com
+  o atalho que resolve; um trabalho por vez em ABAS por natureza (`hidden`, não
+  desmontar; a aba NÃO se guarda em `localStorage`; reusa `.rh-abas`); **um
+  `btn-principal` por tela** (o ato que FECHA o trabalho — salvar/liberar/criar
+  são secundários); e bloco com muitos controles nasce recolhido, resumindo as
+  exceções **em palavras e FORA do `<details>`**. Vale para ficha da pessoa,
+  benefício, vaga, avaliação — **não** para listas (essas seguem o
+  `DashPlanilha`). Reprovado no CI por `test_tela_de_trabalho.py`; ao criar tela
+  do tipo, acrescente-a à lista `TELAS_DE_TRABALHO` (é o mesmo contrato do
+  `TELAS` da régua de largura, que já cobrou por não enumerar a tela nova na
+  v2.62).
 - **Para medir o que está VISÍVEL, use `checkVisibility()` — não
   `getBoundingClientRect`** (v2.96): a régua da v2.95 contou **52 checkboxes
   "visíveis"** que estavam dentro de um `<details>` FECHADO, porque o
