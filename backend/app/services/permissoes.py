@@ -271,6 +271,36 @@ PAPEIS_PADRAO: tuple[PapelPadrao, ...] = (
         }),
     ),
     PapelPadrao(
+        "automacao", "Automação (MCP)",
+        "Assistente conectado ao portal. Consulta para diagnosticar e cadastra "
+        "talento — nada além disso.",
+        # Papel de MÁQUINA, não de gente (v2.94). Existe para que a auditoria
+        # diga "a automação leu isto" com nome próprio, em vez de a leitura se
+        # misturar com o que o Bruno fez à mão — no dia em que algo estranho
+        # aparecer, é essa distinção que responde "foi gente ou foi robô?".
+        #
+        # O que ele NÃO tem é a parte que importa, e cada ausência é uma
+        # decisão:
+        #   · `dados:exportar_base` — o eixo é a natureza do ATO: um GET que
+        #     devolve 1.171 CPFs é exportação, não leitura. Um assistente de
+        #     diagnóstico não tem por que puxar a base inteira.
+        #   · `dados:auditoria` e `dados:logs` — quem é auditado não lê a
+        #     própria trilha.
+        #   · `admissao:escrever`, `:dossie`, `colaboradores:*`, `creche:decidir`
+        #     — nada que efetive, desligue, decida benefício ou gere documento.
+        #     A ÚNICA escrita é `selecao:escrever`, que é a porta de cadastrar
+        #     talento (§ 6 do 13-mcp-do-portal.md).
+        #
+        # ⚠️ Ao acrescentar ferramenta ao MCP, pergunte se a permissão nova é de
+        # DIAGNÓSTICO. Se for de ação, ela provavelmente não pertence a este
+        # papel — o desenho da v1 é deliberadamente estreito, e alargá-lo por
+        # conveniência desfaz a razão de ele existir.
+        permissoes=frozenset({
+            "admissao:ler", "selecao:ler", "selecao:escrever",
+            "organizacao:ler",
+        }),
+    ),
+    PapelPadrao(
         "recepcao", "Recepção",
         "Anuncia visitas e encaminha assuntos aos responsáveis.",
         # Deliberadamente estreito: a recepção precisa achar a pessoa certa,

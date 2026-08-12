@@ -14,6 +14,7 @@ from app.services.auditoria import registrar
 from app.services.email_templates import enviar_modelo
 from app.services.limite import exigir
 from app.services.nomes import capitalizar_nome
+from app.services.token_automacao import PREFIXO as TOKEN_AUTOMACAO_PREFIXO
 from app.models.usuario_rh import UsuarioRH
 
 router = APIRouter(tags=["auth-rh"])
@@ -202,7 +203,28 @@ def requer_rh(
     """
     if credentials is None:
         raise HTTPException(status_code=401, detail="nao_autenticado")
-    usuario_id = validar_token_sessao(credentials.credentials)
+
+    # Credencial de MÁQUINA (MCP, v2.94). Entra pela MESMA porta de propósito:
+    # daqui ela segue para o `exige(...)` que compõe esta dependência, e passa
+    # pela checagem de permissão como qualquer usuário. Uma porta paralela que
+    # não passasse por ali seria a forma mais silenciosa de furar o modelo de
+    # papéis inteiro (v2.86) — e o furo só apareceria quando alguém procurasse.
+    apresentado = credentials.credentials
+    if apresentado.startswith(TOKEN_AUTOMACAO_PREFIXO):
+        from app.services.token_automacao import resolver as _resolver_automacao
+        usuario = _resolver_automacao(db, apresentado)
+        if usuario is None:
+            # Motivo único para "não existe", "revogado", "expirado" e "usuário
+            # inativo": distinguir na resposta diria a quem testa credenciais
+            # qual delas já existiu.
+            raise HTTPException(status_code=401, detail="token_invalido_ou_revogado")
+        from app.services.contexto_log import definir_ator
+        # O ator é marcado como automação: no dia em que algo estranho
+        # aparecer no log, "foi gente ou foi robô?" tem que ter resposta.
+        definir_ator(f"automacao:{usuario.email}")
+        return usuario
+
+    usuario_id = validar_token_sessao(apresentado)
     if usuario_id is None:
         raise HTTPException(status_code=401, detail="sessao_invalida_ou_expirada")
     usuario = db.get(UsuarioRH, uuid.UUID(usuario_id))

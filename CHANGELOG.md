@@ -11,6 +11,75 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.94.0] — 2026-08-11 — A automação entra pela porta da frente
+
+Primeiro degrau do **MCP do portal** (desenho em
+`docs/planejamento/13-mcp-do-portal.md`): o que a automação É no sistema, e como
+ela prova quem é. **Nenhuma ferramenta MCP ainda** — este passo existe para que,
+quando elas chegarem, já entrem por uma porta com nome, papel e botão de
+desligar.
+
+**Dois achados encolheram muito o trabalho, e valem registro porque o padrão se
+repete neste projeto: antes de construir, procurar o que já existe.**
+
+1. **`api/diagnostico.py` já responde quatro das seis ferramentas planejadas** —
+   nasceu do dossiê da Kátia que não gerava, é só leitura, e devolve dados-chave,
+   por que o dossiê não gera, situação dos documentos e linha do tempo. Escrever
+   seis rotas novas teria sido reimplementar o que está no ar.
+2. **A porta de escrita também já existe**: `POST /rh/talentos` (v2.73) nasceu
+   para *"currículo que chega por e-mail"* e já recusa duplicata **nomeando quem
+   é**, com `forcar` para homônimo legítimo.
+
+O que faltava de verdade não era ferramenta — era **credencial**. As rotas são de
+sessão de navegador: login com senha e token de 12h. Sem isso, a automação
+pararia todo dia, e a saída óbvia (guardar a senha do usuário no desktop) é
+exatamente o que não se faz — senha vale para sempre e abre o painel inteiro.
+
+**Papel `automacao`** (`services/permissoes.py`), papel de MÁQUINA e não de
+gente: 4 permissões (`admissao:ler`, `selecao:ler`, `selecao:escrever`,
+`organizacao:ler`) contra as 27 do papel `rh`. Cada ausência é uma decisão, não
+um esquecimento: **sem `dados:exportar_base`** (o eixo é a natureza do ATO — um
+GET que devolve 1.171 CPFs é exportação, não leitura), **sem `dados:auditoria` e
+`:logs`** (quem é auditado não lê a própria trilha), **sem efetivar, desligar,
+decidir creche, gerar dossiê ou criar usuário**. A única escrita é a de cadastrar
+talento. Existe em migration PRÓPRIA porque a semeadura de papéis (`c7e9a1b3d5f8`)
+já rodou em produção — migration aplicada não roda de novo (v2.70), e acrescentar
+o papel àquela lista consertaria só bancos novos.
+
+**Credencial de máquina** (`models/` + `services/token_automacao.py`), e a
+pergunta que decidiu o desenho foi *"se vazar hoje à noite, como eu corto?"*:
+
+- **Revogável.** O token de sessão é `itsdangerous` stateless: enquanto não
+  expira, vale — não há onde marcar "este não vale mais", e cortá-lo exigiria
+  trocar o `SECRET_KEY`, derrubando a sessão de todo mundo. **Medido: 200 → 401
+  no instante da revogação.**
+- **O segredo não fica no banco** — só o `sha256`, e um prefixo `mcp_…` para a
+  tela distinguir um token do outro. Quem tem o banco não tem a credencial.
+  Prefixo reconhecível pela mesma razão de `sk-`/`ghp_`: credencial anônima
+  vazada demora muito mais para ser identificada.
+- **Revogar MARCA, não apaga** — a linha é a prova de que a credencial existiu e
+  de quando deixou de valer. Idempotente: revogar de novo não reescreve o momento
+  real do corte.
+- **Usuário inativo corta a credencial junto** — senão desligar alguém deixaria o
+  token dele vivo, que é o buraco que ninguém lembra de fechar.
+- **Entra pelo MESMO `requer_rh`**, e daí segue para o `exige(...)` de sempre.
+  ⚠️ Isto não é detalhe de implementação: uma porta paralela que autenticasse sem
+  passar pela checagem furaria o modelo de papéis inteiro (v2.86) sem nada na
+  tela denunciando. **Medido na API rodando**: 200 em `/rh/candidatos` e
+  `/rh/talentos`; **403** em `/rh/usuarios`, `/rh/logs/servicos` e
+  `/rh/colaboradores`. No log, o ator sai como `automacao:<e-mail>` — no dia em
+  que algo estranho aparecer, *"foi gente ou foi robô?"* tem resposta.
+
+Gestão em `/rh/tokens-automacao` (GET/POST/DELETE, sob `config:usuarios`).
+Descrição é obrigatória: sem ela, "revogar o que vazou" vira adivinhação entre
+tokens idênticos na tela.
+
+Testes: `test_papel_automacao.py` (stdlib, trava o escopo estreito — 3 mutações:
+alargar com `exportar_base`, alargar com escrita que o RH também tem, promover a
+superadmin) e `test_token_automacao.py` (19 asserções, 3 mutações: ignorar a
+revogação, guardar o segredo em claro, aceitar usuário inativo). As três de cada
+reprovam. Downgrade das duas migrations executado de verdade (1 → 0 → 1).
+
 ## [2.93.0] — 2026-08-11 — Um PDF corrompido não derruba o dossiê inteiro
 
 **O defeito custou 54 minutos e três campos médicos de um colaborador real.**

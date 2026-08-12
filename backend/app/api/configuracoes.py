@@ -2,6 +2,7 @@
 
 import smtplib
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
@@ -221,6 +222,101 @@ def redefinir_senha_usuario(usuario_id: uuid.UUID, payload: UsuarioSenhaIn,
     registrar(db, "usuario_rh_senha_redefinida", ator="rh", ator_detalhe=rh.email,
               detalhe={"usuario": usuario.email})
     db.commit()
+
+
+# ---------- Credenciais de automação (MCP) ----------
+#
+# Ficam junto de usuários porque é isso que elas são: uma forma de um usuário
+# entrar. Ver `services/token_automacao.py` para o desenho e
+# `docs/planejamento/13-mcp-do-portal.md` para o que a automação pode fazer.
+
+
+class TokenAutomacaoIn(BaseModel):
+    usuario_id: uuid.UUID
+    descricao: str
+    dias_validade: int | None = None      # nulo = não expira
+
+
+def _token_dict(t) -> dict:
+    """NUNCA devolve o segredo — ele só existe na resposta da criação."""
+    return {
+        "id": str(t.id), "usuario_id": str(t.usuario_id),
+        "descricao": t.descricao, "prefixo": t.prefixo + "…",
+        "criado_em": t.criado_em, "criado_por": t.criado_por,
+        "usado_em": t.usado_em, "expira_em": t.expira_em,
+        "revogado_em": t.revogado_em, "revogado_por": t.revogado_por,
+        "valido": t.valido,
+    }
+
+
+@router.get("/rh/tokens-automacao")
+def listar_tokens_automacao(db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(exige("config:usuarios"))) -> list[dict]:
+    """Lista as credenciais de máquina. Mostra o prefixo e o último uso — é o
+    que permite responder "qual eu revogo?" e "este ainda está em uso?" sem
+    revelar segredo nenhum."""
+    from app.models.token_automacao import TokenAutomacao
+    tokens = db.scalars(select(TokenAutomacao).order_by(
+        TokenAutomacao.criado_em.desc())).all()
+    return [_token_dict(t) for t in tokens]
+
+
+@router.post("/rh/tokens-automacao", status_code=201)
+def criar_token_automacao(payload: TokenAutomacaoIn, db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
+    """Emite uma credencial. **O segredo aparece UMA vez, nesta resposta.**
+
+    A tela precisa dizer isso antes de emitir: quem não copiar terá de emitir
+    outra e revogar esta — que é o comportamento certo, não um incômodo a
+    contornar guardando o segredo em outro lugar "por garantia".
+    """
+    from datetime import timedelta
+
+    from app.services.token_automacao import emitir
+
+    usuario = db.get(UsuarioRH, payload.usuario_id)
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="usuario_nao_encontrado")
+    if not usuario.ativo:
+        raise HTTPException(status_code=422, detail="usuario_inativo")
+    descricao = (payload.descricao or "").strip()
+    if not descricao:
+        # Sem descrição, "revogar o que vazou" vira adivinhação entre tokens
+        # idênticos na tela.
+        raise HTTPException(status_code=422, detail="descricao_obrigatoria")
+    if payload.dias_validade is not None and payload.dias_validade < 1:
+        raise HTTPException(status_code=422, detail="validade_invalida")
+
+    expira = (datetime.now(timezone.utc) + timedelta(days=payload.dias_validade)
+              if payload.dias_validade else None)
+    registro, segredo = emitir(db, usuario, descricao, criado_por=rh.email,
+                               expira_em=expira)
+    # O segredo NÃO entra na auditoria — auditoria é para ser lida.
+    registrar(db, "token_automacao_criado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"usuario": usuario.email, "descricao": descricao,
+                       "prefixo": registro.prefixo, "papel": usuario.papel})
+    db.commit()
+    return {**_token_dict(registro), "token": segredo}
+
+
+@router.delete("/rh/tokens-automacao/{token_id}", status_code=200)
+def revogar_token_automacao(token_id: uuid.UUID, db: Session = Depends(get_db),
+                            rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
+    """Corta o acesso na hora. **Marca, não apaga**: a linha é a prova de que a
+    credencial existiu e de quando deixou de valer."""
+    from app.models.token_automacao import TokenAutomacao
+    from app.services.token_automacao import revogar
+
+    registro = db.get(TokenAutomacao, token_id)
+    if registro is None:
+        raise HTTPException(status_code=404, detail="token_nao_encontrado")
+    ja_revogado = registro.revogado_em is not None
+    revogar(db, registro, por=rh.email)
+    if not ja_revogado:
+        registrar(db, "token_automacao_revogado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"descricao": registro.descricao, "prefixo": registro.prefixo})
+    db.commit()
+    return _token_dict(registro)
 
 
 # ---------- Assinantes dos documentos oficiais ----------
