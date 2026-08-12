@@ -107,6 +107,35 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Recusa que não oferece a SAÍDA faz quem opera consertar a coisa errada**
+  (v2.93, caso de campo 11/08/2026 — o mais caro do gênero até aqui): um PDF de
+  "nada consta" emitido por site de governo não abria no `pypdf`, e
+  `dossie.py::_adicionar_em_a4` derrubava o dossiê INTEIRO — 18 documentos
+  aprovados perdidos por causa de um. A mensagem não dizia QUAL documento era, e
+  a analista tomou o erro **8×** em 70 minutos até concluir que a culpa era dos
+  campos obrigatórios: desmarcou **condições médicas, medicamento contínuo e
+  contato de emergência** de um colaborador real, com o motivo *"por que não
+  consigo salvar"* na auditoria — que não é justificativa, é socorro digitado no
+  campo errado. O erro continuou depois. ⚠️ **A saída existia e a tela a
+  escondia**: o dossiê parcial (`forcar=true`) tem botão desde sempre, mas o
+  bloco só renderiza no `catch` de PENDÊNCIA (`e.detail.pendencias`); erro de
+  MONTAGEM cai noutro ramo, `pendDossie` fica nulo e o botão **nunca aparece**.
+  É a v2.87 (*"recusa oferecendo a saída, nunca só o bloqueio"*) violada onde
+  mais custava. Três regras: (1) toda recusa de ação pesada oferece a
+  alternativa **no mesmo lugar onde recusou**, em TODOS os ramos do `catch`, não
+  só no primeiro; (2) peça ilegível é **pulada e NOMEADA** — `except: pass`
+  (que existia no ramo do multi-signatário) troca "quebra ruidosamente" por
+  "some caladinho", e página faltando em dossiê que circula para o cliente é
+  pior que erro; (3) **peça pulada não marca `aprovado`** e nenhuma página
+  ⇒ recusa, senão um PDF de zero página sobrescreve o dossiê anterior com o
+  `dossie_gerado_em` afirmando que está pronto. Coberto por
+  `test_dossie_pdf_ilegivel.py`, 3 mutações.
+- **Healthcheck com `curl` marca o container como *unhealthy* PARA SEMPRE**
+  (v2.93): a imagem da API não tem `curl` nem `wget` — só Python. E o critério é
+  apenas "a API responde": **`migracoes.em_dia` NÃO entra**, porque reiniciar em
+  loop por migration atrasada recriaria o incidente da v2.70, onde schema velho
+  no ar era melhor que tela morta. Vai nos DOIS arquivos de deploy (v2.66).
+
 - **Lista suspensa abre para o lado que CABE — e o teste precisa ABRIR a lista**
   (v2.92, defeito visto pelo Bruno na tela): o `SelectBusca` abria com
   `top: calc(100% + 4px)` FIXO, então na última linha de uma tabela o painel

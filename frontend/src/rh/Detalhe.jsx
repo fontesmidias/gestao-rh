@@ -983,6 +983,11 @@ export default function Detalhe({ id, aoVoltar }) {
   const [selecionados, setSelecionados] = useState(new Set())
   const [loteRejeitar, setLoteRejeitar] = useState(false)
   const [pendDossie, setPendDossie] = useState(null)
+  // Peças corrompidas e falha de montagem não-nomeada: estados PRÓPRIOS porque
+  // os três oferecem a MESMA saída (gerar parcial) — e antes só o de pendência
+  // a oferecia (v2.93).
+  const [ilegiveis, setIlegiveis] = useState(null)
+  const [falhaMontagem, setFalhaMontagem] = useState(null)
 
   const [erroCarga, setErroCarga] = useState(null)
   const recarregar = () => api.detalhe(id).then(setDados)
@@ -1067,12 +1072,21 @@ export default function Detalhe({ id, aoVoltar }) {
     if (!window.confirm(forcar
       ? 'Gerar o dossiê PARCIAL (com pendências)? O colaborador NÃO será marcado como aprovado.'
       : `Gerar o dossiê de ${dados.nome_completo} e marcar como APROVADO?`)) return
-    setMsg(null); setPendDossie(null)
+    setMsg(null); setPendDossie(null); setIlegiveis(null); setFalhaMontagem(null)
     try {
-      await api.gerarDossie(id, forcar)
-      setMsg({ tipo: 'ok', texto: forcar
-        ? 'Dossiê PARCIAL gerado (há pendências — o candidato não foi marcado como aprovado).'
-        : 'Dossiê gerado! O candidato foi marcado como aprovado.' })
+      const r = await api.gerarDossie(id, forcar)
+      // Peça pulada por estar ilegível: o dossiê SAIU, mas incompleto. Dizer
+      // "gerado!" aqui esconderia a página que falta de quem vai mandar o PDF
+      // ao cliente.
+      const pulados = Array.isArray(r?.ilegiveis) ? r.ilegiveis : []
+      setMsg(pulados.length
+        ? { tipo: 'erro', texto: `Dossiê gerado SEM ${pulados.length === 1
+            ? 'uma peça que não pôde ser lida' : `${pulados.length} peças que não puderam ser lidas`}: `
+            + `${pulados.join(', ')}. O arquivo está corrompido ou ilegível — reenvie o documento `
+            + 'e gere o dossiê de novo. O colaborador NÃO foi marcado como aprovado.' }
+        : { tipo: 'ok', texto: forcar
+            ? 'Dossiê PARCIAL gerado (há pendências — o candidato não foi marcado como aprovado).'
+            : 'Dossiê gerado! O candidato foi marcado como aprovado.' })
       await recarregar()
     } catch (e) {
       // 422 com lista de pendências → mostra a lista. Qualquer outro erro (500,
@@ -1080,11 +1094,19 @@ export default function Detalhe({ id, aoVoltar }) {
       // real, senão o RH vê um banner vazio e acha que "estava tudo certo".
       if (Array.isArray(e.detail?.pendencias)) {
         setPendDossie(e.detail.pendencias)
+      } else if (Array.isArray(e.dados?.ilegiveis)) {
+        // Todas as peças estavam corrompidas. Diz QUAIS e o que resolve —
+        // reenviar o documento, não mexer em campo obrigatório (v2.93).
+        setIlegiveis(e.dados.ilegiveis)
       } else if (e.amigavel) {
         setMsg({ tipo: 'erro', texto: e.amigavel })
       } else {
-        setMsg({ tipo: 'erro', texto: `O dossiê não pôde ser montado: ${e.detail || e.message}. `
-          + 'Abra o Diagnóstico deste colaborador para ver o motivo exato.' })
+        // Falha de montagem que não sabemos nomear. A saída (dossiê parcial)
+        // existe desde sempre, mas só aparecia no erro de PENDÊNCIA — no erro
+        // de MONTAGEM a tela recusava sem oferecer nada, e quem opera ia
+        // procurar a saída no lugar errado (o caso de 11/08/2026: 54 min
+        // desmarcando exigência médica por causa de um PDF corrompido).
+        setFalhaMontagem(`${e.detail || e.message}`)
       }
     }
   }
@@ -1202,6 +1224,39 @@ export default function Detalhe({ id, aoVoltar }) {
             <button className="btn-secundario btn-mini" onClick={() => gerarDossie(true)}>
               Gerar assim mesmo (dossiê parcial)</button>
             <button className="btn-link" onClick={() => setPendDossie(null)}>cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Nenhuma peça pôde ser lida. O que resolve é REENVIAR o documento —
+          dizer só "não foi possível" mandava quem opera procurar a causa em
+          outro lugar (mexer em exigência não conserta PDF corrompido). */}
+      {ilegiveis && (
+        <div className="alerta">
+          <strong>Nenhum documento pôde ser lido para montar o dossiê:</strong>{' '}
+          {ilegiveis.join(', ')}.
+          <p className="explica">Esses arquivos estão corrompidos ou num formato que o
+            sistema não consegue abrir. Reabra o documento na ficha, peça o reenvio e
+            gere o dossiê de novo. Mexer nos campos obrigatórios não resolve este erro.</p>
+          <div style={{ marginTop: '.6rem' }}>
+            <button className="btn-link" onClick={() => setIlegiveis(null)}>fechar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Falha que não sabemos nomear: oferece a MESMA saída do erro de
+          pendência. Recusar sem alternativa deixa o problema na mão de quem
+          opera — a regra da v2.87, aplicada aqui na v2.93. */}
+      {falhaMontagem && (
+        <div className="alerta">
+          <strong>O dossiê não pôde ser montado:</strong> {falhaMontagem}.
+          <p className="explica">Se for urgente, dá para gerar o dossiê com o que já
+            existe e completar depois — o colaborador NÃO é marcado como aprovado.
+            O Diagnóstico deste colaborador mostra o motivo exato.</p>
+          <div style={{ marginTop: '.6rem' }}>
+            <button className="btn-secundario btn-mini" onClick={() => gerarDossie(true)}>
+              Gerar assim mesmo (dossiê parcial)</button>
+            <button className="btn-link" onClick={() => setFalhaMontagem(null)}>cancelar</button>
           </div>
         </div>
       )}

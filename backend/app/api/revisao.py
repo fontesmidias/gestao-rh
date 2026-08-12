@@ -18,7 +18,8 @@ from app.models.usuario_rh import UsuarioRH
 from app.services import storage
 from app.services import telemetria as telemetria_svc
 from app.services.auditoria import registrar
-from app.services.dossie import DossieIncompleto, gerar_dossie
+from app.services.dossie import (DossieIncompleto, DossiePecasIlegiveis,
+                                 gerar_dossie)
 from app.services.email import enviar_email
 from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
@@ -596,10 +597,22 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
     # trava de idempotência: dois cliques em "Gerar dossiê" não geram dois PDFs
     # nem dois e-mails; a 2ª chamada concorrente recebe 409 ja_em_processamento.
     with trava(f"dossie:{cand.id}"):
+        # Peças que não puderam ser lidas (PDF corrompido, arquivo sumido). São
+        # PULADAS — uma delas não derruba o dossiê inteiro —, mas precisam
+        # aparecer na tela: dossiê a que falta página não pode se apresentar
+        # como completo (v2.93).
+        ilegiveis: list[str] = []
         try:
-            gerar_dossie(db, cand, ignorar_pendencias=forcar)
+            gerar_dossie(db, cand, ignorar_pendencias=forcar, ilegiveis=ilegiveis)
         except DossieIncompleto as exc:
             raise HTTPException(status_code=422, detail={"pendencias": exc.pendencias}) from exc
+        except DossiePecasIlegiveis as exc:
+            registrar(db, "dossie_falhou", ator="rh", candidato_id=cand.id,
+                      detalhe={"erro": "todas_as_pecas_ilegiveis",
+                               "ilegiveis": exc.ilegiveis[:20]})
+            db.commit()
+            raise HTTPException(status_code=422, detail={
+                "erro": "pecas_ilegiveis", "ilegiveis": exc.ilegiveis}) from exc
         except Exception as exc:
             # Erro REAL (arquivo faltando no storage, PDF corrompido…): registra com
             # detalhe e devolve mensagem legível. Antes virava um 500 genérico que o
@@ -611,10 +624,15 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
             db.commit()
             raise HTTPException(status_code=422,
                                 detail=f"erro_ao_montar_dossie: {type(exc).__name__}") from exc
-        if not forcar:
+        # Peça pulada torna o dossiê PARCIAL, mesmo sem o RH ter pedido: marcar
+        # `aprovado` aqui diria que a conferência terminou sobre um documento
+        # que não entrou no PDF.
+        if not forcar and not ilegiveis:
             cand.status = StatusCandidato.aprovado
         registrar(db, "dossie_gerado", ator="rh", candidato_id=cand.id,
-                  detalhe={"parcial": forcar})
+                  detalhe={"parcial": forcar or bool(ilegiveis),
+                           "ilegiveis": ilegiveis[:20]} if ilegiveis
+                  else {"parcial": forcar})
         db.commit()
 
         # Aviso interno pela MATRIZ (v2.20). Antes lia `email_avisos_internos`
@@ -626,7 +644,8 @@ def gerar_dossie_endpoint(candidato_id: uuid.UUID, request: Request, forcar: boo
             db, "dossie_pronto", "aviso_dossie_pronto",
             {"nome": cand.nome_completo,
              "link": f"{base_url_publica(request)}/rh"})
-        return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em}
+        return {"status": cand.status, "dossie_gerado_em": cand.dossie_gerado_em,
+                "ilegiveis": ilegiveis}
 
 
 @router.get("/rh/candidatos/{candidato_id}/dossie")

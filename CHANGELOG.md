@@ -11,6 +11,58 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.93.0] — 2026-08-11 — Um PDF corrompido não derruba o dossiê inteiro
+
+**O defeito custou 54 minutos e três campos médicos de um colaborador real.**
+Um certificado emitido por site de governo (o "nada consta") veio com um PDF que
+o `pypdf` não abre — `PdfReadError: Invalid Elementary Object starting with
+b'\x00' @76085`. O `_adicionar_em_a4` estourava e **o dossiê inteiro morria**:
+18 documentos aprovados perdidos por causa de um.
+
+O estrago não foi o erro; foi o que ele ensinou a quem operava. A mensagem não
+dizia QUAL documento era, então a analista tomou o erro **oito vezes** entre
+09:52 e 11:02 e concluiu que a culpa era dos campos obrigatórios. Desmarcou
+**condições médicas**, **medicamento contínuo** e **contato de emergência**,
+com o motivo `"por que não consigo salvar"` gravado na auditoria — que não é
+justificativa, é um pedido de socorro digitado no campo errado. O erro continuou
+depois de todos os ajustes: nunca teve relação nenhuma com aqueles campos.
+Ficou uma pessoa em posto sem contato de emergência registrado.
+
+**A saída já existia e a tela a escondia.** O dossiê parcial (`forcar=true`)
+está no sistema desde sempre, com botão e tudo — mas o bloco que o oferece só
+renderiza quando o erro é de PENDÊNCIA (`e.detail.pendencias`). O erro de
+MONTAGEM cai em outro ramo do `catch`, `pendDossie` fica nulo, e **o botão nunca
+apareceu**. É a regra da v2.87 (*"desativar em massa RECUSA oferecendo a saída,
+nunca só o bloqueio"*) violada no lugar onde mais custava: recusar sem
+alternativa manda quem opera procurar a saída sozinho, e ela procurou no
+lugar errado.
+
+O que mudou:
+
+- **`dossie.py`**: cada peça entra por `_juntar`, que PULA a ilegível e a
+  **NOMEIA**. O `except Exception: pass` que existia no ramo do
+  multi-signatário foi eliminado junto — ele trocava "quebra ruidosamente" por
+  "some caladinho", e página faltando num dossiê que circula para o cliente é
+  pior que erro.
+- **Nenhuma página ⇒ recusa** (`DossiePecasIlegiveis`), em vez de gravar um PDF
+  de zero página POR CIMA do dossiê anterior com `dossie_gerado_em` dizendo que
+  está pronto.
+- **Peça pulada NÃO marca `aprovado`**: dizer que a conferência terminou sobre
+  um documento que não entrou no PDF é a mentira que este módulo não pode
+  contar. A mensagem de sucesso vira aviso e diz o que reenviar.
+- **A tela oferece a saída nos TRÊS erros** (pendência, peças ilegíveis, falha
+  não nomeada), não só no primeiro.
+- **`test_dossie_pdf_ilegivel.py`** no CI, validado por **3 mutações** (voltar
+  ao `except: pass`; remover o guard de PDF vazio; contar sem nomear) — as três
+  reprovam.
+
+**Healthcheck da API** nos DOIS arquivos de deploy (a armadilha da v2.66: só num
+deles não vale em produção). Usa **Python**, não `curl` — a imagem não tem curl
+nem wget, e um healthcheck com curl marcaria o container como *unhealthy* para
+sempre. Critério é só "a API responde": **`migracoes.em_dia` NÃO entra**, porque
+reiniciar em loop por migration atrasada recriaria o incidente da v2.70, onde
+schema velho no ar era melhor que tela morta.
+
 ## [2.92.0] — 2026-08-11 — A lista suspensa não é mais cortada, e o minutário mostra a mensagem
 
 **A lista de papel saía pela borda** (defeito de campo, com print): o Bruno foi

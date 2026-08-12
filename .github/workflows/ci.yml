@@ -232,7 +232,7 @@ jobs:
                    test_uniforme_planilha test_fonte_configuravel \
                    test_permissoes_efeito test_duplicar test_data_documentos \
                    test_talento_campos_longos test_textos_documentos \
-                   test_processos; do
+                   test_processos test_dossie_pdf_ilegivel; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
