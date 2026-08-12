@@ -1542,6 +1542,11 @@ export const rh = {
   // ---- Gravação e transcrição da entrevista (v2.97) ----
   // Áudio de entrevista NÃO sai de casa: o faster-whisper roda no container
   // `transcricao`. Nada disto entra no dossiê de admissão (§ 15.4).
+  configGravacao: () =>
+    req('/rh/entrevistas/gravacao/config', { headers: authRH() }),
+  salvarConfigGravacao: (dados) =>
+    req('/rh/entrevistas/gravacao/config',
+        { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   gravacaoEntrevista: (id) =>
     req(`/rh/entrevistas/${id}/gravacao`, { headers: authRH() }),
   consentirGravacao: (id, consentiu) =>

@@ -11,6 +11,45 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.3] — 2026-08-12 — O áudio expira em 120 dias; a transcrição fica
+
+Retenção do áudio de entrevista, com o prazo que o Bruno definiu: **120 dias por
+padrão, customizável no painel**, e exclusão antecipada pela ficha (que já
+existia desde a v2.97).
+
+**O áudio expira; o TEXTO permanece.** Voz é dado pessoal — há entendimento de
+que é biométrico — e guardá-la para sempre é difícil de justificar. A
+transcrição é o que serve para escrever a justificativa da avaliação: apagá-la
+junto tiraria a razão de o módulo existir.
+
+Três decisões que NÃO devem ser afrouxadas:
+
+1. **Retenção `0` = INDETERMINADO**, não "apagar tudo hoje" (mesma convenção do
+   log, v2.29). ⚠️ Trocar `<= 0` por `is not None` inverteria o significado e
+   apagaria a base inteira em silêncio. A tela diz isso em palavras, e avisa
+   quando o valor é 0 — campo numérico sem explicação seria lido ao contrário.
+2. **Conta a partir da GRAVAÇÃO, não da criação da entrevista.** Uma entrevista
+   marcada em janeiro e gravada em junho tem áudio de junho.
+3. **O REGISTRO permanece.** Apagar a linha apagaria a prova de que a pessoa foi
+   consultada e consentiu — que é exatamente o que ela existe para provar.
+
+**Provado, não presumido**: envelheci uma gravação para 200 dias e rodei o
+expurgo. O áudio sumiu do MinIO, a chave foi limpa nos blocos e no registro
+principal, e o carimbo do consentimento continuou lá.
+
+Roda na carona do expurgo diário (`python -m app.workers.expurgo`), que já está
+nos DOIS arquivos de deploy — sem worker novo para esquecer de declarar (v2.66).
+
+Configuração em **Configurações → 🗣️ Roteiros de entrevista**, junto do
+instrumento: quem ajusta o roteiro é quem ajusta como a entrevista é gravada.
+A mudança **vai para a auditoria** — meses depois, alguém vai perguntar por que
+um áudio de 90 dias não existe mais, e a resposta precisa estar registrada.
+
+⚠️ A rota `/rh/entrevistas/gravacao/config` foi declarada **ANTES** da
+paramétrica `/rh/entrevistas/{entrevista_id}`: depois dela, "gravacao" viraria um
+UUID inválido e a tela receberia 422 (a armadilha de rotas do FastAPI, já
+registrada no `CLAUDE.md`).
+
 ## [2.98.2] — 2026-08-12 — A gravação acompanha a pessoa, e aparece onde ela é
 
 Pedido do Bruno: *"o áudio da entrevista acompanha o colaborador quando ele

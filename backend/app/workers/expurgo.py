@@ -195,9 +195,72 @@ def arquivar_entrevistas() -> int:
         return n
 
 
+def expurgar_audio_entrevistas() -> int:
+    """Apaga o ÁUDIO das entrevistas passada a retenção (v2.98.3, padrão 120
+    dias, configurável no painel).
+
+    **O áudio expira; o TEXTO permanece.** Voz é dado pessoal — há entendimento
+    de que é biométrico — e guardá-la para sempre é difícil de justificar. A
+    transcrição é o que serve para escrever a justificativa da avaliação, e
+    permanece: apagá-la junto tiraria a razão de o módulo existir.
+
+    Três decisões que NÃO devem ser afrouxadas:
+
+    1. **Retenção `0` = INDETERMINADO**, não "apagar tudo hoje" (mesma convenção
+       do log, v2.29). ⚠️ Trocar `<= 0` por `is not None` inverteria o
+       significado e apagaria a base inteira em silêncio.
+    2. **Conta a partir da GRAVAÇÃO, não da criação da entrevista.** Uma
+       entrevista marcada em janeiro e gravada em junho tem áudio de junho.
+    3. **O REGISTRO permanece** (com o carimbo `audio_expurgado_em` implícito no
+       estado): apagar a linha apagaria a prova de que a pessoa foi consultada e
+       consentiu, que é justamente o que ela existe para provar.
+    """
+    from app.models.bloco_gravacao import BlocoGravacao
+    from app.models.gravacao_entrevista import GravacaoEntrevista
+    from app.services import storage
+    from app.services.gravacao_entrevista import config
+
+    with SessionLocal() as db:
+        dias = config(db)["retencao_dias"]
+        if dias <= 0:                      # ver decisão 1
+            return 0
+        corte = datetime.now(timezone.utc) - timedelta(days=dias)
+        alvos = db.scalars(select(GravacaoEntrevista).where(
+            GravacaoEntrevista.gravado_em.isnot(None),
+            GravacaoEntrevista.gravado_em < corte)).all()
+
+        removidos = 0
+        for g in alvos:
+            blocos = db.scalars(select(BlocoGravacao).where(
+                BlocoGravacao.gravacao_id == g.id)).all()
+            chaves = [g.audio_key, *[b.audio_key for b in blocos]]
+            if not any(chaves):
+                continue                   # já expurgada numa passada anterior
+            for key in chaves:
+                if not key:
+                    continue
+                try:
+                    storage.remover(key)
+                    removidos += 1
+                except Exception:          # noqa: BLE001
+                    # Não trava o lote — mas REGISTRA: falha ao remover dado
+                    # pessoal não pode ser silêncio.
+                    log.exception("Áudio não removido no expurgo: %s", key)
+            g.audio_key = g.audio_bytes = g.audio_tipo = None
+            for b in blocos:
+                b.audio_key = b.audio_bytes = b.audio_tipo = None
+        db.commit()
+        if removidos:
+            log.info("Áudio de entrevista expurgado: %s arquivo(s) anteriores a %s "
+                     "(retenção de %s dias). As transcrições foram mantidas.",
+                     removidos, corte.date(), dias)
+        return removidos
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"Candidatos expurgados: {expurgar()}")
     print(f"Eventos de telemetria expurgados: {expurgar_telemetria()}")
     print(f"Arquivos de log expurgados: {expurgar_logs()}")
     print(f"Entrevistas arquivadas: {arquivar_entrevistas()}")
+    print(f"Áudios de entrevista expurgados: {expurgar_audio_entrevistas()}")

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from fastapi import (APIRouter, Depends, HTTPException, Request, Response,
                      UploadFile)
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -710,6 +710,49 @@ def criar(payload: EntrevistaIn, db: Session = Depends(get_db),
 # --------------------------------------------------------------------------
 # PARAMÉTRICAS
 # --------------------------------------------------------------------------
+
+# ---- Configuração da gravação (v2.98.3) ----------------------------------
+
+
+class ConfigGravacaoIn(BaseModel):
+    # 1–60 min por bloco: acima de 60 o upload de um bloco só já arrisca o
+    # timeout que a divisão veio evitar.
+    bloco_min: int = Field(ge=1, le=60)
+    # 0 = NUNCA expurgar (mesma convenção do log, v2.29). O teto de 3650 dias
+    # (10 anos) existe para o campo não virar "para sempre" por engano de
+    # digitação — quem quer indeterminado escreve 0, que é explícito.
+    retencao_dias: int = Field(ge=0, le=3650)
+
+
+@router.get("/rh/entrevistas/gravacao/config")
+def ver_config_gravacao(db: Session = Depends(get_db),
+                        _rh: UsuarioRH = Depends(exige("config:ler"))) -> dict:
+    from app.services.gravacao_entrevista import (BLOCO_MIN_PADRAO,
+                                                  RETENCAO_DIAS_PADRAO, config)
+    return {**config(db), "bloco_min_padrao": BLOCO_MIN_PADRAO,
+            "retencao_dias_padrao": RETENCAO_DIAS_PADRAO}
+
+
+@router.put("/rh/entrevistas/gravacao/config")
+def salvar_config_gravacao(payload: ConfigGravacaoIn, db: Session = Depends(get_db),
+                           rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
+    """Tamanho do bloco e retenção do áudio (pedido do Bruno: 120 dias por
+    padrão, customizável, com exclusão antecipada pela ficha).
+
+    **Vai para a AUDITORIA**: mudar a retenção de dado biométrico é decisão de
+    política, não ajuste de tela — meses depois, alguém vai perguntar por que
+    um áudio de 90 dias não existe mais, e a resposta tem que estar registrada.
+    """
+    from app.services.config_dinamica import gravar_config
+    gravar_config(db, {"transcricao_bloco_min": str(payload.bloco_min),
+                       "transcricao_retencao_dias": str(payload.retencao_dias)})
+    registrar(db, "gravacao_config_alterada", ator="rh", ator_detalhe=rh.email,
+              detalhe={"bloco_min": payload.bloco_min,
+                       "retencao_dias": payload.retencao_dias})
+    db.commit()
+    from app.services.gravacao_entrevista import config
+    return config(db)
+
 
 @router.get("/rh/entrevistas/{entrevista_id}")
 def ver(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
