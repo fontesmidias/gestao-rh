@@ -613,6 +613,96 @@ sem consertar nada. Ela é paga tela a tela, e o CHANGELOG registra o saldo.
 Isso não substitui o checklist abaixo: contraste, dark mode de verdade,
 hierarquia visual e "abri a tela e olhei" continuam sendo trabalho humano.
 
+## 8c. Tela de TRABALHO: o padrão obrigatório (v2.96 — validado na prática)
+
+> **Status: OBRIGATÓRIO.** Nasceu do redesenho da ficha da pessoa (v2.95/v2.96),
+> aprovado pelo Bruno em protótipo e **confirmado no uso real** antes de virar
+> regra. Vale para toda tela onde alguém *trabalha* sobre um registro — ficha da
+> pessoa, benefício, vaga, avaliação —, não para listas (essas seguem o
+> `DashPlanilha`, § 9.1).
+
+### O problema que este padrão resolve
+
+A queixa foi: *"não tô achando muito intuitivo, o RH não tá achando certas
+coisas, parece muita poluição visual"*. Medido, o diagnóstico não era estético:
+a ficha tinha **14 blocos empilhados na mesma coluna, todos com o mesmo peso
+visual**, e o que se faz todo dia (aprovar documento) pesava igual ao que se faz
+uma vez por ano (definir quais campos são obrigatórios). **Quando tudo tem o mesmo
+peso, é preciso ler tudo para achar o que se veio fazer** — e é isso que a pessoa
+sente como poluição.
+
+### As quatro regras
+
+**1. O IMPEDIMENTO vem antes de tudo.** Se existe algo que trava o registro
+(dossiê que não gera, documento faltando, benefício sem decisão), isso aparece
+**no topo, em uma frase, com o atalho que resolve**. Não no fim, não dentro de um
+dobrável, não em linguagem de enum.
+
+> Custo pago por não seguir isto: em 11/08/2026 a informação *"falta a CTPS"*
+> existia na API e vivia no fim da página, atrás de um `<details>`, depois de ~65
+> linhas de telemetria. A analista tomou o erro 8× em 70 minutos e foi desmarcar
+> exigências médicas de um colaborador real, achando que a culpa era delas.
+
+Duas contenções: **silêncio quando não há impedimento** (bloco verde em toda tela
+seria mais um cartão competindo por atenção) e **falha de carga não vira alarme**
+— dizer "não foi possível verificar" em toda ficha ensinaria a ignorar a faixa
+vermelha, que é justamente o que precisa ser levado a sério (§ 8b, v2.88).
+
+**2. UM TRABALHO POR VEZ — abas por natureza.** Blocos de naturezas diferentes
+não se empilham: viram abas, nomeadas pelo trabalho (*Documentos · Cadastro ·
+Contratação · Histórico*), com a mais frequente abrindo por padrão.
+
+- **A aba diz o que tem dentro** (contador): ninguém deve abrir para descobrir
+  que não havia nada.
+- **`hidden`, nunca desmontar** — trocar de aba não pode perder o que está sendo
+  digitado na outra.
+- **A aba NÃO se guarda em `localStorage`**: abrir o registro de outra pessoa é
+  começar um trabalho novo, e herdar a aba anterior abre a tela onde ninguém
+  pediu. (Em Configurações, guardar faz sentido — lá é preferência de uma tela
+  só, não estado de outro registro.)
+- **Reuse `.rh-abas`**, a primitiva que já existe. Não invente classe nova.
+
+**3. UM VERDE POR TELA.** `btn-principal` (verde cheio) é do ato que **fecha o
+trabalho** — "Efetivar", "Aprovar". Salvar, liberar, acrescentar e criar são
+`btn-secundario`. Seis botões verdes fazem nenhum ser o principal, e o pior caso
+é o irreversível ("Efetivar") pesar igual ao trivial ("Salvar data").
+
+**4. EXCEÇÃO se diz em PALAVRAS, não em caixa desmarcada.** Bloco com muitos
+controles de mesmo formato (as 54 caixas de exigências) nasce **recolhido**, com
+um resumo textual do que fugiu do padrão: *"Esta pessoa tem 3 exceções:
+Dispensados: …"*.
+
+> Três caixas desmarcadas entre 51 idênticas são invisíveis — foi exatamente o
+> caso acima. ⚠️ O resumo mora **FORA** do `<details>`: dentro dele só apareceria
+> para quem abrisse, e o problema que ele resolve é ninguém abrir. `<details>`
+> fechado **nem renderiza** o conteúdo (v2.76.2), então o resumo precisa de
+> consulta própria.
+
+### O resultado medido (ficha da pessoa)
+
+| | antes | depois |
+|---|---|---|
+| Altura da página (desktop) | 1815px | **1363px** (−25%) |
+| Altura da página (celular) | 2360px | **1535px** (−35%) |
+| Controles visíveis | 43 | **36** |
+| Botões verdes cheios | 2 | **1** |
+
+### Como medir (e a armadilha)
+
+`frontend/tests/e2e/_levantamento-densidade.spec.js` — prefixo `_`, roda à mão.
+
+⚠️ **Use `el.checkVisibility({checkOpacity:true})`, nunca
+`getBoundingClientRect`** para decidir o que está visível: o segundo devolve
+dimensão para conteúdo de `<details>` FECHADO e para filho de `[hidden]`. A
+primeira medição deste redesenho contou **52 checkboxes "visíveis"** que não
+estavam na tela — e teria concluído que as abas não resolveram nada.
+
+⚠️ **A comparação antes/depois exige o MESMO critério.** Re-meça o "antes" com
+`git stash` antes de afirmar melhora; comparar réguas diferentes não mede coisa
+nenhuma.
+
+---
+
 ## 9. Checklist de tela nova (cole no PR mental)
 
 Antes de dar uma tela do RH por pronta:
@@ -639,6 +729,10 @@ Antes de dar uma tela do RH por pronta:
 - [ ] Se removi `outline`, repus indicação de foco.
 - [ ] Termos de negócio têm `<Ajuda>`.
 - [ ] Abas usam a classe `ativa`.
+- [ ] **Se é tela de TRABALHO sobre um registro** (§ 8c, obrigatório): o
+      impedimento está no topo; blocos de naturezas diferentes são abas, não
+      pilha; há **um** `btn-principal`; bloco com muitos controles nasce
+      recolhido e resume as exceções **em palavras, fora do `<details>`**.
 - [ ] Vira card no mobile de forma legível.
 - [ ] **No celular, a primeira linha da lista aparece antes de 600px** — medida,
       não estimada (ver § 9.1).

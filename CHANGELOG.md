@@ -11,6 +11,35 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.96.1] — 2026-08-12 — O padrão da tela de trabalho vira obrigatório
+
+O Bruno usou a ficha redesenhada e confirmou: *"funcionou"*. Só agora o padrão
+vira regra — era o combinado, e é a razão de ele não ter sido cravado junto com o
+código: **padrão que não passou pelo uso real é palpite com autoridade**.
+
+**§ 8c do `08-sistema-de-design.md`** (novo, obrigatório) — vale para toda tela
+onde se *trabalha sobre um registro* (ficha da pessoa, benefício, vaga,
+avaliação), não para listas. Quatro regras: o **impedimento no topo** com o
+atalho que resolve; **um trabalho por vez** em abas por natureza; **um verde por
+tela** (o ato que fecha o trabalho); e **exceção dita em palavras**, com o bloco
+de muitos controles nascendo recolhido. Cada uma traz o custo já pago por não
+segui-la, e o resultado medido (−25% de altura no desktop, −35% no celular).
+
+**`test_tela_de_trabalho.py`** no CI — documento não reprova ninguém. Sem o
+teste, a próxima tela nasce empilhada e o § 8c vira recomendação que se lê depois
+de já ter feito errado.
+
+O que ele deliberadamente NÃO cobra: "a aba certa abre por padrão" ou "o
+impedimento é a frase certa" dependem de julgamento, e cobrar por regex o que
+exige juízo produz falso alarme — que ensina a ignorar o alarme (v2.91).
+
+⚠️ **Uma das três mutações expôs um furo real no próprio teste**: mover o resumo
+das exceções para DENTRO do `<details>` (o defeito que ele existe para impedir)
+passava verde, porque a asserção olhava o trecho errado do arquivo. A prova agora
+é posicional — o resumo tem que vir antes da abertura do `<details>` que contém o
+`<Exigencias>`. **Sem rodar a mutação, esse teste teria ido para o CI parecendo
+proteger** — é a v2.64 numa variação nova.
+
 ## [2.96.0] — 2026-08-11 — Um trabalho por vez na ficha da pessoa
 
 Passos 3 e 4 do redesenho aprovado no protótipo. Fecha a leva iniciada na v2.95.
