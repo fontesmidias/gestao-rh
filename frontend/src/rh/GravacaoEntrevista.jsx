@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { rh as api } from '../api.js'
 import { fmtDataHora, fmtDuracao } from '../fmt.js'
 import PlayerAudio from './PlayerAudio.jsx'
+import BotaoBaixar from './BotaoBaixar.jsx'
 
 // Gravação e transcrição da entrevista (v2.97, blocos na v2.98).
 //
@@ -389,8 +390,11 @@ export default function GravacaoEntrevista({ entrevistaId, encerrada }) {
               diz qual trecho falta — esconder seria pior (v2.93). */}
           {g.erro && <p className="aviso-inline">{g.erro}</p>}
           <div className="navegacao">
-            <a className="btn-secundario btn-mini" href={api.urlTextoEntrevista(entrevistaId)}>
-              ⬇ Baixar transcrição (.txt)</a>
+            {/* NÃO é <a href>: rota autenticada, e o navegador segue link sem
+                o header Authorization — o defeito que apareceu como
+                {"detail":"nao_autenticado"} na tela (v2.98.4). */}
+            <BotaoBaixar url={api.urlTextoEntrevista(entrevistaId)}
+                         nome="transcricao.txt">⬇ Baixar transcrição (.txt)</BotaoBaixar>
           </div>
         </>
       )}

@@ -244,7 +244,7 @@ jobs:
                    test_permissoes_efeito test_duplicar test_data_documentos \
                    test_talento_campos_longos test_textos_documentos \
                    test_processos test_dossie_pdf_ilegivel \
-                   test_token_automacao test_gravacao_entrevista; do
+                   test_token_automacao test_gravacao_entrevista \n                   test_blocos_gravacao; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

@@ -11,6 +11,40 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.4] — 2026-08-12 — Baixar transcrição volta a funcionar
+
+**Defeito visto pelo Bruno na tela**: clicar em "⬇ Baixar transcrição (.txt)"
+abria uma janela com `{"detail":"nao_autenticado"}`.
+
+A causa: era um `<a href="/api/...">` para uma rota **autenticada**. O sistema
+autentica por `Authorization: Bearer` — não há cookie de sessão —, e link
+seguido pelo navegador é um **GET limpo**, sem header nenhum. O JSX fica
+plausível, o build passa, e só quebra no clique. Mesma família do `api.x()`
+inexistente (v2.73) e da `prop` inventada (v2.64).
+
+Reproduzido e corrigido com prova: a mesma URL devolve **401 sem header** e
+**200 com header**; na tela, o download agora traz `transcricao.txt` com o
+conteúdo certo.
+
+`BotaoBaixar` (novo) busca com o header, cria o `objectURL` e dispara o download
+— o padrão que o `VisualizadorArquivo` (v2.33), o `baixarDossie` e o
+`PlayerAudio` já usavam; faltava um componente para os links soltos. ⚠️ O nome
+do arquivo vai explícito: o `Content-Disposition` da rota **não alcança** o
+`objectURL`, e sem ele o download sairia com um UUID por nome.
+
+Eram DOIS links quebrados (a ficha da entrevista e a lista da pessoa). Varri o
+resto do JSX: o único `href={api...}` restante é o preview do assinante externo,
+que autoriza pelo TOKEN DA URL — ali o link direto está correto.
+
+**Teste dos blocos** (`test_blocos_gravacao.py`, 22 asserções) entrou no CI,
+fechando a dívida da v2.98: os blocos vinham sendo validados só à mão.
+Validado por **3 mutações**, e ⚠️ **uma delas expôs um furo no próprio teste**:
+as keys de áudio usavam zero-padding (`001`, `002`, `010`), então a ordem por
+key coincidia com a ordem por índice e a mutação que troca `indice` por
+`audio_key` passava VERDE. Com `bloco-2` e `bloco-10` — o caso real — a mutação
+é pega por três asserções. **Sem rodar a mutação, o teste teria ido para o CI
+parecendo proteger a ordem da conversa.**
+
 ## [2.98.3] — 2026-08-12 — O áudio expira em 120 dias; a transcrição fica
 
 Retenção do áudio de entrevista, com o prazo que o Bruno definiu: **120 dias por

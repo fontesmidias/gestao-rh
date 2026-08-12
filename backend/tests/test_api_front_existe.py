@@ -64,9 +64,23 @@ checar(len(DEFINIDOS) > 50,
        f"o extrator achou as funções do api.js ({len(DEFINIDOS)}) — se cair para "
        f"perto de zero, o formato do arquivo mudou e o teste virou decoração")
 
+def _sem_comentarios(codigo: str) -> str:
+    """Comentário que EXPLICA a regra não pode ser confundido com violação dela.
+
+    Achado na v2.98.4: um comentário dizendo *"mesma família do `api.x()`
+    inexistente"* fez este teste reprovar o `BotaoBaixar.jsx` — ele acusou como
+    chamada real a MENÇÃO ao defeito, no arquivo que o conserta. É a armadilha
+    da v2.71 (teste estrutural que reprova a documentação do próprio conserto),
+    e o reflexo errado seria apagar o comentário.
+    """
+    codigo = re.sub(r"\{/\*.*?\*/\}", "", codigo, flags=re.S)   # comentário JSX
+    codigo = re.sub(r"/\*.*?\*/", "", codigo, flags=re.S)        # bloco /* */
+    return re.sub(r"^\s*//.*$", "", codigo, flags=re.M)           # linha //
+
+
 faltando: dict[str, set[str]] = {}
 for arquivo in sorted(FRONT.rglob("*.jsx")):
-    texto = arquivo.read_text(encoding="utf-8")
+    texto = _sem_comentarios(arquivo.read_text(encoding="utf-8"))
     for m in re.finditer(r"\bapi\.([A-Za-z_]\w*)\s*\(", texto):
         nome = m.group(1)
         if nome not in DEFINIDOS:
