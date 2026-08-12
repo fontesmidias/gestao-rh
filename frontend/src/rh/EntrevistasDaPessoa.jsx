@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
 import { fmtData } from '../fmt.js'
 import PlayerAudio from './PlayerAudio.jsx'
+import BotaoBaixar from './BotaoBaixar.jsx'
 
 // Histórico de entrevistas da PESSOA (fase 2, § 8.5).
 //
@@ -110,8 +111,9 @@ export default function EntrevistasDaPessoa({ talentoId, candidatoId }) {
                           nome={`entrevista-${e.id}`} />
                       )}
                       {e.gravacao.tem_texto && (
-                        <a className="btn-link" href={api.urlTextoEntrevista(e.id)}>
-                          ⬇ transcrição</a>
+                        <BotaoBaixar url={api.urlTextoEntrevista(e.id)}
+                                     nome={`transcricao-${e.id}.txt`}
+                                     className="btn-link">⬇ transcrição</BotaoBaixar>
                       )}
                       {['aguardando', 'processando'].includes(e.gravacao.status) && (
                         <span className="chip">transcrevendo…</span>

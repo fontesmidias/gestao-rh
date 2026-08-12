@@ -107,6 +107,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`<a href>` para rota AUTENTICADA devolve 401 — o navegador não manda o
+  header** (v2.98.4, defeito visto pelo Bruno na tela): clicar em "Baixar
+  transcrição" abria uma janela com `{"detail":"nao_autenticado"}`. O sistema
+  autentica por `Authorization: Bearer` (não há cookie de sessão), e link
+  seguido pelo navegador é um GET LIMPO. O JSX fica plausível, o build passa, e
+  só quebra no clique — mesma família do `api.x()` inexistente (v2.73) e da
+  `prop` inventada (v2.64). Use `BotaoBaixar` (busca com o header, cria
+  `objectURL`, dispara o download com o nome certo) ou o `PlayerAudio` para
+  áudio. ⚠️ O `download` do `<a>` precisa do NOME explícito: o
+  `Content-Disposition` da rota não alcança o `objectURL`, e sem ele o arquivo
+  sai com um UUID por nome. Exceção legítima: rota cuja autorização está no
+  TOKEN DA URL (o preview do assinante externo) — ali o link direto é correto.
 - **Consentimento em conversa ASSIMÉTRICA precisa ser recusável, e a recusa é um
   REGISTRO** (v2.97, gravação de entrevista): voz é dado pessoal e há
   entendimento de que é biométrico; numa entrevista de emprego, de um lado está
