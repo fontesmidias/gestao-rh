@@ -323,13 +323,21 @@ def resumo(g: GravacaoEntrevista | None, db: Session | None = None) -> dict:
     if g is None:
         return {"status": StatusGravacao.nao_perguntado.value,
                 "rotulo": ROTULOS[StatusGravacao.nao_perguntado],
-                "tem_audio": False, "tem_texto": False}
+                "tem_audio": False, "tem_texto": False, "pode_gravar": False,
+                "blocos": [],
+                "bloco_min": (config(db)["bloco_min"] if db is not None
+                              else BLOCO_MIN_PADRAO)}
     blocos = blocos_de(db, g) if db is not None else []
     return {
         "id": str(g.id), "status": g.status.value,
         # A tela lista os blocos para baixar um a um e para mostrar QUAL falhou.
         "blocos": [_bloco_dump(b) for b in blocos],
         "duracao_total_s": sum(b.duracao_s or 0 for b in blocos) or g.duracao_s,
+        # A tela precisa saber se PODE gravar (e de quantos em quantos minutos
+        # corta) sem reimplementar a regra — duas cópias divergem, e a do front
+        # é a que grava sem direito.
+        "pode_gravar": g.pode_gravar,
+        "bloco_min": (config(db)["bloco_min"] if db is not None else BLOCO_MIN_PADRAO),
         "rotulo": ROTULOS.get(g.status, g.status.value),
         "tem_audio": bool(g.audio_key), "tem_texto": bool(g.texto),
         "duracao_s": g.duracao_s, "audio_bytes": g.audio_bytes,

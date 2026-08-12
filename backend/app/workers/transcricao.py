@@ -48,8 +48,92 @@ def _transcrever(audio: bytes, modelo: str, idioma: str) -> tuple[str, str]:
     return texto, getattr(info, "language", idioma)
 
 
+def transcrever_bloco(bloco_id: str) -> dict:
+    """Transcreve UM bloco de ~10 min. É o caminho normal desde a v2.98.
+
+    Um job por bloco, e não um job que percorre todos, por três razões:
+
+    1. **O texto do começo aparece enquanto o fim ainda roda** — com um job
+       único, o RH esperaria a entrevista inteira para ler a primeira frase.
+    2. **Um bloco que falha não derruba os outros.** No job único, uma exceção
+       no bloco 3 perderia o 4 e o 5 junto.
+    3. **Retentar é barato**: reenfileira só o bloco que falhou, não 90 minutos.
+
+    Ao terminar, chama `consolidar`, que decide o estado da gravação inteira
+    (ver as três regras no docstring dela).
+    """
+    from app.core.db import SessionLocal
+    from app.models.bloco_gravacao import BlocoGravacao, StatusBloco
+    from app.services import storage
+    from app.services.gravacao_entrevista import consolidar
+
+    db = SessionLocal()
+    inicio = time.monotonic()
+    try:
+        b = db.get(BlocoGravacao, uuid.UUID(bloco_id))
+        if b is None:
+            log.warning("Transcrição: bloco %s não existe mais.", bloco_id)
+            return {"ok": False, "erro": "bloco_inexistente"}
+        if not b.audio_key:
+            b.status = StatusBloco.falhou
+            b.erro = "O áudio deste trecho não foi guardado."
+            db.commit()
+            return {"ok": False, "erro": "sem_audio"}
+
+        b.status = StatusBloco.processando
+        db.commit()
+
+        cfg = _config(db)
+        texto, _idioma = _transcrever(storage.ler(b.audio_key),
+                                      cfg["modelo"], cfg["idioma"])
+        b.processamento_s = int(time.monotonic() - inicio)
+        b.transcrito_em = datetime.now(timezone.utc)
+        if texto:
+            b.texto, b.status, b.erro = texto, StatusBloco.pronta, None
+        else:
+            # Bloco mudo é NORMAL (a pessoa lendo um documento, uma pausa longa)
+            # e não contamina os outros — ver `consolidar`.
+            b.status = StatusBloco.inaudivel
+            b.erro = "Sem fala reconhecível neste trecho."
+        db.commit()
+
+        from app.models.gravacao_entrevista import GravacaoEntrevista
+        g = db.get(GravacaoEntrevista, b.gravacao_id)
+        if g is not None:
+            consolidar(db, g)
+            db.commit()
+        return {"ok": bool(texto), "bloco": b.indice, "caracteres": len(texto or "")}
+
+    except Exception as exc:                    # noqa: BLE001
+        log.exception("Falha ao transcrever o bloco %s", bloco_id)
+        try:
+            b = db.get(BlocoGravacao, uuid.UUID(bloco_id))
+            if b is not None:
+                b.status = StatusBloco.falhou
+                b.erro = f"Falha ao transcrever ({type(exc).__name__})."
+                b.processamento_s = int(time.monotonic() - inicio)
+                db.commit()
+                from app.models.gravacao_entrevista import GravacaoEntrevista
+                g = db.get(GravacaoEntrevista, b.gravacao_id)
+                if g is not None:
+                    # Consolida MESMO na falha: sem isto a gravação ficaria
+                    # `processando` para sempre, e a tela mostraria um spinner
+                    # eterno — indistinguível de "ainda está rodando".
+                    consolidar(db, g)
+                    db.commit()
+        except Exception:                       # noqa: BLE001
+            log.exception("Nem o estado de falha pôde ser gravado (%s)", bloco_id)
+        return {"ok": False, "erro": type(exc).__name__}
+    finally:
+        db.close()
+
+
 def transcrever(gravacao_id: str) -> dict:
-    """Transcreve UMA gravação. É esta função que a fila chama.
+    """Transcreve uma gravação de arquivo ÚNICO (sem blocos).
+
+    Continua existindo para o áudio enviado de uma vez — o RH pode subir um
+    arquivo gravado fora do sistema (celular, gravador). O caminho da gravação
+    pelo navegador usa `transcrever_bloco`.
 
     Toda saída é um ESTADO GRAVADO, nunca silêncio (a regra do Match, v2.00):
     quem abrir a ficha depois precisa saber o que aconteceu com o áudio dele.

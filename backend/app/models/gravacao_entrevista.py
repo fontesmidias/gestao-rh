@@ -111,7 +111,22 @@ class GravacaoEntrevista(Base):
 
     @property
     def pode_gravar(self) -> bool:
-        """Só se grava com consentimento registrado. Concentrado numa
-        propriedade porque espalhar a regra pelos chamadores faz uma das cópias
-        esquecer de conferir — e a que esquece não dá erro, só grava."""
-        return self.status == StatusGravacao.consentido
+        """Há consentimento registrado para gravar esta entrevista.
+
+        Concentrado numa propriedade porque espalhar a regra pelos chamadores faz
+        uma das cópias esquecer de conferir — e a que esquece não dá erro, só
+        grava.
+
+        ⚠️ **Não é `status == consentido`** (era, e estava errado — v2.98): a
+        partir do PRIMEIRO bloco a gravação passa a `aguardando`, e a checagem
+        recusaria o SEGUNDO bloco da mesma entrevista, no meio da conversa. O que
+        importa é o consentimento estar dado e não ter sido retirado; os estados
+        de processamento são consequência dele, não sua negação.
+
+        `recusado` e `nao_perguntado` continuam barrando — que é o ponto.
+        """
+        return self.consentimento_em is not None and self.status in (
+            StatusGravacao.consentido, StatusGravacao.aguardando,
+            StatusGravacao.processando, StatusGravacao.pronta,
+            StatusGravacao.falhou, StatusGravacao.audio_inaudivel,
+        )

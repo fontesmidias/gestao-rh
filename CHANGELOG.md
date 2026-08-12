@@ -11,6 +11,47 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.98.1] — 2026-08-12 — Gravar, pausar, retomar — e ouvir na própria tela
+
+Segunda parte da gravação em blocos: agora ela funciona ponta a ponta.
+
+**Blocos automáticos e invisíveis.** O `MediaRecorder` fecha um pedaço a cada
+10 min e ele sobe SOZINHO, com o áudio do bloco seguinte já sendo capturado — o
+corte não interrompe a conversa. O entrevistador clica em Gravar e em Encerrar,
+e nada mais.
+
+**Pausar ≠ Encerrar** (decisão do Bruno, sobre o clique acidental): pausar
+retoma **no mesmo bloco**, e o relógio do corte automático repõe apenas o tempo
+que FALTAVA — senão uma entrevista com muitas pausas geraria blocos de 25 min.
+Encerrar pergunta antes, porque é irreversível. Medido no navegador: gravar 3s →
+pausar (congela em 3s) → retomar (segue para 5s, não reinicia) → encerrar → o
+bloco de 85 KB chega ao MinIO com duração e índice certos.
+
+**Player nativo, desktop e celular** (`PlayerAudio.jsx`). Não é `<audio src>`
+direto: as rotas exigem `Authorization`, e o `<audio>` não manda header — faria
+um GET anônimo e receberia 401. Busca o blob e cria `objectURL`, o padrão do
+`VisualizadorArquivo` desde a v2.33. **Só carrega quando a pessoa pede**: baixar
+dezenas de MB ao abrir a ficha, no celular com dados móveis, sem ninguém pedir,
+seria o oposto do desejado. O `<audio controls>` é o NATIVO de propósito — no
+celular ele vira o controle do sistema, com a tela bloqueada e no fone.
+
+**Um bloco que falha não derruba os outros.** Um job de fila por bloco: o texto
+do começo aparece enquanto o fim ainda roda, e retentar custa 10 minutos, não 90.
+Se o upload de um trecho falhar, **a gravação continua** — interromper a
+entrevista por causa de um trecho perdido seria pior — e a tela diz qual falhou.
+
+⚠️ **Defeito achado ao testar dois blocos seguidos**: `pode_gravar` era
+`status == consentido`, e a partir do PRIMEIRO bloco a gravação passa a
+`aguardando` — o SEGUNDO bloco era recusado com "sem consentimento", no meio da
+conversa. Agora a checagem é o consentimento estar dado e não ter sido retirado;
+os estados de processamento são consequência dele, não sua negação. `recusado` e
+`nao_perguntado` continuam barrando, que é o ponto.
+
+Mais: aviso do navegador ao fechar a aba gravando; disclaimer dizendo que o
+envio acontece durante a conversa (senão alguém fecha a aba achando que só o
+Encerrar salva); e o `objectURL` é revogado ao sair — sem isso o áudio inteiro
+fica na memória depois de fechar a ficha.
+
 ## [2.98.0] — 2026-08-12 — O dossiê tem o nome certo, e a gravação vira blocos
 
 **Nome do dossiê: `DOCS ADM - KATIA POLIANE.pdf`** (pedido do Bruno) — caixa
