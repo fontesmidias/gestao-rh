@@ -34,6 +34,16 @@ const MOTIVOS = [
 // eu consigo marcar isso após um candidato iniciar seu cadastro?"*. Sim, e a
 // marca vale do clique em diante — o que é correto (não se carimba como
 // presencial um documento assinado em casa), mas precisava estar VISÍVEL.
+// As quatro naturezas de trabalho da ficha (v2.95). A ordem é a do uso: conferir
+// documento é diário; corrigir cadastro, frequente; definir posto, pontual;
+// consultar histórico, raro.
+const ABAS = [
+  { id: 'documentos', rotulo: '📎 Documentos' },
+  { id: 'cadastro', rotulo: '📝 Cadastro' },
+  { id: 'contratacao', rotulo: '💼 Contratação' },
+  { id: 'historico', rotulo: '🔎 Histórico' },
+]
+
 // O que TRAVA esta admissão, no topo da ficha e em uma frase (v2.95).
 //
 // A informação já existia — `GET /rh/candidatos/{id}/diagnostico` devolve
@@ -444,7 +454,9 @@ function PostoServico({ dados, recarregar }) {
                 onClick={() => setAdicionais([...adicionais, { nome: '', valor: '', tipo: 'reais' }])}>
           + Adicional</button>
       </div>
-      <button className="btn-principal btn-mini" disabled={salvando} onClick={async () => {
+      {/* Secundário (v2.95): "Salvar posto" é passo do caminho, não o ato que
+          fecha a admissão — o verde cheio fica só no "Efetivar". */}
+      <button className="btn-secundario btn-mini" disabled={salvando} onClick={async () => {
         if (!window.confirm('Salvar posto e remuneração?\n\nSe a ficha de cadastro já estiver assinada e o cargo/salário mudar, ela será reaberta para nova assinatura do colaborador.')) return
         setMsg(null); setSalvando(true)
         try {
@@ -902,7 +914,8 @@ function DocumentosEspecificos({ id, setMsg }) {
         )}
         {livres.length > 0 && (
           <div className="navegacao">
-            <button className="btn-principal btn-mini" disabled={salvando}
+            {/* Secundário (v2.95): ver o comentário do "Liberar" acima. */}
+            <button className="btn-secundario btn-mini" disabled={salvando}
                     onClick={acrescentar}>
               {salvando ? 'Acrescentando…' : 'Acrescentar documento'}
             </button>
@@ -1006,8 +1019,12 @@ function PainelInformativo({ id, setMsg }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     flexWrap: 'wrap', gap: '.5rem' }}>
         <strong>📣 Informativo de integração</strong>
+        {/* Secundário (v2.95): verde CHEIO fica só para o ato que FECHA o
+            trabalho da tela — "Efetivar". Liberar informativo, salvar data e
+            salvar posto são passos do caminho, e seis verdes disputando o papel
+            de ação principal fazem nenhum ser o principal. */}
         {pendentes.length > 0 && (
-          <button className="btn-principal btn-mini" disabled={liberando} onClick={liberar}>
+          <button className="btn-secundario btn-mini" disabled={liberando} onClick={liberar}>
             {liberando ? 'Liberando…' : '📨 Liberar para o candidato assinar'}</button>
         )}
       </div>
@@ -1037,6 +1054,12 @@ export default function Detalhe({ id, aoVoltar }) {
   const [msg, setMsg] = useState(null)
   const [selecionados, setSelecionados] = useState(new Set())
   const [loteRejeitar, setLoteRejeitar] = useState(false)
+  // Aba visível (v2.95). Nasce em 'documentos' — decisão do Bruno: é o trabalho
+  // diário. NÃO se guarda em localStorage de propósito: abrir a ficha de alguém
+  // é começar um trabalho novo, e herdar a aba da pessoa ANTERIOR faria a tela
+  // abrir em Histórico sem ninguém pedir (o defeito que a aba de Config já tem,
+  // v2.75 — lá é preferência de uma tela só, aqui seria estado de outra pessoa).
+  const [aba, setAba] = useState('documentos')
   const [pendDossie, setPendDossie] = useState(null)
   // Peças corrompidas e falha de montagem não-nomeada: estados PRÓPRIOS porque
   // os três oferecem a MESMA saída (gerar parcial) — e antes só o de pendência
@@ -1227,7 +1250,13 @@ export default function Detalhe({ id, aoVoltar }) {
             ? <span className="chip" style={{ '--chip-cor': 'var(--cinza-txt)' }}>⚪ Desligado</span>
             : <><button className="btn-principal btn-mini" onClick={efetivar}
                       title="Transforma este candidato em colaborador ativo (aparece em Colaboradores)">
-                ✅ Efetivar como colaborador</button><Ajuda termo="efetivar" /></>}
+                {/* No celular só "Efetivar": medido, o rótulo inteiro não cabe
+                    em 165px e saía CORTADO ("Efetivar como colaborad…"), com o
+                    `text-overflow` escondendo o corte em vez de denunciá-lo
+                    (v2.78). Encurtar o rótulo é o degrau ANTES de esconder —
+                    e a ação nunca se esconde (v2.76.1). */}
+                ✅ Efetivar<span className="so-desktop"> como colaborador</span>
+                </button><Ajuda termo="efetivar" /></>}
         </div>
       </header>
       <p className="explica">
@@ -1264,6 +1293,34 @@ export default function Detalhe({ id, aoVoltar }) {
           Agora: [1] documentos  [2] cadastro  — coladas, no topo.
                  [3] consulta — no fim, colapsada. */}
 
+      {/* ===== ABAS (v2.95) =====
+          A v2.47 já havia agrupado a tela em três faixas por NATUREZA
+          (documentos · cadastro · consulta) e isso resolveu o "muito rolar" da
+          época. O que sobrou, e o Bruno cobrou agora, é que as três continuam
+          EMPILHADAS: 109 controles e 14 blocos na mesma coluna, todos com o
+          mesmo peso visual. Aba não é enfeite aqui — é o que faz a tela mostrar
+          um trabalho por vez.
+          Ordem e padrão decididos por ele: Documentos abre primeiro (é o
+          trabalho diário); Contratação sai de dentro de "cadastro" porque
+          definir posto/salário é outro ato, feito uma vez. */}
+      <nav className="rh-abas" aria-label="Seções da ficha">
+        {ABAS.map((a) => (
+          <button key={a.id} type="button"
+                  className={aba === a.id ? 'ativa' : undefined}
+                  aria-current={aba === a.id ? 'page' : undefined}
+                  onClick={() => setAba(a.id)}>
+            {a.rotulo}
+            {/* O contador diz o que TEM dentro: sem ele a pessoa abre a aba
+                para descobrir que não havia nada (a lição do menu vazio da
+                v2.88 — o silêncio precisa ser dito). */}
+            {a.id === 'documentos' && enviados.length > 0 && (
+              <span className="ficha-aba-conta">{enviados.length}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div hidden={aba !== 'documentos'}>
       {/* Informativo de integração: ação (liberar), não consulta — fica junto
           do trabalho. Some quando o candidato não tem informativo. */}
       <PainelInformativo id={id} setMsg={setMsg} />
@@ -1453,19 +1510,27 @@ export default function Detalhe({ id, aoVoltar }) {
         </div>
       </div>
 
-      {/* ===== 2. CADASTRO — a outra metade do trabalho, colada na primeira ===== */}
-      <PostoServico dados={dados} recarregar={recarregar} />
-      {/* auto-ajuste: quando não há modelo aplicável, `ModelosDoColaborador`
-          devolve null e a grade de 2 colunas deixaria metade da linha vazia. */}
-      <div className="rh-grid-auto">
-        <ModelosDoColaborador id={id} />
-        <FichaRH id={id} />
+      </div>{/* fim da aba Documentos */}
+
+      {/* ===== CADASTRO — corrigir o que a pessoa preencheu ===== */}
+      <div hidden={aba !== 'cadastro'}>
+        <div className="rh-grid-auto">
+          <ModelosDoColaborador id={id} />
+          <FichaRH id={id} />
+        </div>
       </div>
 
-      {/* ===== 3. CONSULTA — não é trabalho do dia a dia: fica no fim e fechada.
-           Antes estes seis blocos ficavam ENTRE as duas áreas acima. ===== */}
-      <details className="rh-card">
-        <summary>🔎 Histórico e consulta desta pessoa</summary>
+      {/* ===== CONTRATAÇÃO — posto, cargo, jornada, salário. Ato pontual, não
+           trabalho diário: por isso saiu de dentro do "cadastro". ===== */}
+      <div hidden={aba !== 'contratacao'}>
+        <PostoServico dados={dados} recarregar={recarregar} />
+      </div>
+
+      {/* ===== HISTÓRICO — consulta. Os blocos deixam de nascer dentro de um
+           `<details>` porque a ABA já é o mecanismo de recolher: manter os dois
+           obrigaria a dois cliques para ver o que se veio ver (a regra "um
+           assunto, um controle", v2.30/v2.75). ===== */}
+      <div hidden={aba !== 'historico'}>
         <div className="rh-grid-2">
           <FichasStatus dados={dados} />
           <TestesDoCandidato id={id} />
@@ -1482,7 +1547,7 @@ export default function Detalhe({ id, aoVoltar }) {
         {/* O que aconteceu na TELA desta pessoa (v2.24) */}
         <TelemetriaPessoa candidatoId={id} />
         <DiagnosticoColaborador id={id} />
-      </details>
+      </div>
     </main>
   )
 }

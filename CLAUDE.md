@@ -107,6 +107,19 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Para medir o que está VISÍVEL, use `checkVisibility()` — não
+  `getBoundingClientRect`** (v2.96): a régua da v2.95 contou **52 checkboxes
+  "visíveis"** que estavam dentro de um `<details>` FECHADO, porque o
+  `getBoundingClientRect` devolve dimensão para conteúdo de details fechado e
+  para filho de `[hidden]`. Com `el.checkVisibility({checkOpacity:true})` a mesma
+  tela mediu **zero**. A diferença não é acadêmica: a primeira medição diria que
+  as abas não resolveram nada. ⚠️ E **a comparação antes/depois tem que usar o
+  MESMO critério** — re-medi o "antes" com `git stash` antes de afirmar a
+  melhora, senão o número compara réguas diferentes e não mede coisa nenhuma.
+- **Comentário JSX dentro de `&& (…)` quebra o build** (v2.96): `{cond && ( {/*
+  … */} <button/> )}` é erro de sintaxe, porque ali só cabe UMA expressão. O
+  comentário vai ANTES da linha do `&&`. Erro barato de achar (o build reprova),
+  mas custa uma rodada.
 - **Redesenho se valida em PROTÓTIPO, medindo antes e depois** (v2.95, método
   cravado pelo Bruno: *"se tudo de design for validar assim, vamos em frente"*).
   A queixa era *"não tô achando intuitivo, parece muita poluição visual"* — que é
