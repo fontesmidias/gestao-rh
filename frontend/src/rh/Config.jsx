@@ -10,6 +10,7 @@ import EmailsConfig from './EmailsConfig.jsx'
 import LogsRH from './LogsRH.jsx'
 import TelemetriaRH from './TelemetriaRH.jsx'
 import RoteirosEntrevista from './RoteirosEntrevista.jsx'
+import ConfigGravacao from './ConfigGravacao.jsx'
 import Exigencias from './Exigencias.jsx'
 // `PapeisAcesso` (v2.86) é o papel de USUÁRIO — não confundir com o `Papeis`
 // logo abaixo neste arquivo, que é o papel com que alguém ASSINA um
@@ -413,7 +414,7 @@ export default function Config({ aoVoltar }) {
       </>}
       {aba === 'importacoes' && <Importacoes />}
       {aba === 'tags' && <TagsConfig />}
-      {aba === 'roteiros' && <RoteirosEntrevista />}
+      {aba === 'roteiros' && <><ConfigGravacao /><RoteirosEntrevista /></>}
       {aba === 'exigencias' && <Exigencias setMsg={setAvisoConfig} />}
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
