@@ -2518,3 +2518,17 @@ td .ajuda-q:hover::after, td .ajuda-q:focus::after {
     -webkit-line-clamp: unset;
   }
 }
+
+/* ---------- Gravação de entrevista: player e trechos (v2.98) ---------- */
+/* Player NATIVO (`<audio controls>`): no celular ele vira o controle do
+   sistema — com a tela bloqueada, no fone —, coisa que player desenhado à mão
+   não faz. Mesma escolha do `<details>` e do `<input type=file>`. */
+.player-audio { display: flex; align-items: center; gap: var(--esp-2);
+                flex-wrap: wrap; margin: var(--esp-1) 0; }
+.player-audio audio { flex: 1 1 14rem; min-width: 0; max-width: 100%; height: 2.2rem; }
+.player-rotulo { font-size: var(--fs-apoio); color: var(--texto-suave);
+                 flex: 0 0 auto; }
+.bloco-linha { display: flex; align-items: center; gap: var(--esp-2);
+               flex-wrap: wrap; padding: var(--esp-2) 0;
+               border-top: 1px solid var(--borda-suave); }
+.bloco-linha:first-of-type { border-top: 0; }

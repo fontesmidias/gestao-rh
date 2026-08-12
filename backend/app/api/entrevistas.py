@@ -1409,3 +1409,104 @@ def excluir_gravacao(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
               detalhe={"entrevista": str(entrevista_id)})
     db.commit()
     return resumo(g, db)
+
+
+# ---- Blocos de áudio (v2.98) ---------------------------------------------
+#
+# A gravação pelo navegador sobe em blocos de ~10 min DURANTE a conversa. Ver o
+# docstring de `models/bloco_gravacao.py`: se o navegador cair aos 32 minutos, o
+# que já subiu está salvo — e a entrevista não se refaz.
+
+
+@router.post("/rh/entrevistas/{entrevista_id}/gravacao/bloco", status_code=201)
+async def subir_bloco(entrevista_id: uuid.UUID, arquivo: UploadFile,
+                      indice: int | None = None, duracao_s: int | None = None,
+                      inicio_s: int | None = None,
+                      db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
+    """Guarda UM bloco e enfileira a transcrição dele.
+
+    `indice` vem do front (é ele que sabe qual trecho está enviando). Ausente,
+    o servidor usa o próximo — mas o front DEVE mandar: sem o índice explícito,
+    dois blocos que subam fora de ordem (rede instável reordena) trocariam de
+    lugar na conversa, e ninguém perceberia lendo o texto.
+    """
+    from app.services import fila
+    from app.services.gravacao_entrevista import (AUDIO_MAX_BYTES, EXTENSOES_AUDIO,
+                                                  GravacaoRecusada, obter_ou_criar,
+                                                  proximo_indice, registrar_bloco,
+                                                  resumo)
+    e = db.get(Entrevista, entrevista_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="entrevista_nao_encontrada")
+    g = obter_ou_criar(db, e)
+    if not g.pode_gravar:
+        raise HTTPException(status_code=409, detail={
+            "erro": "sem_consentimento",
+            "mensagem": "Registre a autorização da pessoa antes de enviar o áudio."})
+
+    nome = arquivo.filename or ""
+    ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else "webm"
+    if ext not in EXTENSOES_AUDIO:
+        raise HTTPException(status_code=422, detail={
+            "erro": "formato_nao_suportado", "recebido": ext,
+            "aceitos": sorted(EXTENSOES_AUDIO)})
+
+    n = indice if indice and indice > 0 else proximo_indice(db, g)
+    try:
+        dados = await arquivo.read()
+        if len(dados) > AUDIO_MAX_BYTES:
+            raise HTTPException(status_code=413, detail={
+                "erro": "arquivo_grande",
+                "limite_mb": AUDIO_MAX_BYTES // (1024 * 1024)})
+        # A key leva o índice ZERO-PADDED só por higiene de listagem; a ORDEM
+        # de verdade é a coluna `indice` (v2.35 — listagem é lexicográfica).
+        key = f"entrevistas/{e.id}/blocos/{n:03d}.{ext}"
+        storage.salvar(key, dados, arquivo.content_type or "audio/webm")
+        try:
+            b = registrar_bloco(db, g, indice=n, key=key, bytes_=len(dados),
+                                tipo=arquivo.content_type or "",
+                                duracao_s=duracao_s, inicio_s=inicio_s)
+        except GravacaoRecusada as exc:
+            raise HTTPException(status_code=409, detail={
+                "erro": exc.erro, "mensagem": exc.detalhe}) from exc
+        registrar(db, "entrevista_bloco_enviado", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"entrevista": str(entrevista_id), "bloco": n,
+                           "bytes": len(dados)})
+        db.commit()
+    finally:
+        await arquivo.close()
+
+    try:
+        fila.enfileirar("app.workers.transcricao.transcrever_bloco", str(b.id),
+                        timeout=60 * 60, fila_nome=fila.NOME_FILA_TRANSCRICAO)
+    except Exception:                           # noqa: BLE001
+        # Fila fora: o bloco está salvo e fica `aguardando`. O botão "tentar de
+        # novo" reenfileira — o áudio não se perde, que é o que importa.
+        _log_grav.exception("Bloco %s não pôde ser enfileirado", b.id)
+    return resumo(g, db)
+
+
+@router.get("/rh/entrevistas/{entrevista_id}/gravacao/bloco/{indice}/audio")
+def baixar_bloco(entrevista_id: uuid.UUID, indice: int,
+                 db: Session = Depends(get_db),
+                 _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
+    """Ouve ou baixa UM trecho. Serve o player da tela (`Accept-Ranges` deixa o
+    navegador buscar o meio do áudio sem baixar tudo) e o download avulso."""
+    from app.models.bloco_gravacao import BlocoGravacao
+    from app.services.gravacao_entrevista import nome_arquivo
+    e, g = _gravacao_de(db, entrevista_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="sem_gravacao")
+    b = db.scalar(select(BlocoGravacao).where(
+        BlocoGravacao.gravacao_id == g.id, BlocoGravacao.indice == indice))
+    if b is None or not b.audio_key:
+        raise HTTPException(status_code=404, detail="bloco_nao_encontrado")
+    pessoa = _pessoa_de(db, e)
+    nome = nome_arquivo(pessoa["nome"], e.realizada_em or e.marcada_para or e.criada_em,
+                        parte=b.indice)
+    ext = (b.audio_key.rsplit(".", 1)[-1] or "webm")
+    return Response(content=storage.ler(b.audio_key),
+                    media_type=b.audio_tipo or "audio/webm",
+                    headers={"Content-Disposition": f'inline; filename="{nome}.{ext}"',
+                             "Accept-Ranges": "bytes"})

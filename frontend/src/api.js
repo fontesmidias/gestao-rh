@@ -36,7 +36,7 @@ async function req(caminho, opcoes = {}) {
 // `navigator.onLine` é falível para dizer que ESTÁ online (pode haver Wi-Fi
 // sem saída), mas é confiável quando diz que NÃO está — então só afirmamos
 // falta de conexão quando ele confirma.
-async function buscar(url, opcoes) {
+export async function buscar(url, opcoes) {
   const inicio = Date.now()
   try {
     return await fetch(url, opcoes)
@@ -346,7 +346,7 @@ export const talentos = {
 
 // --- RH (token de sessão no localStorage) ---
 const tokenRH = () => localStorage.getItem('rh_token')
-const authRH = () => ({ Authorization: `Bearer ${tokenRH()}` })
+export const authRH = () => ({ Authorization: `Bearer ${tokenRH()}` })
 
 export const rh = {
   // --- Carteira de Processos (v2.91) ---
@@ -1561,6 +1561,21 @@ export const rh = {
     req(`/rh/entrevistas/${id}/gravacao/transcrever`, { method: 'POST', headers: authRH() }),
   excluirGravacaoEntrevista: (id) =>
     req(`/rh/entrevistas/${id}/gravacao`, { method: 'DELETE', headers: authRH() }),
+  // Bloco de áudio (v2.98): a gravação sobe em pedaços de ~10 min DURANTE a
+  // conversa — se o navegador cair, o que já subiu está salvo.
+  subirBlocoEntrevista: async (id, arquivo, { indice, duracaoS, inicioS }) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    const q = new URLSearchParams({ indice: String(indice) })
+    if (duracaoS) q.set('duracao_s', String(Math.round(duracaoS)))
+    if (inicioS != null) q.set('inicio_s', String(Math.round(inicioS)))
+    const r = await buscar(`${BASE}/rh/entrevistas/${id}/gravacao/bloco?${q}`,
+                           { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
+  urlBlocoEntrevista: (id, indice) =>
+    `${BASE}/rh/entrevistas/${id}/gravacao/bloco/${indice}/audio`,
   urlAudioEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/audio`,
   urlTextoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/texto`,
 
