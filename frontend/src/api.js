@@ -1583,6 +1583,7 @@ export const rh = {
     `${BASE}/rh/entrevistas/${id}/gravacao/bloco/${indice}/audio`,
   urlAudioEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/audio`,
   urlTextoEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/texto`,
+  urlPdfEntrevista: (id) => `${BASE}/rh/entrevistas/${id}/gravacao/pdf`,
 
   // ---- Roteiros de entrevista (v2.66, § 14.1) ----
   // O catálogo do instrumento. Rascunho → publicado: só publicado se usa, e é

@@ -393,8 +393,13 @@ export default function GravacaoEntrevista({ entrevistaId, encerrada }) {
             {/* NÃO é <a href>: rota autenticada, e o navegador segue link sem
                 o header Authorization — o defeito que apareceu como
                 {"detail":"nao_autenticado"} na tela (v2.98.4). */}
+            {/* Dois formatos, dois usos (decisão do Bruno): o PDF timbrado é
+                para arquivar e circular — diz de quem é, de quando e para qual
+                vaga; o .txt é para copiar um trecho e colar na justificativa. */}
+            <BotaoBaixar url={api.urlPdfEntrevista(entrevistaId)}
+                         nome="transcricao.pdf">⬇ Transcrição (PDF timbrado)</BotaoBaixar>
             <BotaoBaixar url={api.urlTextoEntrevista(entrevistaId)}
-                         nome="transcricao.txt">⬇ Baixar transcrição (.txt)</BotaoBaixar>
+                         nome="transcricao.txt" className="btn-link">.txt</BotaoBaixar>
           </div>
         </>
       )}

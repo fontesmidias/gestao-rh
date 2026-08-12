@@ -111,9 +111,9 @@ export default function EntrevistasDaPessoa({ talentoId, candidatoId }) {
                           nome={`entrevista-${e.id}`} />
                       )}
                       {e.gravacao.tem_texto && (
-                        <BotaoBaixar url={api.urlTextoEntrevista(e.id)}
-                                     nome={`transcricao-${e.id}.txt`}
-                                     className="btn-link">⬇ transcrição</BotaoBaixar>
+                        <BotaoBaixar url={api.urlPdfEntrevista(e.id)}
+                                     nome={`transcricao-${e.id}.pdf`}
+                                     className="btn-link">⬇ transcrição (PDF)</BotaoBaixar>
                       )}
                       {['aguardando', 'processando'].includes(e.gravacao.status) && (
                         <span className="chip">transcrevendo…</span>
