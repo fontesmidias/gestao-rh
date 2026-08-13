@@ -118,6 +118,90 @@ def main() -> int:
     checar(1.0 <= PAUSA_PARAGRAFO_S <= 5.0,
            f"PAUSA_PARAGRAFO_S = {PAUSA_PARAGRAFO_S}s está entre 1s e 5s")
 
+    print("\n=== 8. Diarizacao: rotulo NEUTRO, numerado pela ORDEM DA CONVERSA ===")
+    from app.workers.transcricao import _com_falantes, _falante_de
+
+    # O pyannote devolve rótulos ARBITRÁRIOS e fora de ordem (SPEAKER_02 pode
+    # falar primeiro). Numerar por eles daria "Interlocutor 3" numa conversa de
+    # duas pessoas — e o RH procuraria um terceiro que não existe.
+    trechos = [(0, 4.2, "SPEAKER_02"), (6.9, 11.2, "SPEAKER_00"),
+               (14.4, 16.2, "SPEAKER_02")]
+    conversa = [
+        Seg("Boa tarde, obrigado por vir.", 0, 2.0),
+        Seg("Vamos falar da sua experiência.", 2.0, 4.0),
+        Seg("Claro.", 7.0, 7.6),
+        Seg("Trabalhei três anos na portaria.", 7.6, 11.0),
+        Seg("Entendi. E por que saiu?", 14.5, 16.0),
+    ]
+    t = _com_falantes(conversa, trechos)
+    checar(t.startswith("[Interlocutor 1]"),
+           f"quem fala PRIMEIRO e o Interlocutor 1 (veio {t[:20]!r})")
+    checar("[Interlocutor 2]" in t, "o segundo falante ganha o rotulo 2")
+    checar("[Interlocutor 3]" not in t,
+           "conversa de duas vozes NAO inventa um terceiro (o rotulo do "
+           "pyannote e arbitrario: SPEAKER_00 e _02)")
+    checar("SPEAKER" not in t, "o rotulo interno do modelo nunca vaza para a tela")
+    # Turnos consecutivos do mesmo falante viram UM parágrafo: um rótulo por
+    # frase deixaria a leitura pior que o bloco corrido que veio consertar.
+    checar(t.count("[Interlocutor 1]") == 2 and t.count("[Interlocutor 2]") == 1,
+           "falas seguidas do mesmo interlocutor ficam num paragrafo so")
+
+    print("\n=== 9. Diarizacao que FALHA degrada para o texto corrido ===")
+    # A transcrição não pode se perder porque a diarização falhou: o texto é o
+    # que serve para escrever a justificativa; saber quem falou é melhoria.
+    sem = _com_falantes(conversa, None)
+    checar("Interlocutor" not in sem and "Boa tarde" in sem,
+           "sem trechos de falante, o texto sai sem rotulo — nunca vazio")
+
+    # ⚠️ Exercita o CAMINHO REAL (`_transcrever`), não só a função interna: a
+    # mutação que troca `if trechos:` por `if diarizar:` passava verde só com a
+    # asserção acima — e ela é o defeito grave, porque com a diarização LIGADA e
+    # o modelo indisponível o texto sairia sem os parágrafos da v2.99. Achado ao
+    # rodar a mutação, não ao escrever o teste (a lição da v2.68/v2.98.4).
+    import app.workers.transcricao as _mod
+
+    class _Info:
+        language = "pt"
+
+    original_diarizar = _mod._diarizar
+    original_modelo = None
+    try:
+        # Substitui o LIMITE EXTERNO: o modelo do Whisper e o do pyannote.
+        _mod._diarizar = lambda audio, token: None      # falhou / sem token
+        classe = type("W", (), {
+            "__init__": lambda self, *a, **k: None,
+            "transcribe": lambda self, *a, **k: (iter(conversa), _Info()),
+        })
+        import sys as _sys
+        import types as _types
+        falso = _types.ModuleType("faster_whisper")
+        falso.WhisperModel = classe
+        original_modelo = _sys.modules.get("faster_whisper")
+        _sys.modules["faster_whisper"] = falso
+
+        texto, _idi = _mod._transcrever(b"audio", "small", "pt",
+                                        diarizar=True, hf_token="tok")
+        checar("Boa tarde" in texto,
+               "com diarizacao LIGADA e o modelo fora, o texto continua saindo")
+        checar("Interlocutor" not in texto,
+               "e sem rotulo inventado")
+        checar("\n\n" in texto,
+               "degrada para os PARAGRAFOS da v2.99, nao para um bloco unico")
+    finally:
+        _mod._diarizar = original_diarizar
+        if original_modelo is None:
+            _sys.modules.pop("faster_whisper", None)
+        else:
+            _sys.modules["faster_whisper"] = original_modelo
+
+    print("\n=== 10. O falante vem da MAIOR sobreposicao, nao do instante inicial ===")
+    # Whisper e pyannote cortam em pontos diferentes: um segmento costuma
+    # começar décimos ANTES de o falante assumir. Casar pelo início daria o
+    # falante ANTERIOR em toda troca de turno — onde o rótulo mais importa.
+    limite = [(0.0, 5.0, "A"), (5.0, 10.0, "B")]
+    checar(_falante_de(4.8, 9.5, limite) == "B",
+           "segmento que comeca no fim do turno anterior fica com quem fala mais")
+
     print("\n" + "=" * 62)
     if falhas:
         print(f"REPROVADO — {len(falhas)} verificação(ões) falharam:")

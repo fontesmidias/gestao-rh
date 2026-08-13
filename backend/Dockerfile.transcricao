@@ -23,8 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY pyproject.toml ./
+# O `torch` do índice de CPU é ~5x menor que o padrão (que traz CUDA): sem o
+# `--extra-index-url` a imagem ganharia ~2 GB de driver de GPU que o VPS não tem.
+# `pyannote.audio` é a diarização — "quem falou" (v3.00); só ESTE container
+# carrega esse peso, a API e o worker comum não.
 RUN pip install --no-cache-dir . \
-    && pip install --no-cache-dir "faster-whisper>=1.0,<2"
+    && pip install --no-cache-dir "faster-whisper>=1.0,<2" \
+    && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+       "torch>=2.2,<3" "torchaudio>=2.2,<3" \
+    && pip install --no-cache-dir "pyannote.audio>=3.1,<4"
 
 COPY app ./app
 COPY alembic.ini ./
