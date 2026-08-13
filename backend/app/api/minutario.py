@@ -128,6 +128,32 @@ def editar_modelo(modelo_id: uuid.UUID, payload: ModeloMensagemIn,
     return _dump_modelo(m, _tags_do_modelo(db, m.id))
 
 
+@router.put("/rh/minutario/modelos/{modelo_id}/ativo")
+def alternar_ativo(modelo_id: uuid.UUID, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> dict:
+    """Liga/desliga o modelo no seletor de composição.
+
+    Existe como rota PRÓPRIA porque o `PATCH` exige o corpo inteiro (título,
+    meio, corpo, tags) — para alternar um booleano a tela teria de reenviar o
+    texto todo, e qualquer divergência sobrescreveria o conteúdo sem ninguém
+    pedir. Um ato, uma rota (KISS).
+
+    ⚠️ **O `ativo` NÃO é decorativo**: `ComporMensagem` filtra
+    `modelos.filter(m => m.ativo)`, então modelo inativo some do seletor de quem
+    dispara. Sem esta rota, a cópia criada pelo `duplicar` (que nasce inativa de
+    propósito, v2.87) ficava num beco: não valia e não havia como ativá-la — foi
+    o que o Bruno relatou em 12/08/2026.
+    """
+    m = db.get(ModeloMensagem, modelo_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="modelo_nao_encontrado")
+    m.ativo = not m.ativo
+    registrar(db, "minutario_modelo_ativo", ator="rh", ator_detalhe=rh.email,
+              detalhe={"modelo": str(m.id), "titulo": m.titulo, "ativo": m.ativo})
+    db.commit()
+    return _dump_modelo(m, _tags_do_modelo(db, m.id))
+
+
 @router.delete("/rh/minutario/modelos/{modelo_id}", status_code=204)
 def excluir_modelo(modelo_id: uuid.UUID, db: Session = Depends(get_db),
                    rh: UsuarioRH = Depends(exige("documentos:minutario"))) -> None:

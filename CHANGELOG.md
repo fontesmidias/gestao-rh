@@ -11,6 +11,46 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [2.99.0] — 2026-08-12 — A transcrição se lê, e o modelo de mensagem se ativa
+
+Dois feedbacks do Bruno, ambos sobre coisa que existia e não servia.
+
+**A transcrição vinha num bloco único** — *"a leitura fica difícil"*. Estava
+certo: 40 minutos de conversa davam ~6.000 palavras num parágrafo só, porque o
+worker fazia `" ".join(...)` sobre os segmentos. O `faster-whisper` já devolve
+cada segmento com `start`/`end`, e era essa informação que estava sendo jogada
+fora.
+
+Agora `_em_paragrafos` quebra por **pausa** (`PAUSA_PARAGRAFO_S = 2.5s`): numa
+entrevista, o silêncio entre turnos é onde um para de falar e o outro começa.
+Sem diarização não se sabe QUEM falou — mas se sabe que a fala mudou de dono, e a
+quebra reproduz isso na página. Fala corrida muito longa também quebra, mas
+⚠️ **só em fim de frase**: cortar "trabalhei três anos na portaria" ao meio
+mudaria o que se lê, e a transcrição é peça que circula (vai ao PDF timbrado).
+
+`test_transcricao_paragrafos.py` no CI (11 asserções, stdlib pura — a função é
+pura e não importa `faster_whisper`), **3 mutações, 3 pegas**: voltar ao bloco
+único, cortar por tamanho sem exigir fim de frase, e ignorar a pausa.
+
+**Modelo de mensagem duplicado ficava num beco.** A cópia nasce inativa de
+propósito (v2.87 — cópia não vale antes de alguém revisar), e **não havia como
+ativá-la**: o `PATCH` aceitava o campo, mas nenhum botão na tela o alcançava.
+
+O `ativo` **tem** finalidade, ao contrário do que parecia: o `ComporMensagem`
+filtra `modelos.filter(m => m.ativo)`, então modelo inativo some do seletor de
+quem dispara — é o que impede um rascunho de aparecer para quem vai mandar a
+mensagem. O que faltava era a saída.
+
+Rota PRÓPRIA (`PUT .../ativo`) em vez de reusar o `PATCH`: aquele exige o corpo
+inteiro, e reenviar título, corpo e tags só para alternar um booleano
+sobrescreveria o texto na primeira divergência. Um ato, uma rota (KISS). O botão
+diz o que ACONTECE ao clicar — "ativar"/"desativar" —, nunca o estado atual
+(v2.78).
+
+⚠️ O `test_api_front_existe` pegou um defeito meu antes do commit: a função nova
+foi chamada no JSX e **não existia** no `api.js` (minha edição casou o nome
+errado). É exatamente o defeito da v2.73 que ele existe para impedir.
+
 ## [2.98.5] — 2026-08-12 — A transcrição em papel timbrado
 
 O PDF que o Bruno escolheu no protótipo, ao lado do `.txt` que já existia. Os

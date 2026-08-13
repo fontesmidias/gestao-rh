@@ -20,11 +20,11 @@ importa.
 """
 
 # Mantenha em sincronia com o topo do CHANGELOG.md — o `test_versao.py` cobra.
-VERSAO = "2.98.5"
+VERSAO = "2.99.0"
 
 # Rótulo curto do que a versão entregou. Aparece ao lado do número na tela de
 # Configurações; é o que faz "2.54.0" virar uma informação em vez de um número.
-VERSAO_NOME = "O dossiê tem o nome certo, e a gravação vira blocos"
+VERSAO_NOME = "A transcrição se lê, e o modelo de mensagem se ativa"
 
 
 def versao_completa() -> str:

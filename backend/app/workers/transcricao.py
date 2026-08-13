@@ -44,8 +44,60 @@ def _transcrever(audio: bytes, modelo: str, idioma: str) -> tuple[str, str]:
                                    vad_filter=True)
     # `vad_filter` corta silêncio — numa entrevista com pausas longas, isso é a
     # diferença entre minutos e dezenas de minutos de processamento.
-    texto = " ".join(s.text.strip() for s in segmentos).strip()
-    return texto, getattr(info, "language", idioma)
+    return _em_paragrafos(segmentos), getattr(info, "language", idioma)
+
+
+# Uma pausa acima disto separa PARÁGRAFOS. 2,5s é a fronteira prática entre
+# respirar no meio de uma frase e ceder a palavra — abaixo disso a conversa
+# continua, acima dela alguém tomou o turno.
+PAUSA_PARAGRAFO_S = 2.5
+
+
+def _em_paragrafos(segmentos) -> str:
+    """Junta os segmentos do Whisper em PARÁGRAFOS legíveis (v2.99).
+
+    Antes era `" ".join(...)`: 40 minutos de conversa viravam um bloco único de
+    ~6.000 palavras, e o Bruno relatou o óbvio — não se lê. O modelo já devolve
+    cada segmento com `start`/`end`, e é essa informação que estava sendo jogada
+    fora.
+
+    Duas regras, e as duas vêm de como a fala funciona:
+
+    1. **Pausa longa quebra parágrafo** (`PAUSA_PARAGRAFO_S`): numa entrevista, o
+       silêncio entre turnos é justamente onde um para de falar e o outro começa.
+       Sem diarização não se sabe QUEM falou — mas se sabe que a fala mudou de
+       dono, e a quebra reproduz isso na página.
+    2. **Parágrafo muito longo quebra na frase**: fala corrida sem pausa (alguém
+       contando uma história) daria um parágrafo de vinte linhas. Acima do teto,
+       corta no fim de frase mais próximo — nunca no meio.
+
+    ⚠️ Nunca quebra no MEIO de uma frase por contagem de caracteres: dividir
+    "trabalhei três anos na portaria" em duas linhas mudaria o sentido do que se
+    lê, e a transcrição vira peça que circula.
+    """
+    paragrafos: list[str] = []
+    atual: list[str] = []
+    fim_anterior = None
+    LIMITE_CHARS = 700          # ~10 linhas: acima disso o bloco cansa
+
+    for s in segmentos:
+        texto = (s.text or "").strip()
+        if not texto:
+            continue
+        inicio = getattr(s, "start", None)
+        pausa = (inicio - fim_anterior) if (inicio is not None and fim_anterior is not None) else 0
+        atingiu_teto = sum(len(t) for t in atual) > LIMITE_CHARS
+        # O teto só corta em FIM DE FRASE — no meio, mudaria o sentido.
+        fecha_frase = bool(atual) and atual[-1].rstrip().endswith((".", "!", "?", "…"))
+        if atual and (pausa >= PAUSA_PARAGRAFO_S or (atingiu_teto and fecha_frase)):
+            paragrafos.append(" ".join(atual).strip())
+            atual = []
+        atual.append(texto)
+        fim_anterior = getattr(s, "end", None)
+
+    if atual:
+        paragrafos.append(" ".join(atual).strip())
+    return "\n\n".join(p for p in paragrafos if p).strip()
 
 
 def transcrever_bloco(bloco_id: str) -> dict:
