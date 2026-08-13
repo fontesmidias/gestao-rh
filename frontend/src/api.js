@@ -1549,6 +1549,12 @@ export const rh = {
   // `transcricao`. Nada disto entra no dossiê de admissão (§ 15.4).
   configGravacao: () =>
     req('/rh/entrevistas/gravacao/config', { headers: authRH() }),
+  // Confere o token ANTES da entrevista real: sem isto, o RH só descobriria
+  // que ele está errado depois de conduzir 40 minutos de conversa.
+  testarTokenDiarizacao: (hfToken) =>
+    req('/rh/entrevistas/gravacao/testar-token',
+        { method: 'POST', headers: authRH(),
+          body: JSON.stringify({ hf_token: hfToken || null }) }),
   salvarConfigGravacao: (dados) =>
     req('/rh/entrevistas/gravacao/config',
         { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

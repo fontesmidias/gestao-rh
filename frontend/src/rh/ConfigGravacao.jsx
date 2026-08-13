@@ -25,6 +25,8 @@ export default function ConfigGravacao() {
   const [diarizar, setDiarizar] = useState(true)
   // `null` = não mexer no token guardado; string = gravar (vazia LIMPA).
   const [token, setToken] = useState(null)
+  const [teste, setTeste] = useState(null)
+  const [testando, setTestando] = useState(false)
 
   const carregar = () => {
     setErro(null)
@@ -36,6 +38,15 @@ export default function ConfigGravacao() {
       .catch((e) => setErro(e.detail || e.message || 'Falha ao carregar.'))
   }
   useEffect(() => { carregar() }, [])
+
+  const testar = async () => {
+    setTestando(true); setTeste(null)
+    try {
+      setTeste(await api.testarTokenDiarizacao(token))
+    } catch (e) {
+      setTeste({ ok: false, mensagem: e.detail || e.message })
+    } finally { setTestando(false) }
+  }
 
   const salvar = async () => {
     setSalvando(true); setMsg(null)
@@ -126,12 +137,22 @@ export default function ConfigGravacao() {
                  placeholder={cfg.tem_hf_token ? '•••••••• (deixe em branco para manter)' : 'hf_…'}
                  value={token ?? ''} onChange={(e) => setToken(e.target.value)} />
           <small className="explica">
-            O modelo que separa as vozes exige um token gratuito do Hugging Face
-            e o aceite da licença em{' '}
-            <code>huggingface.co/pyannote/speaker-diarization-3.1</code>.
+            O modelo que separa as vozes exige um token <strong>gratuito</strong>{' '}
+            do Hugging Face e o aceite da licença em{' '}
+            <code>huggingface.co/pyannote/speaker-diarization-3.1</code>. Ele é
+            usado <strong>uma única vez</strong>, para baixar o modelo — depois
+            tudo roda aqui dentro, sem custo por uso e sem o áudio sair.
             <strong> Sem o token, a transcrição continua saindo</strong> — só
-            não vem separada por interlocutor.
+            não vem separada por interlocutor, e a ficha diz isso.
           </small>
+          <div className="navegacao">
+            <button type="button" className="btn-secundario btn-mini"
+                    disabled={testando} onClick={testar}>
+              {testando ? 'Testando…' : 'Testar token'}</button>
+          </div>
+          {teste && (
+            <p className={teste.ok ? 'sucesso' : 'alerta'}>{teste.mensagem}</p>
+          )}
         </label>
       )}
 

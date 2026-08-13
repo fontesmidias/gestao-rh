@@ -291,10 +291,24 @@ def consolidar(db: Session, g: GravacaoEntrevista) -> GravacaoEntrevista:
         return g
 
     g.status = StatusGravacao.pronta
-    # Dizer QUAIS blocos faltam, não só que faltam: o RH consegue reouvir
-    # justamente aquele trecho.
-    g.erro = (f"Transcrição parcial: os blocos {', '.join(str(b.indice) for b in falhos)} "
-              "não puderam ser transcritos." if falhos else None)
+    # Dois avisos possíveis, e os dois precisam chegar à tela:
+    #   · bloco que falhou — dizendo QUAIS, para o RH reouvir aquele trecho;
+    #   · diarização pedida que não veio (sem token, modelo fora) — senão o RH
+    #     vê texto sem rótulo e não sabe se está desligada ou quebrada, que é o
+    #     silêncio que a v2.66/v2.69 já cobraram.
+    # ⚠️ Um `else None` aqui APAGARIA o aviso da diarização que os blocos
+    # trouxeram — o defeito que o Bruno apontou antes de ir para produção.
+    avisos = []
+    if falhos:
+        avisos.append(
+            f"Transcrição parcial: os blocos "
+            f"{', '.join(str(b.indice) for b in falhos)} não puderam ser transcritos.")
+    # O aviso da diarização é o MESMO em todos os blocos (a causa é global);
+    # basta o primeiro que houver.
+    da_diarizacao = next((b.erro for b in com_texto if b.erro), None)
+    if da_diarizacao:
+        avisos.append(da_diarizacao)
+    g.erro = " ".join(avisos) or None
     return g
 
 
