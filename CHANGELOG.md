@@ -11,6 +11,63 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.0] — 2026-08-12 — Interlocutor 1, Interlocutor 2
+
+Pergunta do Bruno: *"será que conseguimos identificar os interlocutores, nem que
+seja interlocutor 1, 2…?"*. **É essa formulação que torna o recurso aceitável** —
+e ela reabre uma decisão que a v2.97 tinha fechado.
+
+A v2.97 recusou diarização porque **atribuir fala a uma pessoa NOMEADA** numa
+ficha que ela assina é risco jurídico: dizer *"o candidato afirmou X"* quando
+quem disse foi o entrevistador é grave. Mas `Interlocutor 1` **não afirma quem é
+ninguém** — só marca que a voz mudou. Se errar, o pior caso é um rótulo trocado
+num parágrafo, e quem esteve na conversa percebe lendo. É a diferença entre
+IDENTIFICAR e SEPARAR, e só a segunda está sendo feita.
+
+⚠️ **NUNCA troque `Interlocutor N` pelo nome da pessoa.** No dia em que alguém
+pedir isso, a pergunta é: *o que acontece se o rótulo estiver errado numa peça
+que vai para uma reclamatória?*
+
+**O custo é TEMPO, e o Bruno decidiu pagá-lo** (ligada por padrão): o pyannote
+3.1 tem RTF ~1,74 em CPU — 10 min de áudio levam ~18 min. Uma entrevista de 40
+minutos passa de poucos minutos para ~1h10 na fila. Roda em segundo plano, então
+não trava ninguém; a transcrição fica pronta mais tarde. **Configurável no
+painel** para desligar sem deploy se o tempo incomodar.
+
+Três decisões que sustentam o desenho:
+
+1. **A numeração segue a ORDEM DE ENTRADA na conversa**, não o rótulo interno do
+   pyannote (`SPEAKER_00`, `SPEAKER_02`…), que é arbitrário e pularia números —
+   "Interlocutor 3" numa conversa de duas pessoas faria o RH procurar um terceiro
+   que não existe.
+2. **O falante vem da MAIOR sobreposição**, não do instante inicial: Whisper e
+   pyannote cortam em pontos diferentes, e casar pelo início daria o falante
+   ANTERIOR em toda troca de turno — justamente onde o rótulo importa.
+3. **Falha na diarização DEGRADA, nunca perde a transcrição.** Sem token, sem
+   licença aceita, modelo indisponível: o texto sai em parágrafos, como na
+   v2.99. O texto é o que serve para escrever a justificativa; saber quem falou
+   é melhoria.
+
+⚠️ **O modelo é GATED**: exige token gratuito do HuggingFace e aceite de licença.
+A tela pede o token, diz onde consegui-lo, e avisa que **sem ele a transcrição
+continua saindo** — só não vem separada. O token é credencial: nunca volta ao
+painel (só `tem_hf_token: true/false`) e nunca entra na auditoria.
+
+⚠️ **O gerador do faster-whisper é de uma passada só** — materializado em lista
+antes de ser usado duas vezes (agrupar por falante E cair no texto corrido se a
+diarização falhar). Sem isso, o segundo uso viria vazio e a transcrição sairia em
+branco **sem erro nenhum**.
+
+`torch` vem do índice de CPU (`--extra-index-url .../whl/cpu`): o padrão traz
+CUDA e engordaria a imagem em ~2 GB de driver de GPU que o VPS não tem. Só o
+container de transcrição carrega esse peso.
+
+Testes: 18 asserções, **3 mutações, 3 pegas** (numerar pelo rótulo do pyannote;
+casar o falante pelo instante inicial; deixar a falha derrubar a transcrição).
+⚠️ A terceira **só passou a ser pega** depois de o teste exercitar o CAMINHO REAL
+(`_transcrever`, com o modelo substituído) em vez da função interna — antes ela
+saía verde. É a lição da v2.68.
+
 ## [2.99.0] — 2026-08-12 — A transcrição se lê, e o modelo de mensagem se ativa
 
 Dois feedbacks do Bruno, ambos sobre coisa que existia e não servia.

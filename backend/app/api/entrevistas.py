@@ -722,15 +722,31 @@ class ConfigGravacaoIn(BaseModel):
     # (10 anos) existe para o campo não virar "para sempre" por engano de
     # digitação — quem quer indeterminado escreve 0, que é explícito.
     retencao_dias: int = Field(ge=0, le=3650)
+    # Diarização: separar "quem falou" com rótulo NEUTRO (Interlocutor 1, 2…).
+    # Ligada por padrão (decisão do Bruno, 2026-08-12) sabendo que custa TEMPO:
+    # ~1,7x a duração do áudio, em CPU.
+    diarizar: bool | None = None
+    # Token do HuggingFace (o modelo do pyannote é GATED). `None` = não mexer —
+    # é o que permite salvar as outras opções sem reenviar a credencial. String
+    # vazia LIMPA, que é como se desconfigura.
+    hf_token: str | None = None
 
 
 @router.get("/rh/entrevistas/gravacao/config")
 def ver_config_gravacao(db: Session = Depends(get_db),
                         _rh: UsuarioRH = Depends(exige("config:ler"))) -> dict:
+    from app.services.config_dinamica import ler_config
     from app.services.gravacao_entrevista import (BLOCO_MIN_PADRAO,
                                                   RETENCAO_DIAS_PADRAO, config)
-    return {**config(db), "bloco_min_padrao": BLOCO_MIN_PADRAO,
-            "retencao_dias_padrao": RETENCAO_DIAS_PADRAO}
+    c = ler_config(db, ("transcricao_diarizar", "transcricao_hf_token"))
+    return {
+        **config(db), "bloco_min_padrao": BLOCO_MIN_PADRAO,
+        "retencao_dias_padrao": RETENCAO_DIAS_PADRAO,
+        "diarizar": (c.get("transcricao_diarizar") or "1").strip() != "0",
+        # ⚠️ Devolve se EXISTE, nunca o valor: token é credencial, e a tela só
+        # precisa saber se está configurado (mesma regra das chaves de IA).
+        "tem_hf_token": bool((c.get("transcricao_hf_token") or "").strip()),
+    }
 
 
 @router.put("/rh/entrevistas/gravacao/config")
@@ -744,11 +760,21 @@ def salvar_config_gravacao(payload: ConfigGravacaoIn, db: Session = Depends(get_
     um áudio de 90 dias não existe mais, e a resposta tem que estar registrada.
     """
     from app.services.config_dinamica import gravar_config
-    gravar_config(db, {"transcricao_bloco_min": str(payload.bloco_min),
-                       "transcricao_retencao_dias": str(payload.retencao_dias)})
+    valores = {"transcricao_bloco_min": str(payload.bloco_min),
+               "transcricao_retencao_dias": str(payload.retencao_dias)}
+    if payload.diarizar is not None:
+        valores["transcricao_diarizar"] = "1" if payload.diarizar else "0"
+    if payload.hf_token is not None:
+        # String vazia LIMPA o token (é como se desconfigura); `None` não mexe.
+        valores["transcricao_hf_token"] = payload.hf_token.strip()
+    gravar_config(db, valores)
+    # ⚠️ O TOKEN NÃO entra na auditoria — ela é feita para ser lida. Registra-se
+    # que mudou, nunca o valor.
     registrar(db, "gravacao_config_alterada", ator="rh", ator_detalhe=rh.email,
               detalhe={"bloco_min": payload.bloco_min,
-                       "retencao_dias": payload.retencao_dias})
+                       "retencao_dias": payload.retencao_dias,
+                       "diarizar": payload.diarizar,
+                       "hf_token_alterado": payload.hf_token is not None})
     db.commit()
     from app.services.gravacao_entrevista import config
     return config(db)

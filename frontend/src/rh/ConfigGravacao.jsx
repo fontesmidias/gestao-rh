@@ -22,11 +22,17 @@ export default function ConfigGravacao() {
   const [msg, setMsg] = useState(null)
   const [bloco, setBloco] = useState('')
   const [dias, setDias] = useState('')
+  const [diarizar, setDiarizar] = useState(true)
+  // `null` = não mexer no token guardado; string = gravar (vazia LIMPA).
+  const [token, setToken] = useState(null)
 
   const carregar = () => {
     setErro(null)
     return api.configGravacao()
-      .then((d) => { setCfg(d); setBloco(String(d.bloco_min)); setDias(String(d.retencao_dias)) })
+      .then((d) => {
+        setCfg(d); setBloco(String(d.bloco_min)); setDias(String(d.retencao_dias))
+        setDiarizar(d.diarizar !== false); setToken(null)
+      })
       .catch((e) => setErro(e.detail || e.message || 'Falha ao carregar.'))
   }
   useEffect(() => { carregar() }, [])
@@ -36,6 +42,11 @@ export default function ConfigGravacao() {
     try {
       const d = await api.salvarConfigGravacao({
         bloco_min: Number(bloco), retencao_dias: Number(dias),
+        diarizar,
+        // Só envia o token se a pessoa digitou algo: `null` preserva o que
+        // está guardado, e é isso que permite salvar as outras opções sem
+        // reenviar a credencial.
+        ...(token === null ? {} : { hf_token: token }),
       })
       setCfg({ ...cfg, ...d })
       setMsg({ texto: 'Configuração salva.' })
@@ -89,6 +100,40 @@ export default function ConfigGravacao() {
           </small>
         </label>
       </div>
+
+      {/* Diarização (v3.00): rótulo NEUTRO — "Interlocutor 1, 2". Nunca o nome
+          da pessoa: o rótulo pode errar, e a transcrição vai ao PDF que
+          circula. Dizer "quem falou" errado numa peça dessas é pior que não
+          dizer. */}
+      <label className="campo-check" style={{ marginTop: 'var(--esp-3)' }}>
+        <input type="checkbox" checked={diarizar}
+               onChange={(e) => setDiarizar(e.target.checked)} />
+        Separar quem falou (Interlocutor 1, Interlocutor 2…)
+      </label>
+      <small className="explica">
+        Deixa a transcrição muito mais legível, mas <strong>a transcrição demora
+        bem mais</strong> — cerca de 1,7× a duração do áudio. Uma conversa de 40
+        minutos leva perto de 1 hora para ficar pronta, em segundo plano.
+        Os rótulos são neutros: o sistema separa as vozes, mas{' '}
+        <strong>não sabe quem é quem</strong>.
+      </small>
+
+      {diarizar && (
+        <label className="campo" style={{ marginTop: 'var(--esp-2)' }}>
+          <span className="rotulo">Token do Hugging Face
+            {cfg.tem_hf_token && <span className="chip"> configurado</span>}</span>
+          <input type="password" autoComplete="off"
+                 placeholder={cfg.tem_hf_token ? '•••••••• (deixe em branco para manter)' : 'hf_…'}
+                 value={token ?? ''} onChange={(e) => setToken(e.target.value)} />
+          <small className="explica">
+            O modelo que separa as vozes exige um token gratuito do Hugging Face
+            e o aceite da licença em{' '}
+            <code>huggingface.co/pyannote/speaker-diarization-3.1</code>.
+            <strong> Sem o token, a transcrição continua saindo</strong> — só
+            não vem separada por interlocutor.
+          </small>
+        </label>
+      )}
 
       {Number(dias) === 0 && (
         <p className="aviso-inline">
