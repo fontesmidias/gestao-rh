@@ -389,6 +389,25 @@ export default function GravacaoEntrevista({ entrevistaId, encerrada }) {
           {/* Transcrição parcial (algum bloco falhou): o texto SAI, mas a tela
               diz qual trecho falta — esconder seria pior (v2.93). */}
           {g.erro && <p className="aviso-inline">{g.erro}</p>}
+
+          {/* Trazer transcrição ANTIGA para o padrão novo (v3.00.3, pedido do
+              Bruno: "os antigos, queria utilizar já esse novo padrão"). Só
+              aparece quando FAZ DIFERENÇA — há áudio guardado, a separação
+              está ligada e o texto ainda é corrido. Oferecer sempre gastaria
+              uma hora de processamento pelo mesmo resultado. */}
+          {g.tem_audio && !g.tem_falantes && g.diarizar !== false && (
+            <div className="aviso-inline">
+              <p>Esta transcrição é de <strong>antes da separação de vozes</strong> —
+                 sai como texto corrido. Dá para refazer a partir do áudio
+                 guardado, sem regravar nada.</p>
+              <p className="explica">
+                Leva cerca de 1,7× a duração do áudio e roda em segundo plano.
+                O texto atual só é substituído quando o novo fica pronto.
+              </p>
+              <button className="btn-secundario btn-mini" disabled={ocupado}
+                      onClick={tentarDeNovo}>↻ Refazer separando quem falou</button>
+            </div>
+          )}
           <div className="navegacao">
             {/* NÃO é <a href>: rota autenticada, e o navegador segue link sem
                 o header Authorization — o defeito que apareceu como

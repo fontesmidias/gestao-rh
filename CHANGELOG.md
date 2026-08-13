@@ -11,6 +11,52 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.3] — 2026-08-13 — As entrevistas antigas também ganham os interlocutores
+
+Pedido do Bruno logo depois que a separação de vozes entrou no ar: *"os
+antigos, queria utilizar já esse novo padrão com o hugging face"*. As
+entrevistas transcritas antes da v3.00 saíram como texto corrido — e o áudio
+delas continua guardado, então dá para refazer sem regravar nada.
+
+Ao abrir a ficha para fazer isso, apareceram **dois defeitos que não davam erro
+nenhum**:
+
+### Corrigido
+
+- **A rota de refazer exigia `g.audio_key` — campo que só o envio de ARQUIVO
+  ÚNICO preenche.** Quem gravou pelo navegador (o caminho normal desde a v2.98)
+  guarda o áudio em blocos, então recebia `404 sem_audio` **com a entrevista
+  inteira guardada ao lado**. É a família do "a informação já existia, no lugar
+  errado" (v2.95): o áudio estava lá; a rota olhava para o campo errado. Agora
+  ela consulta os blocos e reenfileira **um por trecho** — o mesmo caminho do
+  envio normal, para que um bloco ruim não derrube os outros oitenta minutos.
+- **A rota exigia falha.** Aceitando só `falhou`/`audio_inaudivel`, ficava sem
+  saída justamente o caso do pedido: transcrição **pronta** é o estado normal de
+  quem quer o padrão novo.
+- **`tem_audio` ignorava os blocos**, então a tela diria "sem áudio" para toda
+  gravação feita pelo navegador.
+- **A recusa passou a dizer o que houve.** Sem bloco e sem áudio único, a
+  resposta explica que o áudio pode ter expirado pela retenção e que a
+  transcrição atual permanece — recusa que não explica faz consertar a coisa
+  errada (v2.93).
+
+### Novo
+
+- **Botão "↻ Refazer separando quem falou"** na ficha da entrevista, e ele
+  **só aparece quando faz diferença**: há áudio guardado, a separação está
+  ligada e o texto ainda é corrido. Oferecer sempre custaria ~1,7× a duração do
+  áudio para devolver exatamente o mesmo texto. A tela diz quanto demora e que
+  o texto atual só é substituído quando o novo fica pronto.
+
+### Interno
+
+- `diarizar` passou a sair do `config()` do serviço. Era lido também na rota de
+  configuração — duas leituras da mesma chave divergem na primeira mudança de
+  regra.
+- `test_retranscrever.py` (estrutural, no CI), validado por **4 mutações**:
+  exigir `audio_key`, enfileirar uma tarefa só, oferecer o botão sempre e
+  `tem_audio` sem os blocos.
+
 ## [3.00.2] — 2026-08-12 — O token vai para Integrações, onde se procura por ele
 
 Correção de endereço, apontada pelo Bruno: *"não seria melhor essa coisa de

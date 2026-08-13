@@ -738,11 +738,12 @@ def ver_config_gravacao(db: Session = Depends(get_db),
     from app.services.config_dinamica import ler_config
     from app.services.gravacao_entrevista import (BLOCO_MIN_PADRAO,
                                                   RETENCAO_DIAS_PADRAO, config)
-    c = ler_config(db, ("transcricao_diarizar", "transcricao_hf_token"))
+    # `diarizar` sai do `config()` (v3.00.3) — era lido aqui também, e duas
+    # leituras da mesma chave divergem na primeira mudança de regra.
+    c = ler_config(db, ("transcricao_hf_token",))
     return {
         **config(db), "bloco_min_padrao": BLOCO_MIN_PADRAO,
         "retencao_dias_padrao": RETENCAO_DIAS_PADRAO,
-        "diarizar": (c.get("transcricao_diarizar") or "1").strip() != "0",
         # ⚠️ Devolve se EXISTE, nunca o valor: token é credencial, e a tela só
         # precisa saber se está configurado (mesma regra das chaves de IA).
         "tem_hf_token": bool((c.get("transcricao_hf_token") or "").strip()),
@@ -1501,21 +1502,58 @@ async def subir_audio(entrevista_id: uuid.UUID, arquivo: UploadFile,
 @router.post("/rh/entrevistas/{entrevista_id}/gravacao/transcrever")
 def retranscrever(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
                   rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
-    """Tenta de novo. Existe porque falha de transcrição costuma ser transitória
-    (fila fora, container reiniciando), e sem isto o RH ficaria com um áudio
-    guardado e nenhum caminho — teria de reenviar o arquivo que já está lá."""
+    """Transcreve de novo o áudio que já está guardado.
+
+    Serve a DOIS casos, e o segundo é o que o Bruno pediu em 13/08/2026:
+
+    1. **Falha transitória** (fila fora, container reiniciando) — sem isto o RH
+       ficaria com um áudio guardado e nenhum caminho, tendo de reenviar o
+       arquivo que já está lá.
+    2. **Aplicar a separação de vozes ao que já foi transcrito.** As gravações
+       feitas ANTES da v3.00 têm texto corrido; refazer com a diarização ligada
+       as traz para o padrão novo, sem regravar nada.
+
+    ⚠️ Aceita gravação `pronta` de propósito. A versão anterior exigia falha, e
+    isso deixava sem saída justamente o caso 2 — transcrição pronta é o estado
+    normal de quem quer o padrão novo.
+
+    ⚠️ Reenfileira os BLOCOS quando eles existem: a versão anterior exigia
+    `g.audio_key`, que só o envio de arquivo único preenche. Quem gravou pelo
+    navegador (o caminho normal desde a v2.98) recebia 404 `sem_audio` com o
+    áudio inteiro guardado ao lado.
+    """
+    from app.models.bloco_gravacao import StatusBloco
     from app.models.gravacao_entrevista import StatusGravacao
     from app.services import fila
-    from app.services.gravacao_entrevista import resumo
+    from app.services.gravacao_entrevista import blocos_de, resumo
     _e, g = _gravacao_de(db, entrevista_id)
-    if g is None or not g.audio_key:
-        raise HTTPException(status_code=404, detail="sem_audio")
+    if g is None:
+        raise HTTPException(status_code=404, detail="sem_gravacao")
+
+    blocos = [b for b in blocos_de(db, g) if b.audio_key]
+    if not blocos and not g.audio_key:
+        # O áudio pode ter sido expurgado pela retenção (v2.98.3): a transcrição
+        # permanece, mas não há o que retranscrever. Dizer o motivo, não só 404.
+        raise HTTPException(status_code=404, detail={
+            "erro": "sem_audio",
+            "mensagem": "Não há áudio guardado para esta entrevista — ele pode "
+                        "ter sido apagado pela retenção. A transcrição atual "
+                        "permanece."})
+
     g.status = StatusGravacao.aguardando
     g.erro = None
+    for b in blocos:
+        b.status, b.erro = StatusBloco.aguardando, None
     db.commit()
+
+    # Uma tarefa por bloco: é o mesmo caminho do envio normal, e um bloco que
+    # falhar não derruba os outros.
+    tarefas = ([("app.workers.transcricao.transcrever_bloco", str(b.id)) for b in blocos]
+               or [("app.workers.transcricao.transcrever", str(g.id))])
     try:
-        fila.enfileirar("app.workers.transcricao.transcrever", str(g.id),
-                        timeout=60 * 60, fila_nome=fila.NOME_FILA_TRANSCRICAO)
+        for funcao, arg in tarefas:
+            fila.enfileirar(funcao, arg, timeout=60 * 60,
+                            fila_nome=fila.NOME_FILA_TRANSCRICAO)
     except Exception as exc:       # noqa: BLE001
         _log_grav.exception("Não foi possível enfileirar a transcrição de %s", g.id)
         raise HTTPException(status_code=503, detail={
