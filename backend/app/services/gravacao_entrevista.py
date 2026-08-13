@@ -41,7 +41,8 @@ def config(db: Session) -> dict:
     """Bloco (min) e retenção (dias). Valor inválido cai no padrão em vez de
     quebrar: config ruim não pode impedir uma entrevista de ser gravada."""
     from app.services.config_dinamica import ler_config
-    c = ler_config(db, ("transcricao_bloco_min", "transcricao_retencao_dias"))
+    c = ler_config(db, ("transcricao_bloco_min", "transcricao_retencao_dias",
+                        "transcricao_diarizar"))
 
     def _int(chave: str, padrao: int, minimo: int, maximo: int) -> int:
         try:
@@ -58,6 +59,9 @@ def config(db: Session) -> dict:
         # `<= 0` por `is not None` transformaria "guardar para sempre" em
         # "apagar tudo hoje", em silêncio.
         "retencao_dias": _int("transcricao_retencao_dias", RETENCAO_DIAS_PADRAO, 0, 3650),
+        # Ligada por padrão: só o "0" explícito desliga. Chave ausente é
+        # instalação que nunca abriu a tela, não escolha de deixar sem.
+        "diarizar": (c.get("transcricao_diarizar") or "1").strip() != "0",
     }
 
 
@@ -353,7 +357,19 @@ def resumo(g: GravacaoEntrevista | None, db: Session | None = None) -> dict:
         "pode_gravar": g.pode_gravar,
         "bloco_min": (config(db)["bloco_min"] if db is not None else BLOCO_MIN_PADRAO),
         "rotulo": ROTULOS.get(g.status, g.status.value),
-        "tem_audio": bool(g.audio_key), "tem_texto": bool(g.texto),
+        # ⚠️ Conta os BLOCOS: quem grava pelo navegador (o caminho normal desde
+        # a v2.98) não preenche `g.audio_key`, e olhar só para ele diria "sem
+        # áudio" com a entrevista inteira guardada ao lado.
+        "tem_audio": bool(g.audio_key) or bool(blocos),
+        "tem_texto": bool(g.texto),
+        # A tela precisa distinguir "texto corrido" de "texto separado por
+        # interlocutor" para oferecer refazer só quando FAZ DIFERENÇA — senão
+        # ofereceria uma hora de processamento pelo mesmo resultado.
+        "tem_falantes": "[Interlocutor" in (g.texto or ""),
+        # A tela só oferece refazer se a separação estiver LIGADA — com ela
+        # desligada, refazer devolveria o mesmo texto corrido depois de uma
+        # hora de processamento.
+        "diarizar": (config(db)["diarizar"] if db is not None else True),
         "duracao_s": g.duracao_s, "audio_bytes": g.audio_bytes,
         "consentimento_em": g.consentimento_em,
         "consentimento_por": g.consentimento_por,

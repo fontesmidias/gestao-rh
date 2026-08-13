@@ -113,7 +113,8 @@ jobs:
                    test_migration_insert_cru test_anti_prompt_injection \
                    test_api_front_existe test_campo_variaveis \
                    test_permissoes_declaradas test_papel_automacao \
-                   test_tela_de_trabalho test_transcricao_paragrafos; do
+                   test_tela_de_trabalho test_transcricao_paragrafos \
+                   test_retranscrever; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

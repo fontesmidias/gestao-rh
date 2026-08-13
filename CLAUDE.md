@@ -107,6 +107,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Campo de "tem arquivo?" que só um dos caminhos preenche diz NÃO com o
+  arquivo guardado ao lado** (v3.00.3): a rota de refazer a transcrição exigia
+  `gravacao.audio_key`, preenchido só pelo envio de ARQUIVO ÚNICO — quem grava
+  pelo navegador (o caminho normal desde a v2.98) guarda em `BlocoGravacao`, e
+  recebia `404 sem_audio` **com a entrevista inteira no storage**. `tem_audio`
+  no resumo tinha o mesmo furo, então a tela também dizia "sem áudio". Neste
+  sistema quase todo dado tem DUAS portas (v2.89.1) e isto vale para a PRESENÇA
+  do dado, não só para o tamanho dele: ao perguntar "existe arquivo?", conte
+  TODOS os caminhos de gravação, nunca um campo só. E **ação de reprocessar não
+  deve exigir estado de FALHA**: aceitar só `falhou` deixou sem saída o caso que
+  motivou o recurso — refazer uma transcrição `pronta` para aplicar melhoria
+  nova. ⚠️ O botão correspondente **só aparece quando faz diferença** (há áudio,
+  a melhoria está ligada, e o texto ainda não a tem): oferecê-lo sempre gastaria
+  ~1,7× a duração do áudio para devolver texto idêntico. Coberto por
+  `test_retranscrever.py`, 4 mutações.
 - **`<a href>` para rota AUTENTICADA devolve 401 — o navegador não manda o
   header** (v2.98.4, defeito visto pelo Bruno na tela): clicar em "Baixar
   transcrição" abria uma janela com `{"detail":"nao_autenticado"}`. O sistema
