@@ -54,12 +54,24 @@ modelos**. A credencial estava certa desde o começo.
   diante**, e aponta o ↻ Refazer para aproveitar a qualidade nova no que já
   existe.
 
+- **O modelo passou a ser guardado entre blocos.** Cada `WhisperModel(...)` relê
+  o modelo do disco, e uma entrevista de 40 min vira ~4 blocos: com o `small`
+  isso custava segundos, com o `medium` custaria dezenas deles por trecho. O
+  worker RQ é processo de vida longa, então o cache vale para todas as tarefas
+  que ele atender — guardado **por nome**, para que trocar o modelo no painel
+  passe a valer sem reiniciar o container, e só o último, porque manter dois
+  somaria os dois tamanhos na memória.
+- A tela avisa que o `large-v3` usa ~3 GB enquanto transcreve: o container não
+  tem limite de memória declarado, e numa VPS apertada ele disputaria memória
+  com o banco — o sintoma seria o Postgres caindo durante uma transcrição,
+  longe da causa. Aviso, nunca bloqueio: quem conhece a máquina decide.
+
 ### Interno
 
 - A chave `transcricao_modelo` era lida pelo worker desde a v2.97 e **não tinha
   rota nem tela** — só era configurável escrevendo no banco (a armadilha da
   v2.68). Agora tem as três pontas.
-- `test_diarizacao_diagnostico.py` cresceu para 8 mutações.
+- `test_diarizacao_diagnostico.py` cresceu para 9 mutações.
 
 ## [3.00.4] — 2026-08-13 — O erro que mandava conferir a coisa certa
 

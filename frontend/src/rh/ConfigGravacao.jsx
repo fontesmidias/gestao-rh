@@ -119,6 +119,18 @@ export default function ConfigGravacao() {
         </small>
       </label>
 
+      {/* O container de transcrição roda SEM limite de memória declarado, e o
+          large-v3 pede ~3 GB: numa VPS apertada ele compete com o Postgres, e
+          o sintoma seria o banco caindo durante uma transcrição — longe da
+          causa. Aviso, não bloqueio: quem conhece a máquina decide. */}
+      {modelo === 'large-v3' && (
+        <p className="aviso-inline">
+          O <strong>large-v3</strong> usa cerca de <strong>3 GB de memória</strong>{' '}
+          enquanto transcreve. Se o servidor for apertado, ele disputa memória
+          com o banco de dados — vale conferir antes de deixar ligado.
+        </p>
+      )}
+
       {modelo && cfg.modelo && modelo !== cfg.modelo && (
         <p className="aviso-inline">
           <strong>Vale só para o que for transcrito daqui em diante.</strong> O

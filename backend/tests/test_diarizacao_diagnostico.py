@@ -130,6 +130,28 @@ def main() -> int:
     checar("redirect_stdout" in corpo,
            "captura o stdout do pyannote para o log")
 
+    # --- 3b. O modelo não é relido do disco a cada bloco ---------------------
+    # Uma entrevista de 40 min vira ~4 blocos. Recarregar o `medium` (1,5 GB) em
+    # cada um custa dezenas de segundos por trecho, por entrevista — e o worker
+    # RQ é processo de vida longa, então guardar entre chamadas é de graça.
+    transcrever = _funcao(worker, "_transcrever")
+    checar(transcrever is not None, "a função `_transcrever` existe")
+    if transcrever is not None:
+        corpo_tr = ast.unparse(transcrever)
+        checar("WhisperModel(" not in corpo_tr,
+               "`_transcrever` NÃO instancia o modelo direto (usa o cache)")
+        checar("_carregar_modelo" in corpo_tr,
+               "`_transcrever` pede o modelo ao cache")
+    carregar = _funcao(worker, "_carregar_modelo")
+    checar(carregar is not None, "existe `_carregar_modelo` (cache por processo)")
+    if carregar is not None:
+        corpo_c = ast.unparse(carregar)
+        # O `ast.unparse` normaliza as aspas para simples — comparar com as
+        # duplas do arquivo reprovaria código correto.
+        checar("_MODELO_CARREGADO['nome'] != nome" in corpo_c,
+               "o cache é POR NOME — trocar o modelo no painel passa a valer "
+               "sem reiniciar o container")
+
     # --- 4. O teste de token confere as DUAS licenças ------------------------
     testar = _funcao(api, "testar_token_diarizacao")
     checar(testar is not None, "a rota `testar_token_diarizacao` existe")
