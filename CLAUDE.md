@@ -107,6 +107,16 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Verificação de import só prova o que ela CARREGA — importe na profundidade
+  do uso** (v3.00.6, o mesmo defeito duas vezes): o build passou a terminar com
+  um `python -c` importando `pyannote.audio.Pipeline`, e ele ficou VERDE com o
+  `matplotlib` faltando — a exigência mora um nível abaixo, em
+  `pyannote.audio.pipelines`, que só carrega quando o pipeline é montado de
+  verdade. A imagem subiu e o `ModuleNotFoundError` apareceu na ficha de uma
+  entrevista real. Importar o pacote de cima dá impressão de cobertura sem
+  tê-la; é a v2.67 (*"teste que não executa a linha mutada"*) aplicada a
+  dependência. Ao escrever guarda-corpo de import, importe o SÍMBOLO que o
+  código de produção usa, não a fachada do pacote.
 - **`pip install` encadeado REABRE a faixa que o anterior fechou** (v3.00.5, a
   continuação do defeito acima): a v3.00.4 cravou `torch==2.8.0` numa linha e
   instalou o `pyannote` na SEGUINTE — e o pip, resolvendo de novo, trocou o
