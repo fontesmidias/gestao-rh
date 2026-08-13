@@ -46,14 +46,39 @@ def _config(db) -> dict:
     }
 
 
+# Um modelo por PROCESSO, guardado entre chamadas (v3.00.5). Uma entrevista de
+# 40 min vira ~4 blocos, e cada `WhisperModel(...)` relê o modelo do disco: com
+# o `small` isso custava segundos, com o `medium` (1,5 GB) custa dezenas deles —
+# multiplicado pelo número de blocos, por entrevista. O worker RQ é um processo
+# de vida longa, então o cache vale para todas as tarefas que ele atender.
+#
+# ⚠️ Guardado POR NOME: trocar o modelo no painel tem de passar a valer sem
+# reiniciar o container. Guarda-se só o último, porque manter dois na memória
+# somaria os dois tamanhos — e a máquina que aperta com um não aguenta dois.
+_MODELO_CARREGADO: dict = {"nome": None, "obj": None}
+
+
+def _carregar_modelo(nome: str):
+    from faster_whisper import WhisperModel
+    if _MODELO_CARREGADO["nome"] != nome:
+        log.info("Carregando o modelo de transcrição '%s' (a primeira vez "
+                 "pode baixá-lo).", nome)
+        # Descarta o anterior ANTES de carregar o novo: com os dois vivos, o
+        # pico de memória é a soma — e é justamente na troca para um modelo
+        # maior que a máquina estaria mais apertada.
+        _MODELO_CARREGADO["obj"] = None
+        _MODELO_CARREGADO["obj"] = WhisperModel(nome, device="cpu",
+                                                compute_type="int8")
+        _MODELO_CARREGADO["nome"] = nome
+    return _MODELO_CARREGADO["obj"]
+
+
 def _transcrever(audio: bytes, modelo: str, idioma: str,
                  diarizar: bool = False, hf_token: str = "") -> tuple[str, str]:
     """Devolve `(texto, idioma_detectado)`. Import local: ver o topo do módulo."""
-    from faster_whisper import WhisperModel
-
     # `int8` roda em CPU com ~4x menos memória que `float32`, com perda de
     # qualidade irrelevante para fala. `cpu` explícito: sem GPU no VPS.
-    w = WhisperModel(modelo, device="cpu", compute_type="int8")
+    w = _carregar_modelo(modelo)
     segmentos, info = w.transcribe(io.BytesIO(audio), language=idioma or None,
                                    vad_filter=True)
     # `vad_filter` corta silêncio — numa entrevista com pausas longas, isso é a
