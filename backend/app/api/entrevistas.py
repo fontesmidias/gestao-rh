@@ -730,20 +730,29 @@ class ConfigGravacaoIn(BaseModel):
     # é o que permite salvar as outras opções sem reenviar a credencial. String
     # vazia LIMPA, que é como se desconfigura.
     hf_token: str | None = None
+    # Qualidade da transcrição. `None` = não mexer, pelo mesmo motivo do token:
+    # a tela do token e a da política salvam campos diferentes.
+    modelo: str | None = None
 
 
 @router.get("/rh/entrevistas/gravacao/config")
 def ver_config_gravacao(db: Session = Depends(get_db),
                         _rh: UsuarioRH = Depends(exige("config:ler"))) -> dict:
     from app.services.config_dinamica import ler_config
-    from app.services.gravacao_entrevista import (BLOCO_MIN_PADRAO,
-                                                  RETENCAO_DIAS_PADRAO, config)
+    from app.services.gravacao_entrevista import (BLOCO_MIN_PADRAO, MODELO_PADRAO,
+                                                  MODELOS, RETENCAO_DIAS_PADRAO,
+                                                  config)
     # `diarizar` sai do `config()` (v3.00.3) — era lido aqui também, e duas
     # leituras da mesma chave divergem na primeira mudança de regra.
     c = ler_config(db, ("transcricao_hf_token",))
     return {
         **config(db), "bloco_min_padrao": BLOCO_MIN_PADRAO,
         "retencao_dias_padrao": RETENCAO_DIAS_PADRAO,
+        # O catálogo vai para a tela em vez de a tela repetir a lista: lista
+        # paralela diverge na primeira mudança, e aqui a divergência daria uma
+        # opção que o worker recusa.
+        "modelos": [{"valor": k, **v} for k, v in MODELOS.items()],
+        "modelo_padrao": MODELO_PADRAO,
         # ⚠️ Devolve se EXISTE, nunca o valor: token é credencial, e a tela só
         # precisa saber se está configurado (mesma regra das chaves de IA).
         "tem_hf_token": bool((c.get("transcricao_hf_token") or "").strip()),
@@ -768,6 +777,17 @@ def salvar_config_gravacao(payload: ConfigGravacaoIn, db: Session = Depends(get_
     if payload.hf_token is not None:
         # String vazia LIMPA o token (é como se desconfigura); `None` não mexe.
         valores["transcricao_hf_token"] = payload.hf_token.strip()
+    if payload.modelo is not None:
+        # ⚠️ SÓ O CATÁLOGO entra: nome livre viraria download no Hugging Face
+        # dentro do worker, e a falha apareceria minutos depois, em segundo
+        # plano, sem nada na tela ligando uma coisa à outra.
+        from app.services.gravacao_entrevista import MODELOS
+        if payload.modelo not in MODELOS:
+            raise HTTPException(status_code=422, detail={
+                "erro": "modelo_desconhecido",
+                "mensagem": f"Modelo '{payload.modelo}' não existe. "
+                            f"Opções: {', '.join(MODELOS)}."})
+        valores["transcricao_modelo"] = payload.modelo
     gravar_config(db, valores)
     # ⚠️ O TOKEN NÃO entra na auditoria — ela é feita para ser lida. Registra-se
     # que mudou, nunca o valor.
@@ -775,6 +795,7 @@ def salvar_config_gravacao(payload: ConfigGravacaoIn, db: Session = Depends(get_
               detalhe={"bloco_min": payload.bloco_min,
                        "retencao_dias": payload.retencao_dias,
                        "diarizar": payload.diarizar,
+                       "modelo": payload.modelo,
                        "hf_token_alterado": payload.hf_token is not None})
     db.commit()
     from app.services.gravacao_entrevista import config

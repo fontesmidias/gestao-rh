@@ -11,6 +11,56 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.5] — 2026-08-13 — A transcrição fica melhor, e a biblioteca que faltava entra
+
+Duas coisas na mesma leva: a qualidade que o Bruno pediu (*"vamos de medium"*) e
+a continuação do defeito da v3.00.4 — o erro tinha mudado de `AttributeError`
+para `ModuleNotFoundError`, com o teste de token respondendo **200 nos dois
+modelos**. A credencial estava certa desde o começo.
+
+### Corrigido
+
+- **Faltava `torchvision` no container.** O `pyannote.audio` o IMPORTA e não o
+  declara como dependência, então o pip nunca o instalava e a diarização morria
+  no import. Entra cravado (`0.23.0`, que casa com o torch 2.8).
+- **Os pinos da v3.00.4 não estavam valendo.** O `pip install` do `pyannote`
+  rodava DEPOIS, numa chamada separada, e reabria as faixas que a v3.00.4 tinha
+  fechado — o log do build mostra `torch-2.13.0` e `huggingface-hub-1.27.0`
+  entrando por cima. Agora tudo numa resolução só: conflito vira **erro de
+  build**, e não imagem quebrada em produção.
+- **O build agora IMPORTA o que a diarização usa.** Módulo faltando reprova no
+  CI, em vez de virar erro na ficha de uma entrevista real.
+- **`ModuleNotFoundError` virou caso próprio, e a mensagem NOMEIA o módulo.**
+  Antes caía no texto genérico e mandava conferir token e licença — pela segunda
+  vez, depois de o teste já ter aprovado os dois.
+
+### Novo
+
+- **A qualidade da transcrição virou escolha, e o padrão subiu para `medium`**
+  (decisão do Bruno). Na entrevista real, o `small` escreveu *"Daxon"* por
+  Dexion, *"ex-social"* por eSocial e *"gorrigo"* por currículo — o texto vira
+  justificativa de avaliação, e nome errado ali é pior que espera maior. Três
+  opções em Configurações → Gravação de entrevistas, cada uma dizendo o custo em
+  tempo: `small` (~0,6× o áudio), `medium` (~1,5×) e `large-v3` (~3×).
+  ⚠️ **Só o catálogo entra** (422 `modelo_desconhecido`): nome livre viraria
+  download no Hugging Face dentro do worker, e a falha apareceria minutos
+  depois, em segundo plano, sem nada na tela ligando uma coisa à outra.
+- **A imagem pré-baixa o modelo padrão.** Sem isso, a primeira transcrição
+  depois de cada deploy baixaria ~1,5 GB antes de começar — e quem espera é o
+  RH, com a entrevista encerrada, sem nada dizendo que o atraso é download. O
+  nome vem do `MODELO_PADRAO` do serviço, lido no build: duas listas
+  divergiriam em silêncio, e o sintoma seria justamente esse download.
+- A tela avisa que trocar o modelo **vale só para o que for transcrito daqui em
+  diante**, e aponta o ↻ Refazer para aproveitar a qualidade nova no que já
+  existe.
+
+### Interno
+
+- A chave `transcricao_modelo` era lida pelo worker desde a v2.97 e **não tinha
+  rota nem tela** — só era configurável escrevendo no banco (a armadilha da
+  v2.68). Agora tem as três pontas.
+- `test_diarizacao_diagnostico.py` cresceu para 8 mutações.
+
 ## [3.00.4] — 2026-08-13 — O erro que mandava conferir a coisa certa
 
 Defeito de campo. A ficha da entrevista mostrou *"Não foi possível separar quem
