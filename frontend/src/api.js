@@ -809,6 +809,11 @@ export const rh = {
     req(`/rh/minutario/modelos${incluirInativos ? '?incluir_inativos=true' : ''}`, { headers: authRH() }),
   minutarioDuplicarModelo: (id) =>
     req(`/rh/minutario/modelos/${id}/duplicar`, { method: 'POST', headers: authRH() }),
+  // Liga/desliga o modelo no seletor de composição (v2.99). Rota PRÓPRIA: o
+  // PATCH exige o corpo inteiro, e reenviar o texto só para alternar um
+  // booleano arriscaria sobrescrever o conteúdo.
+  minutarioAlternarAtivo: (id) =>
+    req(`/rh/minutario/modelos/${id}/ativo`, { method: 'PUT', headers: authRH() }),
   minutarioCriarModelo: (dados) =>
     req('/rh/minutario/modelos', { method: 'POST', headers: authRH(), body: JSON.stringify(dados) }),
   minutarioEditarModelo: (id, dados) =>

@@ -54,6 +54,18 @@ export default function MinutarioRH() {
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível duplicar (${e.detail || e.message}).` }) }
   }
 
+  const alternarAtivo = async (m) => {
+    try {
+      const r = await api.minutarioAlternarAtivo(m.id)
+      carregar()
+      setMsg({ tipo: 'ok', texto: r.ativo
+        ? `"${r.titulo}" está ATIVO — já aparece ao compor mensagem.`
+        : `"${r.titulo}" está INATIVO — não aparece mais ao compor.` })
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível alterar (${e.detail || e.message}).` })
+    }
+  }
+
   const excluir = async (m) => {
     if (!window.confirm(`Excluir o modelo "${m.titulo}"?`)) return
     try { await api.minutarioExcluirModelo(m.id); carregar() }
@@ -95,7 +107,18 @@ export default function MinutarioRH() {
                   <td>{m.tags.map((t) => (
                     <span key={t.id} className="chip" style={{ '--chip-cor': t.cor || undefined }}>{t.nome}</span>
                   ))}</td>
-                  <td>{m.ativo ? 'Ativo' : <em>Inativo</em>}</td>
+                  {/* O rótulo do botão diz o que ACONTECE ao clicar, nunca o
+                      estado atual (v2.78). Sem ele, a cópia criada pelo
+                      "duplicar" — que nasce inativa de propósito — ficava num
+                      beco: não valia e não havia como ativá-la. */}
+                  <td>
+                    {m.ativo ? 'Ativo' : <em>Inativo</em>}{' '}
+                    <button className="btn-link" onClick={() => alternarAtivo(m)}
+                            title={m.ativo
+                              ? 'Deixa de aparecer no seletor ao compor mensagem'
+                              : 'Passa a aparecer no seletor ao compor mensagem'}>
+                      {m.ativo ? 'desativar' : 'ativar'}</button>
+                  </td>
                   <td>
                     <button className="btn-link" onClick={() => setVendo(m)}>ver</button>
                     <button className="btn-link" onClick={() => copiarTexto(m)}>copiar</button>
