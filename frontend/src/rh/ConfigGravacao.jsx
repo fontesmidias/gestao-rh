@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { rh as api } from '../api.js'
+import SelectBusca from '../SelectBusca.jsx'
 
 // Configuração da gravação de entrevistas (v2.98.3).
 //
@@ -23,6 +24,7 @@ export default function ConfigGravacao() {
   const [bloco, setBloco] = useState('')
   const [dias, setDias] = useState('')
   const [diarizar, setDiarizar] = useState(true)
+  const [modelo, setModelo] = useState('')
 
   const carregar = () => {
     setErro(null)
@@ -30,6 +32,7 @@ export default function ConfigGravacao() {
       .then((d) => {
         setCfg(d); setBloco(String(d.bloco_min)); setDias(String(d.retencao_dias))
         setDiarizar(d.diarizar !== false)
+        setModelo(d.modelo || d.modelo_padrao || '')
       })
       .catch((e) => setErro(e.detail || e.message || 'Falha ao carregar.'))
   }
@@ -40,7 +43,7 @@ export default function ConfigGravacao() {
     try {
       const d = await api.salvarConfigGravacao({
         bloco_min: Number(bloco), retencao_dias: Number(dias),
-        diarizar,
+        diarizar, modelo,
         // O TOKEN não é enviado daqui: ele vive em Integrações (v3.00.2), e
         // omiti-lo preserva o que está guardado — salvar a política nunca
         // mexe na credencial.
@@ -97,6 +100,34 @@ export default function ConfigGravacao() {
           </small>
         </label>
       </div>
+
+      {/* Qualidade da transcrição (v3.00.5, decisão do Bruno): o `small`
+          errava nome próprio e sigla numa entrevista real — "Dexion" saiu
+          "Daxon", "eSocial" saiu "ex-social". O texto vira justificativa de
+          avaliação, e nome errado ali é pior que espera maior.
+
+          A lista vem do SERVIDOR: repeti-la aqui daria, na primeira mudança,
+          uma opção que o worker recusa. */}
+      <label className="campo" style={{ marginTop: 'var(--esp-3)' }}>
+        <span className="rotulo">Qualidade da transcrição</span>
+        <SelectBusca valor={modelo} aoMudar={setModelo}
+                     opcoes={(cfg.modelos || []).map((m) => ({
+                       valor: m.valor, rotulo: m.rotulo, extra: m.detalhe }))} />
+        <small className="explica">
+          {(cfg.modelos || []).find((m) => m.valor === modelo)?.detalhe}
+          {' '}O tempo é somado ao da separação de vozes, quando ela está ligada.
+        </small>
+      </label>
+
+      {modelo && cfg.modelo && modelo !== cfg.modelo && (
+        <p className="aviso-inline">
+          <strong>Vale só para o que for transcrito daqui em diante.</strong> O
+          que já está pronto não muda sozinho — para reaproveitar a qualidade
+          nova numa entrevista antiga, use <strong>↻ Refazer</strong> na ficha
+          dela. E a primeira transcrição com um modelo novo demora mais: ele
+          precisa ser baixado uma vez.
+        </p>
+      )}
 
       {/* Diarização (v3.00): rótulo NEUTRO — "Interlocutor 1, 2". Nunca o nome
           da pessoa: o rótulo pode errar, e a transcrição vai ao PDF que

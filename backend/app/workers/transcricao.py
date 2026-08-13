@@ -26,7 +26,7 @@ def _config(db) -> dict:
     from app.services.config_dinamica import ler_config
     cfg = ler_config(db, ("transcricao_modelo", "transcricao_idioma",
                           "transcricao_diarizar", "transcricao_hf_token"))
-    from app.services.gravacao_entrevista import MODELO_PADRAO
+    from app.services.gravacao_entrevista import MODELO_PADRAO, MODELOS
     return {
         # Ligada por padrão (decisão do Bruno, 2026-08-12), mas desligável sem
         # deploy: o custo é TEMPO (RTF ~1,74 em CPU), e quem sente isso é quem
@@ -35,7 +35,11 @@ def _config(db) -> dict:
         # ⚠️ Token do HuggingFace: o modelo do pyannote é GATED (exige aceite de
         # licença). NUNCA vai para log nem volta ao painel — é credencial.
         "hf_token": (cfg.get("transcricao_hf_token") or "").strip(),
-        "modelo": (cfg.get("transcricao_modelo") or MODELO_PADRAO).strip(),
+        # ⚠️ Valida contra o CATÁLOGO, e não só "não vazio" (v3.00.5): nome de
+        # modelo inválido vira tentativa de download no Hugging Face e a
+        # transcrição falha aqui, em segundo plano, longe de quem digitou.
+        "modelo": (m if (m := (cfg.get("transcricao_modelo") or "").strip())
+                   in MODELOS else MODELO_PADRAO),
         # Fixar "pt" evita o auto-detect errar em áudio ruim e transcrever
         # português como espanhol — que sai plausível e errado.
         "idioma": (cfg.get("transcricao_idioma") or "pt").strip(),
@@ -398,6 +402,17 @@ def _diarizar(audio: bytes, token: str):
         # — o token estava certo. Mandar conferir a coisa certa é o mínimo; a
         # v2.93 custou 70 minutos por uma recusa que apontava o lugar errado.
         texto_erro = f"{type(exc).__name__}: {exc}"
+        # Biblioteca AUSENTE é caso próprio, e a mensagem NOMEIA o módulo: sem
+        # isso, "ModuleNotFoundError" manda quem opera conferir token e licença
+        # de novo — a recusa que aponta o lugar errado (v2.93), agora com o
+        # agravante de que o token já foi testado e aprovado.
+        if isinstance(exc, ModuleNotFoundError):
+            falta = getattr(exc, "name", None) or "?"
+            return None, (f"O container de transcrição está sem a biblioteca "
+                          f"`{falta}`, necessária para separar as vozes. Não é "
+                          "problema do seu token — a imagem precisa ser "
+                          "reconstruída com ela. A transcrição está completa, "
+                          "só sem os rótulos.")
         de_versao = any(p in texto_erro for p in (
             "AudioMetaData", "list_audio_backends", "set_audio_backend",
             "use_auth_token", "torchaudio", "huggingface_hub"))

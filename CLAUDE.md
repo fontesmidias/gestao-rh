@@ -107,6 +107,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`pip install` encadeado REABRE a faixa que o anterior fechou** (v3.00.5, a
+  continuação do defeito acima): a v3.00.4 cravou `torch==2.8.0` numa linha e
+  instalou o `pyannote` na SEGUINTE — e o pip, resolvendo de novo, trocou o
+  torch por baixo (o log do build mostra `torch-2.13.0` e
+  `huggingface-hub-1.27.0` entrando por cima dos pinos). Pino só vale se tudo
+  estiver na MESMA resolução; aí conflito vira erro de build em vez de imagem
+  quebrada em produção. ⚠️ E **biblioteca que o pacote IMPORTA mas não DECLARA**
+  não é instalada por ninguém: o `pyannote.audio` usa `torchvision` sem o
+  declarar, e o sintoma foi `ModuleNotFoundError` na ficha da entrevista, com o
+  token já testado e aprovado. Em container de ML, termine o `RUN` com um
+  `python -c` que IMPORTE o que a função usa — módulo faltando reprova no CI,
+  não na cara de quem opera.
 - **Dependência com faixa ABERTA quebra sozinha, e o sintoma culpa a
   credencial** (v3.00.4, defeito de campo): o `Dockerfile.transcricao` pedia
   `torchaudio>=2.2,<3`, e o `pyannote.audio` 3.x declara as próprias

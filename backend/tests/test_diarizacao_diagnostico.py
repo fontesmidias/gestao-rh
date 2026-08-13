@@ -71,6 +71,22 @@ def main() -> int:
            "`pyannote.audio` cravado")
     checar("huggingface_hub<1.0" in dockerfile,
            "`huggingface_hub` com TETO (1.0 removeu `use_auth_token`)")
+    # `torchvision` é importado pelo pyannote e NÃO declarado por ele — o pip
+    # não o instalava, e a diarização morria com `ModuleNotFoundError` (v3.00.5).
+    checar("torchvision==0.23.0" in dockerfile,
+           "`torchvision` instalado e cravado (o pyannote o usa sem declarar)")
+    # ⚠️ Uma resolução SÓ: instalado num `pip install` posterior, o pyannote
+    # reabre as faixas e o pip troca o torch por baixo — foi o que o log do
+    # build mostrou acontecendo (torch 2.13, huggingface_hub 1.27).
+    bloco = dockerfile[dockerfile.index("RUN pip install"):]
+    bloco = bloco[:bloco.index("COPY")]
+    checar(bloco.count("pip install") == 2,
+           "torch e pyannote na MESMA resolução do pip (senão um sobrescreve o "
+           "outro)")
+    # Guarda-corpo: importar no build faz módulo faltando reprovar no CI, em
+    # vez de virar erro na ficha da entrevista.
+    checar("from pyannote.audio import Pipeline" in dockerfile,
+           "o build IMPORTA o que a diarização usa, e falha se faltar")
     for aberto in ('"torchaudio>=2.2,<3"', '"torch>=2.2,<3"',
                    '"pyannote.audio>=3.1,<4"'):
         checar(aberto not in dockerfile,
@@ -93,6 +109,8 @@ def main() -> int:
            "a recusa por licença nomeia os DOIS modelos")
 
     # --- 3. A mensagem distingue a causa -------------------------------------
+    checar("ModuleNotFoundError" in corpo,
+           "biblioteca AUSENTE é caso próprio e NOMEIA o módulo que falta")
     checar("AudioMetaData" in corpo and "use_auth_token" in corpo,
            "reconhece a falha de VERSÃO pelo texto do erro")
     checar("não é problema do seu token" in corpo,

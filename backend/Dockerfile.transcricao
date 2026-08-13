@@ -37,13 +37,48 @@ COPY pyproject.toml ./
 # antes de tocar no áudio. O sintoma engana: a tela dizia "confira o token e a
 # licença", e o token estava correto o tempo todo.
 #
+# `torchvision` entra CRAVADO junto (v3.00.5, `ModuleNotFoundError` de campo): o
+# `pyannote.audio` o importa mas NÃO o declara como dependência, então o pip não
+# o instalava e a diarização morria no import — com o token já testado e
+# aprovado, o que mandava conferir a credencial pela segunda vez. A versão tem
+# de casar com o torch (0.23.0 ↔ 2.8.0); desencontro aqui dá erro de símbolo em
+# C++, pior de ler que o módulo faltando.
+#
 # `torchaudio` 2.8 é a ÚLTIMA que ainda tem `AudioMetaData`. Ao subir qualquer
 # uma destas, rode a diarização de ponta a ponta — o build passa igual.
+#
+# ⚠️ Tudo numa RESOLUÇÃO SÓ, e não em `pip install` encadeados: instalado
+# depois, o `pyannote` REABRE as faixas que acabamos de fechar e o pip troca o
+# torch por baixo — foi o que aconteceu de verdade (o log do build mostrou
+# `torch-2.13.0` e `huggingface-hub-1.27.0` entrando por cima dos pinos). Numa
+# chamada só, o resolvedor precisa satisfazer todos ao mesmo tempo, e conflito
+# vira ERRO DE BUILD em vez de imagem quebrada em produção.
+#
+# O `python -c` no fim é o guarda-corpo: importa o que a diarização usa e
+# imprime as versões. Módulo faltando (o `torchvision` não declarado) reprova
+# AQUI, no CI, em vez de virar `ModuleNotFoundError` na ficha da entrevista.
 RUN pip install --no-cache-dir . \
-    && pip install --no-cache-dir "faster-whisper>=1.0,<2" \
     && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
-       "torch==2.8.0" "torchaudio==2.8.0" \
-    && pip install --no-cache-dir "pyannote.audio==3.3.2" "huggingface_hub<1.0"
+       "faster-whisper>=1.0,<2" \
+       "torch==2.8.0" "torchaudio==2.8.0" "torchvision==0.23.0" \
+       "pyannote.audio==3.3.2" "huggingface_hub<1.0" \
+    && python -c "import torch, torchaudio, torchvision, huggingface_hub, faster_whisper; \
+       from pyannote.audio import Pipeline; \
+       print('diarizacao ok:', torch.__version__, torchaudio.__version__, \
+             torchvision.__version__, huggingface_hub.__version__)"
+
+# Pré-baixa o modelo PADRÃO na imagem (v3.00.5). Sem isto, a primeira
+# transcrição depois de cada deploy baixa ~1,5 GB antes de começar — e quem
+# espera é o RH, com a entrevista já encerrada, sem nada na tela dizendo que o
+# atraso é download. O volume `whisper-cache` cobre os RESTARTS; ele não cobre
+# a primeira execução de uma imagem nova.
+#
+# ⚠️ O nome vem do `MODELO_PADRAO` do serviço, copiado ANTES do resto da app de
+# propósito: assim trocar o padrão invalida esta camada do cache do Docker e o
+# modelo certo entra na imagem. Duas listas divergiriam em silêncio, e o
+# sintoma seria justamente o download que este passo existe para evitar.
+COPY app/services/gravacao_entrevista.py /tmp/_grav.py
+RUN MODELO=$(python -c "import re,pathlib;       print(re.search(r'^MODELO_PADRAO = \"([^\"]+)\"',       pathlib.Path('/tmp/_grav.py').read_text(encoding='utf-8'), re.M).group(1))")     && echo "Pré-baixando o modelo de transcrição: $MODELO"     && python -c "import sys; from faster_whisper import WhisperModel;        WhisperModel(sys.argv[1], device='cpu', compute_type='int8')" "$MODELO"     && rm /tmp/_grav.py
 
 COPY app ./app
 COPY alembic.ini ./

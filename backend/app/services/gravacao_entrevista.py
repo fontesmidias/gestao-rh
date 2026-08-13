@@ -26,7 +26,36 @@ EXTENSOES_AUDIO = frozenset({"webm", "ogg", "oga", "opus", "mp3", "m4a", "wav", 
 # Modelo padrão do faster-whisper. `small` dá conta de português com áudio de
 # sala e roda em CPU; `medium` é melhor e ~3x mais lento. Configurável para não
 # exigir deploy quando o Bruno quiser trocar.
-MODELO_PADRAO = "small"
+# ⚠️ Só o CATÁLOGO entra (v3.00.5): o nome do modelo vira download do Hugging
+# Face dentro do worker. Nome inválido não dá erro na tela — a transcrição
+# simplesmente falha depois, em segundo plano, longe de quem digitou.
+#
+# O custo de subir é TEMPO, e ele multiplica: cada degrau é ~2× o anterior por
+# minuto de áudio, e a diarização (~1,7×) roda por cima. Os números abaixo são
+# do `int8` em CPU, que é o que o VPS tem.
+MODELOS = {
+    "small":  {"rotulo": "Rápido (small)",
+               "detalhe": "~0,6× a duração do áudio. Erra nome próprio e termo "
+                          "técnico (\"Dexion\" vira \"Daxon\").",
+               "tamanho_mb": 500},
+    "medium": {"rotulo": "Equilibrado (medium)",
+               "detalhe": "~1,5× a duração do áudio. Bem melhor em nome próprio "
+                          "e sigla. É o recomendado para entrevista.",
+               "tamanho_mb": 1500},
+    "large-v3": {"rotulo": "Melhor possível (large-v3)",
+                 "detalhe": "~3× a duração do áudio e ~3 GB de memória. Só vale "
+                            "se o medium ainda errar demais.",
+                 "tamanho_mb": 3000},
+}
+
+# `medium` desde a v3.00.5 (decisão do Bruno, 2026-08-13): o `small` errava
+# nome próprio e sigla numa entrevista real, e o texto vira justificativa de
+# avaliação — nome errado ali é pior que espera maior.
+#
+# ⚠️ Trocar este valor NÃO muda o que já está gravado, e a imagem do container
+# pré-baixa SÓ o padrão: escolher outro no painel faz o worker baixá-lo na
+# primeira transcrição (o volume `whisper-cache` guarda daí em diante).
+MODELO_PADRAO = "medium"
 
 # --- Configuração no painel (v2.98) ---------------------------------------
 #
@@ -42,7 +71,7 @@ def config(db: Session) -> dict:
     quebrar: config ruim não pode impedir uma entrevista de ser gravada."""
     from app.services.config_dinamica import ler_config
     c = ler_config(db, ("transcricao_bloco_min", "transcricao_retencao_dias",
-                        "transcricao_diarizar"))
+                        "transcricao_diarizar", "transcricao_modelo"))
 
     def _int(chave: str, padrao: int, minimo: int, maximo: int) -> int:
         try:
@@ -62,6 +91,10 @@ def config(db: Session) -> dict:
         # Ligada por padrão: só o "0" explícito desliga. Chave ausente é
         # instalação que nunca abriu a tela, não escolha de deixar sem.
         "diarizar": (c.get("transcricao_diarizar") or "1").strip() != "0",
+        # Valor fora do catálogo cai no padrão em vez de quebrar: config ruim
+        # não pode impedir uma entrevista de ser transcrita.
+        "modelo": (m if (m := (c.get("transcricao_modelo") or "").strip())
+                   in MODELOS else MODELO_PADRAO),
     }
 
 
