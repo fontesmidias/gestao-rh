@@ -83,10 +83,22 @@ def main() -> int:
     checar(bloco.count("pip install") == 2,
            "torch e pyannote na MESMA resolução do pip (senão um sobrescreve o "
            "outro)")
+    # `matplotlib` idem — e ele escapou do guarda-corpo da v3.00.5, ver abaixo.
+    checar("matplotlib" in dockerfile,
+           "`matplotlib` instalado (o pyannote.audio.pipelines o usa sem declarar)")
     # Guarda-corpo: importar no build faz módulo faltando reprovar no CI, em
     # vez de virar erro na ficha da entrevista.
     checar("from pyannote.audio import Pipeline" in dockerfile,
            "o build IMPORTA o que a diarização usa, e falha se faltar")
+    # ⚠️ …e IMPORTA NA MESMA PROFUNDIDADE do uso real (v3.00.6): a v3.00.5
+    # importava só a fachada `pyannote.audio.Pipeline`, e a exigência de
+    # `matplotlib` mora um nível abaixo, em `pyannote.audio.pipelines`, que só
+    # carrega quando o pipeline é montado DE VERDADE. O build passou verde e o
+    # `ModuleNotFoundError` apareceu na ficha da entrevista — guarda-corpo raso
+    # prova menos do que parece.
+    checar("from pyannote.audio.pipelines import" in dockerfile,
+           "o build importa `pyannote.audio.pipelines` (a camada que o uso "
+           "real alcança), não só a fachada")
     for aberto in ('"torchaudio>=2.2,<3"', '"torch>=2.2,<3"',
                    '"pyannote.audio>=3.1,<4"'):
         checar(aberto not in dockerfile,

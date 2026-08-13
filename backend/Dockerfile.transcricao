@@ -37,12 +37,19 @@ COPY pyproject.toml ./
 # antes de tocar no áudio. O sintoma engana: a tela dizia "confira o token e a
 # licença", e o token estava correto o tempo todo.
 #
-# `torchvision` entra CRAVADO junto (v3.00.5, `ModuleNotFoundError` de campo): o
-# `pyannote.audio` o importa mas NÃO o declara como dependência, então o pip não
-# o instalava e a diarização morria no import — com o token já testado e
-# aprovado, o que mandava conferir a credencial pela segunda vez. A versão tem
-# de casar com o torch (0.23.0 ↔ 2.8.0); desencontro aqui dá erro de símbolo em
-# C++, pior de ler que o módulo faltando.
+# `torchvision` e `matplotlib` entram CRAVADOS junto (v3.00.5/v3.00.6, DOIS
+# `ModuleNotFoundError` de campo): o `pyannote.audio` importa os dois e NÃO os
+# declara como dependência, então o pip não os instalava e a diarização morria
+# no import — com o token já testado e aprovado, o que mandava conferir a
+# credencial pela segunda vez. A versão do torchvision tem de casar com a do
+# torch (0.23.0 ↔ 2.8.0); desencontro aqui dá erro de símbolo em C++, pior de
+# ler que o módulo faltando.
+#
+# ⚠️ O `matplotlib` escapou do guarda-corpo da v3.00.5 porque ele importava só
+# `pyannote.audio.Pipeline`, e a exigência mora um nível abaixo, em
+# `pyannote.audio.pipelines` — carregado só quando o pipeline é montado DE
+# VERDADE. Guarda-corpo de import tem de alcançar a MESMA profundidade que o
+# uso real: importar a fachada prova menos do que parece.
 #
 # `torchaudio` 2.8 é a ÚLTIMA que ainda tem `AudioMetaData`. Ao subir qualquer
 # uma destas, rode a diarização de ponta a ponta — o build passa igual.
@@ -61,9 +68,12 @@ RUN pip install --no-cache-dir . \
     && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
        "faster-whisper>=1.0,<2" \
        "torch==2.8.0" "torchaudio==2.8.0" "torchvision==0.23.0" \
-       "pyannote.audio==3.3.2" "huggingface_hub<1.0" \
-    && python -c "import torch, torchaudio, torchvision, huggingface_hub, faster_whisper; \
+       "pyannote.audio==3.3.2" "huggingface_hub<1.0" "matplotlib>=3.8,<4" \
+    && python -c "import torch, torchaudio, torchvision, huggingface_hub, faster_whisper, matplotlib; \
        from pyannote.audio import Pipeline; \
+       from pyannote.audio.pipelines import SpeakerDiarization; \
+       from pyannote.audio.pipelines.clustering import AgglomerativeClustering; \
+       from pyannote.audio.pipelines.speaker_verification import PretrainedSpeakerEmbedding; \
        print('diarizacao ok:', torch.__version__, torchaudio.__version__, \
              torchvision.__version__, huggingface_hub.__version__)"
 

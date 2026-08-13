@@ -11,6 +11,45 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.6] — 2026-08-13 — O guarda-corpo que não alcançava o fundo
+
+Segundo `ModuleNotFoundError` no mesmo lugar, agora com `matplotlib`. A
+mensagem da v3.00.5 fez o trabalho dela — nomeou o módulo e disse que não era o
+token —, mas a defesa que deveria ter pego isso no CI **falhou por profundidade**.
+
+### Corrigido
+
+- **Faltava `matplotlib`.** Mesma causa do `torchvision`: o `pyannote.audio` o
+  importa e não o declara como dependência.
+- **O guarda-corpo do build era raso.** Ele importava a fachada
+  `pyannote.audio.Pipeline`, e a exigência de `matplotlib` mora um nível abaixo,
+  em `pyannote.audio.pipelines` — que só carrega quando o pipeline é montado de
+  verdade. O build passou verde, a imagem subiu, e o erro apareceu na ficha de
+  uma entrevista real. Agora o build importa **na mesma profundidade que o uso**
+  (`SpeakerDiarization`, `AgglomerativeClustering` e
+  `PretrainedSpeakerEmbedding`) — inclusive o caminho que só roda com token
+  VÁLIDO, onde um módulo faltando apareceria depois de tudo parecer certo.
+
+  A lição vale além daqui: **verificação de import só prova o que ela carrega**.
+  Importar o pacote de cima passa a impressão de cobertura sem tê-la — é a
+  família do "teste que não executa a linha mutada" (v2.67), aplicada a
+  dependência.
+
+### Medido
+
+- Carregar o `medium` do disco: **138 s na primeira vez, 63 s com o cache do
+  sistema quente**. Sem o cache em memória da v3.00.5, uma entrevista de 4
+  blocos jogaria fora ~4 minutos só recarregando o mesmo modelo.
+- A imagem ficou em **2,17 GB**, com o `medium` (1,5 GB) embutido — confirmado
+  rodando `WhisperModel("medium")` dentro dela **sem baixar nada**.
+- O aviso que o próprio `pyannote` imprime ao importar confirma o pino da
+  v3.00.4: *"list_audio_backends has been deprecated… It will be removed from
+  the 2.9 release"*.
+
+### Interno
+
+- `test_diarizacao_diagnostico.py` cresceu para 10 mutações.
+
 ## [3.00.5] — 2026-08-13 — A transcrição fica melhor, e a biblioteca que faltava entra
 
 Duas coisas na mesma leva: a qualidade que o Bruno pediu (*"vamos de medium"*) e
