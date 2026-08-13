@@ -11,6 +11,37 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.2] — 2026-08-12 — O token vai para Integrações, onde se procura por ele
+
+Correção de endereço, apontada pelo Bruno: *"não seria melhor essa coisa de
+token e teste estar em integrações?"*. Estava certo.
+
+**Credencial de serviço externo mora em Integrações** — é onde vivem M365, Gmail,
+Teams, SMTP e as chaves de IA. Eu havia posto o token do Hugging Face junto dos
+roteiros de entrevista, misturando duas naturezas: quem procura *"onde ponho a
+credencial X"* abre Integrações, e era lá que ela precisava estar.
+
+A separação que ficou:
+
+- **Integrações** → o TOKEN e o botão de testar (credencial).
+- **Roteiros de entrevista** → ligar/desligar a separação de vozes, tamanho do
+  trecho e retenção do áudio (política do processo).
+
+⚠️ **Um assunto, um controle** (v2.75): o campo saiu da tela de roteiros em vez
+de existir nos dois lugares — dois campos para a mesma credencial divergiriam, e
+o RH não saberia qual vale. No lugar dele ficou um aviso que aparece **só quando
+a separação está ligada e o token não foi configurado**, dizendo onde resolver.
+
+Ao remover o controle, saíram junto o estado e a função que o alimentavam
+(v2.78): `token`, `teste`, `testando` e `testar` teriam ficado declarados sem
+uso, e o próximo a ler não saberia se é esquecimento ou intenção.
+
+**Nota de operação:** a v3.00 não estava em produção quando o Bruno procurou o
+campo — a VPS roda a v2.98.5. Nada estava quebrado; a tela ainda não existia lá.
+O deploy da stack traz junto o container `transcricao` **bem maior** (~3 GB, com
+PyTorch e pyannote), então o Portainer precisa RECRIAR o serviço, não só
+reiniciá-lo.
+
 ## [3.00.1] — 2026-08-12 — A diarização que falha DIZ o que houve
 
 Três perguntas do Bruno sobre a v3.00, e uma delas apontou um defeito real.

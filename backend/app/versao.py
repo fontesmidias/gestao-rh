@@ -20,7 +20,7 @@ importa.
 """
 
 # Mantenha em sincronia com o topo do CHANGELOG.md — o `test_versao.py` cobra.
-VERSAO = "3.00.1"
+VERSAO = "3.00.2"
 
 # Rótulo curto do que a versão entregou. Aparece ao lado do número na tela de
 # Configurações; é o que faz "2.54.0" virar uma informação em vez de um número.

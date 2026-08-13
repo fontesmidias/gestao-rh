@@ -11,6 +11,7 @@ import LogsRH from './LogsRH.jsx'
 import TelemetriaRH from './TelemetriaRH.jsx'
 import RoteirosEntrevista from './RoteirosEntrevista.jsx'
 import ConfigGravacao from './ConfigGravacao.jsx'
+import TokenDiarizacao from './TokenDiarizacao.jsx'
 import Exigencias from './Exigencias.jsx'
 // `PapeisAcesso` (v2.86) é o papel de USUÁRIO — não confundir com o `Papeis`
 // logo abaixo neste arquivo, que é o papel com que alguém ASSINA um
@@ -421,6 +422,7 @@ export default function Config({ aoVoltar }) {
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
         <div className="rh-grid-2"><RemetenteRecrutamento /></div>
         <div className="rh-grid-2"><OcrIA /><GroqIA /></div>
+        <div className="rh-grid-2"><TokenDiarizacao /></div>
         <div className="rh-grid-2"><AvisosInternos /></div>
         <Teams />
       </>}
