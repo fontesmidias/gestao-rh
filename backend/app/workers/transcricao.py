@@ -12,6 +12,7 @@ O import fica dentro de `_transcrever`.
 
 import io
 import logging
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -61,12 +62,13 @@ def _transcrever(audio: bytes, modelo: str, idioma: str,
     segmentos = list(segmentos)
     idioma_detectado = getattr(info, "language", idioma)
 
-    trechos = _diarizar(audio, hf_token) if diarizar else None
+    trechos, aviso = _diarizar(audio, hf_token) if diarizar else (None, None)
     if trechos:
-        return _com_falantes(segmentos, trechos), idioma_detectado
+        return _com_falantes(segmentos, trechos), idioma_detectado, None
     # Sem diarização (desligada, sem token, ou falhou): texto corrido em
-    # parágrafos — o comportamento da v2.99. Degrada, nunca perde.
-    return _em_paragrafos(segmentos), idioma_detectado
+    # parágrafos — o comportamento da v2.99. Degrada, nunca perde — mas DIZ o
+    # motivo quando a diarização foi pedida e não veio.
+    return _em_paragrafos(segmentos), idioma_detectado, aviso
 
 
 # Uma pausa acima disto separa PARÁGRAFOS. 2,5s é a fronteira prática entre
@@ -158,14 +160,18 @@ def transcrever_bloco(bloco_id: str) -> dict:
         db.commit()
 
         cfg = _config(db)
-        texto, _idioma = _transcrever(storage.ler(b.audio_key),
-                                      cfg["modelo"], cfg["idioma"],
-                                      diarizar=cfg["diarizar"],
-                                      hf_token=cfg["hf_token"])
+        texto, _idioma, aviso = _transcrever(storage.ler(b.audio_key),
+                                             cfg["modelo"], cfg["idioma"],
+                                             diarizar=cfg["diarizar"],
+                                             hf_token=cfg["hf_token"])
         b.processamento_s = int(time.monotonic() - inicio)
         b.transcrito_em = datetime.now(timezone.utc)
         if texto:
-            b.texto, b.status, b.erro = texto, StatusBloco.pronta, None
+            # `erro` carrega o AVISO da diarização quando ela foi pedida e não
+            # veio: o bloco está pronto (tem texto), mas a tela precisa dizer
+            # por que não há rótulo de falante — senão o RH não sabe se está
+            # desligada, sem token ou quebrada.
+            b.texto, b.status, b.erro = texto, StatusBloco.pronta, aviso
         else:
             # Bloco mudo é NORMAL (a pessoa lendo um documento, uma pausa longa)
             # e não contamina os outros — ver `consolidar`.
@@ -236,9 +242,9 @@ def transcrever(gravacao_id: str) -> dict:
 
         cfg = _config(db)
         audio = storage.ler(g.audio_key)
-        texto, idioma = _transcrever(audio, cfg["modelo"], cfg["idioma"],
-                                     diarizar=cfg["diarizar"],
-                                     hf_token=cfg["hf_token"])
+        texto, idioma, aviso = _transcrever(audio, cfg["modelo"], cfg["idioma"],
+                                            diarizar=cfg["diarizar"],
+                                            hf_token=cfg["hf_token"])
 
         g.processamento_s = int(time.monotonic() - inicio)
         g.modelo, g.idioma = cfg["modelo"], idioma
@@ -255,7 +261,8 @@ def transcrever(gravacao_id: str) -> dict:
 
         g.texto = texto
         g.status = StatusGravacao.pronta
-        g.erro = None
+        # Ver o comentário do bloco: aviso da diarização vai para a TELA.
+        g.erro = aviso
         db.commit()
         log.info("Transcrição %s pronta: %d caracteres em %ds.",
                  gravacao_id, len(texto), g.processamento_s)
@@ -321,7 +328,9 @@ def _diarizar(audio: bytes, token: str):
     """
     if not token:
         log.info("Diarização pulada: sem token do HuggingFace configurado.")
-        return None
+        return None, ("Sem o token do Hugging Face, a transcrição sai sem separar "
+                      "quem falou. Configure em Configurações → Roteiros de "
+                      "entrevista.")
     try:
         import tempfile
 
@@ -349,12 +358,20 @@ def _diarizar(audio: bytes, token: str):
                    for t, _, rotulo in anotacao.itertracks(yield_label=True)]
         log.info("Diarização: %d trecho(s), %d voz(es).",
                  len(trechos), len({r for _, _, r in trechos}))
-        return trechos
+        return trechos, None
     except Exception:                                   # noqa: BLE001
         # Sem token válido, sem licença aceita, modelo indisponível, memória…
         # Todos degradam igual: texto sem rótulo, que é melhor que nada.
         log.exception("Diarização falhou — a transcrição segue sem rótulo.")
-        return None
+        # ⚠️ O motivo VOLTA para quem chamou, e daí para a TELA. Só registrar no
+        # log deixaria o RH vendo texto sem rótulo sem saber se a diarização
+        # está desligada, sem token ou quebrada — e silêncio se confunde com
+        # "estava tudo certo" (v2.66/v2.69). O tipo do erro basta para orientar;
+        # o texto cru pode carregar caminho de arquivo.
+        return None, (f"Não foi possível separar quem falou "
+                      f"({type(sys.exc_info()[1]).__name__}). A transcrição está "
+                      "completa, só sem os rótulos. Confira o token do Hugging "
+                      "Face e se a licença do modelo foi aceita.")
 
 
 def _falante_de(inicio: float | None, fim: float | None, trechos) -> str | None:

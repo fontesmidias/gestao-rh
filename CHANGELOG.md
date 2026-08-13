@@ -11,6 +11,49 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.1] — 2026-08-12 — A diarização que falha DIZ o que houve
+
+Três perguntas do Bruno sobre a v3.00, e uma delas apontou um defeito real.
+
+**"Esse token é pago? Tem limite?"** — não, e não. Conta e token gratuitos, e o
+token serve **só para baixar o modelo uma vez**: depois disso ele roda local, em
+PyTorch puro, no próprio container. Não há chamada de API por entrevista, não há
+cota, não há custo por minuto — e o áudio continua sem sair de casa, que era a
+decisão da v2.97. A tela agora diz isso, em vez de deixar a dúvida.
+
+**"Se falhar? Não teria um fallback? Não seria erro silencioso?"** — aqui ele
+estava certo, e o defeito era meu. A v3.00 tratava a falha **só no log**: a
+transcrição saía sem rótulo e **nada aparecia na tela**. O RH abriria a ficha,
+veria texto corrido, e não saberia se a diarização está desligada, sem token ou
+quebrada. É o silêncio que a v2.66 (worker que não roda) e a v2.69 (documento que
+não nasce) já cobraram caro.
+
+Agora `_diarizar` devolve `(trechos, motivo)`: o motivo VOLTA para o registro e
+daí para a tela, dizendo **o que resolve** — falta o token / a licença não foi
+aceita / o modelo não respondeu. O fallback em si já existia e continua: sem
+diarização o texto sai em parágrafos (v2.99). **Degrada, nunca perde** — mas
+agora avisa.
+
+⚠️ **A consolidação APAGAVA o aviso**: `g.erro = ... if falhos else None` zerava
+o motivo que os blocos traziam. Os dois avisos agora convivem — qual bloco falhou
+E por que não houve separação de vozes.
+
+**"Não dá para customizar pelo front?"** — dá, e faltava o principal: um botão
+**"Testar token"**, como o das chaves de IA (v2.00). Sem ele, o RH só descobriria
+que o token está errado **depois de conduzir uma entrevista de 40 minutos**.
+A rota consulta a API do Hub sem baixar os ~500 MB do modelo, e distingue os DOIS
+motivos de recusa, que pedem ações diferentes: **401 = token inválido** (gere
+outro) × **403 = licença não aceita** (abra a página do modelo e aceite). Rede
+fora não vira "token recusado" — mandaria trocar uma credencial que está certa
+(a lição da v2.00).
+
+⚠️ **Duas mutações escaparam por eu substituir DEMAIS no teste.** A que faz o
+aviso morrer no log passava verde porque o caso trocava a `_diarizar` inteira —
+nunca exercitando o `return` dela. Só foi pega depois de o teste chamar a função
+REAL, nos dois caminhos de falha que existem sem rede (sem token; pyannote
+ausente). É a lição da v2.68 pela segunda vez nesta leva: **substitua o limite
+externo, não as suas próprias funções.**
+
 ## [3.00.0] — 2026-08-12 — Interlocutor 1, Interlocutor 2
 
 Pergunta do Bruno: *"será que conseguimos identificar os interlocutores, nem que

@@ -167,7 +167,9 @@ def main() -> int:
     original_modelo = None
     try:
         # Substitui o LIMITE EXTERNO: o modelo do Whisper e o do pyannote.
-        _mod._diarizar = lambda audio, token: None      # falhou / sem token
+        # A diarização devolve `(trechos, aviso)` desde a v3.00.1: o motivo
+        # da falha VOLTA para a tela, em vez de morrer no log.
+        _mod._diarizar = lambda audio, token: (None, "modelo indisponivel")
         classe = type("W", (), {
             "__init__": lambda self, *a, **k: None,
             "transcribe": lambda self, *a, **k: (iter(conversa), _Info()),
@@ -179,8 +181,8 @@ def main() -> int:
         original_modelo = _sys.modules.get("faster_whisper")
         _sys.modules["faster_whisper"] = falso
 
-        texto, _idi = _mod._transcrever(b"audio", "small", "pt",
-                                        diarizar=True, hf_token="tok")
+        texto, _idi, aviso = _mod._transcrever(b"audio", "small", "pt",
+                                               diarizar=True, hf_token="tok")
         checar("Boa tarde" in texto,
                "com diarizacao LIGADA e o modelo fora, o texto continua saindo")
         checar("Interlocutor" not in texto,
@@ -193,6 +195,26 @@ def main() -> int:
             _sys.modules.pop("faster_whisper", None)
         else:
             _sys.modules["faster_whisper"] = original_modelo
+
+    print("\n=== 9b. A propria _diarizar devolve o MOTIVO, nao so None ===")
+    # ⚠️ O caso 9 substitui `_diarizar` inteira, então nunca exercita o `return`
+    # dela — a mutação que faz o aviso morrer no log passava VERDE. Aqui a
+    # função REAL é chamada, nos dois caminhos de falha que existem sem rede:
+    # sem token e com o pyannote ausente.
+    _trechos, aviso_sem_token = _mod._diarizar(b"audio", "")
+    checar(_trechos is None, "sem token, nao ha trechos")
+    checar(bool(aviso_sem_token) and "token" in aviso_sem_token.lower(),
+           f"e o motivo DIZ que falta o token (veio {str(aviso_sem_token)[:45]!r})")
+    checar("Configurações" in (aviso_sem_token or ""),
+           "e diz ONDE resolver — recusa sem saida deixa o problema na mao de "
+           "quem opera (v2.87/v2.93)")
+
+    # Com token, mas sem o pyannote instalado (é o caso da máquina de quem
+    # desenvolve e da imagem da API): tem que devolver motivo, não estourar.
+    _trechos2, aviso_falha = _mod._diarizar(b"audio", "hf_token_qualquer")
+    checar(_trechos2 is None, "pyannote ausente nao devolve trechos")
+    checar(bool(aviso_falha),
+           "e a falha REAL tambem devolve motivo — nunca None silencioso")
 
     print("\n=== 10. O falante vem da MAIOR sobreposicao, nao do instante inicial ===")
     # Whisper e pyannote cortam em pontos diferentes: um segmento costuma

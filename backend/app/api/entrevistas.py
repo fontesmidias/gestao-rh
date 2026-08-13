@@ -780,6 +780,67 @@ def salvar_config_gravacao(payload: ConfigGravacaoIn, db: Session = Depends(get_
     return config(db)
 
 
+class TokenTesteIn(BaseModel):
+    # Vazio = testar o que já está guardado. É como se confere sem redigitar.
+    hf_token: str | None = None
+
+
+@router.post("/rh/entrevistas/gravacao/testar-token")
+def testar_token_diarizacao(payload: TokenTesteIn, db: Session = Depends(get_db),
+                            _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
+    """Confere o token do Hugging Face SEM esperar uma entrevista real.
+
+    Existe porque a alternativa é péssima: sem isto, o RH só descobriria que o
+    token está errado depois de conduzir uma entrevista de 40 minutos e ver a
+    transcrição sair sem rótulo. Mesma razão do "testar chave" da IA de texto
+    (v2.00) — credencial se confere quando se configura, não quando se usa.
+
+    ⚠️ **NÃO baixa o modelo** (são ~500 MB): consulta a API do Hub para saber se
+    o token é válido E se a licença do modelo foi aceita — que são os DOIS
+    motivos de falha, e eles pedem ações diferentes.
+    """
+    import httpx
+
+    from app.services.config_dinamica import ler_config
+
+    token = (payload.hf_token or "").strip()
+    if not token:
+        token = (ler_config(db, ("transcricao_hf_token",))
+                 .get("transcricao_hf_token") or "").strip()
+    if not token:
+        return {"ok": False, "erro": "sem_token",
+                "mensagem": "Nenhum token configurado."}
+
+    modelo = "pyannote/speaker-diarization-3.1"
+    try:
+        r = httpx.get(f"https://huggingface.co/api/models/{modelo}",
+                      headers={"Authorization": f"Bearer {token}"}, timeout=15)
+    except Exception as exc:                    # noqa: BLE001
+        # Rede fora ≠ token inválido: dizer "token recusado" aqui mandaria o RH
+        # trocar uma credencial que está certa (a lição da v2.00).
+        return {"ok": False, "erro": "sem_conexao",
+                "mensagem": f"Não foi possível falar com o Hugging Face "
+                            f"({type(exc).__name__}). Tente de novo."}
+
+    if r.status_code == 401:
+        return {"ok": False, "erro": "token_invalido",
+                "mensagem": "O token não foi aceito. Gere outro em "
+                            "huggingface.co/settings/tokens."}
+    if r.status_code == 403:
+        # Token válido, licença não aceita — a ação que resolve é OUTRA, e a
+        # mensagem precisa dizer qual.
+        return {"ok": False, "erro": "licenca_nao_aceita",
+                "mensagem": "O token é válido, mas a licença do modelo ainda não "
+                            f"foi aceita. Abra huggingface.co/{modelo}, "
+                            "entre com esta conta e aceite as condições."}
+    if r.status_code >= 400:
+        return {"ok": False, "erro": "erro_hub",
+                "mensagem": f"O Hugging Face respondeu {r.status_code}."}
+    return {"ok": True,
+            "mensagem": "Token válido e licença aceita. A separação de "
+                        "interlocutores vai funcionar."}
+
+
 @router.get("/rh/entrevistas/{entrevista_id}")
 def ver(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
     _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> dict:
