@@ -27,11 +27,23 @@ COPY pyproject.toml ./
 # `--extra-index-url` a imagem ganharia ~2 GB de driver de GPU que o VPS não tem.
 # `pyannote.audio` é a diarização — "quem falou" (v3.00); só ESTE container
 # carrega esse peso, a API e o worker comum não.
+#
+# ⚠️ VERSÕES CRAVADAS, e não é preciosismo (v3.00.4, defeito de campo): o
+# `pyannote.audio` 3.x declara as dependências SEM TETO (`torchaudio>=2.2.0`,
+# `huggingface_hub>=0.13.0`), e as duas tiveram remoção destrutiva em out/2025 —
+# `torchaudio` 2.9 removeu `AudioMetaData`/`list_audio_backends`, e o
+# `huggingface_hub` 1.0 removeu `use_auth_token`. Com faixa aberta, o pip pega a
+# mais nova e a diarização quebra com `AttributeError` **no import do módulo**,
+# antes de tocar no áudio. O sintoma engana: a tela dizia "confira o token e a
+# licença", e o token estava correto o tempo todo.
+#
+# `torchaudio` 2.8 é a ÚLTIMA que ainda tem `AudioMetaData`. Ao subir qualquer
+# uma destas, rode a diarização de ponta a ponta — o build passa igual.
 RUN pip install --no-cache-dir . \
     && pip install --no-cache-dir "faster-whisper>=1.0,<2" \
     && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
-       "torch>=2.2,<3" "torchaudio>=2.2,<3" \
-    && pip install --no-cache-dir "pyannote.audio>=3.1,<4"
+       "torch==2.8.0" "torchaudio==2.8.0" \
+    && pip install --no-cache-dir "pyannote.audio==3.3.2" "huggingface_hub<1.0"
 
 COPY app ./app
 COPY alembic.ini ./

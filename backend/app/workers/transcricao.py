@@ -337,8 +337,31 @@ def _diarizar(audio: bytes, token: str):
         import torch                                   # noqa: F401  (pyannote exige)
         from pyannote.audio import Pipeline
 
-        pipe = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1", use_auth_token=token)
+        # O pyannote explica a recusa com `print()` (stdout), não por exceção —
+        # e a linha some do log, que é onde alguém vai procurar. Capturar o
+        # stdout é o que transforma "deu AttributeError" em "a licença de X não
+        # foi aceita".
+        import contextlib
+        import io as _io
+        saida = _io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            pipe = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1", use_auth_token=token)
+        if saida.getvalue().strip():
+            log.warning("Diarização, saída do pyannote: %s",
+                        saida.getvalue().strip())
+        # ⚠️ `from_pretrained` devolve `None` — sem levantar — quando o acesso ao
+        # modelo é negado (licença não aceita, token sem permissão): o pyannote
+        # faz `print()` e `return None`. Sem esta checagem, o erro só aparece na
+        # linha seguinte como `AttributeError: 'NoneType'`, a UMA linha da causa
+        # real e indistinguível de uma quebra de biblioteca — que foi
+        # exatamente o que mandou o Bruno conferir um token que estava certo.
+        if pipe is None:
+            return None, ("O Hugging Face negou o acesso ao modelo. Aceite as "
+                          "condições de uso em pyannote/speaker-diarization-3.1 "
+                          "E em pyannote/segmentation-3.0 — são duas licenças, "
+                          "com a MESMA conta do token. A transcrição está "
+                          "completa, só sem os rótulos.")
         # O pyannote lê de ARQUIVO, não de bytes. `delete=False` + remoção
         # explícita: no Linux o handle aberto de um NamedTemporaryFile não é
         # relido por outra biblioteca de forma confiável.
@@ -368,10 +391,27 @@ def _diarizar(audio: bytes, token: str):
         # está desligada, sem token ou quebrada — e silêncio se confunde com
         # "estava tudo certo" (v2.66/v2.69). O tipo do erro basta para orientar;
         # o texto cru pode carregar caminho de arquivo.
+        exc = sys.exc_info()[1]
+        # ⚠️ A mensagem tem de DISTINGUIR a causa (v3.00.4): a primeira versão
+        # mandava "confira o token e a licença" para QUALQUER falha, e o defeito
+        # real era incompatibilidade de versão do `torchaudio`/`huggingface_hub`
+        # — o token estava certo. Mandar conferir a coisa certa é o mínimo; a
+        # v2.93 custou 70 minutos por uma recusa que apontava o lugar errado.
+        texto_erro = f"{type(exc).__name__}: {exc}"
+        de_versao = any(p in texto_erro for p in (
+            "AudioMetaData", "list_audio_backends", "set_audio_backend",
+            "use_auth_token", "torchaudio", "huggingface_hub"))
+        if de_versao:
+            return None, ("A separação de vozes está fora do ar por "
+                          "incompatibilidade entre as bibliotecas do container "
+                          "de transcrição — não é problema do seu token. A "
+                          "transcrição está completa, só sem os rótulos. "
+                          "Avise quem cuida do sistema (o log de `transcricao` "
+                          "tem o detalhe).")
         return None, (f"Não foi possível separar quem falou "
-                      f"({type(sys.exc_info()[1]).__name__}). A transcrição está "
+                      f"({type(exc).__name__}). A transcrição está "
                       "completa, só sem os rótulos. Confira o token do Hugging "
-                      "Face e se a licença do modelo foi aceita.")
+                      "Face e se as licenças dos modelos foram aceitas.")
 
 
 def _falante_de(inicio: float | None, fim: float | None, trechos) -> str | None:
