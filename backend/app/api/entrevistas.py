@@ -812,34 +812,43 @@ def testar_token_diarizacao(payload: TokenTesteIn, db: Session = Depends(get_db)
         return {"ok": False, "erro": "sem_token",
                 "mensagem": "Nenhum token configurado."}
 
-    modelo = "pyannote/speaker-diarization-3.1"
-    try:
-        r = httpx.get(f"https://huggingface.co/api/models/{modelo}",
-                      headers={"Authorization": f"Bearer {token}"}, timeout=15)
-    except Exception as exc:                    # noqa: BLE001
-        # Rede fora ≠ token inválido: dizer "token recusado" aqui mandaria o RH
-        # trocar uma credencial que está certa (a lição da v2.00).
-        return {"ok": False, "erro": "sem_conexao",
-                "mensagem": f"Não foi possível falar com o Hugging Face "
-                            f"({type(exc).__name__}). Tente de novo."}
+    # ⚠️ São DOIS modelos, com licenças SEPARADAS (v3.00.4): o de diarização usa
+    # o de segmentação por baixo. Conferir só o primeiro devolvia "vai
+    # funcionar" com o segundo faltando — e a falha aparecia depois, numa
+    # entrevista de 40 minutos, como se fosse problema do token.
+    MODELOS = ("pyannote/speaker-diarization-3.1", "pyannote/segmentation-3.0")
+    for modelo in MODELOS:
+        try:
+            r = httpx.get(f"https://huggingface.co/api/models/{modelo}",
+                          headers={"Authorization": f"Bearer {token}"}, timeout=15)
+        except Exception as exc:                    # noqa: BLE001
+            # Rede fora ≠ token inválido: dizer "token recusado" aqui mandaria o
+            # RH trocar uma credencial que está certa (a lição da v2.00).
+            return {"ok": False, "erro": "sem_conexao",
+                    "mensagem": f"Não foi possível falar com o Hugging Face "
+                                f"({type(exc).__name__}). Tente de novo."}
 
-    if r.status_code == 401:
-        return {"ok": False, "erro": "token_invalido",
-                "mensagem": "O token não foi aceito. Gere outro em "
-                            "huggingface.co/settings/tokens."}
-    if r.status_code == 403:
-        # Token válido, licença não aceita — a ação que resolve é OUTRA, e a
-        # mensagem precisa dizer qual.
-        return {"ok": False, "erro": "licenca_nao_aceita",
-                "mensagem": "O token é válido, mas a licença do modelo ainda não "
-                            f"foi aceita. Abra huggingface.co/{modelo}, "
-                            "entre com esta conta e aceite as condições."}
-    if r.status_code >= 400:
-        return {"ok": False, "erro": "erro_hub",
-                "mensagem": f"O Hugging Face respondeu {r.status_code}."}
+        if r.status_code == 401:
+            return {"ok": False, "erro": "token_invalido",
+                    "mensagem": "O token não foi aceito. Gere outro em "
+                                "huggingface.co/settings/tokens."}
+        if r.status_code in (403, 404):
+            # 404 também: o Hub esconde modelo gated de quem não tem acesso, e
+            # tratá-lo como "não existe" mandaria procurar defeito onde não há.
+            # Token válido, licença não aceita — a ação que resolve é OUTRA, e a
+            # mensagem precisa dizer QUAL das duas está faltando.
+            return {"ok": False, "erro": "licenca_nao_aceita",
+                    "mensagem": "O token é válido, mas falta aceitar a licença "
+                                f"de huggingface.co/{modelo}. Abra com esta "
+                                "mesma conta e aceite as condições. São duas "
+                                "licenças; esta é a que ainda falta."}
+        if r.status_code >= 400:
+            return {"ok": False, "erro": "erro_hub",
+                    "mensagem": f"O Hugging Face respondeu {r.status_code} "
+                                f"para {modelo}."}
     return {"ok": True,
-            "mensagem": "Token válido e licença aceita. A separação de "
-                        "interlocutores vai funcionar."}
+            "mensagem": "Token válido e as duas licenças aceitas. A separação "
+                        "de interlocutores vai funcionar."}
 
 
 @router.get("/rh/entrevistas/{entrevista_id}")

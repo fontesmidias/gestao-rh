@@ -11,6 +11,50 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.00.4] — 2026-08-13 — O erro que mandava conferir a coisa certa
+
+Defeito de campo. A ficha da entrevista mostrou *"Não foi possível separar quem
+falou (AttributeError). […] Confira o token do Hugging Face e se a licença do
+modelo foi aceita"* — e **o token estava correto**. A mensagem mandava conferir
+a coisa errada, que é o defeito mais caro do gênero neste projeto (v2.93: a
+analista tomou o erro 8× em 70 minutos e desmarcou três exigências médicas por
+diagnóstico errado).
+
+### Corrigido
+
+- **As versões do container de transcrição estavam com faixa ABERTA.** O
+  `pyannote.audio` 3.x declara as dependências sem teto, e duas tiveram remoção
+  destrutiva em out/2025: `torchaudio` 2.9 removeu `AudioMetaData` e o
+  `huggingface_hub` 1.0 removeu `use_auth_token`. Com a faixa aberta, o pip pega
+  a mais nova e a diarização quebra **no import do módulo**, antes de tocar no
+  áudio — sem ninguém ter mexido em nada. Agora `torch`/`torchaudio` 2.8.0,
+  `pyannote.audio` 3.3.2 e `huggingface_hub<1.0`, cravados.
+- **`Pipeline.from_pretrained` devolve `None` — sem levantar — quando o acesso
+  ao modelo é negado.** O erro só aparecia na linha SEGUINTE, como
+  `AttributeError: 'NoneType'`, a um passo da causa e com cara de biblioteca
+  quebrada. Agora a recusa é detectada onde nasce e diz o que resolve.
+- **São DUAS licenças, e o teste de token conferia UMA.** O
+  `speaker-diarization-3.1` usa o `segmentation-3.0` por baixo; faltando a
+  segunda, o teste respondia "vai funcionar" e a falha aparecia depois, numa
+  entrevista de 40 minutos. O teste agora percorre os dois e diz **qual** falta.
+  Trata `404` como licença faltando: o Hub esconde modelo gated de quem não tem
+  acesso, e ler isso como "não existe" mandaria procurar defeito onde não há.
+- **A mensagem distingue as três causas**, porque as ações são diferentes:
+  incompatibilidade de versão (que ninguém do RH resolve trocando token, e a
+  tela agora diz isso), licença não aceita, token inválido.
+- **O `print()` do pyannote virou log.** Ele explica a recusa por stdout, não
+  por exceção — e a linha sumia justamente do lugar onde alguém vai procurar.
+
+### Interno
+
+- `test_diarizacao_diagnostico.py` (estrutural, no CI), validado por **4
+  mutações**: reabrir a faixa de versões, remover a checagem de `None`, desligar
+  a distinção de causa e conferir uma licença só. ⚠️ A terceira mutação **passou
+  verde na primeira versão do teste** — ele procurava o TEXTO da mensagem, que
+  continuava escrito no arquivo mesmo com o `if` desligado. A asserção passou a
+  ler a árvore e exigir que a variável realmente DECIDA a mensagem. É a família
+  do "teste que não executa a linha mutada" (v2.67).
+
 ## [3.00.3] — 2026-08-13 — As entrevistas antigas também ganham os interlocutores
 
 Pedido do Bruno logo depois que a separação de vozes entrou no ar: *"os

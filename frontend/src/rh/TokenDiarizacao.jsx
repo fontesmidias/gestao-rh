@@ -78,11 +78,19 @@ export default function TokenDiarizacao() {
                value={token ?? ''} onChange={(e) => setToken(e.target.value)} />
       </label>
 
+      {/* ⚠️ São DUAS licenças (v3.00.4): o modelo de diarização usa o de
+          segmentação por baixo, e aceitar só a primeira faz a separação falhar
+          depois, numa entrevista real — parecendo problema do token. */}
       <p className="explica">
-        Crie em <code>huggingface.co/settings/tokens</code> e{' '}
-        <strong>aceite a licença</strong> em{' '}
-        <code>huggingface.co/pyannote/speaker-diarization-3.1</code>, com a mesma
-        conta. São duas coisas diferentes — o teste abaixo diz qual está faltando.
+        Crie o token em <code>huggingface.co/settings/tokens</code> e{' '}
+        <strong>aceite as duas licenças</strong>, com a mesma conta:
+      </p>
+      <ul className="explica">
+        <li><code>huggingface.co/pyannote/speaker-diarization-3.1</code></li>
+        <li><code>huggingface.co/pyannote/segmentation-3.0</code></li>
+      </ul>
+      <p className="explica">
+        São três coisas diferentes — o teste abaixo diz qual está faltando.
       </p>
 
       <div className="navegacao">

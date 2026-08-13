@@ -107,6 +107,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Dependência com faixa ABERTA quebra sozinha, e o sintoma culpa a
+  credencial** (v3.00.4, defeito de campo): o `Dockerfile.transcricao` pedia
+  `torchaudio>=2.2,<3`, e o `pyannote.audio` 3.x declara as próprias
+  dependências SEM TETO. `torchaudio` 2.9 removeu `AudioMetaData` e o
+  `huggingface_hub` 1.0 removeu `use_auth_token` (out/2025) — o pip pega a mais
+  nova, a diarização quebra **no import**, e a tela dizia *"confira o token do
+  Hugging Face"* com o token CORRETO. Rebuild sem ninguém mexer em nada vira
+  defeito em produção. Em container de ML, **crave as versões** e, ao subi-las,
+  rode a função de ponta a ponta: o build passa igual. ⚠️ Três causas com ações
+  DIFERENTES (versão incompatível · licença não aceita · token inválido) não
+  podem sair com a mesma mensagem — é a v2.93 (*"recusa que aponta o lugar
+  errado"*) numa variação nova. E **`Pipeline.from_pretrained` devolve `None`
+  em silêncio** quando o acesso é negado: sem checar, o erro nasce na linha
+  seguinte como `AttributeError: NoneType`, indistinguível de biblioteca
+  quebrada. São **DUAS licenças** (`speaker-diarization-3.1` usa
+  `segmentation-3.0`); conferir uma só dizia "vai funcionar" e a falha aparecia
+  numa entrevista de 40 min. Coberto por `test_diarizacao_diagnostico.py`, 4
+  mutações — uma delas **passou verde na 1ª versão do teste**, porque procurar o
+  TEXTO da mensagem não prova que o `if` que a escolhe está ligado (v2.67).
 - **Campo de "tem arquivo?" que só um dos caminhos preenche diz NÃO com o
   arquivo guardado ao lado** (v3.00.3): a rota de refazer a transcrição exigia
   `gravacao.audio_key`, preenchido só pelo envio de ARQUIVO ÚNICO — quem grava
