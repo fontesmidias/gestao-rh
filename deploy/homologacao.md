@@ -59,6 +59,18 @@ Com folga confortável, siga. Se apertar, a saída é deixar o serviço
 `transcricao` de homologação **parado** e ligá-lo só na hora de testar
 (`docker start`), ou usar o modelo `small` lá.
 
+⚠️ **A stack não usa as imagens do GHCR quando você a constrói do código** — e
+construir é o que estoura a memória, não rodar. Medido em 2026-08-13 numa
+máquina com 7,8 GB: `docker compose up --build` derrubou o daemon DUAS vezes
+com `error during connect: … _ping: EOF`, porque ele constrói os seis serviços
+em PARALELO e um deles compila torch + pyannote. O erro não fala em memória, o
+que manda procurar defeito no Docker.
+
+Por isso o guia usa o `portainer-stack.yml`, que **puxa imagem pronta** do CI e
+não compila nada: subir custa uma fração do que compilar. Se algum dia precisar
+construir na própria VPS, faça um serviço por vez
+(`docker compose build api`, depois `frontend`, e assim por diante).
+
 ---
 
 ## Passo 2 — DNS na Cloudflare
