@@ -78,7 +78,7 @@ construir na própria VPS, faça um serviço por vez
 Painel da Cloudflare → seu domínio → **DNS** → **Add record**:
 
 - **Type:** `A`
-- **Name:** `homolog`
+- **Name:** `hrh`
 - **IPv4 address:** o IP da VPS (o mesmo da produção)
 - **Proxy status:** **DNS only** (nuvem CINZA) — ver o aviso abaixo
 - **TTL:** Auto
@@ -94,7 +94,7 @@ MinIO/pgAdmin).
 Confira a propagação antes de seguir:
 
 ```bash
-dig +short homolog.SEUDOMINIO      # tem que devolver o IP da VPS
+dig +short hrh.greenhousedf.online      # tem que devolver o IP da VPS
 ```
 
 ---
@@ -114,7 +114,7 @@ Em **Environment variables → Advanced mode**, cole:
 ```env
 # --- identidade e URL ---------------------------------------------------
 ENVIRONMENT=homologacao
-BASE_URL=https://homolog.SEUDOMINIO
+BASE_URL=https://hrh.greenhousedf.online
 
 # --- PORTAS: as TRÊS mudam, senão a stack não sobe ----------------------
 # Produção usa 8090 / 9100 / 9101. Repetir qualquer uma faz o Docker
@@ -191,12 +191,12 @@ Tem que devolver `"status":"ok"` e a versão esperada. Se `migracoes.em_dia` vie
 
 ## Passo 4 — Nginx no host
 
-Crie `/etc/nginx/sites-available/homolog`:
+Crie `/etc/nginx/sites-available/hrh`:
 
 ```nginx
 server {
     listen 80;
-    server_name homolog.SEUDOMINIO;
+    server_name hrh.greenhousedf.online;
 
     # O certbot acrescenta o bloco de TLS e o redirecionamento sozinho.
 
@@ -228,7 +228,7 @@ server {
 Ative, teste a sintaxe e recarregue:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/homolog /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/hrh /etc/nginx/sites-enabled/
 sudo nginx -t          # NÃO recarregue sem isto passar
 sudo systemctl reload nginx
 ```
@@ -241,7 +241,7 @@ arquivo novo — corrija-o em vez de mexer no que está funcionando.
 ## Passo 5 — Certificado HTTPS
 
 ```bash
-sudo certbot --nginx -d homolog.SEUDOMINIO
+sudo certbot --nginx -d hrh.greenhousedf.online
 ```
 
 Escolha redirecionar HTTP → HTTPS quando ele perguntar. O certbot reescreve o
@@ -253,7 +253,7 @@ Confira que a renovação automática funciona:
 sudo certbot renew --dry-run
 ```
 
-Agora `https://homolog.SEUDOMINIO` deve abrir a tela de login.
+Agora `https://hrh.greenhousedf.online` deve abrir a tela de login.
 
 ---
 
@@ -355,7 +355,7 @@ O CI publica `:latest` a cada push no `main`, então o re-pull traz a versão ma
 recente. Confira depois:
 
 ```bash
-curl -s https://homolog.SEUDOMINIO/api/health
+curl -s https://hrh.greenhousedf.online/api/health
 ```
 
 **Recomeçar do zero** (quando o banco de teste ficar bagunçado):
@@ -370,8 +370,9 @@ que destrói dado, e as duas stacks aparecem lado a lado na mesma lista.
 
 ## Verificação final
 
-- [ ] `https://homolog.SEUDOMINIO/api/health` responde `ok` e a versão certa
-- [ ] `https://SEUDOMINIO/api/health` (produção) **continua** respondendo
+- [ ] `https://hrh.greenhousedf.online/api/health` responde `ok` e a versão certa
+- [ ] `https://rh.greenhousedf.online/api/health` (produção) **continua**
+      respondendo
 - [ ] `docker volume ls | grep homolog` mostra volumes com o prefixo da stack
       nova — e os da produção seguem intactos
 - [ ] O login de homologação **não** funciona com a senha da produção
