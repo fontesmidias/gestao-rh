@@ -28,7 +28,7 @@ misturado.
 |---|---|
 | **Volumes** (banco, MinIO, logs, modelo) | O Portainer/Compose prefixa os volumes nomeados com o NOME DA STACK. Stack `gestao-rh-homolog` cria `gestao-rh-homolog_postgres-data`, sem tocar em `gestao-rh_postgres-data`. **É por isso que o nome da stack não pode repetir.** |
 | **Rede** | A rede `internal` também é prefixada. Os serviços conversam por nome (`db`, `redis`, `minio`) DENTRO da própria stack — o `db` de homologação nunca alcança o de produção. |
-| **Porta publicada** | Só o `frontend` publica porta. Produção em `8090`, homologação em `8091`. Duas stacks na mesma porta: a segunda simplesmente não sobe. |
+| **Portas publicadas** | São **três**, e todas precisam mudar: `FRONTEND_PORT` (produção `8090` → homologação `8091`) e as duas do MinIO, `MINIO_API_PORT` (`9100` → `9110`) e `MINIO_CONSOLE_PORT` (`9101` → `9111`). Repetir qualquer uma faz a segunda stack **não subir**, com um erro de "port is already allocated" que não diz qual stack já a ocupava. |
 | **`SECRET_KEY`** | **Tem que ser DIFERENTE.** É o que assina token de sessão e link mágico. Iguais, um link emitido em homologação valeria na produção. |
 | **Credenciais** | Banco e MinIO com senha própria. Não reaproveite a de produção. |
 
@@ -115,7 +115,20 @@ Em **Environment variables → Advanced mode**, cole:
 # --- identidade e URL ---------------------------------------------------
 ENVIRONMENT=homologacao
 BASE_URL=https://homolog.SEUDOMINIO
+
+# --- PORTAS: as TRÊS mudam, senão a stack não sobe ----------------------
+# Produção usa 8090 / 9100 / 9101. Repetir qualquer uma faz o Docker
+# recusar com "port is already allocated" — sem dizer QUEM já a ocupava.
 FRONTEND_PORT=8091
+MINIO_API_PORT=9110
+MINIO_CONSOLE_PORT=9111
+
+# O MinIO precisa saber por qual endereço o NAVEGADOR o alcança; com o
+# endereço interno (minio:9000) a listagem de arquivos quebra. Em
+# homologação nada disso é publicado na internet, então aponte para o
+# loopback — o acesso ao console, se precisar, é por túnel SSH.
+MINIO_SERVER_URL=http://127.0.0.1:9110
+MINIO_BROWSER_REDIRECT_URL=http://127.0.0.1:9111
 
 # --- SEGREDO PRÓPRIO (não repita o da produção) -------------------------
 # Gere com: openssl rand -hex 32
@@ -152,6 +165,18 @@ RETENTION_DAYS=90
 Clique em **Deploy the stack** e aguarde. A primeira subida baixa ~4 GB de
 imagem; a API só responde depois de aplicar as migrations (é o `entrypoint` que
 as roda).
+
+⚠️ **Ela BAIXA imagem pronta, não compila nada** — e essa diferença é grande.
+Construir do código-fonte (`docker compose up --build`) compila torch + pyannote
+e derrubou o daemon numa máquina de 7,8 GB, duas vezes, com um erro que não fala
+em memória (`error during connect: … _ping: EOF`). O `portainer-stack.yml` usa
+as imagens que o CI já publicou no GHCR, então subir custa uma fração disso.
+
+Se o pull do GHCR falhar por permissão, faça login uma vez na VPS:
+
+```bash
+docker login ghcr.io -u SEU_USUARIO_GITHUB -p SEU_TOKEN_PAT   # escopo read:packages
+```
 
 Confira antes de mexer no nginx — ainda pelo IP, sem passar pelo proxy:
 
@@ -260,6 +285,40 @@ documentada na internet.
 **Nunca restaure um dump da produção aqui.** Foi decisão explícita: homologação
 existe para poder ser destruída e recriada sem consequência, e um banco com
 1.171 CPFs reais deixa de ter essa propriedade.
+
+---
+
+## Passo 7 — Testar a separação de vozes (o motivo deste ambiente)
+
+É o que não se consegue validar em lugar nenhum hoje. Na ordem:
+
+1. **Configurações → 🔌 E-mail e integrações → Separação de vozes.** Cole o
+   token do Hugging Face e clique em **Testar token**. Ele confere as DUAS
+   licenças (`speaker-diarization-3.1` e `segmentation-3.0`) e diz qual falta.
+   Use um token **próprio de homologação**, não o mesmo da produção — assim dá
+   para revogá-lo sem derrubar o que está no ar.
+2. **Configurações → Gravação de entrevistas.** Confira a qualidade
+   (`medium` é o padrão) e que a separação está ligada.
+3. Crie uma entrevista de teste, grave dois minutos **com duas pessoas
+   falando** — pode ser você e um vídeo qualquer ao fundo — e encerre.
+4. Acompanhe pelo log do worker:
+
+```bash
+docker logs -f $(docker ps --filter name=homolog --filter name=transcricao -q)
+```
+
+O que esperar no log, em ordem: `Carregando o modelo de transcrição 'medium'`,
+depois `Diarização: N trecho(s), M voz(es)`. Se aparecer
+`Diarização, saída do pyannote:` seguido de texto, é o Hub recusando acesso — a
+mensagem dele diz o motivo.
+
+5. Abra a transcrição. Com tudo certo, ela sai marcada com
+   `[Interlocutor 1]` / `[Interlocutor 2]`.
+
+⚠️ **Se falhar, a mensagem na tela já distingue a causa** (v3.00.4–v3.00.6):
+biblioteca faltando **nomeia o módulo**; incompatibilidade de versão diz
+explicitamente *"não é problema do seu token"*; licença não aceita nomeia qual
+das duas. Mande a mensagem inteira — é ela que diz onde corrigir.
 
 ---
 
