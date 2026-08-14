@@ -64,6 +64,15 @@ PYTHONPATH=. .venv/Scripts/python.exe tests/smoke_test.py   # 15 etapas, precisa
 cd frontend && npm run build                                # valida JSX/CSS
 ```
 
+⚠️ **`up --build` constrói os SEIS serviços em paralelo e derruba o daemon em
+máquina apertada** (2026-08-13, aconteceu duas vezes): a imagem de transcrição
+compila torch + pyannote, e numa máquina de 7,8 GB (o WSL pega ~metade) o Docker
+Desktop morre com `error during connect: … _ping: EOF` — erro que **não fala em
+memória** e manda procurar defeito no Docker. Sintoma vizinho: `docker ps` vazio
+e `docker info` acusando *"Docker Desktop is manually paused"*. Em máquina
+apertada, construa um serviço por vez (`docker compose build api`) e deixe o
+`transcricao` por último — ou nem o construa, se não for testar transcrição.
+
 Stack local completo (containers `deploy-*`): roda a partir do código-fonte e
 NÃO se atualiza sozinho — depois de commitar, reconstruir com
 
