@@ -37,8 +37,16 @@ rh = {"Authorization": f"Bearer {c.post('/api/rh/auth/login', json={'email': 'rh
 
 
 def _novo_talento(nome: str) -> str:
+    # ⚠️ E-mail ÚNICO por execução. Era derivado do nome (`fulano@example.com`),
+    # fixo entre rodadas — e desde a v3.05.0 o cadastro público DEDUPLICA por
+    # e-mail: a segunda execução reusaria o talento da primeira. Pior aqui do
+    # que em outros testes, porque este ARQUIVA talentos, e o recadastro reabre
+    # quem está arquivado como "novo": o teste verificaria um estado que ele
+    # mesmo acabou de desfazer, e a falha não falaria da causa.
+    import uuid as _uuid
+    sufixo = _uuid.uuid4().hex[:8]
     r = c.post("/api/talentos", json={
-        "nome": nome, "email": f"{nome.split()[0].lower()}@example.com",
+        "nome": nome, "email": f"{nome.split()[0].lower()}-{sufixo}@example.com",
         "cargos_interesse": ["Recepcionista"], "consentimento_lgpd": True})
     assert r.status_code == 201, r.text
     return r.json()["id"]
