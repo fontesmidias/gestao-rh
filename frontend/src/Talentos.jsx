@@ -5,8 +5,11 @@ import { anotar, anotarFriccao, definirContexto } from './telemetria.js'
 import logo from './assets/logo.png'
 
 // Formulário PÚBLICO do Banco de Talentos (sem login), em 3 passos curtos com
-// barra de progresso — substitui o Microsoft Forms. Aceita currículo opcional
-// (PDF/foto/Word). Só nome + aceite LGPD são obrigatórios (máxima conversão).
+// barra de progresso — substitui o Microsoft Forms.
+//
+// Obrigatórios: nome, aceite LGPD e CURRÍCULO (v3.06, decisão do Bruno —
+// reverte a escolha de 'máxima conversão' da v1.55). O currículo é avisado já
+// no PRIMEIRO passo: quem só descobre a exigência no fim desiste no fim.
 const PASSOS = ['Sobre você', 'O que você procura', 'Currículo & experiência']
 const TIPOS = [
   { v: 'efetivo', r: 'Efetivo' },
@@ -56,6 +59,10 @@ export default function BancoDeTalentos() {
 
   const validarPasso = () => {
     if (passo === 0 && !form.nome.trim()) return 'Informe o seu nome para continuarmos.'
+    // Currículo obrigatório (v3.06, decisão do Bruno). A cobrança é AQUI, na
+    // tela: a rota não pode exigi-lo porque o arquivo sobe numa segunda
+    // chamada, depois de o cadastro existir.
+    if (passo === 2 && !curriculo) return 'Anexe seu currículo para enviar — pode ser um arquivo ou uma foto das páginas.'
     if (passo === 2 && !form.consentimento_lgpd) return 'É preciso aceitar o uso dos dados (LGPD) para enviar.'
     return null
   }
@@ -84,16 +91,21 @@ export default function BancoDeTalentos() {
       // cadastro dela. O que identifica é o `upload_token` — assinado e com
       // prazo —, nunca o id solto (v2.36).
       if (r?.upload_token) definirContexto({ talentoToken: r.upload_token })
-      // currículo é opcional: se anexou e o cadastro devolveu token, envia
+      // O currículo é obrigatório (v3.06) e sobe numa SEGUNDA chamada — o
+      // cadastro já existe neste ponto. Se o upload falhar, o cadastro NÃO é
+      // desfeito: perder o contato de quem se interessou por causa de um
+      // arquivo corrompido ou de uma internet que caiu seria pior, e o RH vê a
+      // pendência do currículo na ficha. Mas a pessoa PRECISA saber que faltou
+      // — dizer "enviado com sucesso" quando o currículo não subiu é a mentira
+      // que a v2.02 registrou (o `catch` que mostrava sucesso com HTTP 500).
       if (curriculo && r?.id && r?.upload_token) {
         try { await api.enviarCurriculo(r.id, r.upload_token, curriculo) }
         catch (e3) {
-          // Era um `catch {}` mudo: o currículo é opcional, mas falhar em
-          // silêncio esconde justamente o problema que a telemetria existe
-          // para achar (a lição da v2.02).
           anotarFriccao('talento_curriculo_falhou', {
             detalhe: e3?.detail || e3?.message, tamanho: curriculo.size,
           })
+          setEnviado('sem_curriculo')
+          return
         }
       }
       setEnviado(true)
@@ -103,6 +115,31 @@ export default function BancoDeTalentos() {
         : `Não foi possível enviar (${err2.detail || err2.message}). Tente de novo.`)
     } finally { setEnviando(false) }
   }
+
+  // O cadastro entrou mas o CURRÍCULO não subiu (arquivo corrompido, internet
+  // caindo). O cadastro fica — perder o contato de quem se interessou seria
+  // pior —, mas a tela DIZ que faltou: anunciar "recebido!" quando o currículo
+  // não chegou é o sucesso mentiroso da v2.02, e a pessoa iria embora achando
+  // que estava tudo certo.
+  if (enviado === 'sem_curriculo') return (
+    <main className="cartao verificar">
+      <Link to="/" className="verificar-marca"><img src={logo} alt="Green House" className="logo-img" /></Link>
+      <div className="verificar-selo">!</div>
+      <h1>Cadastro recebido, mas o currículo não subiu</h1>
+      <p className="explica centro">Seus dados entraram no Banco de Talentos — isso está
+        garantido. Só o <strong>arquivo do currículo</strong> não chegou, provavelmente por
+        instabilidade na conexão ou pelo tamanho do arquivo.</p>
+      <p className="explica centro">Você pode <strong>preencher de novo</strong> com o
+        currículo (seus dados serão atualizados, sem duplicar o cadastro) ou aguardar: o RH
+        vê que ele está faltando e pode pedir por e-mail.</p>
+      <p className="explica centro">
+        <button type="button" className="btn-secundario"
+                onClick={() => { setEnviado(false); setPasso(2) }}>
+          Tentar anexar de novo</button>
+      </p>
+      <p className="explica centro"><Link to="/">← Voltar ao início</Link></p>
+    </main>
+  )
 
   if (enviado) return (
     <main className="cartao verificar">
@@ -141,6 +178,15 @@ export default function BancoDeTalentos() {
         {passo === 0 && (
           <fieldset className="talento-fs">
             <legend>Sobre você</legend>
+            {/* O aviso vem no PRIMEIRO passo, não no terceiro: quem descobre a
+                exigência só no fim já investiu o preenchimento inteiro e
+                desiste ali — e a foto resolve para quem não tem o arquivo à
+                mão, que é a maioria de quem preenche pelo celular. */}
+            <p className="explica" style={{ marginTop: 0 }}>
+              📎 Tenha o <strong>currículo</strong> à mão: ele é necessário para
+              concluir o cadastro. Vale <strong>arquivo</strong> (PDF ou Word) ou
+              <strong> foto das páginas</strong>.
+            </p>
             <label className="campo"><span className="rotulo">Nome completo *</span>
               <input value={form.nome} onChange={set('nome')} autoComplete="name" autoFocus /></label>
             <div className="linha2">
@@ -200,7 +246,7 @@ export default function BancoDeTalentos() {
         {passo === 2 && (
           <fieldset className="talento-fs">
             <legend>Currículo & experiência</legend>
-            <span className="rotulo">Currículo <small>(opcional — aumenta suas chances)</small></span>
+            <span className="rotulo">Currículo <small>(obrigatório)</small></span>
             <input ref={inputCv} type="file" accept={CV_ACCEPT} hidden
                    onChange={(e) => setCurriculo(e.target.files?.[0] || null)} />
             <button type="button" className="talento-cv" onClick={() => inputCv.current?.click()}>
