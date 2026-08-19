@@ -18,6 +18,7 @@ preenchem; o RH decide.
 
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
@@ -968,3 +969,92 @@ async def creche_admissao_doc(token: str, crianca_id: str, tipo: str, arquivo: U
         c.guarda_key = key
     db.commit()
     return _dump_crianca(c)
+
+
+# ==========================================================================
+# Comprovante MENSAL de despesa (v3.02)
+#
+# O e-mail de ativação manda enviar, todo mês, a nota fiscal da creche (PJ) ou a
+# declaração de quitação do cuidador (PF) — e até aqui não havia rota que
+# recebesse isso. As regras são do Jurídico (e-mail de 18/08/2026): um por filho
+# e por mês, com corte no dia 25.
+#
+# A lógica mora em `services/creche_envio.py`, compartilhada com a porta do RH:
+# duplicá-la faria as duas divergirem na primeira mudança (v2.74).
+# ==========================================================================
+
+
+@router.get("/creche/sessao/{token}/competencias")
+def listar_competencias(token: str, db: Session = Depends(get_db)) -> dict:
+    """O que já foi entregue e o que falta, por criança.
+
+    Devolve também a competência SUGERIDA (o mês anterior) e o prazo — quem abre
+    a tela precisa saber *o que* enviar e *até quando*, sem ter que calcular.
+    """
+    from datetime import date as _date
+
+    from app.models.creche_competencia import CompetenciaCreche
+    from app.services import creche_competencia as regras
+    from app.services.creche_envio import dump
+
+    _, ben = _requer_sessao(token, db)
+    col = db.get(Candidato, ben.candidato_id)
+    posto = (db.get(PostoServico, col.posto_servico_id)
+             if col and col.posto_servico_id else None)
+    teto = regras.centavos(posto.valor_reembolso_creche) if posto else None
+
+    hoje = _date.today()
+    ano_sug, mes_sug = regras.competencia_anterior(hoje)
+    registros = db.scalars(select(CompetenciaCreche).where(
+        CompetenciaCreche.beneficio_id == ben.id).order_by(
+        CompetenciaCreche.ano.desc(), CompetenciaCreche.mes.desc())).all()
+
+    dia = ben.dia_entrega_mensal or regras.DIA_CORTE_PADRAO
+    entregues = {(r.crianca_id, r.ano, r.mes) for r in registros}
+    # Só as crianças DEFERIDAS geram pendência: cobrar comprovante de quem foi
+    # indeferido faria a pessoa juntar documento para um direito que não existe.
+    pendentes = [
+        {"crianca_id": str(c.id), "crianca": c.nome,
+         "competencia": regras.rotulo(ano_sug, mes_sug),
+         "ano": ano_sug, "mes": mes_sug,
+         "tipo_comprovante": c.tipo_comprovante}
+        for c in ben.criancas
+        if c.decisao != "indeferida" and (c.id, ano_sug, mes_sug) not in entregues
+    ]
+    return {
+        "dia_corte": dia,
+        "dias_para_o_corte": regras.dias_para_o_corte(dia, hoje),
+        "competencia_sugerida": {"ano": ano_sug, "mes": mes_sug,
+                                 "rotulo": regras.rotulo(ano_sug, mes_sug)},
+        "ativo": ben.status == StatusBeneficio.ativo,
+        "pendentes": pendentes,
+        "competencias": [dump(r, teto) for r in registros],
+    }
+
+
+@router.post("/creche/sessao/{token}/competencias")
+async def enviar_comprovante(token: str, crianca_id: uuid.UUID, ano: int, mes: int,
+                             arquivos: list[UploadFile],
+                             valor: str | None = None,
+                             db: Session = Depends(get_db)) -> dict:
+    """Envia o comprovante do mês. Aceita VÁRIAS folhas — viram um PDF só.
+
+    `arquivos` é lista porque a câmera guiada devolve uma foto por folha (v2.61)
+    e a declaração/nota costuma ter mais de uma. Guardar só a primeira era a
+    causa do "não consigo ver se há mais de uma folha": não havia.
+    """
+    from app.services.creche_envio import dump, receber
+
+    _, ben = _requer_sessao(token, db)
+    partes: list[tuple[str, bytes]] = []
+    for arq in arquivos:
+        conteudo = await ler_upload(db, arq, EXTENSOES_COM_WORD)
+        partes.append((arq.filename or "comprovante", conteudo))
+
+    registro = receber(db, ben, crianca_id, ano, mes, partes, valor,
+                       ator="colaborador")
+    col = db.get(Candidato, ben.candidato_id)
+    posto = (db.get(PostoServico, col.posto_servico_id)
+             if col and col.posto_servico_id else None)
+    from app.services.creche_competencia import centavos
+    return dump(registro, centavos(posto.valor_reembolso_creche) if posto else None)
