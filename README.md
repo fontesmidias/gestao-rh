@@ -180,6 +180,7 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 ### Atualização e rollback (sem perda de dados)
 
 - **Atualizar:** `git pull` + o mesmo `up -d --build` (ou *Re-pull image* no Portainer). As migrations rodam sozinhas no start e preservam os volumes `postgres-data` e `minio-data`.
+- **Voltar uma versão:** cada versão fechada vira uma **tag git** (`v3.09.0`) e uma imagem `:3.09.0`, criadas pelo CI **só quando o pipeline inteiro passa** — tag que existe é versão que foi aprovada, não apenas que compilou. O passo a passo está em [`deploy/voltar-versao.md`](deploy/voltar-versao.md): qual versão escolher, as **seis** linhas de imagem que precisam mudar juntas (a da API aparece quatro vezes) e por que o banco **não** volta com o código.
 - **Confira depois de todo deploy:** `GET /api/health` →
 
   ```json

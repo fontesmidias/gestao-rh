@@ -2647,6 +2647,20 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   termos de negócio com `<Ajuda>`. Ao mudar um padrão, atualizar o DOC e este
   CLAUDE.md. Checklist completo no doc.
 - Idioma: TUDO em pt-BR (código, comentários, commits, UI).
+- **Toda versão fechada vira TAG GIT — e quem a cria é o CI** (19/08/2026,
+  pedido do Bruno). O `type=semver` do job de imagens existia desde sempre e
+  nunca teve tag para usar: só havia `:latest` e `:<sha>`, então voltar uma
+  versão exigia decorar o SHA. Hoje o último passo do `ci.yml` lê o `versao.py`
+  e cria `vX.Y.Z` — **com `if: success()` e no FIM do job**, porque o job de
+  IMAGENS roda em paralelo aos testes e publica mesmo quando eles reprovam:
+  em 19/08/2026, 7 das 9 versões da leva tinham imagem no GHCR e CI vermelho.
+  Tag criada antes apontaria para código que reprova, e alguém voltaria para ela
+  achando que é uma versão boa. Tag existente NÃO é sobrescrita (o passo avisa e
+  segue): refazer a versão sem subir o número é esquecimento de atualizar o
+  `versao.py`. Rollback documentado em `deploy/voltar-versao.md` — ⚠️ são **SEIS
+  linhas** de imagem no stack, e a da API aparece **quatro vezes** (api, worker,
+  expurgo, alertas); trocar só a primeira deixa metade da stack numa versão e
+  metade em outra, sem nada avisando.
 - Commits direto no `main`: `feat(vX.Y): resumo` + corpo com bullets; uma
   versão por "onda" entregue. Push e acompanhar o CI (`gh run list/view`) —
   único workflow `ci.yml` (imagens api/frontend + testes de interface).
