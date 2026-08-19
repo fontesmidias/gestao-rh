@@ -9,6 +9,11 @@ const GLOSSARIO = {
   elegibilidade: 'Elegibilidade: verificação de quem atende aos requisitos para receber o benefício.',
   levantamento: 'Levantamento: coleta interna de dados dos colaboradores para análise de elegibilidade (IN SEGES/MGI nº 147/2026).',
   repactuacao: 'Repactuação: renegociação do contrato com o tomador para incluir o custo do benefício antes de ativá-lo.',
+  // O que se entrega TODO MÊS no reembolso-creche, e por que são dois papéis
+  // diferentes: quem cuida da criança pode ser um estabelecimento (PJ, emite
+  // nota fiscal) ou uma pessoa física (PF, assina a declaração de quitação) —
+  // art. 11, II da IN SEGES/MGI nº 147/2026.
+  creche: 'Comprovante mensal: a cada mês é preciso comprovar a despesa de cada criança — NOTA FISCAL quando quem cuida é uma creche/pré-escola (pessoa jurídica), ou DECLARAÇÃO DE QUITAÇÃO assinada quando é um cuidador pessoa física. O requerimento e a certidão são entregues uma vez só; este se repete.',
   intermitente: 'Intermitente: contrato de trabalho sem jornada fixa — o colaborador é convocado conforme a demanda (art. 452-A da CLT).',
   kit: 'Kit documental: conjunto de documentos que compõem o dossiê daquele posto (comuns + específicos do tomador).',
   slot: 'Slot: espaço reservado para um documento específico que o candidato precisa enviar.',

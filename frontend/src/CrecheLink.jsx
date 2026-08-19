@@ -689,6 +689,10 @@ function AposEnvio({ token, status, criancas, motivoIndeferimento }) {
           ? 'O documento foi assinado por todas as partes. Obrigado!'
           : 'Recebemos sua assinatura. O RH vai finalizar a assinatura institucional.'}</p>
         <ResultadoPorCrianca criancas={criancas} />
+        {/* Benefício assinado = ativo: é aqui que a entrega MENSAL acontece.
+            O componente se esconde sozinho se o benefício ainda não estiver
+            ativo, então não precisa de condição a mais. */}
+        <ComprovanteMensal token={token} />
       </div>
     )
   }
@@ -706,11 +710,146 @@ function AposEnvio({ token, status, criancas, motivoIndeferimento }) {
     )
   }
   const m = ESTADO_MSG[status] || ESTADO_MSG.em_analise
-  return (
+  return (<>
     <div className="rh-card creche-card centro">
       <div style={{ fontSize: '3rem' }}>{m.icone}</div>
       <h2>{m.titulo}</h2>
       <p className="explica">{m.texto}</p>
+    </div>
+    <ComprovanteMensal token={token} />
+  </>)
+}
+
+// --- Comprovante MENSAL de despesa (v3.02) ---------------------------------
+// A entrega que o e-mail de ativação sempre pediu e não tinha onde acontecer:
+// nota fiscal se a creche é PJ, declaração de quitação se o cuidador é PF —
+// UM por filho e por mês, com corte no dia definido pelo RH (padrão 25).
+//
+// Aparece só com o benefício ATIVO: antes disso não há direito reconhecido, e
+// pedir comprovante de quem ainda está em análise é pedir despesa que talvez
+// não seja reembolsada.
+function ComprovanteMensal({ token }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
+  const [camera, setCamera] = useState(null)   // {criancaId, ano, mes, crianca}
+  const [valor, setValor] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  const recarregar = () => api.competencias(token).then(setDados).catch(() => setDados(null))
+  useEffect(() => { recarregar() }, [])
+
+  if (!dados || !dados.ativo) return null
+
+  const subir = async (pend, arquivos) => {
+    const lista = Array.isArray(arquivos) ? arquivos : [arquivos]
+    if (!lista.length) return
+    setErro(null); setEnviando(true)
+    try {
+      await api.enviarComprovante(token, pend.crianca_id, pend.ano, pend.mes, lista, valor)
+      setCamera(null); setValor('')
+      await recarregar()
+    } catch (e) {
+      // A mensagem tem que dizer o que RESOLVE — `catch` cego mandando "tente
+      // de novo" faz a pessoa repetir exatamente o que não funcionou.
+      const d = e.detail
+      const chave = typeof d === 'string' ? d : d?.erro
+      const M = {
+        nenhuma_folha_legivel: 'Não consegui ler nenhuma das folhas enviadas. Tente fotografar de novo, com o documento inteiro dentro da moldura.',
+        competencia_ja_aprovada: 'O comprovante deste mês já foi aprovado pelo RH. Se precisar corrigir, fale com o RH.',
+        crianca_indeferida: 'Esta criança não foi deferida no benefício, então não há comprovante a enviar.',
+        beneficio_nao_ativo: 'Seu benefício não está ativo no momento. Procure o RH.',
+        competencia_futura: 'Ainda não é possível enviar o comprovante deste mês.',
+        competencia_em_curso: 'O mês ainda não terminou — envie o comprovante do mês passado.',
+        arquivo_grande_demais: 'O arquivo é grande demais. Tente fotografar de novo ou enviar um PDF menor.',
+        formato_nao_suportado: 'Formato não aceito. Envie foto (JPG/PNG) ou PDF.',
+      }
+      setErro(M[chave] || `Não foi possível enviar (${chave || e.message}).`)
+    } finally { setEnviando(false) }
+  }
+
+  const pendentes = dados.pendentes || []
+  const enviadas = dados.competencias || []
+  const faltam = dados.dias_para_o_corte
+
+  return (
+    <div className="rh-card creche-card">
+      <h3>📄 Comprovante do mês</h3>
+      <p className="explica">Todo mês, envie <strong>um comprovante por criança</strong>:
+        {' '}<strong>nota fiscal</strong> se quem cuida for uma creche ou pré-escola (PJ), ou a
+        {' '}<strong>declaração de quitação</strong> assinada se for um cuidador pessoa física (PF).
+        O prazo é <strong>dia {dados.dia_corte}</strong> de cada mês.</p>
+
+      {/* O prazo aparece como CONTAGEM, não como data solta: "faltam 2 dias"
+          move; "dia 25" exige que a pessoa faça a conta. */}
+      {pendentes.length > 0 && (
+        <div className={faltam <= 2 ? 'alerta' : 'aviso-inline'}>
+          {faltam === 0 ? <><strong>Hoje</strong> é o último dia do prazo.</>
+            : <>Faltam <strong>{faltam} dia(s)</strong> para o prazo deste mês.</>}
+        </div>
+      )}
+
+      {erro && <div className="alerta">{erro}</div>}
+
+      {pendentes.length === 0 ? (
+        <p className="sucesso">✅ Nada pendente por aqui. Obrigado!</p>
+      ) : pendentes.map((p) => (
+        <div key={p.crianca_id} className="creche-crianca">
+          <div className="creche-crianca-topo">
+            <strong>{p.crianca}</strong>
+            <span className="explica" style={{ margin: 0 }}>{p.competencia}</span>
+          </div>
+          <label className="campo">
+            <span className="rotulo">Valor pago no mês</span>
+            <input inputMode="decimal" placeholder="ex.: 450,00" value={valor}
+                   onChange={(e) => setValor(e.target.value)} />
+          </label>
+          <button className="btn-principal" disabled={enviando}
+                  onClick={() => setCamera({ ...p })}>
+            {enviando ? 'Enviando…' : '📎 Enviar comprovante'}</button>
+        </div>
+      ))}
+
+      {/* Mesma câmera guiada da admissão (v2.61): moldura de folha, aviso de
+          foto tremida ou escura, e o botão de escolher arquivo sempre visível.
+          Aceita VÁRIAS folhas — declaração e nota costumam ter mais de uma. */}
+      {camera && (
+        <CapturaDocumento formato="a4"
+                          titulo={`Comprovante de ${camera.crianca} — ${camera.competencia}`}
+                          aoCapturar={(arqs) => subir(camera, arqs)}
+                          aoArquivo={(arqs) => subir(camera, arqs)}
+                          aoFechar={() => setCamera(null)} />
+      )}
+
+      {enviadas.length > 0 && (
+        <details>
+          <summary>Comprovantes enviados ({enviadas.length})</summary>
+          {/* `.dash-scroll` é obrigatório: `overflow-x` na própria `<table>` NÃO
+              funciona (o `display: table` ignora overflow), então sem o wrapper
+              a tabela empurra a PÁGINA de lado — e este link é usado no celular
+              (v2.46). */}
+          <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr><th>Mês</th><th>Valor</th><th>Situação</th></tr></thead>
+            <tbody>
+              {enviadas.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.competencia}</td>
+                  <td>{c.valor_comprovado || '—'}</td>
+                  <td>
+                    {c.status === 'aprovado' ? '✅ aprovado'
+                      : c.status === 'recusado' ? '❌ recusado' : '⏳ em análise'}
+                    {/* O motivo da recusa é da PESSOA: sem ele, ela reenvia a
+                        mesma coisa (regra da casa desde o portal `/meu`). */}
+                    {c.motivo_recusa && (
+                      <><br /><small className="explica">{c.motivo_recusa}</small></>)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        </details>
+      )}
     </div>
   )
 }
