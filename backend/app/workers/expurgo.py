@@ -257,6 +257,103 @@ def expurgar_audio_entrevistas() -> int:
         return removidos
 
 
+def expurgar_creche() -> int:
+    """Apaga documentos de creche que já não têm finalidade (v3.09).
+
+    Lacuna encontrada em 19/08/2026: **o expurgo nunca tocou no creche**. Ele
+    cobria slots de admissão, telemetria, logs, entrevistas e áudio — e certidão
+    de nascimento e termo de guarda de CRIANÇA ficavam no storage para sempre,
+    inclusive de quem foi indeferido. Documento de criança guardado sem
+    finalidade é o oposto do que a LGPD pede, e o problema só cresce: a v3.07
+    passou a coletar isso já na admissão.
+
+    Duas regras, decididas pelo Bruno em 19/08/2026:
+
+    * **Documento da criança** (certidão, guarda) sai de quem foi `indeferido`
+      ou declarou `sem_direito_declarado`, passado o prazo de retenção geral.
+      Quem tem benefício ATIVO não é tocado — o documento sustenta o pagamento.
+    * **Comprovante mensal** (nota fiscal, declaração de quitação) fica **5
+      anos**: ele comprova despesa reembolsada em contrato público, e é o que a
+      fiscalização do contratante pede.
+
+    O REGISTRO permanece nos dois casos: some o arquivo, não a análise. E nada
+    some sem hash na auditoria — a linha vermelha do projeto.
+    """
+    import hashlib
+
+    from app.models.beneficio import BeneficioCreche, CriancaCreche, StatusBeneficio
+    from app.models.creche_competencia import CompetenciaCreche
+    from app.services.auditoria import registrar
+
+    ANOS_COMPROVANTE = 5
+    settings = get_settings()
+    agora = datetime.now(timezone.utc)
+    limite_docs = agora - timedelta(days=settings.retention_days)
+    limite_comprovantes = agora - timedelta(days=365 * ANOS_COMPROVANTE)
+    total = 0
+
+    def _remover(db, keys: list[str], evento: str, detalhe: dict) -> int:
+        """Remove com hash na auditoria ANTES — nada some sem rastro."""
+        evidencias = []
+        for key in keys:
+            try:
+                dados = storage.ler(key)
+                evidencias.append({"arquivo": key, "bytes": len(dados),
+                                   "sha256": hashlib.sha256(dados).hexdigest()})
+            except Exception:
+                evidencias.append({"arquivo": key, "bytes": None, "sha256": None})
+        if evidencias:
+            registrar(db, evento, ator="sistema",
+                      detalhe={**detalhe, "arquivos": evidencias})
+        removidos = 0
+        for key in keys:
+            try:
+                storage.remover(key)
+                removidos += 1
+            except Exception:
+                log.exception("Falha ao remover %s", key)
+        return removidos
+
+    with SessionLocal() as db:
+        # 1) documentos das crianças de quem NÃO tem direito reconhecido
+        encerrados = db.scalars(select(BeneficioCreche).where(
+            BeneficioCreche.status.in_([StatusBeneficio.indeferido,
+                                        StatusBeneficio.sem_direito_declarado]),
+            BeneficioCreche.atualizado_em < limite_docs)).all()
+        for ben in encerrados:
+            for c in db.scalars(select(CriancaCreche).where(
+                    CriancaCreche.beneficio_id == ben.id)).all():
+                keys = [k for k in (c.certidao_key, c.guarda_key) if k]
+                if not keys:
+                    continue
+                total += _remover(db, keys, "creche_documentos_expurgados",
+                                  {"beneficio": str(ben.id),
+                                   "status": ben.status.value})
+                # O registro da criança FICA (nome, data, decisão e motivo): o
+                # que sai é o arquivo. Apagar a linha destruiria a prova de que
+                # o pedido foi analisado — e é ela que responde "por que esta
+                # pessoa foi indeferida?".
+                c.certidao_key = None
+                c.guarda_key = None
+
+        # 2) comprovantes mensais com mais de 5 anos
+        antigos = db.scalars(select(CompetenciaCreche).where(
+            CompetenciaCreche.criado_em < limite_comprovantes,
+            CompetenciaCreche.arquivo_pdf_key.is_not(None))).all()
+        for comp in antigos:
+            from app.services import creche_comprovante
+            keys = creche_comprovante.originais(comp)
+            if comp.arquivo_pdf_key:
+                keys.append(comp.arquivo_pdf_key)
+            total += _remover(db, keys, "creche_comprovante_expurgado",
+                              {"competencia": f"{comp.mes:02d}/{comp.ano}"})
+            comp.arquivo_pdf_key = None
+        db.commit()
+    if total:
+        log.info("Creche: %d arquivo(s) expurgado(s)", total)
+    return total
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     print(f"Candidatos expurgados: {expurgar()}")
@@ -264,3 +361,4 @@ if __name__ == "__main__":
     print(f"Arquivos de log expurgados: {expurgar_logs()}")
     print(f"Entrevistas arquivadas: {arquivar_entrevistas()}")
     print(f"Áudios de entrevista expurgados: {expurgar_audio_entrevistas()}")
+    print(f"Arquivos de creche expurgados: {expurgar_creche()}")

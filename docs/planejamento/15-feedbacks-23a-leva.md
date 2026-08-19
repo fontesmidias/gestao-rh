@@ -513,5 +513,12 @@ direito × informou criança). 3 consultas fixas em cada, sem N+1.
 
 ### ⏳ Pendente das demais prioridades
 - **P4**: creche nas telas de Colaboradores/Admissões.
-- **P5**: coleta na admissão (redação + destino do documento de indeferido).
+### ✅ Entregue — v3.09.0 (P5, coleta na admissão)
+O `BlocoCreche` já coletava; o trabalho foi de REDAÇÃO — o texto agora diz que
+não garante o benefício e o que virá depois (entrega mensal, PF×PJ). ⚠️ Achado
+no caminho: **o expurgo nunca tocou no creche** — certidão de criança de quem foi
+INDEFERIDO ficava no storage para sempre. Corrigido, com o comprovante mensal
+retido por 5 anos (decisão do Bruno).
+
+**A 23ª leva está COMPLETA: os 13 feedbacks foram atendidos.**
 - **Feedback 1**: investigar os dois caminhos da assinatura.

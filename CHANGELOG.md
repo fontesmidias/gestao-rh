@@ -11,6 +11,39 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.09.0] — 2026-08-19 — Coletar cedo sem prometer
+
+Último item da 23ª leva: *"por ocasião da admissão, já podemos coletar tudo isso
+de dados"* — com a ressalva que o próprio Bruno levantou: *"mas também não posso
+gerar uma possível expectativa"*.
+
+### Alterado
+
+- **O texto do bloco de creche no wizard** deixou de ser só informativo. Agora
+  diz o que É (levantamento antecipado, para não refazer depois), **o que não
+  é** (*"isto não garante o benefício"* — depende do contrato do posto estar em
+  vigor e da análise do RH) e **o que vem depois**: a entrega mensal do
+  comprovante, com nota fiscal se a creche for PJ e declaração de quitação se o
+  cuidador for PF. Essa última parte é a que surpreende quem não foi avisado.
+
+### Corrigido
+
+- **O expurgo NUNCA tocou no creche.** Ele cobria slots de admissão,
+  telemetria, logs, entrevistas e áudio — e certidão de nascimento e termo de
+  guarda de **criança** ficavam no storage para sempre, inclusive de quem foi
+  **indeferido**. Documento de criança guardado sem finalidade é o oposto do que
+  a LGPD pede, e o problema só cresceria: a coleta na admissão amplia o volume.
+  - Documento da criança sai de quem foi indeferido ou declarou "não faço jus",
+    passado o prazo de retenção. Quem tem benefício **ativo não é tocado** — o
+    documento sustenta o pagamento.
+  - **Comprovante mensal fica 5 anos** (decisão do Bruno): comprova despesa
+    reembolsada em contrato público, e é o que a fiscalização do contratante
+    pede.
+  - O **registro permanece** nos dois casos: some o arquivo, não a análise —
+    apagar a linha destruiria a prova de que o pedido foi analisado, que é o que
+    responde *"por que esta pessoa foi indeferida?"*. E nada some sem hash na
+    auditoria.
+
 ## [3.08.0] — 2026-08-19 — O botão que ninguém achava
 
 Feedback do Bruno (18/08/2026): *"na etapa de assinar, apesar dela ver os dados

@@ -868,10 +868,27 @@ function BlocoCreche({ token }) {
   return (
     <div className="rh-card" style={{ marginTop: '1rem', borderColor: 'var(--verde)' }}>
       <h3>🍼 Reembolso-Creche (opcional)</h3>
-      <p className="explica">Seu posto de trabalho <strong>{status.posto}</strong> pode dar direito ao
-        Reembolso-Creche (IN SEGES/MGI nº 147/2026). Se você tem filho(a), enteado(a) ou criança sob
-        guarda judicial com <strong>até 5 anos e 11 meses</strong>, informe aqui para já entrar com o
-        pedido — anexando a certidão de nascimento. A análise de elegibilidade é feita pelo RH.</p>
+      {/* ⚠️ REDAÇÃO, não decoração (decisão do Bruno, 18/08/2026): *"não posso
+          gerar uma possível expectativa, mas para tal precisamos ser claros e
+          objetivos quanto ao levantamento"*. Coletar cedo ganha tempo; prometer
+          o benefício a quem talvez não o receba cria uma conversa dolorosa
+          depois. Por isso o texto diz o que É (levantamento antecipado), o que
+          ele NÃO é (garantia), e o que virá DEPOIS — a entrega mensal, que é a
+          parte que surpreende quem não foi avisado. */}
+      <p className="explica">Adiantamos aqui o levantamento do <strong>Reembolso-Creche</strong>
+        {' '}(IN SEGES/MGI nº 147/2026) para você não precisar refazer isso depois. Se tem
+        filho(a), enteado(a) ou criança sob guarda judicial com <strong>até 5 anos e 11
+        meses</strong>, informe abaixo e anexe a certidão de nascimento.</p>
+      <p className="explica"><strong>Isto não garante o benefício.</strong> Ele depende do
+        contrato do posto <strong>{status.posto}</strong> — que precisa já estar em vigor para o
+        reembolso — e da análise do RH. Você será avisado(a) da decisão.</p>
+      <details>
+        <summary>O que será preciso depois, se for aprovado</summary>
+        <p className="explica">Todo mês você enviará <strong>um comprovante por criança</strong>:
+          {' '}<strong>nota fiscal</strong>, se quem cuida for uma creche ou pré-escola (empresa);
+          ou <strong>declaração de quitação assinada</strong>, se for um cuidador pessoa física.
+          O RH informa o prazo e envia lembretes.</p>
+      </details>
 
       {(status.criancas || []).map((c) => (
         <div key={c.id} className="creche-crianca">
