@@ -312,6 +312,30 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       render: (c) => <MatriculaEditavel colaborador={c} aoTrocar={() => carregar()} /> },
     { chave: 'posto', rotulo: 'Posto', ordenavel: true, quebra: true,
       valor: (c) => c.posto_nome || '' },
+    // Reembolso-creche (v3.07, pedido do Bruno): saber se alguém tem o
+    // benefício exigia abrir a tela do Creche e procurar — duas telas para uma
+    // pergunta. OCULTA por padrão porque só parte da base tem o benefício, e a
+    // tela já é larga (v2.59); fica a um clique em "⚙ Colunas" e é filtrável.
+    { chave: 'creche', rotulo: 'Creche', ordenavel: true, oculta: true, filtro: 'select',
+      opcoes: [{ v: 'Ativo', r: 'Ativo' }, { v: 'Pendente', r: 'Comprovante pendente' },
+               { v: 'Em análise', r: 'Em análise' }, { v: '—', r: 'Sem benefício' }],
+      valor: (c) => (!c.creche ? '—'
+        : c.creche.comprovante_pendente ? 'Pendente'
+        : c.creche.status === 'ativo' ? 'Ativo'
+        : c.creche.status === 'em_analise' ? 'Em análise' : c.creche.status),
+      render: (c) => {
+        if (!c.creche) return '—'
+        const k = c.creche
+        if (k.comprovante_pendente) return (
+          <span className="chip" style={{ '--chip-cor': '#e9a63a' }}
+                title={`Falta o comprovante de ${k.competencia} de `
+                  + `${k.comprovante_pendente} criança(s).`}>
+            ⚠️ falta {k.comprovante_pendente}</span>)
+        if (k.status === 'ativo') return (
+          <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}
+                title={`${k.criancas} criança(s) no benefício`}>✓ ativo</span>)
+        return <span className="chip" style={{ '--chip-cor': '#999' }}>{k.status}</span>
+      } },
     { chave: 'nascimento', rotulo: 'Nascimento', ordenavel: true, oculta: true,
       valor: (c) => c.nascimento, render: (c) => fmtDataBR(c.nascimento) },
     { chave: 'contato', rotulo: 'Contato', oculta: true, valor: (c) => c.celular_whatsapp || '' },
@@ -392,6 +416,14 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
       valor: reg.filter((c) => c.dados_faltando?.length).length,
       filtro: { chave: 'cadastro', valor: 'Falta' } },
     { rotulo: 'Na Domínio', valor: reg.filter((c) => c.na_dominio_em).length, cor: '#3b7dd8' },
+    // Creche pendente entra SÓ quando existe (v3.07). Card fixo custaria altura
+    // de cabeçalho para dizer "0": 8 cards em 2 colunas viram 4 fileiras no
+    // celular, e a régua de altura já reprovou essa tela uma vez (v2.85.1).
+    ...(reg.some((c) => c.creche?.comprovante_pendente) ? [{
+      rotulo: 'Creche: comprovante', cor: '#e9a63a',
+      valor: reg.filter((c) => c.creche?.comprovante_pendente).length,
+      filtro: { chave: 'creche', valor: 'Pendente' },
+    }] : []),
   ] : null
 
   return (

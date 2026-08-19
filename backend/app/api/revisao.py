@@ -67,6 +67,41 @@ def _candidatos_admissao(db: Session, status: str | None, busca: str | None,
     return candidatos
 
 
+def _creche_na_admissao(db: Session, candidatos: list) -> dict:
+    """`{candidato_id: {da_direito, criancas}}` para a lista de Admissões.
+
+    Responde a pergunta que o RH faz antes de efetivar: *esta pessoa vai para um
+    posto com direito ao creche, e já informou as crianças no wizard?* Quem for
+    para posto elegível e não tiver informado nada é quem o RH precisa procurar
+    — antes, isso só se descobria abrindo pessoa por pessoa.
+    """
+    from app.models.beneficio import BeneficioCreche, CriancaCreche
+    from app.models.candidato import PostoServico
+
+    ids = [c.id for c in candidatos]
+    if not ids:
+        return {}
+    elegiveis = {p.id for p in db.scalars(select(PostoServico).where(
+        PostoServico.da_direito_creche.is_(True))).all()}
+    beneficios = {b.candidato_id: b.id for b in db.scalars(
+        select(BeneficioCreche).where(BeneficioCreche.candidato_id.in_(ids))).all()}
+    quantas: dict = {}
+    if beneficios:
+        for c in db.scalars(select(CriancaCreche).where(
+                CriancaCreche.beneficio_id.in_(beneficios.values()))).all():
+            quantas[c.beneficio_id] = quantas.get(c.beneficio_id, 0) + 1
+
+    saida = {}
+    for cand in candidatos:
+        da_direito = cand.posto_servico_id in elegiveis
+        ben_id = beneficios.get(cand.id)
+        if not da_direito and not ben_id:
+            continue                       # nada a dizer sobre esta pessoa
+        saida[cand.id] = {"da_direito": da_direito,
+                          "criancas": quantas.get(ben_id, 0)}
+    return saida
+
+
 @router.get("/rh/candidatos")
 def listar_candidatos(status: str | None = None, busca: str | None = None,
                       posto_id: uuid.UUID | None = None,
@@ -108,6 +143,10 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
                               {"por": acesso.assistido_por,
                                "desde": acesso.criado_em,
                                "ate": acesso.expira_em})
+    # Creche na admissão, EM LOTE (v3.07): duas consultas, não uma por pessoa —
+    # a lista cresce com o uso, e o N+1 do dash de Talentos (v2.15) já custou
+    # 43 consultas para 39 registros.
+    creche_adm = _creche_na_admissao(db, candidatos)
     saida = []
     for cand in candidatos:
         meus = [s for s in por_candidato.get(cand.id, []) if s.obrigatorio]
@@ -127,6 +166,12 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
             "dossie_gerado_em": cand.dossie_gerado_em,
             "testes_vinculados": vinculados.get(cand.id, 0),
             "atendimento_assistido": assistidos.get(cand.id),
+            # Reembolso-creche na admissão (v3.07): o que importa AQUI é outra
+            # coisa que em Colaboradores — não a situação do benefício (ele nem
+            # existe ainda), e sim se o posto DÁ DIREITO e se a pessoa já
+            # informou criança no wizard. É o que permite ao RH conferir, antes
+            # de efetivar, quem entra já com o levantamento feito.
+            "creche": creche_adm.get(cand.id),
         })
     return saida
 
