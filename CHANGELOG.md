@@ -54,6 +54,19 @@ ninguém; o ciclo mensal do creche vem na sequência.
   data do aditivo é a mesma para todos). `NULL` = não informada: não se assume
   nem "desde sempre" nem "nunca" — adivinhar decide dinheiro no contracheque.
 
+- **Tela das credenciais de automação** (Configurações → 🔌 Integrações). As
+  rotas existiam **desde a v2.94** e nunca houve tela: criar um token exigia
+  `docker exec` no container, o que na prática significa que o recurso não
+  existia para quem opera — é o espelho do "tela que existe mas ninguém acha"
+  (v2.75), com a tela ausente em vez de escondida. Três coisas que ela faz
+  porque o desenho da credencial depende delas: **avisa ANTES de emitir** que o
+  segredo aparece uma única vez (quem descobre depois o guarda "por garantia"
+  noutro lugar, que é justamente o que gravar só o `sha256` evita); mostra
+  **prefixo e último uso**, o que responde *"qual eu revogo?"* e *"este ainda
+  está em uso?"* sem revelar segredo; e diz que **revogar marca e não apaga**.
+  Só usuários **ativos** aparecem na lista — a rota recusa inativo com 422, e
+  oferecê-los seria convidar ao erro.
+
 ### Documentado
 
 - `docs/planejamento/15-feedbacks-23a-leva.md` — levantamento, as 13 decisões do

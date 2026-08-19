@@ -1463,6 +1463,15 @@ export const rh = {
   redefinirSenhaUsuario: (id, senha_nova) =>
     req(`/rh/usuarios/${id}/senha`, { method: 'PUT', headers: authRH(),
                                       body: JSON.stringify({ senha_nova }) }),
+  // Credenciais de MÁQUINA (v2.94). O segredo volta SÓ na resposta de
+  // `criarTokenAutomacao` — a listagem devolve apenas o prefixo.
+  tokensAutomacao: () => req('/rh/tokens-automacao', { headers: authRH() }),
+  criarTokenAutomacao: (dados) =>
+    req('/rh/tokens-automacao', { method: 'POST', headers: authRH(),
+                                  body: JSON.stringify(dados) }),
+  revogarTokenAutomacao: (id) =>
+    req(`/rh/tokens-automacao/${id}`, { method: 'DELETE', headers: authRH() }),
+
   verM365: () => req('/rh/config/m365', { headers: authRH() }),
   salvarM365: (dados) =>
     req('/rh/config/m365', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),

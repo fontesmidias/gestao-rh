@@ -443,3 +443,17 @@ parametrizado para o portal; a KBA saiu de `api/entrada.py` para
 o catálogo do que existe, o que cada peça faz e quem já usa. Sem ele, a peça
 existe e ninguém sabe — foi o que aconteceu com o `POST /rh/talentos` (a v2.94
 ia recriar uma porta que já existia) e com as rotas de diagnóstico.
+
+### Decisões sobre o valor mensal (2026-08-18)
+
+14. **O valor do posto é TETO, não valor fixo**: reembolsa-se **o menor** entre a
+    despesa comprovada e o `valor_reembolso_creche` do posto. Comprovou R$ 400
+    num posto de R$ 526,64 → reembolsa R$ 400.
+15. **O colaborador informa o valor ao enviar** o comprovante; o RH confere
+    contra o documento ao analisar. Permite somar a folha, conferir o teto e
+    exportar.
+    ⚠️ Consequência: o valor é **entrada de quem não é do RH** — tratar como
+    dado a conferir, nunca como verdade. O RH pode corrigi-lo na análise, e a
+    correção fica na auditoria (quem mudou, de → para).
+    ⚠️ Dinheiro NÃO se guarda como texto nem como float: centavos em inteiro,
+    como o resto do sistema faz onde o valor decide folha.
