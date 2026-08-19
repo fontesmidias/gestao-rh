@@ -2,9 +2,12 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · versionamento semântico.
 
-Rollback: toda migration tem `downgrade()` escrito para não destruir dados —
-`alembic downgrade -1` volta uma revisão; o código volta apontando a stack para a
-tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
+**Rollback: o passo a passo está em [`deploy/voltar-versao.md`](deploy/voltar-versao.md)**
+— qual versão escolher, as SEIS linhas de imagem que precisam mudar juntas, e por
+que o banco não volta com o código. Em resumo: cada versão vira uma **tag git**
+(`v3.09.0`), criada pelo CI só quando o pipeline inteiro passa, e a imagem
+correspondente é `:3.09.0`. Toda migration tem `downgrade()` escrito para não
+destruir dados; faça `pg_dump` antes de qualquer downgrade.
 
 > **Sobre "legado"**: valores de enum e campos que deixaram de ser usados **não
 > são removidos** — o Postgres não apaga valor de enum sem recriar o tipo, e
