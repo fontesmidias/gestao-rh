@@ -72,6 +72,12 @@ jobs:
     # (não em tags — a imagem da tag é a mesma já testada no push do main).
     if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
+    # `contents: write` é o que permite ao último passo CRIAR A TAG da versão.
+    # Sem esta declaração o job herda o padrão do repositório, que pode ser
+    # somente leitura — e o `git push origin <tag>` falharia com 403 no fim de
+    # um pipeline de 9 minutos, depois de tudo já ter passado.
+    permissions:
+      contents: write
     # 35, não 25: a execução normal leva 7–11 min (medido em 12 execuções), mas
     # a v3.05.0 foi CANCELADA no teto de 25 com os testes já aprovados — só o
     # download do Playwright estava lento. Cancelamento parece falha na lista de
@@ -385,3 +391,49 @@ jobs:
         run: docker compose --env-file .env
           -f deploy/docker-compose.base.yml -f deploy/docker-compose.ip.yml
           logs --tail 100
+
+      # ------------------------------------------------------------------
+      # Tag de versão — criada pelo CI, e SÓ quando tudo passou.
+      #
+      # Por que existe (pedido do Bruno, 19/08/2026): para voltar a uma versão
+      # anterior era preciso decorar o SHA do commit. O `type=semver` do job de
+      # imagens já estava configurado, mas nunca teve tag git para usar — então
+      # nenhuma imagem `:3.09.0` chegou a existir, só `:latest` e `:<sha>`.
+      #
+      # Três condições, e cada uma evita um erro real:
+      #
+      # * `if: success()` + posição no FIM do job — a tag só nasce depois dos
+      #   testes, do smoke e do Playwright. Marcar antes criaria tag apontando
+      #   para código que reprova, e alguém voltaria para ele achando que é uma
+      #   versão boa. Foi o que aconteceu hoje: 7 das 9 versões da leva
+      #   reprovaram, e todas tinham imagem publicada.
+      # * Só no `main` (não em PR nem em tag), senão cada PR tentaria criar a
+      #   mesma tag e o push falharia.
+      # * Se a tag JÁ existe, não faz nada e diz isso — refazer a versão sem
+      #   subir o número é engano de quem esqueceu de atualizar o `versao.py`,
+      #   e sobrescrever a tag mudaria o significado de um número já publicado.
+      # ------------------------------------------------------------------
+      - name: Cria a tag da versão (só com o pipeline verde)
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # `sed`, não `grep -oP`: o -P depende do grep ter suporte a PCRE, que
+          # varia por ambiente (no Git Bash do Windows ele recusa direto). Ler a
+          # versão é o passo do qual tudo aqui depende — não vale prendê-lo a
+          # uma flag opcional.
+          versao=$(sed -n 's/^VERSAO = "\(.*\)"/\1/p' backend/app/versao.py)
+          if [ -z "$versao" ]; then
+            echo "::error::não consegui ler VERSAO de backend/app/versao.py"
+            exit 1
+          fi
+          tag="v$versao"
+          git fetch --tags --quiet
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "::notice::a tag $tag já existe — nada a fazer."
+            echo "Se esta era para ser uma versão NOVA, o versao.py não foi atualizado."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$versao"
+          git push origin "$tag"
+          echo "::notice::tag $tag criada — a partir de agora existe a imagem :$versao"
