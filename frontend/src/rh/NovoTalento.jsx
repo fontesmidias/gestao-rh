@@ -55,10 +55,24 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
   const salvar = async (forcar = false) => {
     setErro(null)
     if (!f.nome.trim()) { setErro('O nome é obrigatório.'); return }
+    // Currículo obrigatório (v3.06) — mas COM JUSTIFICATIVA, decisão do Bruno:
+    // o RH cadastra por indicação ou telefone, antes de o arquivo existir, e
+    // travar isso pararia o trabalho por um documento que chega depois. O
+    // motivo vai para a auditoria e para o CRM, onde o RH de fato olha.
+    let motivo = null
+    if (!arquivo) {
+      motivo = window.prompt(
+        'Cadastrar SEM currículo?\n\n'
+        + 'O currículo passou a ser obrigatório. Se ainda não o tem (indicação, '
+        + 'contato por telefone), diga por quê — fica registrado na ficha da '
+        + 'pessoa e na auditoria.')
+      if (!motivo || !motivo.trim()) return   // desistiu: nada é criado
+    }
     setSalvando(true)
     try {
       const criado = await api.cadastrarTalento({
         ...f, cargos_interesse: cargos, regioes, forcar,
+        motivo_sem_curriculo: motivo ? motivo.trim() : null,
       })
       // O currículo é anexado DEPOIS de existir o talento (a rota precisa do
       // id). Falha aqui NÃO desfaz o cadastro — a pessoa já entrou, e o arquivo
@@ -194,7 +208,8 @@ export default function NovoTalento({ aoFechar, aoCriar, aoAbrirExistente }) {
 
       <label className="campo">
         <span className="rotulo">Currículo
-          <span className="dica-inline"> — opcional; PDF, foto ou Word</span></span>
+          <span className="dica-inline"> — obrigatório; PDF, foto ou Word.
+            Sem ele, será pedida uma justificativa</span></span>
         <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx"
                onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
       </label>

@@ -487,11 +487,24 @@ envio com 500. Detalhes no CHANGELOG da v3.02.0. Ficou coberto por teste.
   e-mail (a decisão 6 previu; falta escolher QUANDO disparar).
 - Validação na homologação — depende do Bruno olhar a tela.
 
+### ✅ Entregue — v3.03.0 (matrícula)
+Faixa `99NNNN` (6 díg.) só para as próximas; matrícula em Admissões e no
+requerimento do creche. ⚠️ Achado: `999001` (matrícula REAL do Tirvu) seria lida
+como da nossa faixa e o gerador invadiria a numeração deles.
+
+### ✅ Entregue — v3.04.0 (nomes de download)
+`services/nome_arquivo.py` com o padrão `MATRÍCULA - NOME - DOCUMENTO`; o
+`BotaoBaixar` passou a LER o `Content-Disposition`, então o padrão vale sem cada
+tela repetir o nome. Documento individual do Arquivo saía como `termo-vt.pdf`.
+
+### ✅ Entregue — v3.05.0 (dedup público de talentos)
+A porta pública não tinha dedup nenhuma. Recadastro ATUALIZA em silêncio
+(anti-enumeração: responder "já existe" viraria sonda); arquivado volta à fila,
+`convertido` não é rebaixado.
+
 ### ⏳ Pendente das demais prioridades
-- **P1**: currículo obrigatório nos dois cadastros (autosave + câmera, decisões
-  12 e 13); matrícula `99NNNN` e nas telas/requerimento.
-- **P2**: padronização dos nomes de download (31 pontos + `BotaoBaixar`).
-- **P3**: dedup no cadastro público de talentos.
+- **P1 (resta)**: currículo obrigatório nos dois cadastros — autosave + câmera
+  (decisões 12 e 13).
 - **P4**: creche nas telas de Colaboradores/Admissões.
 - **P5**: coleta na admissão (redação + destino do documento de indeferido).
 - **Feedback 1**: investigar os dois caminhos da assinatura.

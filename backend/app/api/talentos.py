@@ -240,6 +240,16 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
         raise HTTPException(status_code=422, detail="nome_obrigatorio")
     if not dados.pop("consentimento_lgpd", False):
         raise HTTPException(status_code=422, detail="consentimento_obrigatorio")
+    # ⚠️ O currículo é obrigatório desde a v3.06 (decisão do Bruno, 18/08/2026),
+    # mas a exigência NÃO pode viver aqui: o arquivo sobe numa SEGUNDA chamada
+    # (`POST /talentos/{id}/curriculo`), autorizada pelo `upload_token` que esta
+    # rota devolve — exigir agora seria exigir algo que ainda não chegou.
+    #
+    # Quem cobra é a TELA, que não deixa concluir sem anexar. E o cadastro nasce
+    # mesmo assim, de propósito: se o upload falhar (arquivo corrompido, internet
+    # caindo), perder o contato de quem se interessou seria pior que ter um
+    # cadastro sem currículo — o RH vê a pendência e cobra. É a mesma escolha do
+    # wizard da admissão, que salva conforme a pessoa preenche.
     if dados.get("resumo") and len(dados["resumo"]) > 4000:
         dados["resumo"] = dados["resumo"][:4000]
 
@@ -499,6 +509,13 @@ class TalentoRHIn(TalentoIn):
     # `forcar`: o RH viu o aviso de duplicata e decidiu cadastrar assim mesmo
     # (homônimo real existe — a base tem 1.171 pessoas). Não é o padrão.
     forcar: bool = False
+    # O currículo passou a ser obrigatório (v3.06, decisão do Bruno). Aqui, ao
+    # contrário da porta pública, ele pode faltar COM JUSTIFICATIVA: o RH
+    # cadastra por indicação ou por telefone, antes de o arquivo existir, e
+    # travar isso pararia o trabalho por um documento que vem depois. O texto
+    # vai para a auditoria — é o padrão da casa em reverter colaborador e trocar
+    # matrícula: a exceção é permitida, mas fica registrada com o porquê.
+    motivo_sem_curriculo: str | None = None
 
 
 @router.post("/rh/talentos", status_code=201, dependencies=[Depends(requer_rh)])
@@ -521,6 +538,7 @@ def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
     """
     dados = payload.model_dump()
     forcar = dados.pop("forcar", False)
+    motivo_sem_cv = (dados.pop("motivo_sem_curriculo", None) or "").strip()
     dados.pop("website", None)             # honeypot não se aplica a rota do RH
     dados.pop("consentimento_lgpd", None)  # ver docstring: fica NULO, de propósito
 
@@ -585,9 +603,20 @@ def cadastrar_pelo_rh(payload: TalentoRHIn, db: Session = Depends(get_db),
             "erro": "campo_muito_longo",
             "campos": _campos_longos(dados),
         }) from e
+    # O currículo é obrigatório (v3.06) e sobe numa segunda chamada. Quando o RH
+    # cadastra sem tê-lo (indicação, contato por telefone), a justificativa fica
+    # registrada — na auditoria E como anotação no CRM, que é onde o RH olha.
+    # Sem a anotação, "por que esta pessoa não tem currículo?" só se responderia
+    # abrindo a auditoria, e ninguém abre.
+    if motivo_sem_cv:
+        from app.models.crm import Anotacao
+        db.add(Anotacao(talento_id=talento.id,
+                        autor_id=rh.id, autor_nome=rh.nome or rh.email,
+                        texto=f"Cadastrado sem currículo — {motivo_sem_cv}"))
     registrar(db, "talento_cadastrado_pelo_rh", ator="rh", ator_detalhe=rh.email,
               detalhe={"talento": str(talento.id), "nome": talento.nome,
-                       "origem": talento.origem, "forcado": forcar})
+                       "origem": talento.origem, "forcado": forcar,
+                       "motivo_sem_curriculo": motivo_sem_cv or None})
     db.commit()
     # NÃO manda o e-mail de agradecimento do formulário público: ele diz "recebemos
     # o seu cadastro" a quem não se cadastrou — a pessoa levaria um susto, e o

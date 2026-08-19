@@ -11,6 +11,43 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.06.0] — 2026-08-19 — O currículo virou obrigatório
+
+Decisão do Bruno (18/08/2026), nos DOIS cadastros. Reverte conscientemente a
+escolha de "máxima conversão" da v1.55, que tinha deixado só nome + aceite LGPD
+como obrigatórios.
+
+### Alterado
+
+- **Formulário público**: o currículo passou a ser exigido para concluir, e o
+  aviso aparece já no **PRIMEIRO passo** — quem descobre a exigência no fim já
+  investiu o preenchimento inteiro e desiste ali. Aceita arquivo ou **foto das
+  páginas**, que é o caso de quem preenche pelo celular.
+- **Cadastro pelo RH**: obrigatório **com justificativa** — o RH cadastra por
+  indicação ou telefone, antes de o arquivo existir, e travar isso pararia o
+  trabalho por um documento que chega depois. O motivo vai para a auditoria
+  **e para o mini-CRM**, que é onde o RH de fato olha: só na auditoria,
+  *"por que esta pessoa não tem currículo?"* exigiria abrir a auditoria, e
+  ninguém abre.
+
+### Corrigido
+
+- **"Cadastro recebido!" aparecia mesmo quando o currículo não subia.** O
+  arquivo vai numa SEGUNDA chamada; se ela falhava, o `catch` só anotava na
+  telemetria e a tela dizia sucesso — a pessoa ia embora achando que estava tudo
+  certo. Agora há um terceiro estado: o cadastro fica (perder o contato de quem
+  se interessou seria pior que um cadastro sem currículo), mas a tela **diz que
+  faltou** e oferece tentar de novo. É o sucesso mentiroso da v2.02, no mesmo
+  formulário.
+  ⚠️ O botão "tentar de novo" só é seguro por causa da v3.05.0: sem a dedup da
+  porta pública, reenviar criaria um segundo cadastro.
+
+### Onde a exigência NÃO mora
+
+Na rota de cadastro. O arquivo sobe depois de o registro existir — exigi-lo ali
+seria exigir algo que ainda não chegou. Quem cobra é a tela; o backend garante
+o registro da exceção.
+
 ## [3.05.0] — 2026-08-19 — Uma pessoa, um cadastro
 
 *"Pensar em uma hipótese da pessoa se cadastrar apenas uma vez"* (Bruno,
