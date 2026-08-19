@@ -60,6 +60,24 @@ test('banco de talentos: formulário público (3 passos) envia e confirma', asyn
   await page.getByRole('button', { name: /Avançar/ }).click()
   // passo 3 — aceita LGPD e envia
   await page.getByRole('checkbox').check()
+
+  // O currículo passou a ser OBRIGATÓRIO (v3.06, decisão do Bruno). Antes de
+  // anexar, o envio tem que ser BARRADO — sem esta asserção o teste só provaria
+  // que o formulário funciona, não que a regra está ligada.
+  await page.getByRole('button', { name: /Entrar para o Banco de Talentos/ }).click()
+  await expect(page.getByText(/Anexe seu currículo/)).toBeVisible()
+
+  // Anexa um PDF mínimo e VÁLIDO: o backend valida o conteúdo, não só a
+  // extensão, então bytes aleatórios seriam recusados por outro motivo.
+  await page.setInputFiles('input[type="file"]', {
+    name: 'curriculo.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(
+      '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n'
+      + '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n'
+      + '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n'
+      + 'trailer<</Root 1 0 R>>\n%%EOF\n'),
+  })
   await page.getByRole('button', { name: /Entrar para o Banco de Talentos/ }).click()
   await expect(page.getByRole('heading', { name: /Cadastro recebido/ })).toBeVisible()
 })
