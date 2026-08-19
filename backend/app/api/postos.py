@@ -5,7 +5,7 @@ import io
 import re
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -138,6 +138,9 @@ class PostoIn(BaseModel):
     atributos: dict | None = None
     da_direito_creche: bool | None = None
     valor_reembolso_creche: str | None = None
+    # Data em que o aditivo do contrato passou a valer (ver migration
+    # a3f7c1e9d5b2). ISO `aaaa-mm-dd`; None = não informada.
+    creche_vigente_desde: date | None = None
 
 
 def _dump_posto(p: PostoServico) -> dict:
@@ -148,7 +151,9 @@ def _dump_posto(p: PostoServico) -> dict:
             "documentos_kit": p.documentos_kit or [],
             "atributos": p.atributos or {}, "ativo": p.ativo,
             "da_direito_creche": p.da_direito_creche,
-            "valor_reembolso_creche": p.valor_reembolso_creche}
+            "valor_reembolso_creche": p.valor_reembolso_creche,
+            "creche_vigente_desde": (p.creche_vigente_desde.isoformat()
+                                     if p.creche_vigente_desde else None)}
 
 
 def _colunas(db: Session) -> list[str]:
@@ -228,7 +233,8 @@ def criar_posto(payload: PostoIn, db: Session = Depends(get_db),
                         if k in DOCS_ESPECIFICOS_DISPONIVEIS],
         atributos=payload.atributos or {},
         da_direito_creche=bool(payload.da_direito_creche),
-        valor_reembolso_creche=(payload.valor_reembolso_creche or "").strip() or None)
+        valor_reembolso_creche=(payload.valor_reembolso_creche or "").strip() or None,
+        creche_vigente_desde=payload.creche_vigente_desde)
     db.add(posto)
     registrar(db, "posto_criado", ator="rh", ator_detalhe=rh.email, detalhe={"nome": nome})
     db.commit()
@@ -273,6 +279,8 @@ def editar_postos_massa(payload: EdicaoMassaPostosIn, db: Session = Depends(get_
             p.da_direito_creche = payload.da_direito_creche
         if payload.valor_reembolso_creche is not None:
             p.valor_reembolso_creche = payload.valor_reembolso_creche.strip() or None
+        if payload.creche_vigente_desde is not None:
+            p.creche_vigente_desde = payload.creche_vigente_desde
         if payload.contrato_ref is not None:
             p.contrato_ref = payload.contrato_ref.strip() or None
     registrar(db, "postos_editados_massa", ator="rh", ator_detalhe=rh.email,
@@ -353,6 +361,8 @@ def editar_posto(posto_id: uuid.UUID, payload: PostoIn, db: Session = Depends(ge
         posto.da_direito_creche = payload.da_direito_creche
     if payload.valor_reembolso_creche is not None:
         posto.valor_reembolso_creche = payload.valor_reembolso_creche.strip() or None
+    if payload.creche_vigente_desde is not None:
+        posto.creche_vigente_desde = payload.creche_vigente_desde
     registrar(db, "posto_editado", ator="rh", ator_detalhe=rh.email,
               detalhe={"nome": posto.nome})
     db.commit()
@@ -394,6 +404,8 @@ def duplicar_posto(posto_id: uuid.UUID, db: Session = Depends(get_db),
         atributos=dict(p.atributos or {}),
         da_direito_creche=p.da_direito_creche,
         valor_reembolso_creche=p.valor_reembolso_creche,
+        # a vigência descreve o CONTRATO (não identifica o posto): acompanha
+        creche_vigente_desde=p.creche_vigente_desde,
         ativo=False, tirvu_id=None)
     db.add(novo)
     db.flush()

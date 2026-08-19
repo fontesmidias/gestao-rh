@@ -11,6 +11,64 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.01.0] — 2026-08-18 — A porta que a tela prometia
+
+23ª leva de feedbacks (13 itens, a maioria do Reembolso-Creche). Esta versão
+entrega o levantamento, as decisões e os dois itens que não dependiam de
+ninguém; o ciclo mensal do creche vem na sequência.
+
+### Descoberto
+
+- **O e-mail de ativação do creche promete uma entrega mensal que o sistema não
+  tem onde receber.** O texto manda enviar nota fiscal ou declaração todo mês —
+  e o módulo tem **21 rotas POST, nenhuma** que aceite comprovante mensal (o
+  único upload recusa o que não for certidão ou guarda). Não há tabela de
+  competência, worker de lembrete nem data de corte. O `dia_entrega_mensal`
+  existe, é editável em massa e é **dado morto**: só preenche uma variável de um
+  e-mail enviado UMA vez, por uma função chamada `_email_orientacoes_mensais` —
+  nome que engana quem lê. É a armadilha da v2.74 (*promessa na tela sem rota
+  atrás*) na maior escala vista aqui, num benefício que entra em folha.
+- **Pior**: aquele e-mail diz *"até o dia {{dia}}"* com o default **5**, e o
+  Jurídico define corte no dia **25**. Quem foi ativado recebeu a data errada,
+  junto de *"sem a comprovação no prazo, o reembolso pode não ser efetuado"*.
+- Cinco feedbacks já estavam prontos ou quase: a coleta de creche na admissão
+  **já existe** no wizard; o `tipo_comprovante` (PF/PJ) **já existe** no modelo e
+  é coletado, sem nenhuma tela do RH mostrá-lo; a padronização de nomes é a
+  **continuação** do pedido de 12/08.
+
+### Adicionado
+
+- **Criar jornada pela tela** (`JornadasRH.jsx`). A rota `POST /rh/jornadas` e o
+  `api.criarJornada` existiam **desde sempre** e nenhuma tela os chamava — o
+  texto de lista vazia já dizia *"crie manualmente"* sem haver por onde. Rota
+  sem tela é o espelho da promessa sem rota. ⚠️ A rota é **idempotente por
+  descrição**: se a jornada já existe ela devolve a existente com 201, então a
+  tela distingue "criada" de "já existia" — sem isso o RH procuraria uma
+  duplicata que não foi criada.
+- **Vigência do reembolso-creche por posto** (`creche_vigente_desde`, migration
+  `a3f7c1e9d5b2`): o aditivo de cada contrato tem data (ANEEL desde 01/05/2026;
+  INEP 03/2026 e 37/2025 e MAPA 58/2024 desde 01/08; PREPÚBLICA desde 01/02), e
+  o direito era um booleano **sem data** — o sistema não respondia *"esta pessoa
+  tinha direito em maio?"*, que é o que auditoria e retroativo perguntam.
+  Editável individualmente e **em massa** (um contrato tem vários postos e a
+  data do aditivo é a mesma para todos). `NULL` = não informada: não se assume
+  nem "desde sempre" nem "nunca" — adivinhar decide dinheiro no contracheque.
+
+### Documentado
+
+- `docs/planejamento/15-feedbacks-23a-leva.md` — levantamento, as 13 decisões do
+  Bruno, o plano por prioridade e a ideia **descartada** (um módulo genérico de
+  "competência mensal") com o motivo, para não voltar por engano.
+- `docs/planejamento/16-expertises-reusaveis.md` — **catálogo de peças
+  reutilizáveis**, a pedido do Bruno (*"cada vez que criarmos uma expertise,
+  vamos colocá-la de modo que podemos utilizá-la em módulos existentes e
+  futuros"*). O reuso já era praticado sem registro, e isso custa: a v2.94 ia
+  criar seis rotas de diagnóstico e **quatro já existiam**. Inclui a lista de
+  peças **subutilizadas** — genéricas, com um consumidor só — e a lição
+  estrutural: `BotaoBaixar` e `PlayerAudio` moram em `rh/` e têm 2 usos, enquanto
+  `VisualizadorArquivo`, que resolve problema equivalente e está na raiz, tem 5.
+  **Se o contrato não menciona o domínio, o arquivo não deveria morar nele.**
+
 ## [3.00.6] — 2026-08-13 — O guarda-corpo que não alcançava o fundo
 
 Segundo `ModuleNotFoundError` no mesmo lugar, agora com `matplotlib`. A
