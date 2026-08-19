@@ -116,6 +116,22 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Mudar REGRA DE NEGÓCIO quebra o teste que cobria o comportamento antigo — e
+  o E2E reprova por ÚLTIMO** (v3.06, mordeu em três commits seguidos): tornar o
+  currículo obrigatório reprovou o `portal.spec.js`, que preenche o formulário
+  público e espera "Cadastro recebido" **sem anexar nada** — porque até então não
+  precisava. O teste estava certo; quem mudou a regra não foi procurar quem
+  dependia dela. Como a correção só entrou depois, os DOIS commits seguintes
+  subiram já reprovando pelo mesmo motivo. Ao mudar regra, **`grep` nos testes
+  E2E pelo fluxo afetado**: eles exercitam a tela inteira e rodam no fim do
+  pipeline, então a reprovação chega ~4 min depois dos testes rápidos.
+  ⚠️ **Corolário que valeu mais que o conserto**: ao varrer quem MAIS dependia,
+  achei dois testes que a dedup nova (v3.05) passaria a quebrar em SILÊNCIO —
+  `test_talento_arquivar` usava e-mail derivado do nome, fixo entre execuções, e
+  ele ARQUIVA talentos: o recadastro reabre arquivado como "novo", então a 2ª
+  rodada verificaria um estado que ela mesma desfez (e o teste nem roda no CI).
+  É o "só passa em banco limpo" (v2.14) por uma porta nova: **não foi o teste que
+  sujou, foi a regra nova que passou a enxergar o resíduo**.
 - **Verificação de import só prova o que ela CARREGA — importe na profundidade
   do uso** (v3.00.6, o mesmo defeito duas vezes): o build passou a terminar com
   um `python -c` importando `pyannote.audio.Pipeline`, e ele ficou VERDE com o
