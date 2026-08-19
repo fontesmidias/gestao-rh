@@ -84,26 +84,25 @@ class DossiePecasIlegiveis(Exception):
         super().__init__(", ".join(ilegiveis))
 
 
-def nome_arquivo_dossie(nome_pessoa: str) -> str:
-    """`DOCS ADM - KATIA POLIANE.pdf` — o padrão que o RH usa na pasta física
-    (pedido do Bruno, 2026-08-12).
+def nome_arquivo_dossie(nome_pessoa: str, matricula: str | None = None) -> str:
+    """`000123 - KATIA POLIANE - DOCS ADM` (sem extensão — quem chama a põe).
 
-    Existe como função ÚNICA porque o dossiê é baixado de QUATRO lugares (a ficha
-    no front, a rota individual, o Arquivo e o ZIP em lote) e cada um montava o
-    nome à mão. Quatro cópias divergem na primeira mudança — e o sintoma seria o
-    RH recebendo arquivos com dois padrões de nome sem saber por quê.
+    Nasceu em 2026-08-12 com o padrão `DOCS ADM - KATIA POLIANE`, para a pasta
+    física do RH. Em 18/08/2026 o Bruno estendeu a regra a TODOS os downloads
+    (`matrícula - nome - documento`), então esta função passou a delegar ao
+    `services/nome_arquivo.py` — a ordem mudou e a matrícula entrou na frente.
 
-    Caixa alta e sem acento: o header HTTP `Content-Disposition` só carrega ASCII
-    com segurança (nome com acento chega truncado ou codificado em alguns
-    clientes), e a pasta do RH é toda em caixa alta.
+    Continua existindo, em vez de os chamadores usarem o serviço direto, porque
+    o dossiê é baixado de QUATRO lugares e cada um montava o nome à mão; uma
+    função só é o que impede os quatro de divergirem na próxima mudança.
+
+    `matricula` é opcional para não quebrar quem já chamava com um argumento —
+    sem ela o nome sai sem a primeira parte, que é o certo em admissão (a
+    matrícula só nasce no export para o Tirvu).
     """
-    limpo = unicodedata.normalize("NFKD", nome_pessoa or "").encode("ascii", "ignore").decode()
-    # Barra e dois-pontos viram caminho/stream alternativo no Windows; o resto do
-    # saneamento é o mesmo do `export_planilha.slug()`.
-    for proibido in '\\/:*?"<>|':
-        limpo = limpo.replace(proibido, " ")
-    limpo = " ".join(limpo.split()).upper()
-    return f"DOCS ADM - {limpo}" if limpo else "DOCS ADM"
+    from app.services.nome_arquivo import montar
+
+    return montar(matricula, nome_pessoa, "DOCS ADM", extensao="")
 
 
 def _rotulo(doc) -> str:

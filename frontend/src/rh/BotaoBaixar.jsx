@@ -15,6 +15,14 @@ import { authRH, buscar } from '../api.js'
 // `VisualizadorArquivo` (v2.33), o `baixarDossie` e o `PlayerAudio` faziam —
 // faltava um componente para os links soltos.
 
+// O `filename="..."` do `Content-Disposition`, quando a rota o manda. Devolve
+// `null` se não houver — aí vale o nome que a tela passou.
+export function nomeDoCabecalho(resposta) {
+  const cd = resposta.headers.get('content-disposition') || ''
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)
+  return m ? decodeURIComponent(m[1]).trim() : null
+}
+
 export default function BotaoBaixar({ url, nome, children, className = 'btn-secundario btn-mini' }) {
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState(null)
@@ -28,9 +36,12 @@ export default function BotaoBaixar({ url, nome, children, className = 'btn-secu
       const objeto = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objeto
-      // O nome vem de quem chama: o `Content-Disposition` da rota não alcança
-      // o `objectURL`, então sem isto o arquivo sairia com um UUID por nome.
-      a.download = nome
+      // O `Content-Disposition` não alcança o `objectURL` — sem `download` o
+      // arquivo sairia com um UUID por nome. Mas o cabeçalho CHEGA na resposta,
+      // e dá para lê-lo: assim o padrão `MATRÍCULA - NOME - DOCUMENTO` (v3.04)
+      // vale sozinho, sem depender de cada tela repetir o nome certo no JSX —
+      // que é como as quatro nomeações do projeto divergiram.
+      a.download = nomeDoCabecalho(r) || nome
       a.click()
       // Revoga depois do clique: sem isso o arquivo inteiro fica na memória do
       // navegador até a aba fechar.

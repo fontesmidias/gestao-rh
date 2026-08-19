@@ -11,6 +11,45 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.04.0] — 2026-08-19 — Um nome só para tudo que se baixa
+
+Padrão de nome de arquivo `MATRÍCULA - NOME - DOCUMENTO`, caixa alta e sem
+caractere especial, como o Bruno pediu — *"como regra para os módulos existentes
+e os vindouros"*. É a continuação do pedido de 12/08, que resolveu UM documento
+(o dossiê): havia **quatro funções de nomeação diferentes** e 31 pontos montando
+nome à mão.
+
+### Adicionado
+
+- **`services/nome_arquivo.py`**, um lugar só. Caixa alta e ASCII não são
+  estética: o header `Content-Disposition` só carrega ASCII com segurança, e a
+  pasta física do RH é toda em caixa alta. Parte VAZIA é omitida junto com o
+  separador — em admissão a matrícula quase sempre não existe, e
+  ` - MARIA - FICHA.pdf` tem um hífen órfão que todo mundo lê como erro.
+- **O `BotaoBaixar` agora LÊ o `Content-Disposition`** da resposta e o prefere
+  ao nome passado no JSX. Assim o padrão vale sozinho, sem depender de cada tela
+  repetir o nome certo — que é exatamente como as quatro nomeações divergiram.
+- **Documento individual do Arquivo sai identificado**: antes era só
+  `termo-vt.pdf`, e quem baixasse o mesmo documento de três pessoas ficava com
+  três arquivos indistinguíveis na pasta.
+
+### Corrigido
+
+- **Dois testes novos estavam no bloco errado do CI.** `test_matricula` e
+  `test_nome_arquivo` exercitam funções de TEXTO, mas elas moram em
+  `export_tirvu.py`, que importa SQLAlchemy — e o bloco "stdlib pura" do CI não
+  instala nada. Passavam na máquina de quem escreve (que tem o venv) e
+  reprovavam no CI com `ModuleNotFoundError`. Movidos para o bloco que roda
+  dentro do container, e o motivo ficou escrito no `ci.yml`. **Antes de pôr
+  teste no bloco stdlib, confira o que o MÓDULO importa, não só o teste** —
+  verificado rodando com o Python sem venv, que é a condição real de lá.
+
+### Medido
+
+- `test_nome_arquivo` validado por 2 mutações: separador solto quando falta a
+  matrícula (reprova em 3 asserções) e remoção da limpeza de caracteres
+  (reprova em 4, inclusive a das aspas, que quebrariam o header).
+
 ## [3.03.0] — 2026-08-19 — Seis dígitos, sem invadir o vizinho
 
 Matrícula automática de **6 dígitos** (`99`+4), como o Bruno pediu para o padrão

@@ -664,7 +664,7 @@ def baixar_dossie(candidato_id: uuid.UUID, db: Session = Depends(get_db),
         content=storage.ler(cand.dossie_pdf_key),
         media_type="application/pdf",
         headers={"Content-Disposition":
-                 f'attachment; filename="{nome_arquivo_dossie(cand.nome_completo)}.pdf"'},
+                 f'attachment; filename="{nome_arquivo_dossie(cand.nome_completo, cand.matricula)}.pdf"'},
     )
 
 
