@@ -3,10 +3,11 @@ import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import CheckMestre from '../CheckMestre.jsx'
 import Ajuda from '../Ajuda.jsx'
+import InputData from '../InputData.jsx'
 import IncidenciaBeneficios from './IncidenciaBeneficios.jsx'
 
 const VAZIO = { nome: '', sigla: '', cnpj: '', tirvu_id: '', contrato_ref: '', exige_docs_infraero: false,
-  documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '' }
+  documentos_kit: [], atributos: {}, da_direito_creche: false, valor_reembolso_creche: '', creche_vigente_desde: null }
 
 // Aba própria de Postos: CRUD, importador da planilha do Tirvu, vínculo de
 // documentos em massa e colunas dinâmicas.
@@ -83,6 +84,7 @@ export default function PostosRH() {
       documentos_kit: edit.documentos_kit || [], atributos: edit.atributos || {},
       da_direito_creche: !!edit.da_direito_creche,
       valor_reembolso_creche: (edit.valor_reembolso_creche || '').trim() || null,
+      creche_vigente_desde: edit.creche_vigente_desde || null,
     }
     try {
       if (edit.id) await api.editarPosto(edit.id, corpo)
@@ -153,16 +155,27 @@ export default function PostosRH() {
             <span>Marcar como <strong>dá direito ao reembolso-creche</strong></span>
           </label>
           {massaKit.marcar_creche && (
-            <input placeholder="Valor do reembolso (ex.: R$ 526,64) — opcional"
-                   value={massaKit.valor_reembolso_creche || ''} style={{ maxWidth: 300 }}
-                   onChange={(e) => setMassaKit({ ...massaKit, valor_reembolso_creche: e.target.value })} />
+            <div className="linha3">
+              <label className="campo"><span className="rotulo">Valor do reembolso (opcional)</span>
+                <input placeholder="ex.: R$ 526,64" value={massaKit.valor_reembolso_creche || ''}
+                       onChange={(e) => setMassaKit({ ...massaKit, valor_reembolso_creche: e.target.value })} />
+              </label>
+              {/* Em massa porque um MESMO contrato tem vários postos e a data do
+                  aditivo é a mesma para todos eles (ex.: INEP 37/2025). */}
+              <label className="campo"><span className="rotulo">Vigente desde (opcional)</span>
+                <InputData valor={massaKit.creche_vigente_desde || ''}
+                           onChange={(iso) => setMassaKit({ ...massaKit, creche_vigente_desde: iso || null })} />
+              </label>
+            </div>
           )}
           <div className="navegacao">
             <button className="btn-secundario" onClick={() => setMassaKit(null)}>Cancelar</button>
             <button className="btn-principal" onClick={() => aplicarMassa({
               documentos_kit: massaKit.documentos_kit || [], modo_kit: 'adicionar',
               ...(massaKit.marcar_creche ? { da_direito_creche: true,
-                    valor_reembolso_creche: massaKit.valor_reembolso_creche || null } : {}),
+                    valor_reembolso_creche: massaKit.valor_reembolso_creche || null,
+                    ...(massaKit.creche_vigente_desde
+                        ? { creche_vigente_desde: massaKit.creche_vigente_desde } : {}) } : {}),
             })}>Aplicar aos selecionados</button>
           </div>
         </div>
@@ -355,9 +368,20 @@ function CamposPosto({ edit, setEdit, docsDisp, colunas, salvar, onCancelar }) {
           <span>Este posto dá direito ao reembolso-creche</span>
         </label>
         {edit.da_direito_creche && (
-          <input placeholder="Valor do reembolso (ex.: R$ 526,64)"
-                 value={edit.valor_reembolso_creche || ''} style={{ maxWidth: 280 }}
-                 onChange={(e) => setEdit({ ...edit, valor_reembolso_creche: e.target.value })} />
+          <div className="linha3">
+            <label className="campo"><span className="rotulo">Valor do reembolso</span>
+              <input placeholder="ex.: R$ 526,64" value={edit.valor_reembolso_creche || ''}
+                     onChange={(e) => setEdit({ ...edit, valor_reembolso_creche: e.target.value })} />
+            </label>
+            {/* A data do ADITIVO. Sem ela o sistema não responde "esta pessoa
+                tinha direito em maio?" — pergunta de auditoria e de retroativo. */}
+            <label className="campo"><span className="rotulo">Vigente desde</span>
+              <InputData valor={edit.creche_vigente_desde || ''}
+                         onChange={(iso) => setEdit({ ...edit, creche_vigente_desde: iso || null })} />
+              <small className="explica" style={{ margin: '.2rem 0 0' }}>
+                Data do aditivo assinado deste contrato.</small>
+            </label>
+          </div>
         )}
       </div>
       {colunas.length > 0 && (

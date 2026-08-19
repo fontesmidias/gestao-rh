@@ -77,6 +77,12 @@ class PostoServico(Base):
     # repactuação de contrato (ex.: Presidência difere do teto da IN).
     da_direito_creche: Mapped[bool] = mapped_column(default=False)
     valor_reembolso_creche: Mapped[str | None] = mapped_column(String(30))  # "R$ 526,64"
+    # Desde quando o contrato deste posto dá direito ao benefício — o aditivo
+    # tem data (e-mail do Jurídico 18/08/2026: ANEEL desde 01/05, INEP e MAPA
+    # desde 01/08, PREPÚBLICA desde 01/02). Sem isto o sistema não responde
+    # "esta pessoa tinha direito em maio?", que é o que auditoria e retroativo
+    # perguntam. NULL = não informada; NÃO se assume nem "sempre" nem "nunca".
+    creche_vigente_desde: Mapped[date | None] = mapped_column(Date)
     ativo: Mapped[bool] = mapped_column(default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

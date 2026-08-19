@@ -22,6 +22,7 @@ export default function JornadasRH({ aoVoltar }) {
   const [postos, setPostos] = useState([])
   const [dups, setDups] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [criando, setCriando] = useState(false)
 
   const recarregar = () => api.jornadas().then(setJornadas).catch(() => setJornadas([]))
   useEffect(() => {
@@ -48,6 +49,20 @@ export default function JornadasRH({ aoVoltar }) {
       recarregar()
     } catch (e) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar o ID Tirvu (${e.detail || e.message}).` }) }
   }
+  // Criar jornada à mão. A rota é IDEMPOTENTE por descrição (case-insensitive):
+  // se já existe, ela devolve a existente com 201 em vez de erro. Sem avisar,
+  // o RH acha que criou uma segunda e fica procurando a duplicata na lista.
+  const criar = async (dados) => {
+    const antes = (jornadas || []).length
+    const nova = await api.criarJornada(dados)
+    const lista = await api.jornadas()
+    setJornadas(lista)
+    setCriando(false)
+    setMsg(lista.length > antes
+      ? { tipo: 'ok', texto: `Jornada "${nova.descricao}" criada.` }
+      : { tipo: 'ok', texto: `Esta jornada já existia ("${nova.descricao}") — nada foi duplicado.` })
+  }
+
   const excluir = async (j) => {
     if (!window.confirm(`Excluir a jornada "${j.descricao}"?`)) return
     try { await api.excluirJornada(j.id); recarregar() }
@@ -142,12 +157,71 @@ export default function JornadasRH({ aoVoltar }) {
       ) : aba === 'confirmar' ? (
         <Confirmar jornadas={jornadas.filter((j) => !j.estruturado)} postos={postos}
                    onConfirmou={recarregar} setMsg={setMsg} />
-      ) : (
+      ) : (<>
+        {/* Criar fica FORA do card de filtros (v2.76.1: nada que CRIA mora em
+            bloco que se recolhe) e abre perto da lista, não no topo da tela. */}
+        {criando && <NovaJornada postos={postos} aoCriar={criar}
+                                 aoCancelar={() => setCriando(false)} setMsg={setMsg} />}
         <DashPlanilha id="jornadas" colunas={colunas} dados={jornadas} cards={cards}
                       acoesLinha={acoesLinha}
-                      vazio="Nenhuma jornada. Importe da planilha ou crie manualmente." />
-      )}
+                      acoesFiltro={!criando && (
+                        <button className="btn-secundario btn-mini"
+                                onClick={() => setCriando(true)}>＋ Nova jornada</button>)}
+                      vazio="Nenhuma jornada. Importe da planilha ou crie aqui em “＋ Nova jornada”." />
+      </>)}
     </main>
+  )
+}
+
+// --- Criar jornada à mão -----------------------------------------------------
+// A rota `POST /rh/jornadas` existia desde sempre e a tela NUNCA a chamava — o
+// texto de lista vazia já dizia "crie manualmente" sem haver por onde. Só a
+// DESCRIÇÃO é pedida aqui: ela é o texto canônico que vai ao Tirvu, e a
+// estrutura (escala, horários) é proposta pelo parser e confirmada depois, na
+// aba "A confirmar" — pedir tudo agora inverteria esse fluxo.
+function NovaJornada({ postos, aoCriar, aoCancelar, setMsg }) {
+  const [descricao, setDescricao] = useState('')
+  const [postoId, setPostoId] = useState('')
+  const [tirvuId, setTirvuId] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const salvar = async () => {
+    const desc = descricao.trim()
+    if (!desc) { setMsg({ tipo: 'erro', texto: 'Informe a descrição da jornada.' }); return }
+    setSalvando(true)
+    try {
+      await aoCriar({ descricao: desc, posto_servico_id: postoId || null,
+                      tirvu_id: tirvuId.trim() || null })
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: `Não foi possível criar (${e.detail || e.message}).` })
+    } finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="rh-card" style={{ marginBottom: '.6rem' }}>
+      <h3>＋ Nova jornada</h3>
+      <p className="explica">A <strong>descrição</strong> é o texto que vai ao Tirvu — escreva
+        exatamente como ele deve aparecer lá. A estrutura (escala, horários) é proposta
+        automaticamente e fica para você confirmar na aba <strong>A confirmar</strong>.</p>
+      <div className="linha3">
+        <label className="campo"><span className="rotulo">Descrição da jornada</span>
+          <input value={descricao} autoFocus placeholder="ex.: 12X36 DIURNO 07:00 AS 19:00"
+                 onChange={(e) => setDescricao(e.target.value)} /></label>
+        <label className="campo"><span className="rotulo">Posto (opcional)</span>
+          <SelectBusca valor={postoId} aoEscolher={setPostoId} vazioRotulo="— sem posto —"
+                       placeholder="Buscar posto…"
+                       opcoes={postos.map((p) => ({ valor: p.id, rotulo: p.nome }))} /></label>
+        <label className="campo"><span className="rotulo">ID Tirvu (opcional)</span>
+          <input value={tirvuId} placeholder="ex.: 246"
+                 onChange={(e) => setTirvuId(e.target.value)} /></label>
+      </div>
+      <div className="rh-lote" style={{ marginTop: '.6rem' }}>
+        <button className="btn-principal btn-mini" disabled={salvando} onClick={salvar}>
+          {salvando ? 'Criando…' : 'Criar jornada'}</button>
+        <button className="btn-secundario btn-mini" disabled={salvando} onClick={aoCancelar}>
+          Cancelar</button>
+      </div>
+    </div>
   )
 }
 
