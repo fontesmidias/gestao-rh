@@ -100,6 +100,26 @@ de específico** do módulo onde nasceram.
 > módulo tende a ficar invisível. Se o contrato não menciona o domínio, o
 > arquivo não deveria morar no domínio.
 
+
+## Acrescentadas na 23ª leva (v3.02 → v3.09)
+
+| Peça | O que faz | Contrato | Quem usa |
+|---|---|---|---|
+| **`services/nome_arquivo.py`** | Nome de arquivo baixado no padrão `MATRÍCULA - NOME - DOCUMENTO` | `montar(matricula, pessoa, documento, extensao)` · `do_colaborador(obj, documento)` · `limpar(texto)` | `dossie.nome_arquivo_dossie`, `api/arquivo.py`. **Deve ser usado em todo download novo.** |
+| **`services/creche_competencia.py`** | Regras puras do ciclo mensal: competência válida, atraso, dias para o corte, teto do valor | `competencia_anterior(hoje)` · `valida(ano,mes,hoje)` · `em_atraso(...)` · `dias_para_o_corte(...)` · `centavos(txt)` / `reais(cent)` · `valor_reembolsavel(despesa, teto)` | `creche_envio`, `creche.py`, `creche_publico.py`, `workers/creche_lembretes` |
+| **`services/creche_comprovante.py`** | 1..N folhas → um PDF, com originais numerados e hash na auditoria ao substituir | `gravar(db, competencia, partes, ator)` · `expurgar(...)` · `originais(competencia)` | `creche_envio`, `workers/expurgo` |
+| **`services/creche_envio.py`** | A regra de RECEBER o comprovante, compartilhada pelas duas portas | `receber(db, ben, crianca_id, ano, mes, partes, valor, ator)` · `dump(registro, teto)` | `api/creche.py` (RH) e `api/creche_publico.py` (colaborador) |
+| **`export_tirvu.matricula_formatada`** | Zero-pad até 6 dígitos para EXIBIR e NOMEAR (não muda o gravado) | `matricula_formatada(matricula, digitos=6)` · `matricula_automatica(m)` | `nome_arquivo`, `revisao.py`, `creche_pdf`, `colaboradores.py` |
+| **`BotaoBaixar.nomeDoCabecalho`** (front) | Lê o `filename` do `Content-Disposition` | `nomeDoCabecalho(resposta) -> str \| null` | `rh/BotaoBaixar.jsx` |
+
+⚠️ **`centavos()` nunca devolve 0 para texto ilegível** — devolve `None`. Zero
+entraria calado numa soma de dinheiro e o total sairia menor sem nada acusar; é
+a mesma regra do `_valor_unitario` do creche, e há mutação cobrindo.
+
+⚠️ **`nome_arquivo.montar` omite parte vazia junto com o separador**: em admissão
+a matrícula quase sempre não existe, e ` - MARIA - FICHA.pdf` deixaria um hífen
+órfão na frente.
+
 ---
 
 ## Como manter isto vivo

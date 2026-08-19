@@ -63,7 +63,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Frequência do Tirvu** importada por planilha entra como **contexto**, nunca nota; registro incompleto (esqueceu de bater a saída) jamais é contado como falta
 
 ### Recrutamento e seleção
-- **Banco de Talentos**: formulário público (substituiu o Microsoft Forms) com currículo opcional, importação idempotente da planilha do Forms e consentimento LGPD obrigatório. O RH também **cadastra à mão** pelo painel — para o currículo que chega por e-mail ou indicação. Nesse caso o consentimento **não é fingido**: fica registrado quem cadastrou, e a ficha diz "sem aceite" em vez de simular um que não houve. Duplicata **avisa dizendo quem já existe**, nunca funde sozinha
+- **Banco de Talentos**: formulário público (substituiu o Microsoft Forms) com **currículo obrigatório** — arquivo ou foto das páginas, avisado já no primeiro passo —, importação idempotente da planilha do Forms e consentimento LGPD obrigatório. O RH também **cadastra à mão** pelo painel, e ali o currículo pode faltar **com justificativa** (indicação, contato por telefone), que fica na ficha e na auditoria. Nesse caso o consentimento **não é fingido**: fica registrado quem cadastrou, e a ficha diz "sem aceite" em vez de simular um que não houve. Quem já está cadastrado e se cadastra de novo **atualiza o próprio registro**, sem duplicar — e a resposta é idêntica à de um cadastro novo, porque revelar "já existe" numa rota pública a transformaria numa sonda para descobrir quem está na base. No painel, duplicata **avisa dizendo quem já existe**, nunca funde sozinha
 - **Match de Vagas**: o RH cadastra a vaga e o sistema ranqueia os talentos por aderência — filtro estruturado local primeiro (grátis), currículo lido por IA depois. **A IA nunca decide sozinha**: devolve nota e justificativa, o RH convoca. O ranqueamento é **assíncrono** (enfileirado), o texto do currículo é extraído **uma vez** no upload e a análise é reaproveitada por (vaga, talento)
 - **Currículo é tratado como entrada hostil**: é upload público de gente desconhecida cujo texto vai para dentro de um prompt. Cinco camadas anti-prompt-injection e o suspeito aparece marcado **"⚠️ suspeito"** no ranking — **nunca filtrado em silêncio**, porque ranking adulterado parece igual a um legítimo. CPF/RG/telefone/e-mail são removidos antes do envio à IA
 - **Ninguém some sem explicação**: sem currículo, ilegível, aguardando IA e erro são resultados **gravados e exibidos com o motivo** — não ausência
@@ -83,7 +83,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Minutário de Mensagens**: modelos de mensagem e composição assistida por IA a partir dos campos da **vaga** — o texto volta sempre editável e nunca é enviado sozinho
 
 ### Benefícios, testes, arquivo
-- **Reembolso-Creche** (IN SEGES/MGI 147/2026): elegibilidade e **vigência** por posto (o aditivo de cada contrato tem data de início), link público de levantamento com 2FA (ou perguntas de verificação para quem não tem e-mail), assinatura do requerimento e o ciclo de decisão do RH — aprovar, devolver para correção, indeferir por criança, "não faço jus", suspender/encerrar — com aviso ao colaborador em cada passo. ⚠️ A **entrega mensal do comprovante de despesa** (nota fiscal da creche PJ ou declaração de quitação do cuidador PF, com corte no dia 25) está **em construção**: ver `docs/planejamento/15-feedbacks-23a-leva.md`
+- **Reembolso-Creche** (IN SEGES/MGI 147/2026): elegibilidade e **vigência** por posto (o aditivo de cada contrato tem data de início), link público de levantamento com 2FA (ou perguntas de verificação para quem não tem e-mail), assinatura do requerimento e o ciclo de decisão do RH — aprovar, devolver para correção, indeferir por criança, "não faço jus", suspender/encerrar — com aviso ao colaborador em cada passo. O benefício aparece também **nas telas de Colaboradores e Admissões** — quem está com comprovante pendente, e quem vai para posto elegível sem ter informado criança —, em vez de viver só na tela do Creche. Depois de ativo, entra o **ciclo mensal**: todo mês, um comprovante **por criança** — nota fiscal se a creche for PJ, declaração de quitação se o cuidador for PF —, com corte no dia configurável (padrão 25), lembretes automáticos com a antecedência que o RH escolhe, envio pelo colaborador **ou pelo RH**, várias folhas por documento e o valor do posto valendo como **teto** do reembolso
 - **Decisão por criança, um requerimento só**: com mais de um filho, o RH defere uns e indefere outros na própria linha, com o motivo. O valor do reembolso é por criança deferida e acompanha as decisões; o requerimento que o colaborador assina lista as contempladas e registra as negadas em seção própria — antes, negar um filho exigia removê-lo do cadastro, e a prova de que fora analisado sumia junto
 - **Quem faz jus, e até quando**: aba própria com a data em que cada criança sai da idade, quantos dias faltam e quem já saiu — o fechamento mensal do DP deixa de ser constatação depois do fato e vira previsão. Tudo derivado da data de nascimento, sem coleta nova. A idade tem **quatro estados**, não dois: na idade, fora da idade, data ilegível e **data implausível** (nascimento de adulto no campo do filho, que já apareceu em campo) — os dois últimos são "conferir", nunca negativa, e ficam fora do alarme de risco de glosa
 - **Central de testes**: dashboard de todos os testes (admissão + testagem avulsa), reset, relatório de comportamento; links de testagem anônima onde a pessoa vê o próprio resultado
@@ -95,6 +95,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Quem recebe cada aviso interno** (matriz evento × destinatários) — nunca a caixa de login, que é pessoal
 - **Catálogo dos documentos do sistema**: os 11 documentos da admissão com amostra em PDF de verdade, download e "criar modelo a partir deste" nos de texto corrido. Os geradores oficiais **não são substituídos** — o hash do ato de assinatura é calculado sobre o PDF gerado, então trocá-los faria os manifestos já emitidos apontarem para um hash que não se reproduz
 - **Uniformes**: lista com as medidas informadas no wizard, na tela e com export CSV. O e-mail ao operacional diz só que há novidade — ficha de pessoal não circula por caixa de e-mail
+- **Credenciais de automação**: token de MÁQUINA para integrações consultarem o portal no lugar da senha de uma pessoa — o segredo aparece **uma única vez** (o banco guarda só o resumo criptográfico), é **revogável a qualquer momento**, e revogar **marca em vez de apagar**: a linha é a prova de que a credencial existiu e de quando deixou de valer
 - **Central de Importações**, tags, tipos de certificado, prazos por posto/cargo, identidade visual e provedor de e-mail
 
 ### Telemetria de uso — enxergar o que acontece no aparelho das pessoas
@@ -120,6 +121,7 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
 - **Lixeira universal** com restauração e retenção configurável · expurgo LGPD automático · rate limiting em login/2FA
 - E-mail por **Microsoft 365 (Graph)**, **Google (Gmail API)**, webhook do Power Automate ou SMTP — configurados pelo painel
+- **Nome padronizado em todo download**: `MATRÍCULA - NOME - DOCUMENTO`, caixa alta e sem acento — o cabeçalho HTTP só carrega ASCII com segurança, e a pasta física do RH é toda em caixa alta. Vale para os módulos existentes e os novos
 - **Trava anti-duplo-clique** (idempotência no servidor) · tema claro/escuro · **identidade visual da empresa configurável**
 
 ## 🏗️ Arquitetura
@@ -128,7 +130,8 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 React/Vite (SPA)  ──►  nginx  ──►  FastAPI (Python 3.12)
                                      ├── PostgreSQL 16 (Alembic: migrations automáticas no start)
                                      ├── MinIO (arquivos, S3-compatível)
-                                     ├── Redis + RQ (workers: expurgo LGPD, expiração de roteiros)
+                                     ├── Redis + RQ (workers: expurgo LGPD, expiração de roteiros,
+                                     │               lembrete do comprovante mensal do creche)
                                      └── SMTP / Graph API / Gmail API
 ```
 
@@ -180,7 +183,7 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 - **Confira depois de todo deploy:** `GET /api/health` →
 
   ```json
-  { "status": "ok", "versao": "v2.54.0 — …", "versao_numero": "2.54.0",
+  { "status": "ok", "versao": "v3.09.0 — …", "versao_numero": "3.09.0",
     "migracoes": { "em_dia": true, "no_codigo": "b4c5d6e7f8a9", "no_banco": "b4c5d6e7f8a9" } }
   ```
 
@@ -205,7 +208,7 @@ O smoke test sobe contra Postgres + MinIO efêmeros (ver `CLAUDE.md` para os con
 - Link mágico com token de 256 bits (só o **hash** é persistido) e expiração; **rate limiting** em login (por IP e por conta), 2FA e recuperação de senha; anti-enumeração de CPF
 - Assinatura eletrônica simples (art. 4º, I, Lei 14.063/2020), manifesto de evidências no PDF, verificação pública com dados minimizados (nome e CPF mascarados **fora** do painel)
 - Arquivos excluídos, rejeitados ou substituídos deixam **hash SHA-256 na auditoria** antes de sair do storage; exportações em lote registram a lista de quem foi exportado
-- Coleta fundamentada (LGPD art. 7º e art. 11 para dados de saúde), aviso de privacidade no primeiro acesso, expurgo automático pós-admissão e higienização de dados de terceiros não assinados
+- Coleta fundamentada (LGPD art. 7º e art. 11 para dados de saúde), aviso de privacidade no primeiro acesso, expurgo automático pós-admissão — **inclusive dos documentos das crianças do reembolso-creche**, que ficavam guardados para sempre mesmo de quem foi indeferido (o comprovante mensal fica 5 anos, porque comprova despesa reembolsada em contrato público) — e higienização de dados de terceiros não assinados
 - **Leitura de documentos por IA roteada por sensibilidade**: identidade e certificado são lidos normalmente; **atestado de saúde** (dado sensível) só passa pela IA com o provedor sob Zero Data Retention contratado — uma trava no código, ligável pelo painel, com a base legal registrada em [docs/planejamento/07-lgpd-leitura-automatizada-documentos.md](docs/planejamento/07-lgpd-leitura-automatizada-documentos.md). Geolocalização e foto do ponto eletrônico não são importadas para a avaliação (desproporcional ao fim)
 
 ## 🗺️ Roadmap e histórico
@@ -221,7 +224,7 @@ Decisões e roadmap em [docs/planejamento/](docs/planejamento/). Histórico de v
 - **Employee self-service portal**: one passwordless door for the worker's whole life at the company — courses, certificates, pending actions and appraisals; works for Tirvu-imported staff who never filled a form, via knowledge-based questions on native record data
 - **Development & brigade recertification**: employees log courses and certifications; configurable types with expiry/criticality/eligible roles; RH validation queue with batch approval (critical docs never batched); automatic 90-day expiry alerts and one-click enrollment e-mail to the training provider with a per-person PDF dossier
 - **Performance appraisals**: the paper "Appraiser Handbook" digitized — real-time observed facts (visible to the employee, author hidden), the 11-section 360° form (vertical named, horizontal anonymous & aggregated), a state machine that won't skip the in-person feedback conversation, the employee's right of reply, a competency radar + score timeline, and evaluator-drift calibration that informs the approver **without changing any score**; time-clock data imported as context, never as a grade
-- **Workforce, benefits, archive**: unified candidate/employee records; idempotent workforce import; full childcare-reimbursement module (per-post eligibility, review lifecycle, signed request); unified test dashboard; filtered inventory with bulk ZIP+XLSX backup
+- **Workforce, benefits, archive**: unified candidate/employee records; idempotent workforce import; full childcare-reimbursement module (per-post eligibility **with an effective date per contract**, review lifecycle, signed request, plus the **monthly cycle**: one proof of expense per child — invoice when the provider is a company, signed receipt when it is an individual — with a configurable cutoff day, automatic reminders, and the post's amount acting as a **cap**, not a fixed value); unified test dashboard; filtered inventory with bulk ZIP+XLSX backup
 - **Configurable branding**: company name, legal entity, logo and favicon editable from the panel
 - **Cross-cutting**: full audit trail with before/after and file hashes; universal trash with restore; rate limiting; server-side idempotency; Microsoft 365 / Gmail / SMTP e-mail
 - **Stack**: FastAPI + PostgreSQL + MinIO + Redis, React/Vite, Docker Compose / Portainer, CI-published GHCR images, Playwright E2E
