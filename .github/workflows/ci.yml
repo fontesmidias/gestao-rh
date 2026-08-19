@@ -105,6 +105,12 @@ jobs:
           # derrubava a tela inteira de Entrevistas no ErrorBoundary, e o
           # `.catch(() => {})` ao lado não protegia: `undefined()` é TypeError
           # SÍNCRONO. Stdlib pura, lê arquivos, roda em segundos.
+          # `test_creche_competencia` (v3.02): as regras do ciclo mensal do
+          # creche decidem DINHEIRO (o teto do posto é teto, não valor fixo) e
+          # PRAZO (o que está em atraso, quando lembrar). Stdlib pura — o
+          # serviço não importa modelo nem config de propósito. Validado por 3
+          # mutações; a que faz "ilegível virar zero" é a mais importante: zero
+          # entraria calado na soma e o total sairia menor sem nada acusar.
           # `test_permissoes_declaradas` (v2.86): reprova rota /rh/* que não
           # declara permissão. Sem ele, módulo novo nasce aberto a qualquer
           # pessoa com login — e o defeito não aparece na tela: a rota
@@ -114,7 +120,8 @@ jobs:
                    test_api_front_existe test_campo_variaveis \
                    test_permissoes_declaradas test_papel_automacao \
                    test_tela_de_trabalho test_transcricao_paragrafos \
-                   test_retranscrever test_diarizacao_diagnostico; do
+                   test_retranscrever test_diarizacao_diagnostico \
+                   test_creche_competencia; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
