@@ -68,12 +68,33 @@ def checar(condicao, descricao):
 
 
 def _png(cor: int = 200) -> bytes:
-    """Uma imagem real e pequena — o upload valida o conteúdo, não só a
-    extensão, então bytes aleatórios seriam recusados por motivo errado."""
-    from PIL import Image
+    """Uma folha com TEXTURA, como um documento fotografado.
+
+    ⚠️ Cor chapada não serve: a normalização mede nitidez e recusa a imagem como
+    `imagem_borrada` (foi o que fez a 1ª versão deste teste cair no caminho de
+    escape e expor o `PdfStreamError`). Documento real tem texto, logo tem
+    variação — desenhar linhas é o que aproxima o teste do caso verdadeiro.
+    """
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (700, 900), (cor, cor, cor))
+    d = ImageDraw.Draw(img)
+    for y in range(40, 880, 24):
+        d.line([(40, y), (660, y)], fill=(20, 20, 20), width=3)
+    return _para_png(img)
+
+
+def _para_png(img) -> bytes:
     buf = io.BytesIO()
-    Image.new("RGB", (700, 900), (cor, cor, cor)).save(buf, format="PNG")
+    img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def _png_chapado() -> bytes:
+    """Sem textura: a normalização recusa por `imagem_borrada`, e o envio tem de
+    seguir mesmo assim — qualidade de foto não pode travar a comprovação da
+    despesa (v2.61). É o caminho que derrubava tudo com 500."""
+    from PIL import Image
+    return _para_png(Image.new("RGB", (700, 900), (200, 200, 200)))
 
 
 def _cenario(nome: str, valor="R$ 526,64", vigente_desde=None):
@@ -187,7 +208,19 @@ r8 = _enviar(ben4, crianca4, [("f.png", _png(), "image/png")])
 checar(r8.status_code == 200 and r8.json().get("anterior_a_vigencia") is False,
        "competência coberta pela vigência NÃO é marcada")
 
-print("8. a listagem mostra o que falta e o prazo")
+print("8. foto RUIM não derruba o envio (qualidade não trava a comprovação)")
+# ⚠️ Este é o defeito que o CI pegou em 19/08/2026: a normalização recusa a foto
+# por `imagem_borrada`, o caminho de escape guardava os BYTES DO PNG e os
+# mandava ao `combinar_pdfs` — `PdfStreamError`, envio inteiro com 500.
+ben5, crianca5 = _cenario("Ciclo Foto Ruim")
+r10 = _enviar(ben5, crianca5, [("chapada.png", _png_chapado(), "image/png")],
+              valor="R$ 200,00")
+checar(r10.status_code == 200,
+       f"foto sem nitidez ainda é aceita (veio {r10.status_code})")
+checar(r10.json().get("tem_arquivo") is True if r10.status_code == 200 else False,
+       "e o comprovante ficou gravado como PDF")
+
+print("9. a listagem mostra o que falta e o prazo")
 r9 = cli.get(f"/api/rh/creche/levantamentos/{ben2.id}/competencias")
 checar(r9.status_code == 200, "listagem responde")
 corpo9 = r9.json() if r9.status_code == 200 else {}

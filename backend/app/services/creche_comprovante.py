@@ -16,10 +16,14 @@ reusa aqui é o DESENHO — originais numerados + PDF combinado — e as funçõ
 expurga o anterior gravando antes o SHA-256, o tamanho e o caminho de cada
 arquivo removido.
 
-⚠️ Ao contrário do wizard, falha de normalização **não recusa** o envio: cai no
-arquivo original. É a mesma decisão da v2.61 para creche e portal — recusar aqui
-deixaria a pessoa sem conseguir comprovar a despesa por causa da qualidade de
-uma foto, e o benefício travaria pela foto, não pelo direito.
+⚠️ **Qualidade não barra a comprovação** (decisão da v2.61 para creche e
+portal): foto borrada ou escura ainda entra — travar aqui faria o benefício
+depender da câmera, não do direito. Mas o caminho de escape tem de produzir um
+PDF: guardar os bytes de um PNG e mandá-los ao `combinar_pdfs` estoura
+`PdfStreamError` e derruba o envio com 500 (defeito pego pelo CI em 19/08/2026).
+Folha que não vira PDF de jeito nenhum é PULADA e NOMEADA na auditoria; se
+NENHUMA virar, o envio é recusado — melhor que gravar zero página com o registro
+afirmando que está entregue (v2.93).
 """
 
 from __future__ import annotations
@@ -73,6 +77,46 @@ def expurgar(db: Session, competencia, evento: str, ator: str,
             pass
 
 
+def _pdf_de_emergencia(nome: str, dados: bytes) -> bytes | None:
+    """Converte a folha em PDF quando a normalização normal recusou.
+
+    A normalização recusa por QUALIDADE (foto borrada/escura) além de formato, e
+    aqui qualidade não pode barrar a comprovação. Então: PDF passa direto;
+    imagem é convertida sem as checagens; o resto não tem conversão possível e
+    devolve `None`, para o chamador PULAR e NOMEAR a folha.
+    """
+    import io
+    from pathlib import Path
+
+    ext = Path(nome.lower()).suffix
+    if ext == ".pdf":
+        return dados
+    # ⚠️ NÃO dá para chamar `_imagem_para_pdf`: ele aplica as mesmas checagens
+    # de nitidez e tamanho que já recusaram a folha, e levantaria de novo. O que
+    # se reusa é só a parte de CONVERSÃO — reencodar em JPEG e montar a página
+    # timbrada —, que é o trecho depois das validações.
+    try:
+        import img2pdf
+        from PIL import Image
+
+        from app.services.normalizacao import _pagina_timbrada
+
+        img = Image.open(io.BytesIO(dados))
+        img.load()
+        img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=88)
+        pagina = _pagina_timbrada(buf.getvalue(), img.width, img.height,
+                                  "Comprovante de despesa")
+        pdf = pagina if pagina is not None else img2pdf.convert(buf.getvalue())
+    except Exception:
+        return None
+    # Cinto e suspensório: só devolve o que REALMENTE é PDF. Devolver bytes
+    # vazios passaria pelo `is None` do chamador e estouraria adiante, no
+    # `combinar_pdfs` — que foi como este defeito se manifestou.
+    return pdf if pdf and pdf[:4] == b"%PDF" else None
+
+
 def gravar(db: Session, competencia, partes: list[tuple[str, bytes]],
            ator: str, ator_detalhe: str | None = None) -> int:
     """Grava as folhas do comprovante e devolve o total de PÁGINAS do PDF.
@@ -88,8 +132,10 @@ def gravar(db: Session, competencia, partes: list[tuple[str, bytes]],
     do storage é lexicográfica e, sem isso, `10-` vem antes de `2-` — a folha na
     ordem errada num documento de comprovação (a armadilha da v2.35).
     """
-    from app.services.normalizacao import combinar_pdfs, normalizar_para_pdf
+    from app.services.normalizacao import (ArquivoInvalido, combinar_pdfs,
+                                           normalizar_para_pdf)
 
+    ilegiveis: list[str] = []
     if competencia.arquivo_pdf_key:
         expurgar(db, competencia, evento="creche_comprovante_substituido",
                  ator=ator, ator_detalhe=ator_detalhe)
@@ -103,10 +149,27 @@ def gravar(db: Session, competencia, partes: list[tuple[str, bytes]],
             pdf, _paginas = normalizar_para_pdf(nome, dados,
                                                 rotulo="Comprovante de despesa")
         except Exception:
-            # Formato exótico ou PDF protegido: guarda o que veio. O RH ainda vê
-            # o arquivo; só não sai timbrado. Recusar travaria a comprovação.
-            pdf = dados
+            # A normalização recusa por qualidade (foto borrada, escura) ou por
+            # formato. Aqui NÃO se recusa o envio — a decisão da v2.61 para o
+            # creche vale: travar a comprovação pela qualidade de uma foto faria
+            # o benefício depender da câmera, não do direito.
+            #
+            # ⚠️ Mas "guardar o original" só serve se ele JÁ for PDF: mandar os
+            # bytes de um PNG para o `combinar_pdfs` estoura
+            # `PdfStreamError` e derruba o envio inteiro com 500 — o defeito que
+            # o CI pegou. Para imagem, força-se a conversão SEM as checagens de
+            # qualidade; se nem isso der, a folha é PULADA e NOMEADA (v2.93:
+            # peça ilegível é pulada e nomeada, nunca `except: pass`).
+            pdf = _pdf_de_emergencia(nome, dados)
+            if pdf is None:
+                ilegiveis.append(nome)
+                continue
         pdfs.append(pdf)
+
+    if not pdfs:
+        # Nenhuma folha virou PDF: recusar é o certo, porque gravar zero página
+        # com o registro dizendo "entregue" seria pior (v2.93).
+        raise ArquivoInvalido("nenhuma_folha_legivel")
 
     # `combinar_pdfs` devolve (bytes, TOTAL DE PÁGINAS) e já trata a lista de um
     # só — não chamá-la no caso de 1 arquivo gravaria a tupla como se fosse
@@ -120,6 +183,13 @@ def gravar(db: Session, competencia, partes: list[tuple[str, bytes]],
     competencia.paginas = paginas
     competencia.enviado_em = datetime.now(timezone.utc)
     competencia.enviado_por = ator_detalhe or ator
+    if ilegiveis:
+        # Folha pulada é NOMEADA (v2.93): sumir em silêncio faria o comprovante
+        # circular com uma página a menos e ninguém saber qual.
+        registrar(db, "creche_comprovante_folha_ilegivel", ator=ator,
+                  ator_detalhe=ator_detalhe,
+                  detalhe={"competencia": str(competencia.id),
+                           "folhas": ilegiveis})
     return paginas
 
 

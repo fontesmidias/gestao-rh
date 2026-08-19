@@ -122,8 +122,15 @@ def receber(db: Session, ben: BeneficioCreche, crianca_id: uuid.UUID,
     registro.analisado_por = None
     registro.analisado_em = None
 
-    paginas = creche_comprovante.gravar(db, registro, partes,
-                                        ator=ator, ator_detalhe=ator_detalhe)
+    from app.services.normalizacao import ArquivoInvalido
+    try:
+        paginas = creche_comprovante.gravar(db, registro, partes,
+                                            ator=ator, ator_detalhe=ator_detalhe)
+    except ArquivoInvalido as exc:
+        # 422 com o CÓDIGO, que a tela sabe traduzir — não um 500 que manda
+        # quem opera procurar defeito no sistema quando o problema é a foto.
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     registrar(db, "creche_comprovante_enviado", ator=ator,
               ator_detalhe=ator_detalhe, candidato_id=ben.candidato_id,
