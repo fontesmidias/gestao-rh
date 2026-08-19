@@ -261,7 +261,8 @@ jobs:
                    test_processos test_dossie_pdf_ilegivel \
                    test_token_automacao test_gravacao_entrevista \
                    test_blocos_gravacao test_creche_ciclo_mensal \
-                   test_matricula test_nome_arquivo; do
+                   test_matricula test_nome_arquivo \
+                   test_talento_recadastro; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"

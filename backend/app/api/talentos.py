@@ -153,6 +153,80 @@ def opcoes_publicas() -> dict:
     return {"cargos": CARGOS_SUGERIDOS, "regioes": REGIOES_SUGERIDAS}
 
 
+def _talento_existente(db: Session, email: str | None, nome: str | None,
+                       telefone: str | None) -> Talento | None:
+    """A MESMA regra das outras duas portas (cadastro pelo RH e importação de
+    planilha): e-mail; ou nome + telefone quando não há e-mail.
+
+    Está numa função só justamente porque são três portas para o mesmo Banco de
+    Talentos — se discordarem sobre o que é a mesma pessoa, a duplicata entra
+    por uma delas e ninguém vê.
+    """
+    email = (email or "").strip().lower() or None
+    if email:
+        achado = db.scalar(select(Talento).where(func.lower(Talento.email) == email))
+        if achado is not None:
+            return achado
+    tel = _so_digitos_tel(telefone)
+    if tel and (nome or "").strip():
+        for t in db.scalars(select(Talento).where(
+                func.lower(Talento.nome) == nome.strip().lower())).all():
+            if _so_digitos_tel(t.telefone) == tel:
+                return t
+    return None
+
+
+def _recadastrar(db: Session, talento: Talento, dados: dict, cargos: list,
+                 regioes: list, request: Request) -> dict:
+    """Atualiza o cadastro que já existe e responde como se fosse novo.
+
+    Decisões do Bruno (18/08/2026): os dados NOVOS valem (é o que a pessoa quer
+    ao se recadastrar), e quem estava **arquivado volta para a fila** — quem se
+    candidata de novo pode ter mudado (curso novo, experiência nova), e a
+    decisão de descartar se toma outra vez com o dado atual.
+
+    O motivo do arquivamento anterior NÃO se perde: ele vive como anotação no
+    mini-CRM (v2.14), que é append-only — então o RH reavalia sabendo por que
+    tinha descartado.
+
+    ⚠️ `convertido` (já virou candidato, admissão em curso) **não é mexido**:
+    rebaixar para "novo" tiraria da fila de admissão alguém que está sendo
+    admitido, e o sintoma seria a pessoa sumir da tela do RH.
+    """
+    from app.models.crm import Anotacao
+
+    era = talento.status
+    for campo, valor in dados.items():
+        # Campo vazio no reenvio NÃO apaga o que já havia: quem preenche de novo
+        # costuma preencher o essencial, e apagar telefone/cidade que o RH já
+        # tinha seria perder dado por causa de um formulário mais curto.
+        if valor not in (None, "") and hasattr(talento, campo):
+            setattr(talento, campo, valor)
+    if cargos:
+        talento.cargos_interesse = cargos
+        talento.cargo_interesse = cargos[0]
+    if regioes:
+        talento.regioes = regioes
+    talento.consentimento_lgpd_em = datetime.now(timezone.utc)
+    if era in (StatusTalento.arquivado, StatusTalento.em_analise):
+        talento.status = StatusTalento.novo
+
+    db.add(Anotacao(
+        talento_id=talento.id, autor_nome="(cadastro público)",
+        texto=("Recadastrou-se pelo formulário público"
+               + (f" — estava {era.value}, voltou para a fila."
+                  if era == StatusTalento.arquivado else ".")),
+    ))
+    registrar(db, "talento_recadastrado", ator="publico",
+              detalhe={"talento": str(talento.id), "status_antes": era.value,
+                       "status_depois": talento.status.value})
+    db.commit()
+    # Resposta IDÊNTICA à do cadastro novo (anti-enumeração): quem sonda com
+    # e-mail alheio não pode distinguir "já existia" de "acabei de criar".
+    return {"ok": True, "id": str(talento.id),
+            "upload_token": _upload_serializer().dumps({"tid": str(talento.id)})}
+
+
 @router.post("/talentos", status_code=201)
 def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db)) -> dict:
     """Cadastro público no Banco de Talentos. Sem autenticação — protegido por
@@ -174,6 +248,23 @@ def cadastrar(payload: TalentoIn, request: Request, db: Session = Depends(get_db
     tipo = dados.get("tipo_contratacao")
     if tipo and tipo not in TIPOS_CONTRATACAO:
         dados["tipo_contratacao"] = None
+
+    # ---- Recadastro da MESMA pessoa (v3.05) ------------------------------
+    # Feedback do Bruno (18/08/2026): *"pensar em uma hipótese da pessoa se
+    # cadastrar apenas uma vez"*. A porta do RH já tinha dedup ("avisa, não
+    # funde") desde a v2.73; **esta não tinha nenhuma** — a mesma pessoa
+    # preenchendo duas vezes criava dois registros, e ninguém via.
+    #
+    # ⚠️ Aqui NÃO se pode responder "já existe: Maria, maria@x.com" como a rota
+    # do RH faz: isto é PÚBLICO, e a resposta viraria uma sonda para descobrir
+    # quem está no banco de talentos digitando e-mails alheios. O padrão da casa
+    # para porta pública é resposta IDÊNTICA (anti-enumeração, como o gate do
+    # creche e do portal). Por isso aqui se ATUALIZA em silêncio: é o que a
+    # pessoa quer (manter o cadastro em dia) e não revela nada a quem sonda.
+    existente = _talento_existente(db, dados.get("email"), dados.get("nome"),
+                                   dados.get("telefone"))
+    if existente is not None:
+        return _recadastrar(db, existente, dados, cargos, regioes, request)
 
     talento = Talento(**dados)
     talento.cargos_interesse = cargos or None
