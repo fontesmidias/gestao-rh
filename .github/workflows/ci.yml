@@ -426,8 +426,11 @@ jobs:
             exit 1
           fi
           tag="v$versao"
-          git fetch --tags --quiet
-          if git rev-parse "$tag" >/dev/null 2>&1; then
+          # Pergunta ao REMOTO, não ao clone local: o `actions/checkout` faz
+          # checkout RASO por padrão e pode não ter as tags: `git rev-parse`
+          # local diria "não existe" para uma tag que existe, e o push falharia
+          # depois — no fim de um pipeline de 9 minutos, por um guard cego.
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
             echo "::notice::a tag $tag já existe — nada a fazer."
             echo "Se esta era para ser uma versão NOVA, o versao.py não foi atualizado."
             exit 0
