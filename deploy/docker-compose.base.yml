@@ -90,7 +90,11 @@ services:
     # Roda a cada 24h (LGPD + espaço no MinIO): expurgo de arquivos antigos,
     # expiração de roteiros de assinatura vencidos + higienização de externos, e
     # o aviso de certificação prestes a vencer (brigada/NR — v1.83).
-    command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; python -m app.workers.avisar_vencimentos; sleep 86400; done"]
+    # `creche_lembretes` (v3.02) entra aqui, e não no `alertas` de 15 min: a
+    # antecedência é medida em DIAS, então uma passada diária basta — e 96
+    # passadas por dia seriam consultas inúteis (o carimbo impediria o e-mail
+    # repetido, mas o banco seria varrido do mesmo jeito).
+    command: ["while true; do python -m app.workers.expurgo; python -m app.workers.expirar_roteiros; python -m app.workers.avisar_vencimentos; python -m app.workers.creche_lembretes; sleep 86400; done"]
     env_file: ../.env
     depends_on:
       - db
