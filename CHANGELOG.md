@@ -133,6 +133,19 @@ como obrigatórios.
   ⚠️ O botão "tentar de novo" só é seguro por causa da v3.05.0: sem a dedup da
   porta pública, reenviar criaria um segundo cadastro.
 
+### ⚠️ Quebrou o E2E — e o teste estava certo
+
+O `portal.spec.js` preenche o formulário público e espera *"Cadastro recebido"*.
+Ele **não anexava currículo**, porque até então não precisava — então a
+exigência nova o reprovou, no último passo do pipeline (~4 min depois dos testes
+rápidos). O teste refletia o comportamento antigo; quem mudou fui eu.
+
+Corrigido para anexar um PDF mínimo **e**, antes disso, afirmar que o envio é
+BARRADO sem o arquivo: sem essa asserção o teste voltaria a provar só que o
+formulário funciona, não que a regra está ligada. **Ao mudar regra de negócio,
+`grep` nos testes E2E pelo fluxo afetado** — eles exercitam a tela inteira e são
+os últimos a rodar.
+
 ### Onde a exigência NÃO mora
 
 Na rota de cadastro. O arquivo sobe depois de o registro existir — exigi-lo ali
