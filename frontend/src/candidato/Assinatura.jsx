@@ -211,11 +211,30 @@ export default function Assinatura({ token, email, aoConcluir, aoVoltarAoFormula
               Só aparece antes da assinatura: documento assinado é peça de
               prova, e corrigir dado depois disso é outra conversa (o RH
               reabre). */}
+          {/* `btn-secundario`, não `btn-link` (v3.08): o relato que chegou foi
+              *"ela vê os dados das fichas e não consegue editar, o RH tem que
+              editar manualmente"* — e o backend sempre permitiu. O botão estava
+              aqui desde a v2.88, mas como link de texto discreto embaixo do
+              botão verde; quem não o vê conclui que não dá para corrigir e
+              chama o RH. Botão que existe e não é achado não está entregue
+              (v2.75). */}
           {aoVoltarAoFormulario && (
-            <button className="btn-link" onClick={aoVoltarAoFormulario}
+            <button className="btn-secundario" onClick={aoVoltarAoFormulario}
                     style={{ display: 'block', margin: '.8rem auto 0' }}>
-              ← Preciso corrigir meus dados antes de assinar
+              ✏️ Preciso corrigir meus dados antes de assinar
             </button>
+          )}
+          {/* REASSINATURA: aqui não há formulário para voltar — os documentos
+              foram reabertos por uma ação do RH (edição da ficha ou troca de
+              posto/cargo/salário), e a ficha de admissão está fechada. Mas a
+              pessoa continua podendo ver um dado errado, e antes não havia NADA
+              nesta tela dizendo o que fazer: ela assinava mesmo discordando, ou
+              parava e ligava. Dizer para quem falar é a saída que existe. */}
+          {!aoVoltarAoFormulario && (
+            <p className="explica" style={{ textAlign: 'center', marginTop: '.8rem' }}>
+              Encontrou algo errado? <strong>Não assine</strong> — fale com o RH
+              antes, porque estes documentos foram atualizados por eles.
+            </p>
           )}
           {fase === 'enviando' && <Espera texto="Preparando e enviando seu código…" />}
         </>

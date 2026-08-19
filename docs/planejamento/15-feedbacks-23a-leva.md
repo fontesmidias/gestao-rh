@@ -502,9 +502,16 @@ A porta pública não tinha dedup nenhuma. Recadastro ATUALIZA em silêncio
 (anti-enumeração: responder "já existe" viraria sonda); arquivado volta à fila,
 `convertido` não é rebaixado.
 
+### ✅ Entregue — v3.06.0 (currículo obrigatório)
+Nos dois cadastros. Público exige para concluir, com aviso no PRIMEIRO passo;
+RH exige com JUSTIFICATIVA (auditoria + CRM). ⚠️ Achado: a tela dizia "Cadastro
+recebido!" mesmo quando o currículo não subia — o sucesso mentiroso da v2.02.
+
+### ✅ Entregue — v3.07.0 (creche nas telas)
+Coluna em Colaboradores (ativo / falta N comprovante) e em Admissões (posto dá
+direito × informou criança). 3 consultas fixas em cada, sem N+1.
+
 ### ⏳ Pendente das demais prioridades
-- **P1 (resta)**: currículo obrigatório nos dois cadastros — autosave + câmera
-  (decisões 12 e 13).
 - **P4**: creche nas telas de Colaboradores/Admissões.
 - **P5**: coleta na admissão (redação + destino do documento de indeferido).
 - **Feedback 1**: investigar os dois caminhos da assinatura.

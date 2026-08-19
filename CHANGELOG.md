@@ -11,6 +11,38 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.08.0] — 2026-08-19 — O botão que ninguém achava
+
+Feedback do Bruno (18/08/2026): *"na etapa de assinar, apesar dela ver os dados
+das fichas, ela não consegue editar, e o RH tem que editar manualmente"*. O
+diagnóstico não era o que o relato sugeria — e ele não sabia em qual caminho a
+pessoa estava (foi relato de terceiro), então os DOIS foram tratados.
+
+### O que o código dizia
+
+O backend **nunca** bloqueou: `_candidato_do_token` só barra `expurgado` e
+`aprovado`. E o botão *"← Preciso corrigir meus dados antes de assinar"* existe
+desde a v2.88. Mapeados os dois caminhos que levam a esta tela:
+
+1. **Primeira assinatura** — o botão está lá, mas como `btn-link`: texto
+   discreto, cinza, embaixo de um botão verde grande. Quem não o vê conclui que
+   não dá para corrigir e chama o RH. **Botão que existe e não é achado não está
+   entregue** (v2.75).
+2. **Reassinatura** — o botão é escondido de propósito, e com razão: os dois
+   caminhos que reabrem documento são ações do RH (editar a ficha, ou trocar
+   posto/cargo/salário em `postos.py`), e a ficha de admissão está fechada. Mas
+   ali não havia **nada** dizendo o que fazer: quem visse um dado errado assinava
+   mesmo assim ou parava sem saber a quem recorrer.
+
+### Corrigido
+
+- O botão virou **`btn-secundario`** e ganhou ícone — continua abaixo do
+  principal (um `btn-principal` por tela: o ato que FECHA o trabalho é assinar),
+  mas agora se vê.
+- Na reassinatura, a tela **diz a saída que existe**: não assine, fale com o RH,
+  porque estes documentos foram atualizados por eles. É a regra da v2.87 —
+  recusa (ou ausência de caminho) sempre oferece a alternativa no mesmo lugar.
+
 ## [3.07.0] — 2026-08-19 — O creche onde o RH já está olhando
 
 *"Página de colaboradores, de admissão e demais páginas: conter as informações
