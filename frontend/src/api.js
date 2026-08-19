@@ -237,6 +237,24 @@ export const creche = {
   },
   enviar: (t) => req(`/creche/sessao/${t}/enviar`, { method: 'POST' }),
   crecheSemDireito: (t) => req(`/creche/sessao/${t}/sem-direito`, { method: 'POST' }),
+
+  // Comprovante MENSAL de despesa (v3.02): nota fiscal se a creche é PJ,
+  // declaração de quitação se o cuidador é PF. Um por filho e por mês.
+  competencias: (t) => req(`/creche/sessao/${t}/competencias`),
+  enviarComprovante: async (t, criancaId, ano, mes, arquivos, valor) => {
+    // ⚠️ `FormData` NUNCA passa pelo `req()`: ele força `Content-Type: json` e
+    // o navegador deixa de escrever o `boundary` — o FastAPI então não separa
+    // as partes e devolve 422 "Field required" com o arquivo ali do lado
+    // (v2.39.1). Vai por `buscar`, como os demais uploads.
+    const fd = new FormData()
+    for (const a of arquivos) fd.append('arquivos', a)
+    const qs = new URLSearchParams({ crianca_id: criancaId, ano, mes })
+    if (valor) qs.set('valor', valor)
+    const r = await buscar(`${BASE}/creche/sessao/${t}/competencias?${qs}`,
+                           { method: 'POST', body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
   requerimentoStatus: (t) => req(`/creche/sessao/${t}/requerimento`),
   assinarRequerimento: (t) =>
     req(`/creche/sessao/${t}/assinar-requerimento`, { method: 'POST' }),

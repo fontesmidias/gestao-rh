@@ -11,6 +11,61 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.02.0] — 2026-08-19 — A porta do mês
+
+O ciclo MENSAL do reembolso-creche: a estrutura que faltava para receber o
+comprovante que o e-mail de ativação já mandava enviar todo mês. Regras do
+Jurídico (e-mail do Dr. Lucas, 18/08/2026): um comprovante por filho e por mês —
+nota fiscal se a creche for PJ, declaração de quitação se o cuidador for PF —,
+com corte no dia 25 e pagamento até o 5º dia útil do mês seguinte.
+
+### Adicionado
+
+- **`CompetenciaCreche`**: o comprovante de UMA criança em UM mês, com
+  `UniqueConstraint(crianca, ano, mes)` — dois registros do mesmo mês fariam a
+  soma da folha dobrar sem nada denunciar. Reenvio SUBSTITUI, com hash na
+  auditoria do que saiu.
+- **As duas portas de envio pela MESMA função** (`creche_envio.receber`):
+  colaborador pelo link e **RH pelo painel** — antes o RH era somente-leitura
+  sobre documento de creche, e faltando um o único caminho era devolver o
+  levantamento inteiro e esperar.
+- **Multi-folhas**: 1..N folhas viram um PDF, com os originais numerados com
+  zero à esquerda (sem isso a listagem lexicográfica põe `10-` antes de `2-` e a
+  folha sai fora de ordem — v2.35). Era a causa do *"não consigo ver se há mais
+  de uma folha"*: não havia.
+- **Lembrete configurável** (`workers/creche_lembretes.py`, padrão 5/2/1 dia
+  antes), nos DOIS arquivos de deploy (v2.66). Chave de config AUSENTE cai no
+  padrão; chave VAZIA desliga — tratar as duas igual impediria o RH de desligar.
+- **Vigência por posto** (`creche_vigente_desde`): o aditivo de cada contrato
+  tem data, e o direito era um booleano sem ela. Competência anterior à vigência
+  é MARCADA para o RH decidir, **não recusada** — e vigência que já cobre o mês
+  não marca, porque alarme falso ensina a ignorar o alarme (v2.91).
+- **Tela das credenciais de automação**: as rotas existiam desde a v2.94 e nunca
+  houve tela — criar um token exigia `docker exec`.
+- **Criar jornada pela tela**: a rota e o `api.criarJornada` existiam desde
+  sempre e nenhuma tela os chamava; o texto de lista vazia já dizia "crie
+  manualmente" sem haver por onde.
+
+### Corrigido
+
+- **`except` que "salva o original" gravava um PNG como se fosse PDF.** Quando a
+  normalização recusa a foto por qualidade, o caminho de escape guardava os
+  bytes crus e os mandava ao `combinar_pdfs` — `PdfStreamError`, e o envio
+  inteiro caía com 500. O escape agora CONVERTE (reusando só o trecho pós-
+  validação, porque `_imagem_para_pdf` reaplica as mesmas checagens que já
+  recusaram) e confere que o resultado começa com `%PDF`: devolver bytes vazios
+  passava pelo `is None` do chamador e estourava adiante. Folha que não vira PDF
+  é PULADA e NOMEADA na auditoria; se NENHUMA virar, recusa com 422 — melhor que
+  gravar zero página com o registro afirmando que está entregue (v2.93).
+  **Pego pelo CI**, não em produção, porque o teste usa
+  `raise_server_exceptions=False` (v2.72.2): sem isso o 500 mataria o script e a
+  saída vazia passaria por sucesso.
+
+### Medido
+
+- 3 mutações no `test_creche_competencia`, todas reprovadas: teto virando valor
+  fixo, valor ilegível virando zero e a virada de ano no vencimento.
+
 ## [3.01.0] — 2026-08-18 — A porta que a tela prometia
 
 23ª leva de feedbacks (13 itens, a maioria do Reembolso-Creche). Esta versão
