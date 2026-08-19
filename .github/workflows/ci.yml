@@ -72,7 +72,14 @@ jobs:
     # (não em tags — a imagem da tag é a mesma já testada no push do main).
     if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 35, não 25: a execução normal leva 7–11 min (medido em 12 execuções), mas
+    # a v3.05.0 foi CANCELADA no teto de 25 com os testes já aprovados — só o
+    # download do Playwright estava lento. Cancelamento parece falha na lista de
+    # Actions e manda procurar defeito onde não há.
+    # ⚠️ Não subir mais que isso: teto alto demais deixa um job TRAVADO consumir
+    # o dobro do tempo antes de alguém perceber; o que se quer é margem sobre a
+    # variação normal da rede, não paciência infinita.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -331,11 +338,39 @@ jobs:
         with:
           node-version: 20
 
+      # Cache do npm e do navegador do Playwright. Sem eles, cada execução
+      # baixava as dependências e o Chromium inteiro de novo — medido: ~2 min
+      # dos ~9 min do pipeline, e foi o passo que estourou o teto de 25 min na
+      # v3.05.0 (o job foi CANCELADO, não reprovado: os testes tinham passado).
+      #
+      # A chave inclui o hash do `package-lock.json`: mudou dependência, o cache
+      # é ignorado e se instala do zero — cache que não acompanha o lockfile é
+      # pior que não ter, porque roda contra a versão errada sem avisar.
+      - name: Cache do npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: npm-
+
+      - name: Cache do navegador do Playwright
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('frontend/package-lock.json') }}
+
       - name: Instala Playwright
         working-directory: frontend
         run: |
           npm install
-          npx playwright install --with-deps chromium
+          # Com o navegador em cache, só as bibliotecas do sistema precisam ser
+          # instaladas (`--with-deps` sozinho não baixa o browser de novo).
+          if [ "${{ steps.cache-playwright.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       - name: Roda os testes de interface
         working-directory: frontend
