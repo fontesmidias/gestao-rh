@@ -11,6 +11,42 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.05.0] — 2026-08-19 — Uma pessoa, um cadastro
+
+*"Pensar em uma hipótese da pessoa se cadastrar apenas uma vez"* (Bruno,
+18/08/2026). A causa apurada não era a que o pedido sugeria: o cadastro pelo RH
+tinha dedup desde a v2.73 e a importação de planilha também — **a porta PÚBLICA
+não tinha nenhuma**. A mesma pessoa preenchendo duas vezes criava dois
+registros, e nada acusava.
+
+### Adicionado
+
+- **Dedup no cadastro público**, com a MESMA regra das outras duas portas
+  (e-mail; ou nome + telefone quando não há e-mail), agora numa função só —
+  três portas para o mesmo Banco de Talentos não podem discordar sobre o que é
+  a mesma pessoa.
+- ⚠️ **Aqui NÃO se responde "já existe", como a porta do RH faz.** Esta rota é
+  pública: dizer *"já existe: Maria, maria@x.com"* a transformaria numa sonda
+  para descobrir quem está no banco digitando e-mails alheios. O padrão da casa
+  para porta pública é **resposta idêntica** (anti-enumeração, como o gate do
+  creche e do portal), então o recadastro ATUALIZA em silêncio: é o que a pessoa
+  quer, e não revela nada a quem sonda.
+- **Campo vazio no reenvio não apaga o que havia**: quem se recadastra costuma
+  preencher só o essencial, e perder o telefone que o RH já tinha por causa de
+  um formulário mais curto seria perder dado sem ninguém pedir.
+- **Arquivado volta para a fila** (decisão do Bruno): quem se candidata de novo
+  pode ter mudado, e a decisão de descartar se toma outra vez com o dado atual.
+  O motivo do descarte anterior sobrevive — ele vive como anotação append-only
+  no mini-CRM (v2.14), então o RH reavalia sabendo por que tinha recusado.
+  **`convertido` não é rebaixado**: rebaixar tiraria da fila de admissão alguém
+  que está sendo admitido, e o sintoma seria a pessoa sumir da tela.
+
+### Medido
+
+- `test_talento_recadastro` no CI, com 6 blocos — inclusive a asserção de que a
+  resposta do recadastro não contém nenhuma pista (`existe`, `duplicad`…) que
+  permita distinguir "já havia" de "acabei de criar".
+
 ## [3.04.0] — 2026-08-19 — Um nome só para tudo que se baixa
 
 Padrão de nome de arquivo `MATRÍCULA - NOME - DOCUMENTO`, caixa alta e sem
