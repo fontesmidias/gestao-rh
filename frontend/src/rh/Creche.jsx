@@ -889,6 +889,10 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
                     onClick={() => verDocumento(b, 'declaracao')}>📄 Declaração-modelo</button>
             <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
           </div>
+          {/* Só faz sentido depois de ativo: antes disso não há entrega mensal
+              a cobrar, e a seção só ocuparia espaço dizendo "nada aqui". */}
+          {b.status === 'ativo' && (
+            <ComprovantesMensais beneficio={b} criancas={b.criancas} />)}
           {['em_analise', 'aguardando_repactuacao'].includes(b.status) && (
             <div className="navegacao">
               <button className="btn-link" style={{ color: '#d9534f' }}
@@ -902,6 +906,151 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
               <button className="btn-principal" onClick={() => ativar(b, false)}>Ativar benefício</button>
             </div>
           )}
+    </div>
+  )
+}
+// --- Comprovantes MENSAIS de despesa (v3.02) --------------------------------
+// O ciclo que se repete: nota fiscal (creche PJ) ou declaração de quitação
+// (cuidador PF), um por filho e por mês, com corte no dia definido pelo RH.
+//
+// Duas coisas que o RH não tinha e agora tem: ANEXAR o comprovante ele mesmo
+// (antes, faltando documento, o único caminho era devolver o levantamento
+// inteiro e esperar) e ver quantas FOLHAS o envio tem.
+function ComprovantesMensais({ beneficio, criancas }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
+  const [doc, setDoc] = useState(null)      // {blob, nome}
+  const [ocupado, setOcupado] = useState(false)
+
+  const recarregar = () => api.crecheCompetencias(beneficio.id).then(setDados)
+  useEffect(() => { recarregar().catch((e) => setErro(e.detail || e.message)) }, [beneficio.id])
+
+  if (erro) return <div className="alerta">Não foi possível carregar os comprovantes ({erro}).</div>
+  if (!dados) return <p className="explica">Carregando comprovantes…</p>
+
+  const ver = async (c) => {
+    try {
+      const blob = await api.crecheComprovanteArquivo(c.id)
+      setDoc({ blob, nome: `comprovante-${c.competencia}.pdf` })
+    } catch (e) { setErro(`Não foi possível abrir (${e.detail || e.message}).`) }
+  }
+
+  const analisar = async (c, aprovar) => {
+    let motivo = null
+    if (!aprovar) {
+      // Motivo é obrigatório na rota: sem ele o colaborador reenvia a mesma
+      // coisa. Pedir aqui evita o 422 que ele não entenderia.
+      motivo = window.prompt('Por que este comprovante está sendo recusado?\n\n'
+        + 'O colaborador VÊ este texto — diga o que ele precisa corrigir.')
+      if (!motivo || !motivo.trim()) return
+    }
+    setOcupado(true); setErro(null)
+    try {
+      await api.crecheAnalisarCompetencia(c.id, { aprovar, motivo })
+      await recarregar()
+    } catch (e) { setErro(`Não foi possível analisar (${e.detail || e.message}).`) }
+    finally { setOcupado(false) }
+  }
+
+  const anexar = async (pend, arquivos) => {
+    const lista = Array.from(arquivos || [])
+    if (!lista.length) return
+    const valor = window.prompt(`Valor pago no mês para ${pend.crianca} `
+      + `(${pend.competencia}) — deixe em branco se não constar:`) || ''
+    setOcupado(true); setErro(null)
+    try {
+      await api.crecheEnviarComprovanteRH(beneficio.id, pend.crianca_id,
+                                          pend.ano, pend.mes, lista, valor.trim())
+      await recarregar()
+    } catch (e) {
+      const d = e.detail
+      setErro(`Não foi possível anexar (${typeof d === 'string' ? d : d?.erro || e.message}).`)
+    } finally { setOcupado(false) }
+  }
+
+  const pendentes = dados.pendentes || []
+  const lista = dados.competencias || []
+
+  return (
+    <div className="ficha-rh-secao">
+      <h4>📄 Comprovantes mensais <Ajuda termo="creche" /></h4>
+      <p className="explica">Nota fiscal (creche PJ) ou declaração de quitação (cuidador PF),
+        uma por criança e por mês. Prazo: dia <strong>{dados.dia_corte}</strong>.</p>
+
+      {erro && <div className="alerta">{erro}</div>}
+
+      {pendentes.length > 0 && (
+        <div className="aviso-inline">
+          <strong>Falta o comprovante de {pendentes[0].competencia}:</strong>{' '}
+          {pendentes.map((p) => p.crianca).join(', ')}
+          {pendentes.some((p) => p.em_atraso) && ' — em atraso'}
+          <div className="rh-lote" style={{ marginTop: '.4rem' }}>
+            {pendentes.map((p) => (
+              <label key={p.crianca_id} className="btn-secundario btn-mini"
+                     style={{ cursor: 'pointer' }}>
+                📎 Anexar de {p.crianca}
+                <input type="file" hidden multiple accept="image/*,.pdf"
+                       disabled={ocupado}
+                       onChange={(e) => anexar(p, e.target.files)} />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {lista.length === 0 ? (
+        <p className="explica">Nenhum comprovante enviado ainda.</p>
+      ) : (
+        <div className="dash-scroll">
+          <table className="rh-tabela">
+            <thead><tr>
+              <th>Mês</th><th>Criança</th><th>Tipo</th><th>Valor</th>
+              <th>A reembolsar</th><th>Folhas</th><th>Situação</th><th />
+            </tr></thead>
+            <tbody>
+              {lista.map((c) => {
+                const nome = (criancas || []).find((k) => k.id === c.crianca_id)?.nome || '—'
+                return (
+                  <tr key={c.id}>
+                    <td>{c.competencia}</td>
+                    <td>{nome}</td>
+                    <td>{c.tipo_comprovante === 'nota_fiscal' ? 'Nota fiscal (PJ)'
+                      : c.tipo_comprovante === 'declaracao' ? 'Declaração (PF)' : '—'}</td>
+                    <td>{c.valor_comprovado || '—'}</td>
+                    {/* Comprovado e reembolsável são números DIFERENTES quando a
+                        despesa passa do teto do posto — mostrar só um esconderia
+                        de qual se está falando no lugar que decide pagamento. */}
+                    <td>{c.valor_reembolsavel || '—'}</td>
+                    <td>{c.paginas || '—'}</td>
+                    <td>
+                      {c.status === 'aprovado' ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}>aprovado</span>
+                        : c.status === 'recusado' ? <span className="chip" style={{ '--chip-cor': '#d9534f' }}>recusado</span>
+                        : <span className="chip" style={{ '--chip-cor': '#e9a63a' }}>em análise</span>}
+                      {c.anterior_a_vigencia && (
+                        <><br /><span className="chip" style={{ '--chip-cor': '#e9a63a' }}
+                              title="A competência é anterior à data em que o contrato passou a dar direito — confira antes de aprovar">
+                          ⚠️ retroativo</span></>)}
+                      {c.motivo_recusa && (<><br /><small className="explica">{c.motivo_recusa}</small></>)}
+                    </td>
+                    <td className="acoes-candidato">
+                      {c.tem_arquivo && (
+                        <button className="btn-secundario btn-mini" onClick={() => ver(c)}>ver</button>)}
+                      {c.status !== 'aprovado' && (
+                        <button className="btn-secundario btn-mini" disabled={ocupado}
+                                onClick={() => analisar(c, true)}>aprovar</button>)}
+                      {c.status !== 'recusado' && (
+                        <button className="btn-link" disabled={ocupado}
+                                onClick={() => analisar(c, false)}>recusar</button>)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {doc && <VisualizadorArquivo blob={doc.blob} nome={doc.nome}
+                                   aoFechar={() => setDoc(null)} />}
     </div>
   )
 }

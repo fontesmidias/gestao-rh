@@ -46,6 +46,16 @@ com corte no dia 25 e pagamento até o 5º dia útil do mês seguinte.
   sempre e nenhuma tela os chamava; o texto de lista vazia já dizia "crie
   manualmente" sem haver por onde.
 
+- **As telas dos dois lados.** No link do colaborador, o comprovante do mês
+  aparece só com o benefício ATIVO, com a câmera guiada da admissão (moldura,
+  aviso de foto tremida, várias folhas) e o prazo como CONTAGEM — *"faltam 2
+  dias"* move; *"dia 25"* obriga a fazer a conta. No painel do RH, a ficha do
+  benefício ganhou a tabela dos comprovantes com **valor comprovado E valor a
+  reembolsar** lado a lado (são números diferentes quando a despesa passa do
+  teto, e mostrar só um esconderia de qual se fala no lugar que decide
+  pagamento), a contagem de FOLHAS, a marca de retroativo e o botão de
+  **anexar** — que o RH não tinha.
+
 ### Corrigido
 
 - **`except` que "salva o original" gravava um PNG como se fosse PDF.** Quando a

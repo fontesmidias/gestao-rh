@@ -1068,6 +1068,31 @@ export const rh = {
         body: JSON.stringify(dados) }),
   crecheGerarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { method: 'POST', headers: authRH() }),
+
+  // Comprovante MENSAL de despesa (v3.02) — o ciclo que se repete todo mês.
+  crecheCompetencias: (beneficioId) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/competencias`, { headers: authRH() }),
+  crecheAnalisarCompetencia: (id, dados) =>
+    req(`/rh/creche/competencias/${id}/analisar`, { method: 'POST', headers: authRH(),
+        body: JSON.stringify(dados) }),
+  crecheComprovanteArquivo: async (id) => {
+    const r = await buscar(`${BASE}/rh/creche/competencias/${id}/arquivo`,
+                           { headers: authRH() })
+    if (!r.ok) await lancarErro(r)
+    return r.blob()
+  },
+  crecheEnviarComprovanteRH: async (beneficioId, criancaId, ano, mes, arquivos, valor) => {
+    // `FormData` NUNCA pelo `req()` — ver a nota no envio do colaborador.
+    const fd = new FormData()
+    for (const a of arquivos) fd.append('arquivos', a)
+    const qs = new URLSearchParams({ crianca_id: criancaId, ano, mes })
+    if (valor) qs.set('valor', valor)
+    const r = await buscar(
+      `${BASE}/rh/creche/levantamentos/${beneficioId}/competencias?${qs}`,
+      { method: 'POST', headers: authRH(), body: fd })
+    if (!r.ok) await lancarErro(r)
+    return r.json()
+  },
   crecheBaixarDossie: (id) =>
     req(`/rh/creche/levantamentos/${id}/dossie`, { headers: authRH() }),
   crecheDocumentoUrl: (id, tipo) => `${BASE}/rh/creche/levantamentos/${id}/documento/${tipo}`,
