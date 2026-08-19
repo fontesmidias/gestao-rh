@@ -10,7 +10,7 @@ import io
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -1373,3 +1373,147 @@ def previa_documento(beneficio_id: uuid.UUID, tipo: str, db: Session = Depends(g
         raise HTTPException(status_code=422, detail="tipo_invalido")
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="{tipo}.pdf"'})
+
+
+# ==========================================================================
+# Comprovante MENSAL de despesa — lado do RH (v3.02)
+#
+# Até aqui o RH era SOMENTE-LEITURA sobre documento de creche: quando faltava
+# ou vinha ilegível, o único caminho era DEVOLVER o levantamento inteiro e
+# esperar o colaborador reenviar. Na admissão o RH insere o documento pela
+# ficha; aqui não havia como. Pedido do Bruno (18/08/2026).
+# ==========================================================================
+
+
+def _teto_do_beneficio(db: Session, ben: BeneficioCreche) -> int | None:
+    from app.services.creche_competencia import centavos
+    col = db.get(Candidato, ben.candidato_id)
+    posto = (db.get(PostoServico, col.posto_servico_id)
+             if col and col.posto_servico_id else None)
+    return centavos(posto.valor_reembolso_creche) if posto else None
+
+
+@router.get("/rh/creche/levantamentos/{beneficio_id}/competencias")
+def competencias_do_beneficio(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                              _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
+    """Os comprovantes mensais deste benefício, do mais recente para o mais
+    antigo, com o que está pendente no mês corrente."""
+    from datetime import date as _date
+
+    from app.models.creche_competencia import CompetenciaCreche
+    from app.services import creche_competencia as regras
+    from app.services.creche_envio import dump
+
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    teto = _teto_do_beneficio(db, ben)
+    hoje = _date.today()
+    ano_sug, mes_sug = regras.competencia_anterior(hoje)
+    registros = db.scalars(select(CompetenciaCreche).where(
+        CompetenciaCreche.beneficio_id == beneficio_id).order_by(
+        CompetenciaCreche.ano.desc(), CompetenciaCreche.mes.desc())).all()
+    entregues = {(r.crianca_id, r.ano, r.mes) for r in registros}
+    dia = ben.dia_entrega_mensal or regras.DIA_CORTE_PADRAO
+    pendentes = [
+        {"crianca_id": str(c.id), "crianca": c.nome,
+         "ano": ano_sug, "mes": mes_sug,
+         "competencia": regras.rotulo(ano_sug, mes_sug),
+         "em_atraso": regras.em_atraso(ano_sug, mes_sug, dia, hoje)}
+        for c in ben.criancas
+        if c.decisao != "indeferida" and (c.id, ano_sug, mes_sug) not in entregues
+    ]
+    return {"dia_corte": dia, "pendentes": pendentes,
+            "competencias": [dump(r, teto) for r in registros]}
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/competencias")
+async def enviar_comprovante_pelo_rh(
+        beneficio_id: uuid.UUID, crianca_id: uuid.UUID, ano: int, mes: int,
+        arquivos: list[UploadFile], valor: str | None = None,
+        db: Session = Depends(get_db),
+        rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
+    """O RH anexa o comprovante pela ficha — como já faz na admissão.
+
+    Mesma função do envio do colaborador (`creche_envio.receber`): o que muda é
+    só QUEM está agindo, e isso fica no `enviado_por` e na auditoria.
+    """
+    from app.services.creche_envio import dump, receber
+    from app.services.upload_seguro import EXTENSOES_COM_WORD, ler_upload
+
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    partes: list[tuple[str, bytes]] = []
+    for arq in arquivos:
+        conteudo = await ler_upload(db, arq, EXTENSOES_COM_WORD)
+        partes.append((arq.filename or "comprovante", conteudo))
+    registro = receber(db, ben, crianca_id, ano, mes, partes, valor,
+                       ator="rh", ator_detalhe=rh.email)
+    return dump(registro, _teto_do_beneficio(db, ben))
+
+
+class AnaliseCompetenciaIn(BaseModel):
+    aprovar: bool
+    motivo: str | None = None
+    # O RH pode corrigir o valor: quem digitou foi o colaborador, lendo o
+    # próprio documento — é dado a CONFERIR, nunca verdade (v3.02).
+    valor: str | None = None
+
+
+@router.post("/rh/creche/competencias/{competencia_id}/analisar")
+def analisar_competencia(competencia_id: uuid.UUID, payload: AnaliseCompetenciaIn,
+                         db: Session = Depends(get_db),
+                         rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
+    """Aprova ou recusa o comprovante do mês."""
+    from datetime import datetime as _dt
+
+    from app.models.creche_competencia import CompetenciaCreche, StatusCompetencia
+    from app.services.creche_competencia import centavos
+    from app.services.creche_envio import dump
+
+    registro = db.get(CompetenciaCreche, competencia_id)
+    if registro is None:
+        raise HTTPException(status_code=404, detail="competencia_nao_encontrada")
+    motivo = (payload.motivo or "").strip()
+    if not payload.aprovar and not motivo:
+        # Recusa sem motivo deixa o colaborador sem saber o que corrigir — e ele
+        # reenvia a mesma coisa. É a regra da casa desde o portal `/meu`.
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+
+    antes = registro.valor_informado_texto
+    if payload.valor is not None:
+        novo = payload.valor.strip() or None
+        registro.valor_informado_texto = novo
+        registro.valor_centavos = centavos(novo)
+
+    registro.status = (StatusCompetencia.aprovado.value if payload.aprovar
+                       else StatusCompetencia.recusado.value)
+    registro.motivo_recusa = None if payload.aprovar else motivo
+    registro.analisado_por = rh.email
+    registro.analisado_em = _dt.now(timezone.utc)
+
+    ben = db.get(BeneficioCreche, registro.beneficio_id)
+    registrar(db, "creche_comprovante_analisado", ator="rh", ator_detalhe=rh.email,
+              candidato_id=ben.candidato_id if ben else None,
+              detalhe={"competencia": f"{registro.mes:02d}/{registro.ano}",
+                       "resultado": registro.status, "motivo": motivo or None,
+                       "valor_antes": antes,
+                       "valor_depois": registro.valor_informado_texto})
+    db.commit()
+    return dump(registro, _teto_do_beneficio(db, ben))
+
+
+@router.get("/rh/creche/competencias/{competencia_id}/arquivo")
+def baixar_comprovante(competencia_id: uuid.UUID, db: Session = Depends(get_db),
+                       _rh: UsuarioRH = Depends(exige("creche:ler"))) -> Response:
+    """O PDF do comprovante (todas as folhas combinadas)."""
+    from app.models.creche_competencia import CompetenciaCreche
+
+    registro = db.get(CompetenciaCreche, competencia_id)
+    if registro is None or not registro.arquivo_pdf_key:
+        raise HTTPException(status_code=404, detail="sem_arquivo")
+    dados = storage.ler(registro.arquivo_pdf_key)
+    nome = f"comprovante-{registro.ano}-{registro.mes:02d}.pdf"
+    return Response(content=dados, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
