@@ -492,7 +492,11 @@ print("\n12. Cenário 26 — pessoa SEM e-mail: lembrete desligado COM o motivo"
 # --------------------------------------------------------------------------
 # Mutação verificada: fazer `motivo_sem_envio` devolver None sempre -> a tela
 # passa a mostrar o lembrete como ligado para quem não tem e-mail, e falha aqui.
-t_sem = criar_talento("Pessoa Sem Email", email=False)
+# ⚠️ Nome ÚNICO por execução: sem e-mail, a dedup do cadastro público casa por
+# nome + telefone (v3.05.0) — e o telefone é fixo aqui. Com nome repetido, a
+# segunda execução reusaria o talento da primeira em vez de criar um novo: o
+# teste continuaria passando, mas sobre estado de outra rodada.
+t_sem = criar_talento(f"Pessoa Sem Email {SUF}", email=False)
 r = c.post("/api/rh/entrevistas", headers=RH, json={
     "talento_id": t_sem, "tipo": "entrevista", "marcada_para": amanha,
     "modalidade": "presencial", "local": "Sede", "enviar_convite": True})
