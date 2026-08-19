@@ -116,6 +116,23 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Reembolso-creche tem DOIS ciclos, e confundi-los erra dinheiro** (v3.02, o
+  procedimento é do Jurídico — e-mail do Dr. Lucas 18/08/2026, em `docs/email e
+  anexos dr lucas/`): o **requerimento** e a **certidão** entregam-se UMA VEZ (e
+  o requerimento é **um por criança**); o que se repete todo mês é o
+  **comprovante de despesa** — nota fiscal se a creche for PJ, declaração de
+  quitação se o cuidador for PF, **uma por filho**. ⚠️ **`dia_entrega_mensal` é
+  o CORTE do envio (dia 25), não o pagamento** — este é o 5º dia útil do mês
+  seguinte. Os dois números convivem no mesmo processo e significam coisas
+  opostas; o padrão do campo era 5, e o e-mail de ativação mandou "envie até o
+  dia 5" para quem foi ativado antes da correção. ⚠️ **O valor do posto é
+  TETO**: reembolsa-se o MENOR entre a despesa comprovada e ele. E
+  `creche_competencia.centavos()` **nunca devolve 0 para texto ilegível** —
+  zero entraria calado na soma e o total sairia menor sem nada acusar.
+  A competência anterior à `creche_vigente_desde` do posto é **MARCADA, não
+  recusada** (decisão do Bruno): o aditivo pode ter efeito retroativo, e quem
+  decide é o RH — mas a marca aparece na FILA, porque marca que ninguém vê
+  equivale a não ter marca.
 - **Mudar REGRA DE NEGÓCIO quebra o teste que cobria o comportamento antigo — e
   o E2E reprova por ÚLTIMO** (v3.06, mordeu em três commits seguidos): tornar o
   currículo obrigatório reprovou o `portal.spec.js`, que preenche o formulário
