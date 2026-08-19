@@ -282,6 +282,26 @@ const COLUNAS_ADMISSAO = () => [
   { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, oculta: true,
     nowrap: true, filtro: 'texto', valor: (c) => c.matricula || '',
     render: (c) => c.matricula || '—' },
+  // Creche na ADMISSÃO (v3.07): aqui a pergunta é outra que em Colaboradores —
+  // não a situação do benefício (ele nem existe), e sim se o posto dá direito e
+  // se a pessoa já informou criança no wizard. Quem vai para posto elegível sem
+  // ter informado nada é quem o RH precisa procurar ANTES de efetivar.
+  { chave: 'creche', rotulo: 'Creche', ordenavel: true, oculta: true, filtro: 'select',
+    opcoes: [{ v: 'Informou', r: 'Informou criança' },
+             { v: 'A confirmar', r: 'Posto dá direito — nada informado' },
+             { v: '—', r: 'Posto sem direito' }],
+    valor: (c) => (!c.creche?.da_direito ? '—'
+      : c.creche.criancas ? 'Informou' : 'A confirmar'),
+    render: (c) => {
+      if (!c.creche?.da_direito) return '—'
+      return c.creche.criancas
+        ? <span className="chip" style={{ '--chip-cor': 'var(--verde-vivo)' }}
+                title={`${c.creche.criancas} criança(s) informada(s) no wizard`}>
+            🍼 {c.creche.criancas}</span>
+        : <span className="chip" style={{ '--chip-cor': '#e9a63a' }}
+                title="O posto dá direito ao reembolso-creche e nada foi informado — confirme com a pessoa">
+            a confirmar</span>
+    } },
   { chave: 'status', rotulo: 'Status', ordenavel: true,
     valor: (c) => statusInfo(c.status).label,
     render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>

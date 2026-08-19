@@ -70,6 +70,54 @@ def _filtrar(db: Session, status: str | None, busca: str | None,
     return candidatos
 
 
+def _resumo_creche_em_lote(db: Session) -> dict:
+    """`{candidato_id: {...}}` com a situação do creche de cada pessoa.
+
+    Pedido do Bruno (18/08/2026): *"página de colaboradores, de admissão e demais
+    páginas: conter as informações também de benefício creche, bem como a
+    documentação pertinente"*. Antes, saber se alguém tinha o benefício exigia
+    abrir a tela do Creche e procurar — duas telas para uma pergunta.
+
+    ⚠️ **Três consultas no total, não uma por pessoa.** A lista tem 1.156
+    colaboradores; consultar por linha seria o N+1 que a v2.15 achou no dash de
+    Talentos (43 consultas para 39 talentos). O mesmo padrão do lookup de postos
+    logo acima.
+    """
+    from datetime import date as _date
+
+    from app.models.beneficio import BeneficioCreche, CriancaCreche
+    from app.models.creche_competencia import CompetenciaCreche
+    from app.services import creche_competencia as regras
+
+    beneficios = db.scalars(select(BeneficioCreche)).all()
+    if not beneficios:
+        return {}
+    criancas: dict = {}
+    for c in db.scalars(select(CriancaCreche)).all():
+        criancas.setdefault(c.beneficio_id, []).append(c)
+
+    ano, mes = regras.competencia_anterior(_date.today())
+    entregues: dict = {}
+    for r in db.scalars(select(CompetenciaCreche).where(
+            CompetenciaCreche.ano == ano, CompetenciaCreche.mes == mes)).all():
+        entregues.setdefault(r.beneficio_id, set()).add(r.crianca_id)
+
+    saida = {}
+    for ben in beneficios:
+        filhos = criancas.get(ben.id, [])
+        # Só criança DEFERIDA gera pendência: cobrar de quem foi indeferido
+        # faria a tela apontar uma falta que não existe.
+        devem = [c for c in filhos if c.decisao != "indeferida"]
+        faltam = [c for c in devem if c.id not in entregues.get(ben.id, set())]
+        saida[ben.candidato_id] = {
+            "status": ben.status.value,
+            "criancas": len(filhos),
+            "comprovante_pendente": (len(faltam) if ben.status.value == "ativo" else 0),
+            "competencia": regras.rotulo(ano, mes),
+        }
+    return saida
+
+
 @router.get("/rh/colaboradores")
 def listar(status: str | None = None, busca: str | None = None,
            situacao: str | None = None, posto_id: uuid.UUID | None = None,
@@ -82,6 +130,7 @@ def listar(status: str | None = None, busca: str | None = None,
                           so_colaboradores=not incluir_admissao)
     # nomes dos postos em um só lookup (evita N+1 na lista de 1.156)
     postos = {p.id: p.nome for p in db.scalars(select(PostoServico)).all()}
+    creche = _resumo_creche_em_lote(db)
     saida = []
     for c in candidatos:
         # Para importados, CPF/nascimento já são nativos; para admissão, caem na
@@ -110,6 +159,9 @@ def listar(status: str | None = None, busca: str | None = None,
             # indício de que já existe no Tirvu — o front avisa (não bloqueia)
             # antes de reverter a candidato (feedback 2026-07-21).
             "indicio_tirvu": _indicio_tirvu(c),
+            # Situação do reembolso-creche (v3.07): `None` = não tem benefício.
+            # Ver `_resumo_creche_em_lote` — três consultas, não uma por pessoa.
+            "creche": creche.get(c.id),
             # campos vazios do cadastro (importados do Tirvu vêm com buracos) —
             # o RH vê na lista quem precisa completar (feedback 2026-07-21).
             "dados_faltando": _dados_faltando(db, c, cpf, nasc),

@@ -11,6 +11,32 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.07.0] — 2026-08-19 — O creche onde o RH já está olhando
+
+*"Página de colaboradores, de admissão e demais páginas: conter as informações
+também de benefício creche"* (Bruno, 18/08/2026). Antes, saber se alguém tinha o
+benefício exigia abrir a tela do Creche e procurar — duas telas para uma
+pergunta.
+
+### Adicionado
+
+- **Coluna "Creche" em Colaboradores**: ativo, em análise, ou **⚠️ falta N** —
+  quantas crianças estão sem o comprovante do mês. Filtrável, e com um card
+  clicável que aparece **só quando há pendência**: card fixo custaria altura de
+  cabeçalho para dizer "0", e 8 cards em 2 colunas viram 4 fileiras no celular
+  (a régua já reprovou esta tela uma vez, v2.85.1).
+- **Coluna "Creche" em Admissões**, respondendo outra pergunta — ali o benefício
+  ainda não existe. O que importa é *"o posto dá direito e a pessoa já informou
+  criança no wizard?"*: quem vai para posto elegível sem ter informado nada é
+  quem o RH precisa procurar **antes de efetivar**.
+
+### Medido
+
+- **3 consultas fixas** em Colaboradores e **3** em Admissões, não uma por
+  pessoa — a lista tem 1.156 colaboradores, e o N+1 do dash de Talentos (v2.15)
+  já custou 43 consultas para 39 registros. Conferido lendo o código: os laços
+  finais só percorrem dicionários em memória.
+
 ## [3.06.0] — 2026-08-19 — O currículo virou obrigatório
 
 Decisão do Bruno (18/08/2026), nos DOIS cadastros. Reverte conscientemente a
