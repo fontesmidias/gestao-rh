@@ -275,6 +275,13 @@ const COLUNAS_ADMISSAO = () => [
                       + ` em ${fmtDataHora(c.atendimento_assistido.desde)}.`
                       + ' O link expira sozinho — não é preciso encerrar.'}>
           🧑‍💼 em atendimento</span></>)}</>) },
+  // Matrícula (pedido do Bruno, 18/08/2026). OCULTA por padrão: em admissão ela
+  // quase sempre está vazia — só nasce no export para o Tirvu —, e uma coluna de
+  // travessões custaria largura numa tela que já estoura (v2.59). Fica a um
+  // clique em "⚙ Colunas", e ordenável para agrupar quem já tem.
+  { chave: 'matricula', rotulo: 'Matrícula', ordenavel: true, oculta: true,
+    nowrap: true, filtro: 'texto', valor: (c) => c.matricula || '',
+    render: (c) => c.matricula || '—' },
   { chave: 'status', rotulo: 'Status', ordenavel: true,
     valor: (c) => statusInfo(c.status).label,
     render: (c) => (<span className="chip" style={{ '--chip-cor': statusInfo(c.status).cor }}>

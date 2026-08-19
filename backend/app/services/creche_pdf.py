@@ -65,6 +65,14 @@ def gerar_requerimento_creche(db: Session, beneficio: BeneficioCreche,
     # bloco de identificação (rótulo: valor)
     pdf.campo("Colaborador", col.nome_completo)
     pdf.campo("CPF", col.cpf or "-")
+    # Matrícula (pedido do Bruno, 18/08/2026). O documento identificava a pessoa
+    # só por nome + CPF, e é a matrícula que o DP usa para casar com a folha.
+    # Só sai quando EXISTE: imprimir "Matrícula: -" num documento que a pessoa
+    # assina sugere um dado faltando, quando em geral ela ainda nem foi gerada
+    # (a automática nasce no export para o Tirvu).
+    if (col.matricula or "").strip():
+        from app.services.export_tirvu import matricula_formatada
+        pdf.campo("Matrícula", matricula_formatada(col.matricula))
     pdf.campo("Empregadora", EMPRESA_RAZAO)
     pdf.campo("CNPJ Empregadora", EMPRESA_CNPJ)
     pdf.campo("Tomador dos serviços", tomador)

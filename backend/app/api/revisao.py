@@ -21,6 +21,7 @@ from app.services.auditoria import registrar
 from app.services.dossie import (DossieIncompleto, DossiePecasIlegiveis,
                                  gerar_dossie, nome_arquivo_dossie)
 from app.services.email import enviar_email
+from app.services.export_tirvu import matricula_formatada
 from app.services.email_templates import enviar_modelo
 from app.services.magic_link import emitir_link
 
@@ -115,6 +116,11 @@ def listar_candidatos(status: str | None = None, busca: str | None = None,
             "id": cand.id,
             "nome_completo": cand.nome_completo,
             "email": cand.email,
+            # Matrícula em Admissões (pedido do Bruno, 18/08/2026): era a única
+            # das três telas que não a mostrava. Em admissão ela costuma estar
+            # VAZIA — só nasce no export para o Tirvu —, e é exatamente por isso
+            # que aparecer importa: quem já tem veio de outro caminho.
+            "matricula": matricula_formatada(cand.matricula) or None,
             "status": cand.status,
             "progresso_docs": {"ok": len(ok), "total": len(meus)},
             "criado_em": cand.criado_em,

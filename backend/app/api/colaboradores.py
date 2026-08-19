@@ -519,11 +519,22 @@ def _dados_faltando(db: Session, c: Candidato, cpf: str | None,
 def _indicio_tirvu(c: Candidato) -> str | None:
     """Sinaliza que o colaborador provavelmente já existe no Tirvu — para o RH
     ser AVISADO (nunca bloqueado, decisão do Bruno 2026-07-21) antes de reverter.
-    Dois indícios: veio do Tirvu (importação) ou já ganhou matrícula 999NNNN
-    (gerada só no export de admissões para o Tirvu)."""
+
+    Dois indícios: veio do Tirvu (importação) ou já ganhou matrícula AUTOMÁTICA,
+    que só é gerada no export de admissões para o Tirvu.
+
+    ⚠️ São DUAS faixas de matrícula automática desde 19/08/2026: a legada
+    (`999`+4, 7 dígitos) e a nova (`99`+4, 6 dígitos). Conferir só o prefixo
+    `999` deixaria de fora todo mundo admitido a partir de agora — e o aviso
+    sumiria justamente para quem foi exportado mais recentemente. A checagem
+    usa a função de faixa, que distingue isto de uma matrícula REAL do Tirvu
+    que por acaso comece com 99.
+    """
+    from app.services.export_tirvu import matricula_automatica
+
     if c.origem == "importacao":
         return "importado do Tirvu"
-    if (c.matricula or "").startswith("999"):
+    if matricula_automatica(c.matricula):
         return "já teve matrícula gerada para o Tirvu"
     return None
 

@@ -111,24 +111,92 @@ def _salario(texto) -> object:
     return str(texto)
 
 
-PREFIXO_MATRICULA_AUTO = "999"
+# Faixa ANTIGA (até 18/08/2026): `999` + 4 dígitos = 7 caracteres. Continua
+# reconhecida — quem já a tem NÃO é renumerado: aquele número já foi para o
+# Tirvu e para a planilha de ponto, e trocá-lo criaria duas matrículas para a
+# mesma pessoa nos dois sistemas.
+PREFIXO_MATRICULA_LEGADO = "999"
+# Faixa NOVA (decisão do Bruno, 18/08/2026): `99` + 4 dígitos = **6 caracteres**,
+# para caber no padrão de nome de arquivo `MATRÍCULA - NOME - DOCUMENTO` com
+# matrícula de 6 posições. O prefixo se mantém (em vez de sequencial puro)
+# porque é ele que distingue "matrícula que NÓS geramos" da que veio do Tirvu —
+# `colaboradores.py` usa isso como indício antes de reverter um colaborador.
+PREFIXO_MATRICULA_AUTO = "99"
+_TAM_SEQ = 4
+
+
+def _sequencial(matricula: str | None, prefixo: str, tamanho: int) -> int | None:
+    """O sequencial de uma matrícula da faixa, ou `None` se ela não é da faixa.
+
+    ⚠️ **A faixa `99` é ambígua com matrícula REAL do Tirvu.** `999001` tem 6
+    dígitos e começa com `99`, então seria lida como sequencial 9001 — e o
+    gerador pularia para `999002`, invadindo a numeração do Tirvu, onde outra
+    pessoa pode já estar. Por isso a faixa nova exige que o dígito seguinte ao
+    prefixo NÃO seja `9`: `990001`…`998999` são nossos, `999xxx` não é.
+    Isso limita a faixa a ~9.000 matrículas, o que é folgado para uma base de
+    ~1.200 pessoas e é o preço de não colidir com número de gente real.
+    """
+    d = _so_digitos(matricula)
+    if len(d) != len(prefixo) + tamanho or not d.startswith(prefixo):
+        return None
+    resto = d[len(prefixo):]
+    if prefixo == PREFIXO_MATRICULA_AUTO and resto[0] == "9":
+        return None       # `999xxx` é matrícula do Tirvu, não da nossa faixa
+    return int(resto)
+
+
+def matricula_formatada(matricula: str | None, digitos: int = 6) -> str:
+    """A matrícula com zeros à esquerda até `digitos`, para EXIBIR e NOMEAR.
+
+    Pedido do Bruno (18/08/2026): nome de arquivo no padrão
+    `MATRÍCULA - NOME - DOCUMENTO`, com a matrícula em 6 posições (`000000`).
+
+    Duas coisas deliberadas:
+
+    * **Não trunca o que é maior.** As matrículas da faixa legada têm 7 dígitos
+      (`9990001`) e algumas do Tirvu podem ter mais — cortar para caber viraria
+      OUTRO número, e o nome do arquivo deixaria de identificar a pessoa.
+    * **Zero-pad é seguro para o casamento do ponto**: `import_ponto.matricula_norm`
+      já ignora zeros à esquerda, então `003035` e `3035` continuam sendo a
+      mesma pessoa. Isto formata para LER, não muda o que está gravado.
+    """
+    d = _so_digitos(matricula)
+    if not d:
+        return ""
+    return d.zfill(digitos)
+
+
+def matricula_automatica(matricula: str | None) -> bool:
+    """Esta matrícula foi gerada por NÓS (qualquer uma das duas faixas)?
+
+    Serve ao aviso de "esta pessoa provavelmente já está no Tirvu": só se gera
+    matrícula automática no export, então tê-la é indício de que a linha já
+    subiu para lá.
+    """
+    return any(_sequencial(matricula, p, _TAM_SEQ) is not None
+               for p in (PREFIXO_MATRICULA_AUTO, PREFIXO_MATRICULA_LEGADO))
 
 
 def proxima_matricula_auto(db: Session) -> str:
-    """Próxima matrícula automática no padrão 999 + sequencial de 4 dígitos
-    (9990001, 9990002, ...). Continua de onde parou: pega a MAIOR matrícula que
-    casa com 999NNNN já gravada e soma 1. Estável e sem colisão."""
+    """Próxima matrícula automática no padrão `99` + 4 dígitos (990001, 990002…).
+
+    ⚠️ Considera as DUAS faixas ao decidir o próximo número. A antiga (`999`+4)
+    não é mais gerada, mas segue existindo na base — e `9990007` e `990007`
+    compartilham o mesmo sequencial. Ignorar a faixa antiga faria a primeira
+    matrícula nova repetir um sequencial já usado, e as duas conviveriam na
+    mesma coluna do export do Tirvu parecendo pessoas diferentes por um dígito.
+    """
     from sqlalchemy import select
-    matriculas = db.scalars(
-        select(Candidato.matricula).where(
-            Candidato.matricula.like(f"{PREFIXO_MATRICULA_AUTO}____"))).all()
+    matriculas = db.scalars(select(Candidato.matricula).where(
+        Candidato.matricula.is_not(None))).all()
     maior = 0
     for m in matriculas:
-        d = _so_digitos(m)
-        # 999 + 4 dígitos => 7 dígitos exatos começando por 999
-        if len(d) == 7 and d.startswith(PREFIXO_MATRICULA_AUTO):
-            maior = max(maior, int(d[3:]))
-    return f"{PREFIXO_MATRICULA_AUTO}{maior + 1:04d}"
+        for prefixo in (PREFIXO_MATRICULA_AUTO, PREFIXO_MATRICULA_LEGADO):
+            seq = _sequencial(m, prefixo, _TAM_SEQ)
+            if seq is not None:
+                maior = max(maior, seq)
+                break
+    return f"{PREFIXO_MATRICULA_AUTO}{maior + 1:0{_TAM_SEQ}d}"
 
 
 def garantir_matricula(db: Session, c: Candidato) -> str:
