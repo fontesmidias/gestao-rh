@@ -238,6 +238,37 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                   "dia": "dia limite da entrega mensal"},
        exemplo={"nome": "Maria", "dia": "10"}),
 
+    # O LEMBRETE da entrega mensal (v3.02). Nasce aqui porque e-mail novo nasce
+    # no catálogo (v2.21) — e porque este é dos textos mais editados na prática:
+    # quem escreve a cobrança é o RH, não o código.
+    _m(chave="creche_lembrete_mensal", grupo="Reembolso-Creche",
+       rotulo="Lembrete: comprovante do mês",
+       quando=("Faltando N dias para a data de corte, quando o comprovante "
+               "daquele mês ainda não chegou. Os dias de antecedência são "
+               "configuráveis (padrão: 5, 2 e 1 dia antes)."),
+       assunto="Green House — Reembolso-Creche: falta o comprovante de {{competencia}}",
+       corpo="Olá, {{nome}}!\n\n"
+             "Ainda não recebemos o comprovante de {{competencia}} para: "
+             "{{criancas}}.\n\n"
+             "O prazo é dia {{dia}} — faltam {{dias}} dia(s).\n\n"
+             "Envie UM comprovante por criança:\n"
+             "- NOTA FISCAL, se quem cuida for uma creche/pré-escola (PJ); ou\n"
+             "- DECLARAÇÃO DE QUITAÇÃO assinada, se for cuidador pessoa "
+             "física (PF).\n\n"
+             "Acesse: {{link}}\n\n"
+             "Sem a comprovação no prazo, o reembolso do mês pode não ser "
+             "efetuado.",
+       variaveis={"nome": "primeiro nome do colaborador",
+                  "competencia": "mês de referência (ex.: agosto/2026)",
+                  "criancas": "nomes das crianças sem comprovante",
+                  "dia": "dia limite da entrega",
+                  "dias": "quantos dias faltam para o prazo",
+                  "link": "endereço do link do creche"},
+       obrigatorias=("link",),
+       exemplo={"nome": "Maria", "competencia": "agosto/2026",
+                "criancas": "Ana Clara", "dia": "25", "dias": "2",
+                "link": "https://exemplo/creche"}),
+
     _m(chave="creche_indeferido", grupo="Reembolso-Creche",
        rotulo="Pedido indeferido",
        quando="O RH indefere o pedido de Reembolso-Creche.",
