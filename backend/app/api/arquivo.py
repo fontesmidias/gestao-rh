@@ -191,7 +191,7 @@ def baixar_dossie(cid: uuid.UUID, db: Session = Depends(get_db),
               candidato_id=cid, detalhe={"tipo": "dossie"})
     db.commit()
     return _baixar(db, c.dossie_pdf_key,
-                   f"{nome_arquivo_dossie(c.nome_completo)}.pdf")
+                   f"{nome_arquivo_dossie(c.nome_completo, c.matricula)}.pdf")
 
 
 @router.get("/rh/arquivo/pessoa/{cid}/assinatura/{assinatura_id}")
@@ -205,7 +205,12 @@ def baixar_assinatura(cid: uuid.UUID, assinatura_id: uuid.UUID,
     registrar(db, "arquivo_exportado_individual", ator="rh", ator_detalhe=rh.email,
               candidato_id=cid, detalhe={"tipo": "assinatura", "id": str(assinatura_id)})
     db.commit()
-    return _baixar(db, a.pdf_key, f"{slug(titulo_doc(a))}.pdf")
+    # Padrão `matrícula - nome - documento` (v3.04): antes saía só
+    # `termo-vt.pdf` — quem baixasse o mesmo documento de três pessoas ficaria
+    # com três arquivos indistinguíveis na pasta.
+    from app.services.nome_arquivo import do_colaborador
+    return _baixar(db, a.pdf_key,
+                   do_colaborador(db.get(Candidato, cid), titulo_doc(a)))
 
 
 @router.get("/rh/arquivo/pessoa/{cid}/slot/{slot_id}")
@@ -217,7 +222,9 @@ def baixar_slot(cid: uuid.UUID, slot_id: uuid.UUID, db: Session = Depends(get_db
     registrar(db, "arquivo_exportado_individual", ator="rh", ator_detalhe=rh.email,
               candidato_id=cid, detalhe={"tipo": "slot", "id": str(slot_id)})
     db.commit()
-    return _baixar(db, s.arquivo_pdf_key, f"{slug(s.tipo.value)}.pdf")
+    from app.services.nome_arquivo import do_colaborador
+    return _baixar(db, s.arquivo_pdf_key,
+                   do_colaborador(db.get(Candidato, cid), s.tipo.value))
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +311,7 @@ def exportar_lote(pedido: PedidoLote, db: Session = Depends(get_db),
     for c in pessoas:
         base = _pasta(c)
         if "dossie" in tipos and c.dossie_pdf_key:
-            _add(f"{base}/{nome_arquivo_dossie(c.nome_completo)}.pdf",
+            _add(f"{base}/{nome_arquivo_dossie(c.nome_completo, c.matricula)}.pdf",
                  c.dossie_pdf_key, f"{c.nome_completo}: dossiê")
         if "assinados" in tipos:
             for a in db.scalars(select(Assinatura).where(

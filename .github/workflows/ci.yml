@@ -121,7 +121,7 @@ jobs:
                    test_permissoes_declaradas test_papel_automacao \
                    test_tela_de_trabalho test_transcricao_paragrafos \
                    test_retranscrever test_diarizacao_diagnostico \
-                   test_creche_competencia test_matricula; do
+                   test_creche_competencia; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
@@ -240,6 +240,13 @@ jobs:
           # `test_upload_fecha_spool` entra AQUI, não no bloco stdlib: ele
           # monta um `UploadFile` de verdade para provar que o spool é fechado,
           # e para isso precisa do Starlette.
+          # `test_matricula` e `test_nome_arquivo` (v3.04) também: as funções
+          # que eles exercitam são de TEXTO, mas moram em `export_tirvu.py`, que
+          # importa SQLAlchemy no topo. Foram parar no bloco stdlib primeiro e
+          # reprovaram com `ModuleNotFoundError: sqlalchemy` — passavam na
+          # máquina de quem escreve (que tem o venv) e falhavam aqui. Antes de
+          # pôr teste no bloco stdlib, confira o que o MÓDULO importa, não só o
+          # teste.
           for t in test_documentos_catalogo test_email_templates \
                    test_retomada_acesso test_export_tirvu \
                    test_upload_fecha_spool \
@@ -253,7 +260,8 @@ jobs:
                    test_talento_campos_longos test_textos_documentos \
                    test_processos test_dossie_pdf_ilegivel \
                    test_token_automacao test_gravacao_entrevista \
-                   test_blocos_gravacao test_creche_ciclo_mensal; do
+                   test_blocos_gravacao test_creche_ciclo_mensal \
+                   test_matricula test_nome_arquivo; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
