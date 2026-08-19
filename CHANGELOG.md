@@ -11,6 +11,46 @@ tag anterior da imagem no GHCR. Faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.03.0] — 2026-08-19 — Seis dígitos, sem invadir o vizinho
+
+Matrícula automática de **6 dígitos** (`99`+4), como o Bruno pediu para o padrão
+de nome de arquivo. **Só para as próximas**: quem já tem a antiga (`999`+4, 7
+dígitos) fica como está — aquele número já foi para o Tirvu e para a planilha de
+ponto, e trocá-lo criaria duas matrículas para a mesma pessoa nos dois sistemas.
+
+### Adicionado
+
+- **Faixa nova `99NNNN`** e `matricula_formatada()` (zero-pad até 6 para EXIBIR
+  e NOMEAR, sem tocar no gravado). Zero-pad é seguro: `matricula_norm` já ignora
+  zeros à esquerda, então `003035` continua casando com `3035` na planilha de
+  ponto — é isso que autoriza o padrão de nome sem quebrar a frequência.
+- **Matrícula em Admissões** (era a única das três telas sem ela) e **no
+  requerimento do creche**, que identificava a pessoa só por nome + CPF — e é a
+  matrícula que o DP usa para casar com a folha. Sai só quando EXISTE: imprimir
+  "Matrícula: -" num documento assinado sugere dado faltando, quando em geral
+  ela ainda nem foi gerada.
+
+### Corrigido
+
+- **`999001` era lida como matrícula NOSSA.** Tem 6 dígitos e começa com `99`,
+  então a leitura ingênua a tomaria por `99`+`9001` — e o gerador pularia para
+  `999002`, **invadindo a numeração do Tirvu**, onde pode haver outra pessoa. A
+  faixa nova agora exige que o dígito após o prefixo não seja `9`. Custo: a
+  faixa vai até `998999` (~9.000 matrículas, folgado para ~1.200 pessoas); o
+  ganho é não colidir com número de gente real.
+- **O gerador considera as DUAS faixas** ao escolher o próximo número: `9990007`
+  e `990007` compartilham o sequencial, e ignorar a legada faria a primeira
+  matrícula nova repetir um número já usado (medido: geraria `990001` numa base
+  que já tinha o sequencial 7).
+- **`_indicio_tirvu` só reconhecia `999`**: o aviso de "esta pessoa já está no
+  Tirvu" sumiria para todo mundo admitido a partir de agora — justamente os mais
+  recentes.
+
+### Medido
+
+- `test_matricula` no CI, validado por mutação: remover o guard da ambiguidade
+  reprova nomeando o caso `999001`.
+
 ## [3.02.0] — 2026-08-19 — A porta do mês
 
 O ciclo MENSAL do reembolso-creche: a estrutura que faltava para receber o

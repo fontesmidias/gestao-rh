@@ -457,3 +457,41 @@ ia recriar uma porta que já existia) e com as rotas de diagnóstico.
     correção fica na auditoria (quem mudou, de → para).
     ⚠️ Dinheiro NÃO se guarda como texto nem como float: centavos em inteiro,
     como o resto do sistema faz onde o valor decide folha.
+
+---
+
+## Status da execução (2026-08-19)
+
+### ✅ Entregue — v3.01.0
+- Botão de **criar jornada** (rota existia, tela nunca chamava).
+- **Vigência do creche por posto** (`creche_vigente_desde`), individual e em massa.
+- **Tela das credenciais de automação** (rotas existiam desde a v2.94 sem tela).
+
+### ✅ Entregue — v3.02.0 (P0, o ciclo mensal)
+- `CompetenciaCreche` + migration, com unicidade por criança/mês.
+- Regras puras (`services/creche_competencia.py`): competência válida, atraso,
+  dias para o lembrete, e o **teto** — validadas por 3 mutações.
+- **Multi-folhas** (`services/creche_comprovante.py`): 1..N folhas → um PDF.
+- **As duas portas** pela mesma função (`services/creche_envio.py`).
+- **Worker de lembrete**, nos dois arquivos de deploy, dias configuráveis.
+- Template `creche_lembrete_mensal` no catálogo.
+- **Telas**: colaborador (câmera guiada, prazo como contagem) e RH (tabela com
+  comprovado × reembolsável, folhas, retroativo, aprovar/recusar/anexar).
+
+⚠️ **Defeito encontrado pelo CI e corrigido na mesma leva**: o caminho de escape
+da normalização gravava os bytes de um PNG como se fossem PDF, derrubando o
+envio com 500. Detalhes no CHANGELOG da v3.02.0. Ficou coberto por teste.
+
+### ⏳ Pendente do P0
+- **Comunicado corrigindo a data** para quem já foi ativado com `dia 5` no
+  e-mail (a decisão 6 previu; falta escolher QUANDO disparar).
+- Validação na homologação — depende do Bruno olhar a tela.
+
+### ⏳ Pendente das demais prioridades
+- **P1**: currículo obrigatório nos dois cadastros (autosave + câmera, decisões
+  12 e 13); matrícula `99NNNN` e nas telas/requerimento.
+- **P2**: padronização dos nomes de download (31 pontos + `BotaoBaixar`).
+- **P3**: dedup no cadastro público de talentos.
+- **P4**: creche nas telas de Colaboradores/Admissões.
+- **P5**: coleta na admissão (redação + destino do documento de indeferido).
+- **Feedback 1**: investigar os dois caminhos da assinatura.
