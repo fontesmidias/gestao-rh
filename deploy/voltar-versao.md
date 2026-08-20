@@ -16,6 +16,8 @@ existir significa que aquele código foi aprovado, não apenas que ele compilou.
 
 **Na tela do GitHub:** Code → Tags, ou a lista de Releases.
 
+> A imagem com o número (`:3.09.0`) é publicada **no mesmo build do `main`**, lendo o `versao.py` — não depende da tag. Isso é deliberado: o push da tag é feito pelo próprio CI, e o GitHub não dispara workflow a partir dele (proteção contra loop). Se dependesse da tag, ela existiria e a imagem não — e este guia mandaria escolher um número que o registro não tem.
+
 **No terminal:**
 
 ```bash
