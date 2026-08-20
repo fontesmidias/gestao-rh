@@ -116,6 +116,18 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`console_scripts` do pip NÃO entra no PATH do Windows — no MCP isso vira
+  "o servidor não conecta"** (v3.14, achado instalando o pacote de verdade): o
+  `pyproject.toml` declara `portal-rh-mcp = "portal_rh_mcp.servidor:main"`, o
+  `pip install -e .` cria o `.exe`… **numa pasta `Scripts` que não está no
+  PATH**, e o próprio pip AVISA num warning que todo mundo ignora. O Claude
+  Desktop não acha o comando, e a mensagem que aparece não fala em PATH — fala
+  em conexão, mandando procurar no lugar errado (v2.93). No config use
+  `"command": "python", "args": ["-m", "portal_rh_mcp.servidor"]`: o `python`
+  está no PATH por construção (foi assim que o pacote foi instalado). ⚠️ **E
+  teste o servidor de FORA do diretório do repositório** — rodar de dentro
+  esconde o defeito, porque o cwd entra no `sys.path` e o pacote é encontrado
+  mesmo sem estar instalado direito.
 - **Ferramenta de IA sobre rota que o PAPEL não alcança responde 403 para todo
   mundo, sempre** (v3.14, pego conferindo permissão × ferramenta): `erros_recentes`
   foi escrita sobre `GET /rh/diagnostico/erros`, que exige `sistema:telemetria` —
