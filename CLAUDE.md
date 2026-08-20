@@ -116,6 +116,25 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Defesa COPIADA entre pacotes precisa de quem a compare — e o SDK renomeia
+  classe entre majors** (v3.14, servidor MCP): o pacote `mcp/` roda no
+  computador de cada pessoa e o backend roda no VPS, então **não há import
+  possível** — a defesa contra prompt injection do `anti_prompt_injection.py`
+  teve de ser copiada em `mcp/portal_rh_mcp/saida.py`. Cópia sem quem a cubra
+  envelhece torta e em SILÊNCIO, e o que passa por ela é texto de currículo indo
+  para dentro do contexto de um modelo **que executa ferramentas**;
+  `test_mcp_saida.py` (no CI) compara os dois arquivos e reprova nomeando o
+  padrão que falta. ⚠️ **Neutralizar não é apagar, e também não é tornar
+  ilegível**: a 1ª versão separava TODAS as letras do trecho suspeito com
+  caracteres invisíveis — neutraliza igual e devolve uma frase que ninguém lê
+  nem copia, quando quem opera precisa ver exatamente o que a pessoa escreveu.
+  Um separador depois da 1ª letra basta para descasar o padrão. ⚠️ E o SDK
+  `mcp` **renomeou `FastMCP` para `MCPServer` na 2.0**: o código escrito contra
+  a 1.x não sobe, e só apareceu porque o teste SOBE o servidor e LISTA as
+  ferramentas — `import portal_rh_mcp` teria ficado verde com tudo quebrado
+  (v3.00.6). Por isso a faixa está fechada no major (v3.00.4). O teste que
+  precisa do SDK mora em `mcp/tests/` e **fica fora do CI**: a imagem da API não
+  o tem, nem deve ter. Coberto por 5 + 4 mutações.
 - **Reembolso-creche tem DOIS ciclos, e confundi-los erra dinheiro** (v3.02, o
   procedimento é do Jurídico — e-mail do Dr. Lucas 18/08/2026, em `docs/email e
   anexos dr lucas/`): o **requerimento** e a **certidão** entregam-se UMA VEZ (e

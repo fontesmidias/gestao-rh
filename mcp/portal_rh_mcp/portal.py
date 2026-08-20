@@ -40,7 +40,7 @@ class Portal:
             raise ErroDoPortal(
                 "Falta a credencial. Defina PORTAL_RH_TOKEN no "
                 "claude_desktop_config.json — crie a sua em Configurações → "
-                "Integrações → Credenciais de automação."
+                "E-mail e integrações → Credenciais de automação."
             )
 
     def _url(self, caminho: str) -> str:
@@ -60,8 +60,8 @@ class Portal:
         if r.status_code == 401:
             return ErroDoPortal(
                 "A credencial não é aceita (pode ter sido revogada ou expirado). "
-                "Crie outra em Configurações → Integrações → Credenciais de "
-                "automação e atualize o claude_desktop_config.json."
+                "Crie outra em Configurações → E-mail e integrações → Credenciais "
+                "de automação e atualize o claude_desktop_config.json."
             )
         if r.status_code == 403:
             return ErroDoPortal(

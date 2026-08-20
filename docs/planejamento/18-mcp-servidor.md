@@ -1,7 +1,10 @@
-# Servidor MCP do Portal — em construção
+# Servidor MCP do Portal — onde está e o que falta
 
-> Status: **começado em 2026-08-20, incompleto**. Este documento diz onde parei
-> e o que falta, para retomar sem refazer o caminho.
+> Status: **as ferramentas funcionam** (v3.14, 2026-08-20). Falta o lote-piloto
+> dos currículos e as ferramentas de escrita além do talento.
+>
+> Para **instalar**, veja `mcp/README.md`. Para **o desenho e o que não se
+> expõe**, veja `13-mcp-do-portal.md` — ele é o contrato, e um teste o cobra.
 
 ## O que decidiu o desenho
 
@@ -27,40 +30,62 @@ no VPS. Misturá-los faria a imagem da API carregar o SDK do MCP sem precisar, e
 o doc 13 § 4 já rejeitou pôr as rotas do MCP dentro da API do painel — a
 superfície da IA não se funde com a do humano.
 
-## O que já existe
+## O que existe (v3.14)
 
-- **`mcp/pyproject.toml`** — dependências (`mcp[cli]`, `httpx`) e o comando
-  `portal-rh-mcp`.
-- **`mcp/portal_rh_mcp/portal.py`** — o cliente HTTP. A parte que importa é o
-  tratamento de erro: 401, 403, 404, 429 e timeout têm mensagens DIFERENTES,
-  porque cada um pede uma ação diferente (v2.93) — e num assistente isso pesa
-  mais, já que o modelo vai LER a mensagem e repeti-la para a pessoa.
-  O token vem do AMBIENTE, nunca de argumento: o modelo não o vê e não tem como
-  vazá-lo numa resposta.
+| Arquivo | O que é |
+|---|---|
+| `pyproject.toml` | Dependências e o comando `portal-rh-mcp`. O SDK está cravado em `>=2.0,<3` — ver a armadilha abaixo |
+| `portal_rh_mcp/portal.py` | O cliente HTTP. 401, 403, 404, 429 e timeout têm mensagens **diferentes**, porque cada um pede uma ação diferente (v2.93). O token vem do AMBIENTE, nunca de argumento |
+| `portal_rh_mcp/saida.py` | Máscara de CPF e neutralização de prompt injection na saída |
+| `portal_rh_mcp/servidor.py` | As 6 ferramentas e o `main()` do `stdio` |
+| `tests/test_mcp_ferramentas.py` | Sobe o servidor e lista as ferramentas. **Fora do CI** (precisa do SDK) |
+| `backend/tests/test_mcp_saida.py` | Compara a defesa copiada com a do backend. **No CI** |
+| `README.md` | O guia de instalação das 2 a 5 pessoas |
+
+As ferramentas: `buscar_candidato`, `diagnostico_candidato`, `listar_admissoes`,
+`pendencias_tirvu`, `erros_recentes` e `cadastrar_talento`. Todas são **cascas
+finas** sobre rotas existentes — `api/diagnostico.py` já respondia quatro
+perguntas do § 6 numa rota só.
 
 ## O que falta
 
-1. **`servidor.py`** — registrar as ferramentas com o SDK e o `main()` do
-   `stdio`.
-2. **As ferramentas de leitura** (doc 13 § 6): `buscar_candidato`,
-   `pendencias_admissao`, `status_documentos`, `diagnostico_dossie`,
-   `listar_admissoes`, `pendencias_tirvu`. ⚠️ `api/diagnostico.py` **já responde
-   4 delas** — as ferramentas são cascas finas, não código novo.
-3. **As de escrita**, uma a uma: `cadastrar_talento` (casca sobre
-   `POST /rh/talentos`, que já deduplica), e depois o que a decisão de 19/08
-   liberou — convidar, aprovar documento, marcar entrevista.
-4. **O guia de instalação** para as 2 a 5 pessoas: como criar a própria
-   credencial na tela e o que colar no `claude_desktop_config.json`.
-5. **Mascaramento na saída** (doc 13 § 5.5) e o `anti_prompt_injection` em todo
-   texto que volte ao modelo (§ 5.4) — currículo e anotação de CRM são entrada
-   hostil.
+1. **Rodar com gente de verdade.** As 2 a 5 pessoas instalarem e usarem por
+   alguns dias. Só o uso dirá se as descrições das ferramentas fazem o modelo
+   escolher a certa — e é isso que o § 8 do doc 13 chama de documentação
+   funcional.
+2. **O lote-piloto de 50 currículos** (§ 7 do doc 13), medido e relatado. ⚠️ O
+   intervalo de datas é **parâmetro**, nunca constante, e vai para a auditoria:
+   sem ele não se sabe depois o que já foi varrido. Rodada sem intervalo
+   informado **recusa**.
+3. **As ferramentas de escrita que a decisão de 19/08 liberou** — convidar
+   candidato, aprovar documento, marcar entrevista. O papel `assistente_rh` já
+   tem as permissões; falta a casca. Uma a uma, não as três de uma vez.
+4. **Subir o currículo pelo MCP.** Hoje `cadastrar_talento` cria o registro e o
+   arquivo sobe pela tela. A rota existe (`POST /rh/talentos/{id}/curriculo`);
+   falta decidir como o arquivo chega até ela a partir do Desktop.
 
 ## Armadilhas já conhecidas para esta parte
 
+- **O SDK renomeou a classe principal entre majors.** `FastMCP` (1.x) virou
+  `MCPServer` (2.x), e o código escrito contra a 1.x **não sobe** com a 2.0
+  instalada. Só apareceu porque o teste sobe o servidor e LISTA as ferramentas;
+  `import portal_rh_mcp` teria ficado verde com tudo quebrado (v3.00.6). Por
+  isso a faixa está fechada no major — faixa aberta já quebrou este projeto
+  sozinha, com o sintoma culpando a credencial (v3.00.4).
+- **A defesa de injection está COPIADA**, porque o pacote roda no desktop e não
+  importa o backend. `test_mcp_saida.py` compara os dois arquivos e reprova a
+  divergência; ao mexer num, mexa no outro.
+- **Neutralizar não pode tornar o texto ilegível.** Separar todas as letras do
+  trecho suspeito neutraliza e devolve algo que ninguém lê nem copia — e quem
+  opera precisa ver o que a pessoa escreveu. Um separador basta.
+- **Nada em `stdout` além do protocolo.** Um `print` de depuração corrompe a
+  conversa com o Desktop, e o sintoma aparece como "o servidor não conecta".
+  Depure por `stderr`.
 - **Não reimplementar dedup** (doc 13 § 3): `POST /rh/talentos` já recusa
-  duplicata nomeando quem é. Duas portas discordando sobre a mesma pessoa é o
-  defeito que a v2.73 evitou.
-- **Não processar 14 mil currículos de uma vez** (§ 7): lote de 50, medir,
-  ajustar. Velocidade em fila errada multiplica erro.
+  duplicata nomeando quem é.
+- **Não processar 14 mil de uma vez** (§ 7): lote de 50, medir, ajustar.
+  Velocidade em fila errada multiplica erro.
 - **Toda chamada vai à auditoria** marcada como automação — o `requer_rh` já faz
   isso com `automacao:<e-mail de quem age>`, e é o que responde "quem mandou?".
+  Por isso **cada pessoa tem o seu token**: um compartilhado devolveria a
+  pergunta ao vazio.
