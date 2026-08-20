@@ -14,6 +14,83 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.14.0] — 2026-08-20 — O assistente ganha as ferramentas
+
+O servidor MCP passou a existir de verdade: as seis ferramentas do § 6 do
+`13-mcp-do-portal.md` estão registradas e o Claude Desktop já as enxerga. Elas
+são **cascas finas** sobre rotas que já existiam — a regra de negócio continua
+no backend, onde a tela também a exerce, porque duas portas que decidem a mesma
+coisa divergem na primeira mudança (o defeito que a v2.73 evitou no Banco de
+Talentos).
+
+**Leitura** — `buscar_candidato`, `diagnostico_candidato` (a que responde *"por
+que o dossiê não gera?"*, o caso que custou 54 minutos à analista na v2.93),
+`listar_admissoes`, `pendencias_tirvu` e `erros_recentes`. **Escrita**, uma só:
+`cadastrar_talento`, sobre o `POST /rh/talentos` que já recusa duplicata
+nomeando quem é.
+
+### O que a saída faz com o texto antes de entregá-lo ao modelo
+
+Currículo e anotação de CRM são texto que alguém de fora digitou, e aqui eles
+vão para dentro do contexto de um modelo **que executa ferramentas** — o que
+torna a defesa da v1.99 mais necessária, não menos. `saida.py` mascara CPF
+(`***.456.789-**`: guarda o miolo, que é o que permite conferir "é esta pessoa
+mesmo?" contra um documento na mão) e neutraliza instrução dirigida a IA.
+
+Duas decisões dentro disso:
+
+- **Neutralizar não é apagar, e também não é tornar ilegível.** A primeira
+  versão separava todas as letras do trecho suspeito com caracteres invisíveis:
+  neutralizava igual e devolvia uma frase que ninguém consegue ler nem copiar —
+  e quem opera precisa ver exatamente o que a pessoa escreveu. Hoje é **um**
+  separador, depois da primeira letra: o padrão não casa mais, a frase continua
+  legível. Há teste medindo os dois lados.
+- **A detecção é reportada, nunca filtrada calada** (regra da casa desde a
+  v1.99): a resposta ganha um `_alerta_texto_suspeito` dizendo o que foi achado,
+  para o modelo poder avisar a pessoa.
+
+⚠️ **A defesa está COPIADA do backend, e a cópia tem preço.** O pacote `mcp/`
+roda no computador de cada pessoa e o backend roda no VPS — não há import
+possível entre eles. Cópia sem quem a cubra envelheceria torta e em silêncio,
+então `test_mcp_saida.py` compara os dois arquivos e reprova no CI nomeando o
+padrão que falta (é o contrato do `TELAS` da régua de largura, v2.62). Validado
+por 5 mutações.
+
+### O SDK tinha mudado de nome debaixo do código
+
+O servidor foi escrito contra `FastMCP`, e o SDK instalado é a **2.0**, onde a
+classe se chama `MCPServer`. O erro só apareceu porque o teste **sobe o servidor
+de verdade e lista as ferramentas**, que é o caminho que o Claude Desktop
+percorre — `import portal_rh_mcp` teria ficado verde com tudo quebrado (v3.00.6:
+verificação de import só prova o que ela carrega). O `pyproject.toml` agora
+crava `mcp[cli]>=2.0,<3`: faixa aberta em dependência já quebrou este projeto
+sozinha, com o sintoma culpando a credencial (v3.00.4).
+
+`test_mcp_ferramentas.py` cobre, validado por 4 mutações: ferramenta fora do
+contrato do § 6, descrição fraca demais para o modelo escolher, **credencial
+aceita por parâmetro** (o token vem do ambiente justamente para o modelo não o
+ver) e falha de rede que não vira mensagem acionável. Ele fica em `mcp/tests/` e
+**não** no CI: precisa do SDK, que a imagem da API não tem — nem deve ter.
+
+### O guia que faltava
+
+`mcp/README.md` — como criar a credencial (**Configurações → 🔌 E-mail e
+integrações → 🤖 Credenciais de automação**), o que colar no
+`claude_desktop_config.json`, e uma tabela de "quando não funciona" que liga
+cada mensagem à ação. As mensagens de erro do cliente apontavam para uma aba
+"Integrações" que não existe com esse nome; mandar procurar onde não está é o
+que faz quem opera concluir que perdeu o acesso (v2.93).
+
+⚠️ **Cada pessoa cria a sua credencial.** Token compartilhado faria o log dizer
+"a automação fez" sem dizer quem — a pergunta que ele existe para responder.
+
+### O que continua fora, por desenho
+
+Efetivar, desligar, decidir reembolso, assinar e exportar a base. Não é
+limitação técnica: são atos que mudam vínculo, dinheiro ou o sistema inteiro, e
+pedem uma pessoa olhando a tela. O teste reprova ferramenta nova que não esteja
+no § 6 — alargar por conveniência desfaria a razão de o papel existir.
+
 ## [3.13.0] — 2026-08-19 — O papel de quem age pelo assistente
 
 Primeiro passo do MCP com o uso que o Bruno definiu em 19/08/2026: não é a Claude

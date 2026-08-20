@@ -6,7 +6,11 @@ requires-python = ">=3.11"
 dependencies = [
     # O SDK oficial. `mcp[cli]` traz o `mcp` de linha de comando, útil para
     # depurar sem abrir o Claude.
-    "mcp[cli]>=1.2",
+    # ⚠️ Faixa fechada no major: a 2.0 renomeou `FastMCP` para `MCPServer`,
+    # e faixa aberta em dependência já quebrou este projeto sozinha, com o
+    # sintoma culpando a credencial (v3.00.4). Ao subir de major, rode o
+    # `tests/test_mcp_ferramentas.py`: o import muda de nome.
+    "mcp[cli]>=2.0,<3",
     # Mesma biblioteca que o backend usa para falar HTTP — nada de inventar
     # outra só para este pacote.
     "httpx>=0.27",

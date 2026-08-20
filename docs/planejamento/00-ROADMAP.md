@@ -40,7 +40,9 @@
 |---|---|---|
 | **Declaração PF pré-preenchida** | **Decidido pelo Bruno (19/08/2026)**: *"tem que vir pré-preenchida com os dados já mapeados em relação ao filho do colaborador"*. Hoje o sistema gera o modelo EM BRANCO. O que já existe: nome do colaborador, CPF, e nome + data de nascimento da criança. ⚠️ O que **falta** e o modelo do Dr. Lucas pede: nome, CPF, RG e endereço do CUIDADOR, e o valor pago no mês — esses precisam ser coletados (decidir se por criança, uma vez, ou a cada competência) | 23ª leva |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
-| **🔨 Servidor MCP — EM CONSTRUÇÃO** | Papel `assistente_rh` pronto (v3.13) e o cliente HTTP escrito. ⚠️ **O OAuth deixou de ser necessário**: todos os colaboradores têm o Claude Desktop, que aceita o token `mcp_…` que já existe — o desenho do OAuth (`17-mcp-oauth.md`) ficou arquivado, com o motivo, porque o obstáculo volta se um dia precisarem usar pelo navegador. **Onde parei e o que falta: `18-mcp-servidor.md`** |
+| **Lote-piloto de 50 currículos** | O MCP já cadastra talento (v3.14). Falta a primeira rodada medida: 50, taxa de acerto, ajuste — antes de pensar nos 14 mil. ⚠️ O intervalo de datas é parâmetro do RH, nunca constante, e vai para a auditoria. **`13-mcp-do-portal.md` § 7** | 22ª leva |
+| **MCP: instalar com as 2 a 5 pessoas** | O servidor e o guia (`mcp/README.md`) estão prontos. Só o uso real dirá se as descrições fazem o modelo escolher a ferramenta certa | v3.14 |
+| **MCP: as escritas que faltam** | Convidar candidato, aprovar documento, marcar entrevista — o papel `assistente_rh` já tem a permissão, falta a casca. Uma a uma. **`18-mcp-servidor.md`** | 19/08/2026 |
 | **Transcrição no módulo de Arquivo** | Hoje só aparece no card da entrevista | § 11 do doc 14 |
 | **Dados da empresa vindos do banco** | Tirar contato/telefone/site do código; a tela de Marca já existe | 2026-08-08 |
 
@@ -61,6 +63,17 @@ O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
 **Vigência dos 5 contratos** — o Bruno lançou as datas na tela em 19/08/2026
 (ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
 competência anterior à vigência.
+
+### 24ª leva (2026-08-19/20) — v3.11 → v3.14
+**O MCP saiu do papel.** O papel `assistente_rh` (v3.13) e, na v3.14, as
+seis ferramentas registradas e funcionando no Claude Desktop — cascas finas
+sobre rotas que já existiam. O OAuth foi arquivado com o motivo: todos têm o
+Desktop, que aceita o token `mcp_…` de sempre.
+
+Dois achados: o SDK renomeou `FastMCP` para `MCPServer` na 2.0, e só o teste
+que SOBE o servidor pegou; e a defesa contra prompt injection precisou ser
+copiada para o pacote do desktop — com um teste comparando as duas, porque
+cópia sem quem a cubra envelhece torta e em silêncio.
 
 ### 23ª leva (2026-08-18/19) — v3.01 → v3.10
 **Os 13 feedbacks do Bruno.** Ciclo mensal do creche completo (modelo, regras,

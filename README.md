@@ -117,6 +117,13 @@ O que começou como um "portal de admissão" cresceu para uma **plataforma de RH
 - **Sistema de design com guarda-corpo automático** ([`08-sistema-de-design.md`](docs/planejamento/08-sistema-de-design.md) + `test_design_system.py`, que roda no CI): classe ou token que não existe, tabela que estoura a tela e remendo inline reprovam antes do merge
 - Nada estoura a tela na horizontal (**68 combinações tela × largura verificadas**) · foco visível para navegação por teclado · botão só com ícone tem nome acessível
 
+### Assistente de IA (MCP) — consultar e cadastrar pelo Claude Desktop
+- **Servidor MCP próprio** ([`mcp/`](mcp/README.md)): quem opera pergunta *"por que o dossiê da Kátia não gera?"* e recebe a causa, em vez de procurar na tela. Também responde o que falta numa admissão, quem está com documento pendente e o que trava a exportação para o Tirvu
+- **Cadastra talento** pela mesma porta que a tela usa — inclusive a recusa de duplicata, que **avisa nomeando quem já existe** em vez de fundir os dois registros
+- **Papel próprio e credencial por pessoa**: efetivar, desligar, decidir reembolso, assinar e exportar a base continuam só pela tela — atos que mudam vínculo, dinheiro ou o sistema pedem alguém olhando. Cada pessoa tem o seu token, revogável, e o log diz **quem** mandou
+- **Currículo é entrada hostil, também aqui**: CPF sai mascarado e instrução dirigida a IA escondida num currículo é neutralizada **e reportada** — quem opera é avisado, em vez de o texto ser filtrado em silêncio
+- Roda no computador de cada pessoa, sem porta aberta em lugar nenhum
+
 ### Transversal
 - **Trilha de auditoria** de tudo (quem, quando, antes → depois) e **hash SHA-256 de todo arquivo antes de qualquer exclusão**
 - **Lixeira universal** com restauração e retenção configurável · expurgo LGPD automático · rate limiting em login/2FA

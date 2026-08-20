@@ -135,6 +135,12 @@ jobs:
           # serviço não importa modelo nem config de propósito. Validado por 3
           # mutações; a que faz "ilegível virar zero" é a mais importante: zero
           # entraria calado na soma e o total sairia menor sem nada acusar.
+          # `test_mcp_saida` (v3.14): a defesa contra prompt injection está
+          # COPIADA no pacote `mcp/` — ele roda no computador de cada pessoa e
+          # não tem como importar o backend. Cópia sem quem a cubra envelhece
+          # torta e em silêncio, e o que passa por ela é texto de currículo
+          # indo para dentro do contexto de um modelo que executa ferramentas.
+          # Este teste compara os dois arquivos e reprova a divergência.
           # `test_permissoes_declaradas` (v2.86): reprova rota /rh/* que não
           # declara permissão. Sem ele, módulo novo nasce aberto a qualquer
           # pessoa com login — e o defeito não aparece na tela: a rota
@@ -145,7 +151,8 @@ jobs:
                    test_permissoes_declaradas test_papel_automacao \
                    test_tela_de_trabalho test_transcricao_paragrafos \
                    test_retranscrever test_diarizacao_diagnostico \
-                   test_creche_competencia test_papel_assistente_rh; do
+                   test_creche_competencia test_papel_assistente_rh \
+                   test_mcp_saida; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
