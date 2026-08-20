@@ -314,7 +314,8 @@ jobs:
                    test_blocos_gravacao test_creche_ciclo_mensal \
                    test_matricula test_nome_arquivo \
                    test_talento_recadastro \
-                   test_mcp_oauth_metadata test_mcp_oauth_fluxo; do
+                   test_mcp_oauth_metadata test_mcp_oauth_fluxo \
+                   test_mcp_endpoint; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
