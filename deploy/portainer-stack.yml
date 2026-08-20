@@ -96,6 +96,28 @@ services:
   # ⚠️ Este serviço TEM que existir aqui E no `docker-compose.base.yml` — worker
   # declarado num só dos dois não roda em produção e não gera erro nenhum, só
   # silêncio (v2.66).
+  # Assistente de IA — MCP remoto com OAuth (v3.15).
+  # ⚠️ Este é o arquivo que efetivamente SOBE na VPS: um serviço que existe só
+  # no compose local não roda aqui, e não gera erro — gera silêncio (v2.66).
+  # ⚠️ `MCP_ISSUER` precisa ser a URL pública CANÔNICA (https, sem barra final).
+  # Vazia, o serviço sobe com o assistente desligado e o portal segue normal.
+  mcp:
+    image: ghcr.io/fontesmidias/gestao-rh-mcp:latest
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BASE_URL: ${BASE_URL}
+      MCP_ISSUER: ${MCP_ISSUER}
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: mcp
+      TZ: America/Sao_Paulo
+    depends_on:
+      - db
+    volumes:
+      - logs-data:/var/log/gestao-rh
+    networks: [internal]
+    restart: unless-stopped
+
   transcricao:
     image: ghcr.io/fontesmidias/gestao-rh-transcricao:latest
     environment:

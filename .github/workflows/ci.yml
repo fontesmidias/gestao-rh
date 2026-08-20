@@ -37,6 +37,13 @@ jobs:
           - servico: transcricao
             contexto: ./backend
             arquivo: ./backend/Dockerfile.transcricao
+          # Assistente de IA (v3.15): imagem PRÓPRIA e enxuta — só fala HTTP e
+          # banco, sem as dependências de PDF/OCR da API.
+          # ⚠️ Sem esta entrada, o `portainer-stack.yml` aponta para uma imagem
+          # que não existe e o container nunca sobe em produção.
+          - servico: mcp
+            contexto: ./backend
+            arquivo: ./backend/Dockerfile.mcp
     steps:
       - uses: actions/checkout@v4
 
@@ -154,6 +161,12 @@ jobs:
           # ninguém reporta acesso a mais. Cobre também que o objeto devolvido é
           # transiente: mutar o da sessão gravaria o papel trocado na linha real
           # da pessoa, tirando o acesso dela ao painel.
+          # `test_mcp_deploy` (v3.15): cobra que o serviço do assistente existe nos
+          # TRÊS arquivos (compose, portainer-stack e a matriz de imagens) e que o
+          # nginx roteia os `.well-known` ANTES do SPA. O segundo é um defeito
+          # medido em 20/08/2026: sem `location` próprio, a descoberta do OAuth
+          # recebe o HTML do site com status 200, o cliente reporta "não consegui
+          # conectar", e nada no log parece errado.
           # `test_permissoes_declaradas` (v2.86): reprova rota /rh/* que não
           # declara permissão. Sem ele, módulo novo nasce aberto a qualquer
           # pessoa com login — e o defeito não aparece na tela: a rota
@@ -166,7 +179,7 @@ jobs:
                    test_retranscrever test_diarizacao_diagnostico \
                    test_creche_competencia test_papel_assistente_rh \
                    test_mcp_saida test_mcp_permissoes \
-                   test_mcp_oauth_papel; do
+                   test_mcp_oauth_papel test_mcp_deploy; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

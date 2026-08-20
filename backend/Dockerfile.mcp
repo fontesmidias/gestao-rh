@@ -1,0 +1,35 @@
+FROM python:3.12-slim
+
+# Imagem PRÓPRIA e ENXUTA: este serviço só fala HTTP e banco. As dependências de
+# sistema da API (weasyprint, libreoffice, tesseract) existem para gerar PDF e
+# ler documento — nada disso acontece aqui, e carregá-las custaria ~700 MB e uma
+# superfície de ataque maior num serviço que fica exposto ao mundo.
+#
+# ⚠️ Ele PRECISA existir também no `deploy/portainer-stack.yml` e na matriz do
+# `.github/workflows/ci.yml`. Serviço que está em só um dos três não roda em
+# produção — e não gera erro, gera silêncio (v2.66/v2.97).
+
+WORKDIR /app
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir .
+COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
+
+# ⚠️ SEM o `docker-entrypoint.sh` da API, de propósito: quem aplica as migrations
+# é a API. Dois processos rodando `alembic upgrade` no mesmo banco é corrida de
+# migration em produção — é a mesma regra que o `Dockerfile.transcricao` segue,
+# e o motivo de as tabelas do OAuth viverem em `backend/migrations/`.
+#
+# `migrations/` é copiado mesmo assim porque o `env.py` importa os modelos, e a
+# ausência do diretório quebraria um import de conveniência sem aviso.
+
+# Guarda-corpo de import: falha aqui reprova o BUILD, não a cara de quem opera.
+# ⚠️ Importa na profundidade do USO (o app montado, com as ferramentas), não a
+# fachada do pacote — importar de cima dá impressão de cobertura sem tê-la
+# (v3.00.6, o mesmo defeito duas vezes).
+RUN python -c "import app.mcp_app; import app.mcp.ferramentas as f; \
+    assert len(f.FERRAMENTAS) == 5, f.FERRAMENTAS; print('mcp ok')"
+
+EXPOSE 8100
+CMD ["uvicorn", "app.mcp_app:app", "--host", "0.0.0.0", "--port", "8100"]
