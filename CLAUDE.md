@@ -128,6 +128,54 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   teste o servidor de FORA do diretório do repositório** — rodar de dentro
   esconde o defeito, porque o cwd entra no `sys.path` e o pacote é encontrado
   mesmo sem estar instalado direito.
+- **"Existe uma saída que funciona" ≠ "a saída está boa para quem vai usar"**
+  (v3.15, a decisão que reabriu o OAuth): o MCP remoto foi arquivado de manhã
+  porque *"todos têm o Claude Desktop, então o token `mcp_…` funciona"* — e
+  reaberto à tarde, quando o Bruno perguntou *"por que quando vou consumir o mcp
+  de outra plataforma eu só clico e autentico, e no nosso não?"*. O
+  arquivamento respondia **"dá para funcionar?"**; a pergunta certa era **"por
+  que a nossa dá trabalho quando nenhuma outra dá?"**. Entre as duas houve um
+  instalador `.mcpb` (duplo clique) começado e descartado: ele resolvia o
+  terminal e o JSON e **continuava pedindo que cada pessoa criasse e colasse uma
+  credencial**, que é justamente o passo que o padrão de mercado não tem.
+  ⚠️ Quando o caminho tem um padrão que todo mundo conhece, sair dele precisa de
+  justificativa — e *"conseguimos contornar"* não é uma.
+- **Papel de token de IA que vaza dá ACESSO A MAIS, e ninguém reporta** (v3.15,
+  o risco nº 1 do MCP remoto): `permissoes_do_usuario` lê `usuario.papel` **do
+  objeto**. Devolver o `UsuarioRH` do banco no `/mcp` faria a pessoa agir com o
+  papel do dia a dia dela — **medido: 27 permissões em vez de 14**, incluindo
+  `colaboradores:desligar` e `:efetivar`. **E nada daria erro**: as ferramentas
+  passariam a funcionar MELHOR, e ninguém abre chamado dizendo *"o assistente
+  conseguiu desligar um colaborador"*. Por isso
+  `mcp_oauth.identidade_do_access_token` devolve um `UsuarioRH` **TRANSIENTE**
+  com `papel=PAPEL_DO_TOKEN`. ⚠️ Construir objeto novo em vez de mutar o da
+  sessão **não é estilo**: mutar o carregado e deixar commitar **gravaria
+  `assistente_rh` na linha real da pessoa**, tirando o acesso dela ao painel,
+  com a causa noutro serviço, a três arquivos de distância. Coberto por
+  `test_mcp_oauth_papel.py`, 7 mutações.
+- **`.well-known` na RAIZ cai no SPA e devolve HTML com status 200** (v3.15,
+  medido antes de existir): sem `location` próprio no `frontend/nginx.conf`,
+  `/.well-known/oauth-protected-resource` responde **200 com o index.html** — o
+  cliente tenta lê-lo como JSON, falha, e reporta *"não foi possível conectar"*,
+  com o serviço no ar e **nada no log parecendo errado**, porque para o nginx foi
+  um 200 bem-sucedido. É o mesmo mecanismo do `/assets/` da tela branca (v2.29),
+  e as RFCs 9728/8414 exigem a RAIZ — não dá para esconder sob `/api/`. Os
+  blocos vão **antes** do `location /`, com `^~`, e o `/mcp` precisa de
+  `proxy_buffering off` (transporte de longa duração; com buffering a conexão
+  parece travada). Coberto por `test_mcp_deploy.py`.
+- **Teste que afirma sobre o TEXTO do arquivo passa verde com o defeito
+  presente** (v3.15, duas vezes na mesma leva — é a v2.71 em variantes novas):
+  procurar `"MCP_ISSUER"` no `portainer-stack.yml` passava com a linha da
+  variável removida, porque a string também está nos comentários; e procurar
+  `"alembic upgrade"` no `Dockerfile.mcp` reprovava o **comentário que explica
+  por que ele não está lá**. Afirme sobre a DECLARAÇÃO (`^\s+MCP_ISSUER:`) ou
+  sobre as INSTRUÇÕES (linhas sem `#`) — nunca sobre o conteúdo cru.
+- **Emoji em mensagem de falha quebra o teste no console do Windows** (v3.15,
+  atingiu CINCO testes de uma vez): `print("⚠️ …")` levanta `UnicodeEncodeError`
+  em cp1252, e o script morre **ANTES de mostrar a causa** — justamente quando
+  ela importa, porque o teste está reprovando. O que aparece é um traceback de
+  encoding, que não diz nada sobre o defeito real. Use um `_reportar()` que caia
+  para ASCII no `except UnicodeEncodeError`.
 - **Ferramenta de IA sobre rota que o PAPEL não alcança responde 403 para todo
   mundo, sempre** (v3.14, pego conferindo permissão × ferramenta): `erros_recentes`
   foi escrita sobre `GET /rh/diagnostico/erros`, que exige `sistema:telemetria` —
