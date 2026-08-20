@@ -422,6 +422,10 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
         : e.detail?.erro === 'guarda_faltando'
         ? `Para criança sob guarda judicial é preciso anexar também o termo de `
           + `guarda, além da certidão. Falta o de: ${e.detail.criancas.join(', ')}.`
+        : e.detail?.erro === 'tipo_comprovante_faltando'
+        ? `Falta dizer quem cuida de: ${e.detail.criancas.join(', ')}. `
+          + `Escolha "creche/pré-escola" ou "cuidador(a) pessoa física" — é isso `
+          + `que define o documento que você enviará todo mês.`
         : e.detail === 'sem_criancas' ? 'Cadastre ao menos uma criança.'
         : 'Não foi possível enviar. Confira os dados.')
     } finally { setEnviando(false) }
@@ -534,6 +538,23 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
               <span className="explica" style={{ margin: 0 }}>{c.parentesco} · nasc. {c.data_nascimento}</span>
               <button className="btn-link" onClick={() => api.delCrianca(token, c.id).then(recarregar)}>remover</button>
             </div>
+            {/* Quem cuida decide o documento que vem TODO MÊS (art. 11, II da
+                IN 147): creche/pré-escola emite nota fiscal; cuidador pessoa
+                física assina a declaração. Editável aqui porque quem começou
+                pela admissão pode ter cadastrado sem saber ainda — sem isto, a
+                pessoa é cobrada no envio e não tem onde responder. */}
+            <label className="campo" style={{ marginTop: '.4rem' }}>
+              <span className="rotulo">Quem cuida desta criança?</span>
+              <SelectBusca valor={c.tipo_comprovante || ''}
+                           vazioRotulo="— escolha —"
+                           aoEscolher={(v) => v && api.definirTipoComprovante(token, c.id, v)
+                             .then(recarregar)
+                             .catch(() => setErro('Não foi possível salvar. Tente de novo.'))}>
+                <option value="">— escolha —</option>
+                <option value="nota_fiscal">Creche ou pré-escola (empresa) — enviarei nota fiscal</option>
+                <option value="declaracao">Cuidador(a) pessoa física — enviarei declaração assinada</option>
+              </SelectBusca>
+            </label>
             {/* Câmera guiada, a mesma do wizard da admissão (v2.61, pedido do
                 Bruno: *"quero que utilize o que montamos e validamos de câmera,
                 ficou legal"*). Ela avisa quando a foto está tremida ou escura

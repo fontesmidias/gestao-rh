@@ -40,7 +40,6 @@
 
 | O quê | Por quê | Origem |
 |---|---|---|
-| **Exigir o documento certo por PF/PJ** | O `tipo_comprovante` hoje é só rótulo na tela; poderia validar (PJ ⇒ nota fiscal, PF ⇒ declaração) | 23ª leva, item 4 |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
 | **Ferramentas MCP** | Papel `automacao` e credencial existem (v2.94); faltam as ferramentas — cascas finas sobre `api/diagnostico.py`, que já responde 4 das 6 | 22ª leva |
 | **Transcrição no módulo de Arquivo** | Hoje só aparece no card da entrevista | § 11 do doc 14 |

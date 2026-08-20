@@ -133,8 +133,11 @@ with SessionLocal() as db:
 col_b = _colaborador(f"Bruno Com Filho {SUF}")
 tok_b = _sessao(col_b)
 r = c.post(f"/api/creche/sessao/{tok_b}/criancas",
+           # `tipo_comprovante` passou a ser obrigatório ao cadastrar pelo link
+           # (v3.12): é ele que diz qual documento virá todo mês (nota fiscal se
+           # a creche for PJ, declaração se o cuidador for PF).
            json={"nome": "Filho do Bruno", "data_nascimento": "2023-05-10",
-                 "parentesco": "filho"})
+                 "parentesco": "filho", "tipo_comprovante": "declaracao"})
 assert r.status_code in (200, 201), r.text
 
 r = c.post(f"/api/creche/sessao/{tok_b}/sem-direito")

@@ -606,6 +606,14 @@ class CriancaIn(BaseModel):
 _ROTULO_DOC_CRIANCA = {"certidao": "certidão de nascimento",
                        "guarda": "guarda judicial"}
 
+# Quem cuida da criança define QUAL documento comprova a despesa todo mês
+# (art. 11, II da IN SEGES/MGI 147/2026; e-mail do Jurídico de 18/08/2026):
+# creche/pré-escola é PJ e emite NOTA FISCAL; cuidador pessoa física assina a
+# DECLARAÇÃO DE QUITAÇÃO. O sistema não tem como conferir se o arquivo enviado é
+# mesmo uma nota fiscal — o que ele garante é que o tipo esteja DECLARADO, para
+# saber o que cobrar e para a tela dizer à pessoa o que anexar.
+TIPOS_COMPROVANTE = ("declaracao", "nota_fiscal")
+
 
 def _guardar_doc_crianca(beneficio_id, crianca_id: str, tipo: str,
                          arquivo, conteudo: bytes) -> str:
@@ -679,6 +687,11 @@ def add_crianca(token: str, payload: CriancaIn, db: Session = Depends(get_db)) -
         raise HTTPException(status_code=409, detail="levantamento_encerrado")
     if payload.parentesco not in ("filho", "enteado", "guarda"):
         raise HTTPException(status_code=422, detail="parentesco_invalido")
+    if payload.tipo_comprovante not in TIPOS_COMPROVANTE:
+        # Aceitar qualquer string deixaria entrar um valor que nenhuma tela
+        # entende, e o comprovante do mês ficaria sem saber o que exigir.
+        raise HTTPException(status_code=422, detail={
+            "erro": "tipo_comprovante_invalido", "aceitos": list(TIPOS_COMPROVANTE)})
     _conferir_data_da_crianca(payload.data_nascimento.strip())
     c = CriancaCreche(
         beneficio_id=ben.id, nome=payload.nome.strip(),
@@ -686,6 +699,34 @@ def add_crianca(token: str, payload: CriancaIn, db: Session = Depends(get_db)) -
         parentesco=payload.parentesco,
         tipo_comprovante=payload.tipo_comprovante)
     db.add(c)
+    db.commit()
+    return _dump_crianca(c)
+
+
+class TipoComprovanteIn(BaseModel):
+    tipo_comprovante: str
+
+
+@router.put("/creche/sessao/{token}/criancas/{crianca_id}/tipo-comprovante")
+def definir_tipo_comprovante(token: str, crianca_id: str, payload: TipoComprovanteIn,
+                             db: Session = Depends(get_db)) -> dict:
+    """Quem cuida da criança: creche/pré-escola (PJ) ou cuidador pessoa física.
+
+    Existe porque o tipo só podia ser escolhido AO CRIAR a criança — e quem
+    começou pelo wizard da admissão pode tê-la cadastrado sem saber ainda onde
+    ela ficaria. Sem esta rota, a pessoa era cobrada no envio (`tipo_comprovante
+    _faltando`) e não tinha onde responder: recusa sem saída (v2.87).
+    """
+    _, ben = _requer_sessao(token, db)
+    if ben.status != StatusBeneficio.levantamento:
+        raise HTTPException(status_code=409, detail="envio_ja_concluido")
+    c = db.get(CriancaCreche, crianca_id)
+    if c is None or c.beneficio_id != ben.id:
+        raise HTTPException(status_code=404, detail="crianca_nao_encontrada")
+    if payload.tipo_comprovante not in TIPOS_COMPROVANTE:
+        raise HTTPException(status_code=422, detail={
+            "erro": "tipo_comprovante_invalido", "aceitos": list(TIPOS_COMPROVANTE)})
+    c.tipo_comprovante = payload.tipo_comprovante
     db.commit()
     return _dump_crianca(c)
 
@@ -749,6 +790,18 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
     if sem_guarda:
         raise HTTPException(status_code=422,
                             detail={"erro": "guarda_faltando", "criancas": sem_guarda})
+    # QUEM CUIDA define o documento que virá todo mês (art. 11, II da IN 147):
+    # creche/pré-escola (PJ) emite nota fiscal; cuidador pessoa física assina a
+    # declaração de quitação. Sem esta informação o sistema não sabe o que
+    # cobrar, e a pessoa descobre a exigência só no primeiro mês — quando o
+    # prazo já está correndo. Quem começou pela admissão pode ter deixado em
+    # branco (lá o arranjo ainda não está definido); aqui é o momento de
+    # responder, porque é daqui que o benefício segue para análise.
+    sem_tipo = [c.nome for c in ben.criancas if not c.tipo_comprovante]
+    if sem_tipo:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "tipo_comprovante_faltando",
+                                    "criancas": sem_tipo})
     ben.status = StatusBeneficio.em_analise
     ben.enviado_em = datetime.now(timezone.utc)
     col = db.get(Candidato, ben.candidato_id)
@@ -929,9 +982,18 @@ def creche_admissao_add(token: str, payload: CriancaIn, db: Session = Depends(ge
         ben = BeneficioCreche(candidato_id=cand.id, email_confirmado=cand.email)
         db.add(ben)
         db.flush()
+    # ⚠️ Aqui o tipo pode legitimamente ainda NÃO ser conhecido: na admissão a
+    # pessoa muitas vezes não sabe onde a criança vai ficar. Por isso `None` é
+    # aceito nesta porta (e cobrado depois, no link do creche) — mas valor
+    # INVENTADO não passa: o comentário acima já registra que validar só uma das
+    # portas deixa aberta a que ninguém olha.
+    if payload.tipo_comprovante not in (None, "", *TIPOS_COMPROVANTE):
+        raise HTTPException(status_code=422, detail={
+            "erro": "tipo_comprovante_invalido", "aceitos": list(TIPOS_COMPROVANTE)})
     c = CriancaCreche(beneficio_id=ben.id, nome=payload.nome.strip(),
                       data_nascimento=payload.data_nascimento.strip(),
-                      parentesco=payload.parentesco, tipo_comprovante=payload.tipo_comprovante)
+                      parentesco=payload.parentesco,
+                      tipo_comprovante=payload.tipo_comprovante or None)
     db.add(c)
     registrar(db, "creche_crianca_na_admissao", ator="candidato", candidato_id=cand.id)
     db.commit()
