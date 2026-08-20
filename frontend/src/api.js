@@ -227,6 +227,11 @@ export const creche = {
     req(`/creche/sessao/${t}/criancas`, { method: 'POST', body: JSON.stringify(dados) }),
   delCrianca: (t, id) =>
     req(`/creche/sessao/${t}/criancas/${id}`, { method: 'DELETE' }),
+  // Quem cuida da criança (PJ ou PF) — define o documento do mês. Editável
+  // DEPOIS de cadastrar: quem veio da admissão pode não saber ainda.
+  definirTipoComprovante: (t, criancaId, tipo_comprovante) =>
+    req(`/creche/sessao/${t}/criancas/${criancaId}/tipo-comprovante`,
+        { method: 'PUT', body: JSON.stringify({ tipo_comprovante }) }),
   subirDocumento: async (t, criancaId, tipo, arquivo) => {
     const fd = new FormData()
     fd.append('arquivo', arquivo)

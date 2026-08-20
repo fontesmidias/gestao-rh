@@ -14,6 +14,42 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.12.0] — 2026-08-19 — Quem cuida define o documento
+
+Último "parcial" da 23ª leva (item 4). O `tipo_comprovante` — declaração se o
+cuidador é PF, nota fiscal se a creche é PJ (art. 11, II da IN 147) — existia no
+modelo desde sempre e era **só um rótulo na tela**: aceitava qualquer string,
+podia ficar em branco, e nada o cobrava.
+
+### Corrigido
+
+- **Aceitava valor inventado.** O `parentesco` ao lado era validado contra a
+  lista; este não. Um valor que nenhuma tela entende entraria calado, e o
+  comprovante do mês ficaria sem saber o que exigir.
+- **Podia ficar em branco até o fim.** Agora é cobrado **no fechamento do
+  levantamento** — que é quando o benefício segue para análise e o sistema
+  precisa saber o que pedir todo mês. Sem isso, a pessoa descobriria a exigência
+  só no primeiro mês, com o prazo já correndo.
+- ⚠️ **E havia recusa sem saída**: o tipo só podia ser escolhido AO CRIAR a
+  criança. Quem começou pelo wizard da admissão — onde o arranjo muitas vezes
+  ainda não está definido — seria cobrado no envio **sem ter onde responder**.
+  Agora há seletor na linha de cada criança, e rota para gravá-lo (v2.87: toda
+  recusa oferece a alternativa no mesmo lugar).
+
+### Onde `None` continua válido
+
+No wizard da **admissão**: ali a pessoa muitas vezes não sabe onde a criança vai
+ficar, e exigir a resposta naquele momento seria pedir um palpite. Valor
+inventado, porém, é recusado nas duas portas — validar só uma deixaria aberta a
+que ninguém olha (v2.89.1).
+
+### Medido
+
+- `test_creche_manifestacao` criava criança sem o tipo e teria quebrado.
+  Encontrado **antes** do push, procurando quem dependia da regra — a lição que
+  o E2E do Banco de Talentos cobrou hoje de manhã. ⚠️ Ele **não roda no CI**,
+  então só morderia quem o rodasse à mão.
+
 ## [3.11.0] — 2026-08-19 — O padrão de nome onde o documento é de alguém
 
 Continuação do item 11: o padrão `MATRÍCULA - NOME - DOCUMENTO` estava adotado
