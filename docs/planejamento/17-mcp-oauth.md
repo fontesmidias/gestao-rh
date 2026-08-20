@@ -1,4 +1,23 @@
-# MCP remoto com OAuth — desenho
+# MCP remoto com OAuth — desenho ARQUIVADO
+
+> ## ⛔ NÃO IMPLEMENTAR — resolvido de outro jeito (2026-08-20)
+>
+> Este desenho existiu por algumas horas, entre descobrir que o Claude WEB só
+> conecta por OAuth e descobrir que **todos os colaboradores do RH já têm o
+> Claude Desktop instalado** (Bruno, 20/08/2026).
+>
+> Com o Desktop, o token `mcp_…` que já existe (v2.94/v3.01) **funciona sem nada
+> disto**: ele roda o servidor por `command` + `args` e passa segredo por
+> variável de ambiente. Os dias de trabalho de provedor OAuth — e a superfície
+> de segurança nova que vinha junto — deixaram de ser necessários.
+>
+> **Fica registrado porque o obstáculo é real e volta**: se um dia o uso precisar
+> ser pelo NAVEGADOR (alguém sem o Desktop, ou uso pelo celular), o OAuth volta a
+> ser o único caminho, e o levantamento abaixo continua valendo.
+>
+> O que vale hoje: **`18-mcp-servidor.md`**.
+
+---
 
 > Status: **desenhado, não implementado**. Escrito em 2026-08-20, depois que o
 > uso mudou e a arquitetura (A) do doc 13 deixou de servir.

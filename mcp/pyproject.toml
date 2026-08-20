@@ -1,0 +1,23 @@
+[project]
+name = "portal-rh-mcp"
+version = "1.0.0"
+description = "Servidor MCP do Portal de RH — roda no computador de quem usa o Claude Desktop"
+requires-python = ">=3.11"
+dependencies = [
+    # O SDK oficial. `mcp[cli]` traz o `mcp` de linha de comando, útil para
+    # depurar sem abrir o Claude.
+    "mcp[cli]>=1.2",
+    # Mesma biblioteca que o backend usa para falar HTTP — nada de inventar
+    # outra só para este pacote.
+    "httpx>=0.27",
+]
+
+[project.scripts]
+portal-rh-mcp = "portal_rh_mcp.servidor:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["portal_rh_mcp"]
