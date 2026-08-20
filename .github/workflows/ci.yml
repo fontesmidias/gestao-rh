@@ -147,6 +147,13 @@ jobs:
           # ela responderia 403 para todo mundo, sempre, e nada denunciaria —
           # o servidor sobe, a ferramenta aparece, e quem opera acha que pediu
           # a coisa errada. É a v2.88 numa porta nova.
+          # `test_mcp_oauth_papel` (v3.15): o risco nº 1 do MCP remoto. O token
+          # OAuth carrega o papel `assistente_rh` (14 permissões), NUNCA o papel
+          # do dia a dia de quem autorizou (27, incluindo desligar e efetivar).
+          # Se vazar, nada dá erro — as ferramentas passam a funcionar MELHOR, e
+          # ninguém reporta acesso a mais. Cobre também que o objeto devolvido é
+          # transiente: mutar o da sessão gravaria o papel trocado na linha real
+          # da pessoa, tirando o acesso dela ao painel.
           # `test_permissoes_declaradas` (v2.86): reprova rota /rh/* que não
           # declara permissão. Sem ele, módulo novo nasce aberto a qualquer
           # pessoa com login — e o defeito não aparece na tela: a rota
@@ -158,7 +165,8 @@ jobs:
                    test_tela_de_trabalho test_transcricao_paragrafos \
                    test_retranscrever test_diarizacao_diagnostico \
                    test_creche_competencia test_papel_assistente_rh \
-                   test_mcp_saida test_mcp_permissoes; do
+                   test_mcp_saida test_mcp_permissoes \
+                   test_mcp_oauth_papel; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

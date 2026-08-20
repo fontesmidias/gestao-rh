@@ -32,6 +32,7 @@ import app.models.evento  # noqa: F401
 import app.models.ficha  # noqa: F401
 import app.models.lixeira  # noqa: F401
 import app.models.match  # noqa: F401
+import app.models.mcp_oauth  # noqa: F401
 import app.models.minutario  # noqa: F401
 import app.models.modelo_documento  # noqa: F401
 import app.models.prova  # noqa: F401
