@@ -32,9 +32,13 @@ from portal_rh_mcp.servidor import mcp  # noqa: E402
 # O contrato do § 6 do 13-mcp-do-portal.md: leitura para responder "por quê" e
 # UMA porta de escrita, estreita. Ferramenta a mais não é melhoria — o doc diz
 # "nada além disso na v1", e ferramenta demais degrada a escolha do modelo.
+# ⚠️ `erros_recentes` saiu na v3.14 e não deve voltar sem a permissão: a rota
+# exige `sistema:telemetria`, que NENHUM dos dois papéis do MCP tem — ela
+# responderia 403 para todo mundo, sempre. Ferramenta que nunca funciona ensina
+# quem opera a ignorar mensagem de erro (v2.88).
 ESPERADAS = {
     "buscar_candidato", "diagnostico_candidato", "listar_admissoes",
-    "pendencias_tirvu", "erros_recentes", "cadastrar_talento",
+    "pendencias_tirvu", "cadastrar_talento",
 }
 
 falhas = []

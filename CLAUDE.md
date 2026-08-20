@@ -116,6 +116,21 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Ferramenta de IA sobre rota que o PAPEL não alcança responde 403 para todo
+  mundo, sempre** (v3.14, pego conferindo permissão × ferramenta): `erros_recentes`
+  foi escrita sobre `GET /rh/diagnostico/erros`, que exige `sistema:telemetria` —
+  permissão que NENHUM dos dois papéis do MCP tem. Nada denunciaria: o servidor
+  sobe, a ferramenta aparece na lista, o modelo a escolhe, e quem opera conclui
+  que pediu a coisa errada. É a v2.88 numa porta nova (*item que sempre responde
+  403 ensina a equipe a ignorar mensagem de erro* — justamente a mensagem que
+  precisa ser levada a sério quando algo quebra). ⚠️ **A correção é a ferramenta
+  caber no papel, não o papel crescer**: `sistema:telemetria` abre outras 12
+  rotas descrevendo como cada pessoa usa o sistema, e concedê-las para ganhar uma
+  lista de falhas desfaz a razão de o papel ser estreito (§ 5.2 do doc 13). Ao
+  acrescentar ferramenta ao MCP, confira a permissão da rota contra
+  `PAPEIS_PADRAO` — o `test_mcp_permissoes.py` reprova no CI, lendo os caminhos
+  do próprio `servidor.py` (lista à mão envelheceria na primeira ferramenta
+  nova). Coberto por 4 mutações.
 - **Defesa COPIADA entre pacotes precisa de quem a compare — e o SDK renomeia
   classe entre majors** (v3.14, servidor MCP): o pacote `mcp/` roda no
   computador de cada pessoa e o backend roda no VPS, então **não há import

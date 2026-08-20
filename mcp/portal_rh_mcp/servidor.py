@@ -114,16 +114,16 @@ def pendencias_tirvu(busca: str | None = None,
         incluir_importados=incluir_importados or None)))
 
 
-@mcp.tool()
-def erros_recentes(limite: int = 20) -> dict:
-    """Falhas que o sistema registrou (dossiê que não gerou, e-mail que não saiu).
-
-    Use quando a pessoa disser que "algo não funcionou" sem saber o quê. Mostra
-    o erro e o candidato afetado, quando houver.
-    """
-    return _responder(lambda: limpar(
-        {"erros": _portal().get("/rh/diagnostico/erros", limite=limite)}))
-
+# ⚠️ **`erros_recentes` NÃO existe aqui, e a ausência é decisão.** A rota
+# `GET /rh/diagnostico/erros` exige `sistema:telemetria` — permissão que abre
+# outras 12 rotas descrevendo como cada pessoa usa o sistema. Conceder tudo
+# isso ao assistente para ganhar uma lista de falhas seria alargar o papel
+# muito além do que a ferramenta pede, que é o oposto do desenho (§ 5.2 do
+# 13-mcp-do-portal.md). E registrá-la SEM a permissão seria pior: uma
+# ferramenta que responde 403 sempre ensina quem opera a ignorar mensagem de
+# erro (v2.88) — justamente o que precisa ser levado a sério quando algo
+# quebra. O `diagnostico_candidato` já responde "o que houve com esta pessoa";
+# o painel de erros do sistema continua sendo tela.
 
 # ---------------------------------------------------------------- escrita
 

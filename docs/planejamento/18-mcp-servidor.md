@@ -40,12 +40,19 @@ superfície da IA não se funde com a do humano.
 | `portal_rh_mcp/servidor.py` | As 6 ferramentas e o `main()` do `stdio` |
 | `tests/test_mcp_ferramentas.py` | Sobe o servidor e lista as ferramentas. **Fora do CI** (precisa do SDK) |
 | `backend/tests/test_mcp_saida.py` | Compara a defesa copiada com a do backend. **No CI** |
+| `backend/tests/test_mcp_permissoes.py` | Cada rota chamada cabe no papel `assistente_rh`. **No CI** |
 | `README.md` | O guia de instalação das 2 a 5 pessoas |
 
 As ferramentas: `buscar_candidato`, `diagnostico_candidato`, `listar_admissoes`,
-`pendencias_tirvu`, `erros_recentes` e `cadastrar_talento`. Todas são **cascas
-finas** sobre rotas existentes — `api/diagnostico.py` já respondia quatro
-perguntas do § 6 numa rota só.
+`pendencias_tirvu` e `cadastrar_talento`. Todas são **cascas finas** sobre rotas
+existentes — `api/diagnostico.py` já respondia quatro perguntas do § 6 numa rota
+só.
+
+⚠️ **`erros_recentes` foi tirada, e a ausência é decisão.** A rota que a serviria
+exige `sistema:telemetria`, que nenhum dos dois papéis tem — ela responderia 403
+para todo mundo, sempre. Conceder a permissão daria de quebra 12 rotas de
+telemetria ao assistente, o oposto do § 5.2. Não a ressuscite sem resolver isso;
+o `test_mcp_permissoes.py` reprova.
 
 ## O que falta
 
