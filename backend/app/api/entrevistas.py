@@ -214,6 +214,24 @@ def gravacoes_por_entrevista(db: Session, entrevistas) -> dict:
                               "tem_texto": bool(g.texto)} for g in linhas}
 
 
+def _nome_arquivo_entrevista(db: Session, pessoa: dict, documento: str,
+                             extensao: str = "pdf") -> str:
+    """`MATRÍCULA - NOME - DOCUMENTO` para os arquivos da entrevista.
+
+    A matrícula só existe quando a pessoa já é candidato/colaborador — quem foi
+    entrevistado como TALENTO ainda não tem. O `montar` omite a parte vazia
+    junto com o separador, então o nome sai `FULANO - ENTREVISTA.pdf` em vez de
+    ` - FULANO - ENTREVISTA.pdf`, que teria um hífen órfão na frente.
+    """
+    from app.services.nome_arquivo import montar
+
+    matricula = None
+    if pessoa.get("candidato_id"):
+        col = db.get(Candidato, pessoa["candidato_id"])
+        matricula = col.matricula if col else None
+    return montar(matricula, pessoa.get("nome"), documento, extensao)
+
+
 def _dump(e: Entrevista, pessoa: dict, agora: datetime | None = None,
           gravacao: dict | None = None) -> dict:
     return {
@@ -1233,7 +1251,6 @@ def baixar_documento(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
     válido: o SHA-256 do manifesto descreve BYTES, e um PDF regerado teria
     outro carimbo de data interno.
     """
-    from app.services.export_planilha import slug
 
     e = db.get(Entrevista, entrevista_id)
     if e is None:
@@ -1259,9 +1276,9 @@ def baixar_documento(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
               candidato_id=e.candidato_id,
               detalhe={"entrevista": str(e.id), "pessoa": pessoa["nome"]})
     db.commit()
-    nome = slug(f"entrevista-{pessoa['nome']}", fallback="entrevista")
+    nome = _nome_arquivo_entrevista(db, pessoa, "FICHA DE ENTREVISTA")
     return Response(content=dados, media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{nome}.pdf"'})
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
 
 
 class AssinarFichaIn(BaseModel):
@@ -1610,17 +1627,17 @@ def baixar_texto(entrevista_id: uuid.UUID, db: Session = Depends(get_db),
     _rh: UsuarioRH = Depends(exige("selecao:entrevistar"))) -> Response:
     """A transcrição em .txt. Pedido do Bruno: aparece no card da entrevista E
     no módulo de Arquivo."""
-    from app.services.export_planilha import slug
     e, g = _gravacao_de(db, entrevista_id)
     if g is None or not g.texto:
         raise HTTPException(status_code=404, detail="sem_transcricao")
     pessoa = _pessoa_de(db, e)
-    # `slug()` e não o nome cru: nome é texto livre e vira caminho de arquivo
-    # (a regra do `export_planilha`, contra path traversal).
-    nome = slug(f"transcricao-{pessoa['nome']}")
+    # O nome passa pelo saneamento do `nome_arquivo` (caixa alta, ASCII, sem
+    # caractere de caminho): nome de pessoa é texto livre e vira caminho de
+    # arquivo — a mesma regra contra path traversal que o `slug` aplicava.
+    nome = _nome_arquivo_entrevista(db, pessoa, "TRANSCRICAO DA ENTREVISTA", "txt")
     return Response(content=g.texto.encode("utf-8"),
                     media_type="text/plain; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="{nome}.txt"'})
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @router.delete("/rh/entrevistas/{entrevista_id}/gravacao")

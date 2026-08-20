@@ -268,10 +268,18 @@ def baixar_documento(registro_id: uuid.UUID, arquivo_id: uuid.UUID,
     tipos = {"pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg",
              "png": "image/png", "webp": "image/webp", "heic": "image/heic"}
     ext = a.key.rsplit(".", 1)[-1].lower()
+    # Padrão `MATRÍCULA - NOME - DOCUMENTO` (v3.04). Antes saía só
+    # `certificado.pdf`: baixar o comprovante de brigada de três pessoas dava
+    # três arquivos com o mesmo nome, e num módulo cujo objeto É o certificado
+    # de alguém.
+    from app.models.desenvolvimento import RegistroDesenvolvimento
+    from app.services.nome_arquivo import do_colaborador
+    reg = db.get(RegistroDesenvolvimento, registro_id)
+    col = db.get(Candidato, reg.candidato_id) if reg else None
+    nome = do_colaborador(col, a.papel or "documento", extensao=ext)
     return Response(content=dados,
                     media_type=a.content_type or tipos.get(ext, "application/octet-stream"),
-                    headers={"Content-Disposition":
-                             f'inline; filename="{a.papel}.{ext}"'})
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
 
 
 # ---------------------------------------------------------------------------
