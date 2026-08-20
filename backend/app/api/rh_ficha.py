@@ -136,11 +136,15 @@ def baixar_ficha_rh(candidato_id: uuid.UUID, documento: str,
     else:
         pdf = _gerar_pdf(db, candidato, assinatura)
         sufixo = "-previa"
-    nome = "".join(c for c in candidato.nome_completo if c.isalnum() or c in " -_").strip()[:40]
+    # Padrão único (v3.04): `MATRÍCULA - NOME - DOCUMENTO`. O sufixo diz se é a
+    # via ASSINADA ou a prévia — é o que distingue a peça de prova do rascunho,
+    # e some no nome errado seria juntar as duas na mesma pasta.
+    from app.services.nome_arquivo import do_colaborador
+    rotulo = f"{documento.replace('_', ' ')}{' ASSINADA' if sufixo == '-assinada' else ' PREVIA'}"
+    nome = do_colaborador(candidato, rotulo)
     return Response(
         content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition":
-                 f'attachment; filename="{documento}{sufixo}-{nome}.pdf"'})
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 @router.put("/rh/candidatos/{candidato_id}/ficha/{secao}")

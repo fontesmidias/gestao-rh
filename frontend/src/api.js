@@ -1063,6 +1063,12 @@ export const rh = {
           body: JSON.stringify({ decisao, motivo }) }),
   // Prazo E valor de UM benefício já aprovado. Campo ausente não é alterado —
   // dá para corrigir só o valor sem ter que reenviar o prazo.
+  // Dias de antecedência do lembrete do comprovante mensal (v3.10).
+  crecheLembretes: () => req('/rh/creche/lembretes', { headers: authRH() }),
+  salvarCrecheLembretes: (dias_antes) =>
+    req('/rh/creche/lembretes', { method: 'PUT', headers: authRH(),
+        body: JSON.stringify({ dias_antes }) }),
+
   crecheCondicoes: (id, dados) =>
     req(`/rh/creche/levantamentos/${id}/condicoes`, { method: 'PUT', headers: authRH(),
         body: JSON.stringify(dados) }),

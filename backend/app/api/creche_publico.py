@@ -738,6 +738,17 @@ def enviar(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
     if faltando:
         raise HTTPException(status_code=422,
                             detail={"erro": "certidao_faltando", "criancas": faltando})
+    # Quem entra por GUARDA JUDICIAL precisa do termo, além da certidão (pedido
+    # do Bruno, 18/08/2026: *"se for questão de tutela ou guarda, precisa da
+    # documentação, bem como a certidão de nascimento"*). Até aqui só a certidão
+    # era cobrada: o levantamento fechava sem o documento que PROVA o vínculo, e
+    # o RH descobria na análise — devolvendo o levantamento inteiro e esperando.
+    # Filho e enteado não entram: para eles a certidão já é a prova.
+    sem_guarda = [c.nome for c in ben.criancas
+                  if c.parentesco == "guarda" and not c.guarda_key]
+    if sem_guarda:
+        raise HTTPException(status_code=422,
+                            detail={"erro": "guarda_faltando", "criancas": sem_guarda})
     ben.status = StatusBeneficio.em_analise
     ben.enviado_em = datetime.now(timezone.utc)
     col = db.get(Candidato, ben.candidato_id)

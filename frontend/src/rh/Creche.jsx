@@ -49,12 +49,15 @@ export default function Creche({ aoVoltar }) {
                 onClick={() => setAba('pendentes')}>Pendentes de resposta</button>
         <button className={aba === 'sem-acesso' ? 'ativa' : ''}
                 onClick={() => setAba('sem-acesso')}>Não conseguiram acessar</button>
+        <button className={aba === 'lembretes' ? 'ativa' : ''}
+                onClick={() => setAba('lembretes')}>Lembretes</button>
       </div>
 
       {aba === 'levantamentos' ? <Levantamentos />
         : aba === 'vigencia' ? <Vigencia />
         : aba === 'pendentes' ? <Pendentes />
         : aba === 'sem-acesso' ? <SemAcesso />
+        : aba === 'lembretes' ? <ConfigLembretes />
         : <PorPosto />}
     </main>
   )
@@ -1051,6 +1054,81 @@ function ComprovantesMensais({ beneficio, criancas }) {
       )}
       {doc && <VisualizadorArquivo blob={doc.blob} nome={doc.nome}
                                    aoFechar={() => setDoc(null)} />}
+    </div>
+  )
+}
+
+// --- Com quantos dias avisar sobre o comprovante do mês (v3.10) -------------
+// Pedido do Bruno: *"ter a opção de enviar 1d antes, 2d antes e por aí vai,
+// quantos forem necessários"*. A chave de configuração existia desde a v3.02 e
+// era editável só escrevendo no banco — chave sem rota e sem tela não é
+// configurável (v2.68).
+function ConfigLembretes() {
+  const [dias, setDias] = useState(null)
+  const [padrao, setPadrao] = useState([])
+  const [erro, setErro] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    api.crecheLembretes()
+      .then((r) => { setDias(r.dias_antes || []); setPadrao(r.padrao || []) })
+      .catch((e) => setErro(e.detail || e.message))
+  }, [])
+
+  if (erro) return <div className="alerta">Não foi possível carregar ({erro}).</div>
+  if (dias === null) return <p className="explica">Carregando…</p>
+
+  const alternar = (d) =>
+    setDias(dias.includes(d) ? dias.filter((x) => x !== d) : [...dias, d].sort((a, b) => b - a))
+
+  const salvar = async () => {
+    setSalvando(true); setErro(null)
+    try {
+      const r = await api.salvarCrecheLembretes(dias)
+      setDias(r.dias_antes)
+      setMsg(dias.length
+        ? `Lembretes ligados: ${r.dias_antes.join(', ')} dia(s) antes do prazo.`
+        : 'Lembretes DESLIGADOS — ninguém será avisado do comprovante do mês.')
+    } catch (e) { setErro(`Não foi possível salvar (${e.detail?.erro || e.detail || e.message}).`) }
+    finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="rh-card">
+      <h3>🔔 Lembretes do comprovante mensal</h3>
+      <p className="explica">Quem tem benefício ativo e ainda não enviou o comprovante do mês
+        recebe um e-mail com esta antecedência do prazo. Marque quantos quiser — cada dia
+        marcado é um lembrete.</p>
+
+      <div className="chips-escolha" style={{ marginTop: '.4rem' }}>
+        {[10, 7, 5, 3, 2, 1, 0].map((d) => (
+          <button key={d} type="button"
+                  className={`chip-escolha${dias.includes(d) ? ' on' : ''}`}
+                  onClick={() => alternar(d)}>
+            {d === 0 ? 'no dia' : `${d} dia${d > 1 ? 's' : ''} antes`}</button>
+        ))}
+      </div>
+
+      {/* Nenhum dia marcado é decisão VÁLIDA (desligar) — mas precisa ficar
+          explícito, senão parece que a tela não salvou. */}
+      {dias.length === 0 && (
+        <div className="aviso-inline" style={{ marginTop: '.5rem' }}>
+          Sem nenhum dia marcado, <strong>nenhum lembrete é enviado</strong>. Quem esquecer o
+          comprovante só descobrirá quando o reembolso não sair.
+        </div>
+      )}
+
+      {msg && <div className="sucesso" style={{ marginTop: '.5rem' }}>{msg}</div>}
+
+      <div className="rh-lote" style={{ marginTop: '.6rem' }}>
+        <button className="btn-principal btn-mini" disabled={salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar'}</button>
+        {padrao.length > 0 && (
+          <button className="btn-link" disabled={salvando}
+                  onClick={() => setDias([...padrao])}>
+            voltar ao padrão ({padrao.join(', ')})</button>)}
+      </div>
     </div>
   )
 }
