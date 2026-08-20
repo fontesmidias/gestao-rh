@@ -1,26 +1,41 @@
-# MCP remoto com OAuth — desenho ARQUIVADO
+# MCP remoto com OAuth — o caminho escolhido
 
-> ## ⛔ NÃO IMPLEMENTAR — resolvido de outro jeito (2026-08-20)
+> ## ✅ DESARQUIVADO — é o caminho escolhido (2026-08-20, à tarde)
 >
-> Este desenho existiu por algumas horas, entre descobrir que o Claude WEB só
-> conecta por OAuth e descobrir que **todos os colaboradores do RH já têm o
-> Claude Desktop instalado** (Bruno, 20/08/2026).
+> Este desenho foi arquivado de manhã e **reaberto no mesmo dia**, e o porquê
+> vale mais que o desenho: o arquivamento respondeu à pergunta errada.
 >
-> Com o Desktop, o token `mcp_…` que já existe (v2.94/v3.01) **funciona sem nada
-> disto**: ele roda o servidor por `command` + `args` e passa segredo por
-> variável de ambiente. Os dias de trabalho de provedor OAuth — e a superfície
-> de segurança nova que vinha junto — deixaram de ser necessários.
+> **O que arquivou:** todos os colaboradores têm o Claude Desktop, que aceita o
+> token `mcp_…` — então o OAuth "não era necessário".
 >
-> **Fica registrado porque o obstáculo é real e volta**: se um dia o uso precisar
-> ser pelo NAVEGADOR (alguém sem o Desktop, ou uso pelo celular), o OAuth volta a
-> ser o único caminho, e o levantamento abaixo continua valendo.
+> **O que reabriu** (Bruno, olhando o guia de instalação): *"geralmente quando
+> vou consumir o mcp de alguma plataforma, só clico dentro da plataforma, ele
+> pede para autenticar com o Claude e já funciona. Por que isso não vai no
+> nosso?"*
 >
-> O que vale hoje: **`18-mcp-servidor.md`**.
+> A pergunta de manhã foi *"dá para funcionar?"* — e a resposta era sim. A
+> pergunta certa era *"por que a nossa dá trabalho quando nenhuma outra dá?"*.
+> O Desktop torna o token VIÁVEL; não torna a instalação BOA. Entre as duas
+> perguntas houve um instalador `.mcpb` começado e descartado — ele resolvia o
+> terminal e o JSON, e **continuava pedindo que cada pessoa criasse e colasse
+> uma credencial**, que é justamente o passo que o padrão de mercado não tem.
+>
+> ⚠️ **A lição é de escopo, não de OAuth**: "existe uma saída que funciona" não
+> é o mesmo que "a saída está boa para quem vai usar". Quando o caminho tem um
+> padrão que todo mundo conhece, sair dele precisa de justificativa — e
+> "conseguimos contornar" não é uma.
+>
+> **O que o OAuth entrega e as outras duas não:** ninguém cria nem cola token
+> (a pessoa faz login com a conta que já tem); revogar acesso vira desligar o
+> usuário; e funciona **pelo navegador e no celular**, sem exigir o Desktop.
+>
+> O `18-mcp-servidor.md` continua descrevendo o servidor stdio e as ferramentas
+> — que são REAPROVEITADAS aqui. O OAuth troca a porta de entrada, não o
+> conteúdo.
 
 ---
 
-> Status: **desenhado, não implementado**. Escrito em 2026-08-20, depois que o
-> uso mudou e a arquitetura (A) do doc 13 deixou de servir.
+> Status: **desenhado, em implementação** (desde 20/08/2026, à tarde).
 
 ## 1. Por que o desenho do doc 13 não serve mais
 
@@ -56,12 +71,34 @@ o portal não tem provedor de identidade externo, ele acumula os dois papéis:
 |---|---|
 | `/.well-known/oauth-protected-resource` | RFC 9728 — diz ao cliente qual é o authorization server |
 | `/.well-known/oauth-authorization-server` | RFC 8414 — anuncia `/authorize`, `/token`, `/register` |
-| `POST /register` | RFC 7591 — registro dinâmico: o Claude se cadastra sozinho como cliente |
+| `POST /register` | RFC 7591 — registro dinâmico. ⚠️ **DEPRECADO na spec atual** (ver § 3.1); continua necessário por compatibilidade |
 | `GET /authorize` | a pessoa faz login no portal e autoriza |
 | `POST /token` | troca o código por access token (com **PKCE**, obrigatório no 2.1) |
 
 Mais o `WWW-Authenticate` com `resource_metadata` na resposta 401, que é o que
 dispara a descoberta automática.
+
+### 3.1 O que mudou na spec desde a 1ª escrita deste doc
+
+Conferido em 20/08/2026 contra a spec de autorização do MCP:
+
+- **Registro dinâmico (RFC 7591) está DEPRECADO**, mantido só para
+  compatibilidade. O mecanismo preferido passou a ser **Client ID Metadata
+  Documents** (o `client_id` é uma URL https de onde o servidor busca os
+  metadados do cliente). Implementar os dois: o `/register` porque clientes
+  existentes ainda o usam, e o novo porque é para onde a spec aponta.
+- **`resource` (RFC 8707) é obrigatório** no `/authorize` E no `/token`, e o
+  servidor **precisa validar que o token foi emitido para ELE** como audiência.
+  Sem isso, um token emitido para outro serviço seria aceito aqui — é a mesma
+  família do "porta paralela que não passa pela checagem" (v2.86).
+- **`iss` na resposta de autorização** (RFC 9207) é SHOULD hoje e a spec avisa
+  que vira MUST; quem emitir `iss` deve anunciar
+  `authorization_response_iss_parameter_supported: true`. Emitir agora sai mais
+  barato que migrar depois.
+- **PKCE continua obrigatório** (OAuth 2.1).
+- **`offline_access` NÃO entra** no `scopes_supported` nem no
+  `WWW-Authenticate` do resource server — refresh token não é exigência do
+  recurso.
 
 ## 4. As decisões que precedem o código
 
