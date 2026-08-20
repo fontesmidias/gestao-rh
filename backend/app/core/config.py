@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     # senha precisa ser escrita em arquivo.
     rh_admin_email: str = ""
     rh_admin_password: str = ""
+
+    # URL pública CANÔNICA do portal, para o provedor OAuth do MCP remoto
+    # (ex.: https://rh.suaempresa.com.br). Vazio DESLIGA o serviço MCP com
+    # mensagem clara, em vez de cair no `base_url` — cujo padrão é
+    # `http://localhost:8090`, e um provedor OAuth anunciando isso em produção
+    # passaria na descoberta e falharia no callback, com o sintoma longe da
+    # causa. ⚠️ NÃO derivar do cabeçalho Host (`base_url_publica`): o issuer
+    # precisa ser estável, senão quem forjar o Host induz o que anunciamos.
+    mcp_issuer: str = ""
     rh_session_ttl_hours: int = 12
 
     magic_link_ttl_hours: int = 72
