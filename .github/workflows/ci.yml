@@ -292,6 +292,12 @@ jobs:
           # máquina de quem escreve (que tem o venv) e falhavam aqui. Antes de
           # pôr teste no bloco stdlib, confira o que o MÓDULO importa, não só o
           # teste.
+          # `test_mcp_oauth_metadata` (v3.15) entra AQUI e não no bloco stdlib:
+          # importa `app.api.mcp_oauth`, que puxa FastAPI e SQLAlchemy. Ele traz
+          # o próprio `MCP_ISSUER` por `setdefault`, então não depende do `.env`
+          # do job — sem os metadados corretos o cliente nem chega a tentar
+          # conectar, e a mensagem que a pessoa vê é um genérico "não foi
+          # possível", longe da causa.
           for t in test_documentos_catalogo test_email_templates \
                    test_retomada_acesso test_export_tirvu \
                    test_upload_fecha_spool \
@@ -307,7 +313,8 @@ jobs:
                    test_token_automacao test_gravacao_entrevista \
                    test_blocos_gravacao test_creche_ciclo_mensal \
                    test_matricula test_nome_arquivo \
-                   test_talento_recadastro; do
+                   test_talento_recadastro \
+                   test_mcp_oauth_metadata; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1
             echo "::endgroup::"
