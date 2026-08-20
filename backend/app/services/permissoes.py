@@ -301,6 +301,54 @@ PAPEIS_PADRAO: tuple[PapelPadrao, ...] = (
         }),
     ),
     PapelPadrao(
+        "assistente_rh", "Assistente de RH (MCP)",
+        "Pessoa do RH agindo pelo assistente: consulta, cadastra talento e faz "
+        "as tarefas do dia a dia da admissão e da seleção.",
+        # Decisão do Bruno (19/08/2026): os colaboradores do RH vão executar
+        # tarefas pelo Claude Coworking, não só consultar. O papel `automacao`
+        # é estreito DE PROPÓSITO (4 permissões de diagnóstico) e alargá-lo
+        # desfaria a razão de ele existir — então nasce este, ao lado.
+        #
+        # ⚠️ **A autoria é o que sustenta este papel.** Cada pessoa tem o SEU
+        # token (a tela de credenciais já permite), e o `requer_rh` marca o log
+        # com `automacao:<email dela>`: no dia em que algo estranho aparecer,
+        # "quem mandou?" tem resposta. Um token compartilhado pela equipe
+        # devolveria a pergunta ao vazio e é por isso que não se faz.
+        #
+        # O que ele NÃO tem, e cada ausência é uma decisão:
+        #   · **irreversível**: `colaboradores:efetivar`, `:desligar`,
+        #     `:reverter`, `:matricula` — efetivar e desligar mudam o vínculo
+        #     de alguém, e um prompt mal interpretado não pode fazer isso.
+        #   · **dinheiro**: `creche:decidir` decide reembolso que entra em
+        #     folha; `desempenho:homologar` fecha avaliação que vira decisão de
+        #     carreira. Os dois pedem uma pessoa olhando a tela.
+        #   · **base inteira**: `dados:exportar_base` (1.171 CPFs num arquivo),
+        #     `dados:arquivo_lote`, `dados:expurgar`.
+        #   · **quem audita não se audita**: `dados:auditoria`, `dados:logs`.
+        #   · **configuração**: `config:*` muda o sistema para todo mundo —
+        #     inclusive `config:usuarios`, que criaria outro administrador.
+        #   · `documentos:assinar` — assinatura é ato de vontade de uma pessoa
+        #     identificada (Lei 14.063/2020); assinar por prompt descreveria um
+        #     ato que não aconteceu como o manifesto afirma (v2.56).
+        #
+        # ⚠️ Ao acrescentar ferramenta ao MCP, a pergunta continua sendo a da
+        # v2.94: o ato é REVERSÍVEL e do dia a dia? Se muda vínculo, decide
+        # dinheiro ou configura o sistema, não pertence aqui.
+        permissoes=frozenset({
+            # consultar — a metade que responde "por quê"
+            "admissao:ler", "colaboradores:ler", "selecao:ler", "creche:ler",
+            "organizacao:ler", "desenvolvimento:ler", "desempenho:ler",
+            "processos:ler",
+            # agir no dia a dia — tudo reversível, tudo com auditoria
+            "admissao:escrever",          # convidar, corrigir ficha, reenviar link
+            "admissao:revisar_documento", # aprovar/rejeitar documento enviado
+            "admissao:dossie",            # gerar o dossiê
+            "selecao:escrever",           # cadastrar talento (a porta da v1)
+            "selecao:entrevistar",        # marcar e conduzir entrevista
+            "desenvolvimento:validar",    # validar certificado enviado
+        }),
+    ),
+    PapelPadrao(
         "recepcao", "Recepção",
         "Anuncia visitas e encaminha assuntos aos responsáveis.",
         # Deliberadamente estreito: a recepção precisa achar a pessoa certa,
