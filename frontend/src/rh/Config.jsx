@@ -13,6 +13,7 @@ import RoteirosEntrevista from './RoteirosEntrevista.jsx'
 import ConfigGravacao from './ConfigGravacao.jsx'
 import TokenDiarizacao from './TokenDiarizacao.jsx'
 import TokensAutomacao from './TokensAutomacao.jsx'
+import ConexoesMcp from './ConexoesMcp.jsx'
 import Exigencias from './Exigencias.jsx'
 // `PapeisAcesso` (v2.86) é o papel de USUÁRIO — não confundir com o `Papeis`
 // logo abaixo neste arquivo, que é o papel com que alguém ASSINA um
@@ -425,6 +426,7 @@ export default function Config({ aoVoltar }) {
         <div className="rh-grid-2"><OcrIA /><GroqIA /></div>
         <div className="rh-grid-2"><TokenDiarizacao /></div>
         <TokensAutomacao />
+        <ConexoesMcp />
         <div className="rh-grid-2"><AvisosInternos /></div>
         <Teams />
       </>}
