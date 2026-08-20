@@ -318,6 +318,99 @@ def revogar_token_automacao(token_id: uuid.UUID, db: Session = Depends(get_db),
     db.commit()
     return _token_dict(registro)
 
+# ---------- Conexões do assistente (MCP com OAuth) ----------
+#
+# Diferente das credenciais acima em dois pontos que importam:
+#
+# 1. **Ninguém emite nada aqui.** A conexão nasce quando a PESSOA faz login e
+#    autoriza no Claude — não há botão de "criar". Esta tela existe para VER e
+#    para CORTAR.
+# 2. **Cortar é o ponto.** A pergunta que o desenho responde é "se vazar hoje à
+#    noite, como eu corto?" (v2.94). Revogar aqui derruba a conexão na chamada
+#    seguinte, dentro dos 10 minutos de vida do token de acesso.
+
+
+def _conexao_dict(c, nome_da_pessoa: str | None, aplicativo: str | None) -> dict:
+    """O que a tela mostra. NUNCA o segredo — nem o prefixo dele resolve nada.
+
+    `papel_do_usuario` é o papel que a pessoa tinha QUANDO autorizou, guardado
+    para a auditoria responder "quem era ela naquele momento?". O papel que a
+    conexão concede é sempre `assistente_rh`, e é isso que `papel_concedido`
+    diz — os dois juntos deixam ver que a superfície do assistente é menor que
+    a da pessoa.
+    """
+    return {
+        "id": str(c.id),
+        "pessoa": nome_da_pessoa or "(usuário removido)",
+        "aplicativo": aplicativo or "(aplicativo removido)",
+        "papel_concedido": c.papel_concedido,
+        "papel_do_usuario": c.papel_do_usuario,
+        "criado_em": c.criado_em,
+        "usado_em": c.usado_em,
+        "expira_em": c.expira_em,
+        "revogado_em": c.revogado_em,
+        "revogado_por": c.revogado_por,
+        "revogado_motivo": c.revogado_motivo,
+        "valida": c.valido,
+    }
+
+
+@router.get("/rh/mcp/conexoes")
+def listar_conexoes_mcp(db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(exige("config:usuarios"))) -> list[dict]:
+    """As conexões do assistente, ativas e revogadas.
+
+    Mostra as revogadas junto de propósito: a linha é a prova de que a conexão
+    existiu e de quando deixou de valer, e some-la esconderia justamente o que
+    se procura ao investigar.
+    """
+    from app.models.mcp_oauth import ClienteOAuth, Concessao
+
+    concessoes = db.scalars(select(Concessao).order_by(
+        Concessao.criado_em.desc())).all()
+    if not concessoes:
+        return []
+
+    # Em LOTE, não uma consulta por linha: a lista cresce com o uso, e o N+1 do
+    # dash de Talentos já custou 43 consultas para 39 registros (v2.15).
+    pessoas = {u.id: u.nome for u in db.scalars(select(UsuarioRH).where(
+        UsuarioRH.id.in_({c.usuario_id for c in concessoes}))).all()}
+    apps = {c.id: c.client_name for c in db.scalars(select(ClienteOAuth).where(
+        ClienteOAuth.id.in_({c.cliente_id for c in concessoes}))).all()}
+
+    return [_conexao_dict(c, pessoas.get(c.usuario_id), apps.get(c.cliente_id))
+            for c in concessoes]
+
+
+@router.delete("/rh/mcp/conexoes/{conexao_id}", status_code=200)
+def revogar_conexao_mcp(conexao_id: uuid.UUID, db: Session = Depends(get_db),
+                        rh: UsuarioRH = Depends(exige("config:usuarios"))) -> dict:
+    """Corta a conexão. **Marca, não apaga.**
+
+    O efeito é imediato: o `/mcp` consulta a concessão a cada chamada, então a
+    próxima já falha — não se espera o token de acesso expirar. A pessoa
+    continua com o portal normal; o que cai é o assistente.
+    """
+    from app.models.mcp_oauth import ClienteOAuth, Concessao
+    from app.services.mcp_oauth import revogar
+
+    registro = db.get(Concessao, conexao_id)
+    if registro is None:
+        raise HTTPException(status_code=404, detail="conexao_nao_encontrada")
+    ja_revogada = registro.revogado_em is not None
+    revogar(db, registro, por=rh.email, motivo="usuario")
+    if not ja_revogada:
+        pessoa = db.get(UsuarioRH, registro.usuario_id)
+        registrar(db, "mcp_conexao_revogada", ator="rh", ator_detalhe=rh.email,
+                  detalhe={"pessoa": pessoa.email if pessoa else None,
+                           "concessao": str(registro.id)})
+    db.commit()
+    pessoa = db.get(UsuarioRH, registro.usuario_id)
+    app = db.get(ClienteOAuth, registro.cliente_id)
+    return _conexao_dict(registro, pessoa.nome if pessoa else None,
+                         app.client_name if app else None)
+
+
 
 # ---------- Assinantes dos documentos oficiais ----------
 

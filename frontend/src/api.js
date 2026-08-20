@@ -1526,6 +1526,12 @@ export const rh = {
   revogarTokenAutomacao: (id) =>
     req(`/rh/tokens-automacao/${id}`, { method: 'DELETE', headers: authRH() }),
 
+  // Conexões do assistente (MCP com OAuth, v3.15). NÃO há "criar": a conexão
+  // nasce quando a pessoa faz login e autoriza no Claude. Esta tela vê e corta.
+  conexoesMcp: () => req('/rh/mcp/conexoes', { headers: authRH() }),
+  revogarConexaoMcp: (id) =>
+    req(`/rh/mcp/conexoes/${id}`, { method: 'DELETE', headers: authRH() }),
+
   verM365: () => req('/rh/config/m365', { headers: authRH() }),
   salvarM365: (dados) =>
     req('/rh/config/m365', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
