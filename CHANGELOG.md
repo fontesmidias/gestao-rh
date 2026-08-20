@@ -25,9 +25,30 @@ Talentos).
 
 **Leitura** — `buscar_candidato`, `diagnostico_candidato` (a que responde *"por
 que o dossiê não gera?"*, o caso que custou 54 minutos à analista na v2.93),
-`listar_admissoes`, `pendencias_tirvu` e `erros_recentes`. **Escrita**, uma só:
+`listar_admissoes` e `pendencias_tirvu`. **Escrita**, uma só:
 `cadastrar_talento`, sobre o `POST /rh/talentos` que já recusa duplicata
 nomeando quem é.
+
+### A ferramenta que teria respondido 403 para todo mundo
+
+Havia uma sexta, `erros_recentes`, escrita sobre `GET /rh/diagnostico/erros` — e
+essa rota exige `sistema:telemetria`, **que nenhum dos dois papéis do MCP tem**.
+Ela responderia 403 sempre, e nada denunciaria: o servidor sobe, a ferramenta
+aparece na lista, o modelo a escolhe, e quem opera conclui que pediu a coisa
+errada. É a v2.88 numa porta nova — *item que sempre responde 403 ensina a
+equipe a ignorar mensagem de erro*, e é a mensagem de erro que precisa ser
+levada a sério quando algo quebra de verdade.
+
+**A correção foi tirar a ferramenta, não alargar o papel.** `sistema:telemetria`
+abre outras 12 rotas descrevendo como cada pessoa usa o sistema; concedê-las
+para ganhar uma lista de falhas desfaria a razão de o papel ser estreito (§ 5.2
+do doc 13). O `diagnostico_candidato` já responde *"o que houve com esta
+pessoa"*; o painel de erros do sistema continua sendo tela.
+
+`test_mcp_permissoes.py` fecha a porta: lê os caminhos do próprio `servidor.py`
+(lista à mão envelheceria na primeira ferramenta nova) e reprova no CI quem
+chamar rota inexistente ou fora do papel. Validado por 4 mutações — inclusive o
+defeito original.
 
 ### O que a saída faz com o texto antes de entregá-lo ao modelo
 
