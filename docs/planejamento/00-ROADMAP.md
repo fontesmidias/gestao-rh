@@ -32,16 +32,15 @@
 
 | Tema | A pergunta |
 |---|---|
-| **Documento de indeferido** | O expurgo já apaga documento de criança de quem foi indeferido, passado o prazo. Confirmar se o prazo geral (90 dias) serve, ou se este caso pede outro |
-| **Declaração PF preenchida** | Hoje o sistema gera o modelo EM BRANCO. Gerá-la preenchida exigiria cadastrar o cuidador (nome, CPF, RG, endereço) e o valor por mês — vale? |
-| **Retenção do áudio de entrevista** | Pendência da v2.97: quanto tempo o áudio fica antes do expurgo. A transcrição pode sobreviver ao áudio |
+| **Retenção do áudio de entrevista** | Hoje o áudio da entrevista gravada fica no servidor **para sempre**. A transcrição em texto pode sobreviver a ele. Por quantos meses guardar o áudio antes do expurgo? (pendência da v2.97 — o Bruno pediu para reformular a pergunta) |
 
 ## 📋 Na fila
 
 | O quê | Por quê | Origem |
 |---|---|---|
+| **Declaração PF pré-preenchida** | **Decidido pelo Bruno (19/08/2026)**: *"tem que vir pré-preenchida com os dados já mapeados em relação ao filho do colaborador"*. Hoje o sistema gera o modelo EM BRANCO. O que já existe: nome do colaborador, CPF, e nome + data de nascimento da criança. ⚠️ O que **falta** e o modelo do Dr. Lucas pede: nome, CPF, RG e endereço do CUIDADOR, e o valor pago no mês — esses precisam ser coletados (decidir se por criança, uma vez, ou a cada competência) | 23ª leva |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
-| **Ferramentas MCP** | Papel `automacao` e credencial existem (v2.94); faltam as ferramentas — cascas finas sobre `api/diagnostico.py`, que já responde 4 das 6 | 22ª leva |
+| **🔨 Ferramentas MCP — PRÓXIMO** | Papel `automacao` e credencial existem (v2.94); faltam as ferramentas. ⚠️ **O uso mudou** (Bruno, 19/08/2026): não é só a Claude dele — são os **colaboradores do RH no Claude Coworking**, executando tarefas no portal por prompt. Isso muda o desenho: deixa de ser uma credencial de máquina para uma pessoa e passa a ser **várias pessoas agindo pelo MCP**, o que traz de volta as perguntas de AUTORIA (quem fez o quê) e de PERMISSÃO (o papel `automacao` tem 4 permissões de diagnóstico — insuficiente se eles forem *executar tarefas*). Ler `docs/planejamento/13-mcp-do-portal.md` e as ressalvas do CLAUDE.md sobre o papel `automacao` antes de desenhar | 22ª leva |
 | **Transcrição no módulo de Arquivo** | Hoje só aparece no card da entrevista | § 11 do doc 14 |
 | **Dados da empresa vindos do banco** | Tirar contato/telefone/site do código; a tela de Marca já existe | 2026-08-08 |
 
