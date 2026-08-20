@@ -60,7 +60,8 @@ configuração**. Isso abre o `claude_desktop_config.json`. Acrescente:
 {
   "mcpServers": {
     "portal-rh": {
-      "command": "portal-rh-mcp",
+      "command": "python",
+      "args": ["-m", "portal_rh_mcp.servidor"],
       "env": {
         "PORTAL_RH_URL": "https://rh.suaempresa.com.br",
         "PORTAL_RH_TOKEN": "mcp_cole-aqui-o-seu-segredo"
@@ -69,6 +70,16 @@ configuração**. Isso abre o `claude_desktop_config.json`. Acrescente:
   }
 }
 ```
+
+⚠️ **Use `python -m`, não o comando `portal-rh-mcp`.** A instalação cria os dois,
+mas no Windows o `pip` costuma pôr o `.exe` numa pasta `Scripts` que **não está
+no PATH** — e o Claude Desktop não tem como achá-lo. O sintoma seria "o servidor
+não conecta", sem nada dizer que o problema é PATH. O `python -m` acha o pacote
+pelo próprio Python, que já está no PATH porque foi assim que você instalou.
+
+Se o Desktop ainda disser que não achou o `python`, troque por **o caminho
+inteiro** do executável — descubra com `python -c "import sys; print(sys.executable)"`
+e cole o resultado no lugar de `"python"`.
 
 Se já houver outros servidores em `mcpServers`, acrescente `"portal-rh"` ao lado
 deles — não substitua o arquivo inteiro.
