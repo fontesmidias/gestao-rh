@@ -2664,6 +2664,12 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 - Commits direto no `main`: `feat(vX.Y): resumo` + corpo com bullets; uma
   versão por "onda" entregue. Push e acompanhar o CI (`gh run list/view`) —
   único workflow `ci.yml` (imagens api/frontend + testes de interface).
+- **REGRA: o ROADMAP se atualiza a cada versão** (`docs/planejamento/00-ROADMAP.md`,
+  pedido do Bruno em 19/08/2026). Ele responde *"o que vem agora?"* — fila, o que
+  está BLOQUEADO e **por quem**, o que falta decidir, e o que foi DESCARTADO com
+  o motivo. As duas últimas colunas são as que evitam retrabalho: "pendente" sem
+  dizer de quem depende é linha que ninguém resolve, e ideia descartada sem
+  motivo volta na leva seguinte e gasta a discussão de novo.
 - **REGRA: toda leva atualiza CHANGELOG, README e os demais documentos —
   no MESMO commit** (cravada pelo Bruno em 2026-07-29). Não é burocracia: em
   2026-07-29 o CHANGELOG estava 20 versões atrás (parado na v2.01) e o README

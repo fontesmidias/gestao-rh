@@ -1106,6 +1106,52 @@ def editar_prazos(payload: PrazoMassaIn, db: Session = Depends(get_db),
     return {"atualizados": len(bens), "dia_entrega_mensal": dia}
 
 
+class LembretesIn(BaseModel):
+    """Com quantos dias de antecedência avisar sobre o comprovante do mês."""
+    dias_antes: list[int]
+
+
+@router.get("/rh/creche/lembretes")
+def ver_lembretes(db: Session = Depends(get_db),
+                  _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
+    """Os dias de antecedência dos lembretes, e o padrão de fábrica."""
+    from app.workers.creche_lembretes import DIAS_PADRAO, dias_configurados
+
+    return {"dias_antes": list(dias_configurados(db)),
+            "padrao": list(DIAS_PADRAO)}
+
+
+@router.put("/rh/creche/lembretes")
+def editar_lembretes(payload: LembretesIn, db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
+    """Define com quantos dias de antecedência o lembrete sai.
+
+    Pedido do Bruno (18/08/2026): *"ter a opção de enviar 1d antes, 2d antes e
+    por aí vai, quantos forem necessários"*. A chave existia desde a v3.02 e era
+    editável **só escrevendo no banco** — chave de configuração sem rota e sem
+    tela não é configurável (a armadilha da v2.68).
+
+    **Lista VAZIA é decisão válida**: desliga os lembretes. Por isso ela é
+    gravada como string vazia em vez de apagar a chave — chave ausente cai no
+    padrão de fábrica, e as duas coisas precisam ser distinguíveis, senão o RH
+    não consegue desligar.
+    """
+    from app.services.config_dinamica import gravar_config
+    from app.workers.creche_lembretes import CHAVE_DIAS
+
+    dias = sorted({d for d in payload.dias_antes if 0 <= d <= 28}, reverse=True)
+    if len(dias) != len(set(payload.dias_antes)):
+        # Dia fora de 0..28 não existe em todo mês e não teria efeito — recusar
+        # é melhor que gravar calado algo que nunca dispara.
+        raise HTTPException(status_code=422, detail={
+            "erro": "dia_invalido", "aceitos": "0 a 28"})
+    gravar_config(db, {CHAVE_DIAS: ",".join(str(d) for d in dias)})
+    registrar(db, "creche_lembretes_configurados", ator="rh",
+              ator_detalhe=rh.email, detalhe={"dias": dias})
+    db.commit()
+    return {"dias_antes": dias}
+
+
 class CondicoesIn(BaseModel):
     """Prazo e valor de UM benefício, editáveis depois de aprovado."""
     dia_entrega_mensal: int | None = None
@@ -1314,10 +1360,11 @@ def baixar_dossie(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
         db.commit()
     dados = storage.ler(ben.dossie_pdf_key)
     col = db.get(Candidato, ben.candidato_id)
-    nome = (col.nome_completo or "colaborador").replace(" ", "-").lower()
+    # Padrão único de nome (v3.04): `MATRÍCULA - NOME - DOCUMENTO`.
+    from app.services.nome_arquivo import do_colaborador
+    nome = do_colaborador(col, "DOSSIE REEMBOLSO CRECHE")
     return Response(content=dados, media_type="application/pdf",
-                    headers={"Content-Disposition":
-                             f'inline; filename="dossie-creche-{nome}.pdf"'})
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
 
 
 _CT_POR_EXT = {
@@ -1371,8 +1418,12 @@ def previa_documento(beneficio_id: uuid.UUID, tipo: str, db: Session = Depends(g
         pdf = gerar_declaracao_modelo(db, ben)
     else:
         raise HTTPException(status_code=422, detail="tipo_invalido")
+    from app.services.nome_arquivo import do_colaborador
+    rotulo = ("REQUERIMENTO REEMBOLSO CRECHE" if tipo == "requerimento"
+              else "DECLARACAO DE QUITACAO MODELO")
+    nome = do_colaborador(db.get(Candidato, ben.candidato_id), rotulo)
     return Response(content=pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{tipo}.pdf"'})
+                    headers={"Content-Disposition": f'inline; filename="{nome}"'})
 
 
 # ==========================================================================
@@ -1514,6 +1565,12 @@ def baixar_comprovante(competencia_id: uuid.UUID, db: Session = Depends(get_db),
     if registro is None or not registro.arquivo_pdf_key:
         raise HTTPException(status_code=404, detail="sem_arquivo")
     dados = storage.ler(registro.arquivo_pdf_key)
-    nome = f"comprovante-{registro.ano}-{registro.mes:02d}.pdf"
+    # Antes saía `comprovante-2026-08.pdf`: sem nome e sem matrícula, três
+    # pessoas geravam três arquivos indistinguíveis na pasta.
+    from app.services.nome_arquivo import do_colaborador
+    ben = db.get(BeneficioCreche, registro.beneficio_id)
+    col = db.get(Candidato, ben.candidato_id) if ben else None
+    nome = do_colaborador(
+        col, f"COMPROVANTE CRECHE {registro.mes:02d}-{registro.ano}")
     return Response(content=dados, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="{nome}"'})

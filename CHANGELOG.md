@@ -14,6 +14,44 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.10.0] — 2026-08-19 — Revisão da leva: o que tinha ficado pela metade
+
+Revisão item a item dos 13 feedbacks **contra o código**, não contra o
+CHANGELOG. Três estavam incompletos, e dois deles eu tinha identificado no
+levantamento e não implementado.
+
+### Corrigido
+
+- **O termo de GUARDA não era exigido.** O pedido era explícito (*"se for
+  questão de tutela ou guarda, precisa da documentação, bem como a certidão"*) e
+  a validação do envio cobrava só a certidão: o levantamento fechava sem o
+  documento que PROVA o vínculo, e o RH descobria na análise — devolvendo o
+  levantamento inteiro e esperando. Agora recusa com 422 `guarda_faltando`,
+  **nomeando quem falta**. Filho e enteado não entram: para eles a certidão já
+  é a prova.
+- **Os dias do lembrete eram configuráveis só no banco.** A chave nasceu na
+  v3.02 sem rota e sem tela — a armadilha da v2.68, que o próprio projeto
+  registra: *chave de configuração sem rota e sem tela não é configurável*.
+  Agora há aba própria em Reembolso-Creche → **Lembretes**, com os dias em
+  chips. Nenhum dia marcado desliga os lembretes, e a tela **diz isso** em vez
+  de parecer que não salvou.
+- **O padrão de nome de arquivo estava adotado em 2 de 15 arquivos.** A
+  infraestrutura foi criada na v3.04 e quase nada a usava — inclusive o próprio
+  creche, cujo comprovante saía como `comprovante-2026-08.pdf`, sem nome e sem
+  matrícula: três pessoas geravam três arquivos indistinguíveis. Padronizados
+  agora o dossiê do creche, o requerimento, a declaração-modelo, o comprovante
+  mensal e **a ficha da pessoa** (`003035 - MARIA DE FATIMA - FICHA CADASTRO
+  ASSINADA.pdf`) — o sufixo distingue a via assinada da prévia, que é o que
+  separa a peça de prova do rascunho.
+
+### Adicionado
+
+- **`docs/planejamento/00-ROADMAP.md`** (pedido do Bruno): o que está na fila, o
+  que está bloqueado **e por quem**, o que falta decidir e o que foi descartado
+  **com o motivo** — ideia descartada sem motivo volta na leva seguinte e gasta
+  a discussão de novo. Numerado `00-` para aparecer primeiro na pasta.
+  **Atualizar a cada versão** é regra, como o CHANGELOG e o README.
+
 ## [3.09.0] — 2026-08-19 — Coletar cedo sem prometer
 
 Último item da 23ª leva: *"por ocasião da admissão, já podemos coletar tudo isso

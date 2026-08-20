@@ -417,6 +417,11 @@ function SessaoCreche({ token, aoEnviar, aoExpirar }) {
     catch (e) {
       setErro(e.detail?.erro === 'certidao_faltando'
         ? `Falta a certidão de nascimento de: ${e.detail.criancas.join(', ')}.`
+        // A mensagem diz o que RESOLVE, e nomeia quem falta: "documentação
+        // pendente" faria a pessoa procurar em todas as crianças.
+        : e.detail?.erro === 'guarda_faltando'
+        ? `Para criança sob guarda judicial é preciso anexar também o termo de `
+          + `guarda, além da certidão. Falta o de: ${e.detail.criancas.join(', ')}.`
         : e.detail === 'sem_criancas' ? 'Cadastre ao menos uma criança.'
         : 'Não foi possível enviar. Confira os dados.')
     } finally { setEnviando(false) }
