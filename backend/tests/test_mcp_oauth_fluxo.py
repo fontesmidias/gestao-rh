@@ -268,10 +268,24 @@ def rodar():
 
 rodar()
 
-if falhas:
+def _reportar(itens: list[str]) -> None:
+    """Imprime as falhas em qualquer console.
+
+    ⚠️ O console do Windows (cp1252) NÃO imprime emoji: um `print` com "⚠️"
+    levanta `UnicodeEncodeError` e o teste morre ANTES de mostrar a mensagem —
+    justamente quando ela importa, porque o teste está reprovando. O defeito
+    aparece como traceback de encoding, que não fala nada sobre a causa real.
+    """
     print("FALHOU:")
-    for f in falhas:
-        print(f"  - {f}")
+    for item in itens:
+        try:
+            print(f"  - {item}")
+        except UnicodeEncodeError:
+            print("  - " + item.encode("ascii", "replace").decode("ascii"))
+
+
+if falhas:
+    _reportar(falhas)
     sys.exit(1)
 print("OK - fluxo completo: PKCE, replay, rotacao com deteccao de reuso, recusa "
       "por papel e corte ao desativar a conta.")

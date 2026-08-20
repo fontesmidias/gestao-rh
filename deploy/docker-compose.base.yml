@@ -57,6 +57,30 @@ services:
     networks: [internal]
     restart: unless-stopped
 
+  # Assistente de IA — MCP remoto com OAuth (v3.15). Imagem PRÓPRIA e enxuta:
+  # este serviço só fala HTTP e banco, e as dependências de PDF/OCR da API não
+  # se aplicam. Serviço SEPARADO da API de propósito: a superfície da IA não se
+  # funde com a do humano (doc 13 § 4), e os `.well-known` do OAuth precisam
+  # morar na RAIZ do host, enquanto os 40 routers da API usam `prefix=/api`.
+  # ⚠️ Precisa existir também no `portainer-stack.yml` E na matriz do `ci.yml`.
+  # ⚠️ Sem `MCP_ISSUER` no `.env`, o serviço sobe e o `/mcp/health` responde
+  # `sem_issuer` — o assistente fica desligado e o portal segue normal.
+  mcp:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.mcp
+    env_file: ../.env
+    depends_on:
+      - db
+    environment:
+      LOG_DIR: /var/log/gestao-rh
+      LOG_SERVICO: mcp
+      TZ: America/Sao_Paulo
+    volumes:
+      - logs-data:/var/log/gestao-rh
+    networks: [internal]
+    restart: unless-stopped
+
   # Transcrição de entrevistas (v2.97). Imagem PRÓPRIA: o faster-whisper pesa
   # ~500 MB e a API/worker nunca o executam. Fila PRÓPRIA (`transcricao`):
   # áudio leva minutos e seguraria atrás de si o Match e a indexação de
