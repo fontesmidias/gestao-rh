@@ -21,14 +21,20 @@ conexão falha dizendo que não alcançou o servidor — com tudo no ar e nada n
 parecendo errado. É o mesmo mecanismo do incidente da tela branca (v2.29).
 """
 
-from fastapi import APIRouter, Request
+from urllib.parse import urlsplit
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException
 
 from app.core.config import ip_do_cliente
 from app.core.db import get_db
+from app.core.security import verificar_senha
+from app.models.usuario_rh import UsuarioRH
 from app.services import mcp_oauth as oauth
+from app.services import mcp_telas as telas
 from app.services.auditoria import registrar
 from app.services.limite import exigir
 
