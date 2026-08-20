@@ -145,7 +145,7 @@ jobs:
                    test_permissoes_declaradas test_papel_automacao \
                    test_tela_de_trabalho test_transcricao_paragrafos \
                    test_retranscrever test_diarizacao_diagnostico \
-                   test_creche_competencia; do
+                   test_creche_competencia test_papel_assistente_rh; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"

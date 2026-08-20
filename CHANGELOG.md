@@ -14,6 +14,49 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.13.0] — 2026-08-19 — O papel de quem age pelo assistente
+
+Primeiro passo do MCP com o uso que o Bruno definiu em 19/08/2026: não é a Claude
+dele lendo currículos, são os **colaboradores do RH no Claude Coworking**
+executando tarefas por prompt. Isso muda o desenho da v2.94 em dois pontos —
+**autoria** (quem mandou?) e **permissão** (o papel `automacao` tem 4, todas de
+diagnóstico).
+
+### Adicionado
+
+- **Papel `assistente_rh`** (14 permissões), entre o `automacao` (4) e o `rh`
+  (27). Tem o dia a dia da admissão e da seleção: convidar, corrigir ficha,
+  aprovar documento, gerar dossiê, cadastrar talento, marcar entrevista, validar
+  certificado.
+
+### O que ele NÃO tem — e cada ausência é uma decisão
+
+- **Irreversível**: efetivar, desligar, reverter, trocar matrícula. Mudam o
+  vínculo de alguém, e um prompt mal interpretado não pode fazer isso.
+- **Dinheiro**: `creche:decidir` decide reembolso que entra em folha;
+  `desempenho:homologar` fecha avaliação que vira decisão de carreira.
+- **Base inteira e trilha**: exportar 1.171 CPFs, arquivo em lote, expurgo — e
+  quem é auditado não lê a própria auditoria.
+- **Configuração**: `config:*`, incluindo o que criaria outro administrador.
+- **Assinar**: assinatura é ato de vontade de uma pessoa identificada (Lei
+  14.063/2020). Assinar por prompt faria o manifesto descrever um ato que não
+  aconteceu como ele afirma (v2.56).
+
+### A autoria é o que sustenta isto
+
+**Token por pessoa** (decisão do Bruno), não um compartilhado pela equipe. O
+`requer_rh` já marca o log com `automacao:<e-mail de quem age>` — então "quem
+mandou?" tem resposta, e revogar o acesso de um não derruba os outros. Um token
+único devolveria a pergunta ao vazio.
+
+### Medido
+
+- `test_papel_assistente_rh` no CI, validado por mutação: acrescentar
+  `colaboradores:efetivar` e `creche:decidir` ao papel reprova nomeando as duas.
+  A asserção `automacao < assistente_rh < rh` existe para o papel não empatar
+  com o `rh` sem ninguém notar — aí ele deixaria de ser uma decisão e viraria um
+  apelido.
+
 ## [3.12.0] — 2026-08-19 — Quem cuida define o documento
 
 Último "parcial" da 23ª leva (item 4). O `tipo_comprovante` — declaração se o
