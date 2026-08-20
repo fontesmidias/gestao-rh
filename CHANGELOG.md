@@ -14,6 +14,36 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.11.0] — 2026-08-19 — O padrão de nome onde o documento é de alguém
+
+Continuação do item 11: o padrão `MATRÍCULA - NOME - DOCUMENTO` estava adotado
+em poucos endpoints. Classifiquei os 21 pontos restantes antes de mexer — nem
+todos devem segui-lo.
+
+### Alterado
+
+- **Certificado de desenvolvimento** saía como `certificado.pdf`. Num módulo
+  cujo objeto É o certificado de alguém, baixar o comprovante de brigada de três
+  pessoas dava três arquivos com o mesmo nome.
+- **Ficha e transcrição de entrevista**: saíam em minúsculas com hífens
+  (`entrevista-maria-de-fatima.pdf`), fora do padrão. ⚠️ Aqui a pessoa pode ser
+  um **talento**, que ainda não tem matrícula — o nome sai sem a primeira parte
+  (`JOAO PEDRO - FICHA DE ENTREVISTA.pdf`), sem hífen órfão na frente.
+
+### Onde o padrão NÃO se aplica (classificado, não esquecido)
+
+Planilhas da base inteira (`colaboradores-2026-08-19.xlsx`, Tirvu, Dexion), logs
+de serviço, CSV de telemetria e amostras de modelo com dados fictícios: não há
+UMA pessoa a nomear, e forçar o padrão criaria um nome que mente. Anexos de CRM,
+desempenho e currículo mantêm o **nome original** — são arquivo de terceiro, e
+renomeá-los é decisão que a v2.33 já registrou em sentido contrário.
+
+### Corrigido
+
+- Dois imports de `slug` ficaram órfãos em `entrevistas.py`, e um comentário
+  passou a descrever código que não existia mais — comentário que descreve o
+  passado engana quem lê depois.
+
 ## [3.10.0] — 2026-08-19 — Revisão da leva: o que tinha ficado pela metade
 
 Revisão item a item dos 13 feedbacks **contra o código**, não contra o

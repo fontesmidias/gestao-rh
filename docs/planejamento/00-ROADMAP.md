@@ -26,7 +26,6 @@
 | O quê | O que destrava | Desde |
 |---|---|---|
 | **Comunicado da data de corte** | Decidir QUANDO disparar. O padrão foi corrigido para dia 25, mas quem foi ativado antes recebeu "envie até o dia 5" por e-mail | v3.02 |
-| **Vigência dos 5 contratos** | Preencher as datas na tela de Postos (ANEEL 01/05, INEP ×2 e MAPA 01/08, PREPÚBLICA 01/02). O campo aceita edição em massa | v3.01 |
 | **Validar a 23ª leva na homologação** | Olhar as telas novas e dizer se está bom | v3.09 |
 
 ## 🤔 A decidir
@@ -41,7 +40,6 @@
 
 | O quê | Por quê | Origem |
 |---|---|---|
-| **Padrão de nome nos ~10 endpoints restantes** | `MATRÍCULA - NOME - DOCUMENTO` já vale no dossiê, na ficha e no creche; falta entrevistas, desenvolvimento, modelos, CRM e desempenho | 23ª leva, item 11 |
 | **Exigir o documento certo por PF/PJ** | O `tipo_comprovante` hoje é só rótulo na tela; poderia validar (PJ ⇒ nota fiscal, PF ⇒ declaração) | 23ª leva, item 4 |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
 | **Ferramentas MCP** | Papel `automacao` e credencial existem (v2.94); faltam as ferramentas — cascas finas sobre `api/diagnostico.py`, que já responde 4 das 6 | 22ª leva |
@@ -61,6 +59,10 @@
 ## ✅ Entregue — histórico por leva
 
 O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
+
+**Vigência dos 5 contratos** — o Bruno lançou as datas na tela em 19/08/2026
+(ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
+competência anterior à vigência.
 
 ### 23ª leva (2026-08-18/19) — v3.01 → v3.10
 **Os 13 feedbacks do Bruno.** Ciclo mensal do creche completo (modelo, regras,
