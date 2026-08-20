@@ -35,7 +35,8 @@
 
 ---
 
-> Status: **desenhado, em implementação** (desde 20/08/2026, à tarde).
+> Status: **IMPLEMENTADO** na v3.15 (20/08/2026). Falta só configurar a
+> `MCP_ISSUER` por ambiente e testar na homologação — ver `mcp/CONECTAR.md`.
 
 ## 1. Por que o desenho do doc 13 não serve mais
 

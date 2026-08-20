@@ -14,6 +14,136 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.15.0] — 2026-08-20 — Clicar e autenticar, sem instalar nada
+
+Conectar o assistente ao portal virou o que já é em qualquer outra plataforma:
+adicionar o endereço, fazer login, autorizar. Antes exigia instalar Python,
+abrir o terminal e editar um arquivo JSON.
+
+### A pergunta que reabriu o desenho
+
+O OAuth foi arquivado de manhã, com este raciocínio: *"todos têm o Claude
+Desktop, então o token `mcp_…` funciona sem nada disto"*. À tarde, olhando o
+guia de instalação, o Bruno perguntou:
+
+> *"geralmente quando vou consumir o mcp de alguma plataforma, só clico dentro
+> da plataforma, ele pede para autenticar com o Claude e já funciona. Por que
+> isso não vai no nosso?"*
+
+O arquivamento respondia *"dá para funcionar?"* — e a resposta era sim. A
+pergunta certa era *"por que a nossa dá trabalho quando nenhuma outra dá?"*. O
+Desktop torna o token VIÁVEL; não torna a instalação BOA.
+
+Entre as duas perguntas houve um instalador `.mcpb` (duplo clique) começado e
+descartado: ele resolvia o terminal e o JSON, e **continuava pedindo que cada
+pessoa criasse e colasse uma credencial** — o passo que o padrão de mercado não
+tem. ⚠️ A lição é de escopo, não de OAuth: *"existe uma saída que funciona"* não
+é o mesmo que *"a saída está boa para quem vai usar"*, e sair de um padrão que
+todo mundo conhece precisa de justificativa — "conseguimos contornar" não é uma.
+
+**O que o OAuth entrega e as outras duas opções não:** ninguém cria nem cola
+token; revogar acesso vira desligar o usuário; e funciona **pelo navegador e no
+celular**, sem exigir o Desktop.
+
+### O risco nº 1, que falharia em silêncio
+
+`permissoes_do_usuario` lê `usuario.papel` **do objeto**. Devolver o `UsuarioRH`
+do banco faria a pessoa agir com o papel do dia a dia dela — **medido: 27
+permissões em vez de 14**, incluindo `colaboradores:desligar` e `:efetivar`.
+
+⚠️ **E nada daria erro**: as ferramentas passariam a funcionar melhor, e ninguém
+abre chamado dizendo *"o assistente conseguiu desligar um colaborador"*. É o
+defeito de acesso a mais, que ninguém reporta (v2.86).
+
+`identidade_do_access_token` devolve um `UsuarioRH` **transiente** com o papel
+trocado. Construir objeto novo em vez de mutar o da sessão não é estilo: mutar o
+carregado e deixar commitar **gravaria `assistente_rh` na linha real da pessoa**,
+tirando o acesso dela ao painel, com a causa noutro serviço.
+
+### O defeito medido antes de existir
+
+`/.well-known/oauth-protected-resource` na homologação devolvia **HTTP 200 com o
+HTML do SPA**. O cliente tenta lê-lo como JSON, falha, e reporta *"não foi
+possível conectar"* — com o serviço no ar, respondendo, e nada no log parecendo
+errado, porque para o nginx foi um 200 bem-sucedido. É o mesmo mecanismo do
+incidente da tela branca (v2.29), e os `.well-known` moram na RAIZ por exigência
+das RFCs, então não dá para escondê-los sob `/api/`.
+
+### O que sustenta a segurança
+
+- **PKCE S256** obrigatório (validado contra o vetor oficial da RFC 7636).
+- **Audiência (RFC 8707)**: o token diz para qual recurso vale, e o `/mcp` recusa
+  o emitido para outro — sem isso, token de qualquer serviço que compartilhe o
+  `SECRET_KEY` seria aceito.
+- **Código de uso único**: replay é recusado **e revoga a concessão** — a
+  primeira troca pode ter sido a do atacante.
+- **Refresh rotaciona**, e o novo sai na MESMA resposta que invalida o antigo:
+  devolver só o access deixaria o cliente com um refresh morto e a reconexão
+  pararia dez minutos depois, parecendo intermitência de rede.
+- **Reuso de refresh anterior revoga a concessão inteira** (`refresh_hash_anterior`)
+  — recusar só o pedido deixaria a credencial legítima viva com quem a roubou.
+- **`MCP_ISSUER` canônico**, nunca derivado do `Host`: quem forjasse o cabeçalho
+  induziria o endereço que o portal afirma ser o dele.
+- **Redirect loopback casa ignorando a PORTA** (RFC 8252): o Claude Code sorteia
+  uma porta por execução, e exigi-la faria a conexão funcionar uma vez e falhar
+  em toda reconexão — o sintoma "às vezes funciona".
+
+### Quem conecta, e com o quê
+
+Decisão do Bruno: apenas `superadmin`, `admin` e `rh`. Os demais fazem login e
+recebem **uma tela explicando** — não um erro mudo, porque "errei a conta" e
+"falta liberação" pedem ações diferentes (v2.87). ⚠️ `automacao` e
+`assistente_rh` ficam fora **de propósito**: são papéis de MÁQUINA, e incluí-los
+criaria o laço da conta de máquina conectando a si mesma.
+
+A tela de consentimento mostra o **hostname do destino** em destaque — o nome do
+aplicativo é texto livre de quem registrou (o `/register` é público por
+especificação), o destino é para onde a credencial vai de fato. Loopback ganha
+aviso próprio. E diz o que **não** concede: efetivar, desligar, decidir
+reembolso, assinar e exportar continuam só pela tela.
+
+### Ver e cortar
+
+Configurações → E-mail e integrações → **Conexões do assistente**. Sem botão de
+criar (a conexão nasce quando a pessoa autoriza), e cortar tem efeito **imediato**
+— o `/mcp` consulta a concessão a cada chamada. Provado de ponta a ponta: o
+assistente funciona, corta, para na hora, e a linha permanece como prova.
+
+O motivo da revogação é traduzido, porque a distinção importa: *"reuso
+detectado"* significa que o sistema viu uma credencial antiga sendo
+reapresentada e cortou sozinho — sem isso, quem lê conclui que alguém revogou à
+mão e não investiga.
+
+### Infraestrutura
+
+Container próprio (534 MB contra 1,15 GB da API — o assistente não gera PDF nem
+lê documento), nos **três** arquivos de deploy, porque serviço que está em só um
+não roda em produção e não gera erro: gera silêncio (v2.66, terceira
+reincidência). Sem `ENTRYPOINT`: quem migra é a API, e dois processos no
+`alembic upgrade` é corrida em produção.
+
+### Achados de verificação
+
+Um da spec e três meus, todos revelados por mutação ou por rodar de verdade:
+
+- **O registro dinâmico de cliente está DEPRECADO** na spec atual, em favor de
+  Client ID Metadata Documents — mas continua sendo o caminho de compatibilidade
+  que os clientes usam. O metadata anuncia os dois.
+- Dois testes que afirmavam sobre o **texto** dos arquivos passavam verdes com o
+  defeito presente (um deles chegava a reprovar o comentário que EXPLICA o
+  acerto — a lição da v2.71, em variantes YAML e Dockerfile).
+- Uma asserção acusava código correto: consultar o banco **é** parte de resolver
+  o papel.
+- **Mensagem de falha com emoji quebrava cinco testes** no console do Windows
+  (`UnicodeEncodeError`) — o teste morria ANTES de mostrar a causa, justamente
+  quando ela importa.
+
+### Testes
+
+Seis arquivos novos, **31 mutações** ao todo: `test_mcp_oauth_papel` (7),
+`test_mcp_oauth_metadata` (6), `test_mcp_oauth_fluxo` (6, contra Postgres real),
+`test_mcp_endpoint` (6) e `test_mcp_deploy` (6). Todos no CI.
+
 ## [3.14.0] — 2026-08-20 — O assistente ganha as ferramentas
 
 O servidor MCP passou a existir de verdade: as seis ferramentas do § 6 do

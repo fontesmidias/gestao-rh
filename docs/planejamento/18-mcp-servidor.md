@@ -1,10 +1,19 @@
 # Servidor MCP do Portal — onde está e o que falta
 
-> Status: **as ferramentas funcionam** (v3.14, 2026-08-20). Falta o lote-piloto
-> dos currículos e as ferramentas de escrita além do talento.
+> Status: **este é o servidor STDIO** — o caminho manual, que continua válido
+> para quem quiser rodar no próprio computador.
 >
-> Para **instalar**, veja `mcp/README.md`. Para **o desenho e o que não se
-> expõe**, veja `13-mcp-do-portal.md` — ele é o contrato, e um teste o cobra.
+> ⚠️ **O caminho principal passou a ser o MCP remoto com OAuth** (v3.15): a
+> pessoa adiciona o endereço do portal como conector e faz login, sem instalar
+> nada e sem credencial para colar. Veja **`17-mcp-oauth.md`** e o guia
+> `mcp/CONECTAR.md`.
+>
+> Este documento segue valendo para o servidor stdio: as 5 ferramentas são as
+> MESMAS, e as descrições delas são comparadas por teste entre os dois — se
+> divergirem, o remoto e o local respondem diferente à mesma pergunta.
+>
+> Para **o desenho e o que não se expõe**, veja `13-mcp-do-portal.md` — ele é o
+> contrato, e um teste o cobra.
 
 ## O que decidiu o desenho
 
