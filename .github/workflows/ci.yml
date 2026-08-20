@@ -42,6 +42,16 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # A versão sai do `versao.py`, e a imagem já nasce com ela — sem depender
+      # da tag git. Motivo: o push da tag é feito pelo `GITHUB_TOKEN`, e o
+      # GitHub NÃO dispara workflow a partir dele (proteção contra loop). O
+      # `type=semver` só reagiria a uma tag empurrada por uma pessoa, então
+      # sozinho ele nunca publicaria a `:3.09.0` — a tag nasceria e a imagem
+      # correspondente não existiria, que é o pior dos dois mundos: o guia de
+      # rollback mandaria escolher um número que o registro não tem.
+      - id: versao
+        run: echo "numero=$(sed -n 's/^VERSAO = "\(.*\)"/\1/p' backend/app/versao.py)" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -54,6 +64,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.servico }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.versao.outputs.numero }},enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=sha,prefix=
 
