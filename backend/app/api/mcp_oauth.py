@@ -75,9 +75,30 @@ def metadata_do_autorizador() -> dict:
 
     - `code_challenge_methods_supported: ["S256"]` — sem ele o cliente conclui
       que não há PKCE e **recusa continuar** (a spec manda recusar).
-    - `token_endpoint_auth_methods_supported: ["none"]` **junto com**
-      `client_id_metadata_document_supported: true` são a condição para o
-      cliente usar CIMD; anunciar um sem o outro faz cair no registro dinâmico.
+    - `token_endpoint_auth_methods_supported: ["none"]` — cliente PÚBLICO: a
+      prova é o PKCE, não um segredo.
+
+    ⚠️ **`client_id_metadata_document_supported` NÃO é anunciado, e a ausência
+    é a decisão** (v3.15.1, defeito de campo 26/08/2026). Anunciá-lo `true`
+    **junto com** `token_endpoint_auth_methods_supported: ["none"]` é a
+    condição para o cliente usar CIMD — e o Claude usou: mandou a URL do
+    próprio metadata como `client_id`
+    (`https://claude.ai/oauth/mcp-oauth-client-...`) em vez de chamar
+    `/register`. Como CIMD nunca foi implementado — `resolver_cliente` só
+    procura na tabela `mcp_cliente_oauth`, que ficava VAZIA —, todo
+    "Vincular" morria em "Aplicativo não reconhecido".
+
+    O que tornou isto caro de achar: **nada parecia errado**. O serviço no ar,
+    o `/authorize` respondendo, a tela sendo a NOSSA, e a mensagem mandando
+    *"remova o conector e adicione-o de novo"* — que refaz a descoberta, lê o
+    mesmo `.well-known`, usa CIMD de novo e falha idêntico. A instrução do erro
+    era um laço.
+
+    Ao implementar CIMD de verdade um dia, o par é: buscar a URL do `client_id`
+    com **allowlist de host** (é requisição de saída para destino escolhido pelo
+    cliente — SSRF), materializar o cliente com `origem="cimd"` (o valor já
+    existe no modelo e nunca foi escrito) e só ENTÃO ligar este campo. Nunca
+    anunciar antes.
     - `authorization_response_iss_parameter_supported: true` — obrigatório para
       quem emite `iss` (RFC 9207), e nós emitimos.
     """
@@ -94,7 +115,9 @@ def metadata_do_autorizador() -> dict:
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
-        "client_id_metadata_document_supported": True,
+        # `client_id_metadata_document_supported` fica FORA — ver o ⚠️ do
+        # docstring. Ligá-lo sem implementar CIMD faz o cliente abandonar o
+        # `/register` (o único caminho que existe) e quebra o "Vincular".
         "authorization_response_iss_parameter_supported": True,
     }
 
