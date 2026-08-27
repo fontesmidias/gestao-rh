@@ -62,18 +62,64 @@ def teste_pkce_anunciado():
             "desafio vira o próprio segredo (o que o OAuth 2.1 fechou).")
 
 
-def teste_cliente_publico_e_cimd():
-    """Os dois campos que, JUNTOS, permitem o cliente identificar-se por CIMD."""
+def teste_cliente_publico():
     metodos = autorizador.get("token_endpoint_auth_methods_supported")
     if metodos != ["none"]:
         falhas.append(
             f"`token_endpoint_auth_methods_supported` é {metodos!r}, esperado "
             "['none'] — o cliente é PÚBLICO e a prova dele é o PKCE.")
-    if autorizador.get("client_id_metadata_document_supported") is not True:
+
+
+def teste_cimd_anunciado_so_se_implementado():
+    """Anúncio e implementação andam JUNTOS — nunca um sem o outro.
+
+    ⚠️ Este teste já existiu ao contrário, EXIGINDO o anúncio, e a mensagem dele
+    avisava: *"se o CIMD não for implementado de fato, REMOVA este campo em vez
+    de deixá-lo mentindo"*. O aviso estava certo e o teste travava o lado errado
+    — então o campo ficou `true` sem implementação e **quebrou o "Vincular" em
+    produção** (26/08/2026): o Claude viu o anúncio, abandonou o `/register` e
+    mandou a URL do próprio metadata como `client_id`. O `resolver_cliente` só
+    consulta `mcp_cliente_oauth`, que estava VAZIA — "Aplicativo não reconhecido"
+    em toda tentativa, com o serviço perfeitamente no ar.
+
+    A regra que fica: **capacidade anunciada é promessa**, e a única forma de
+    não quebrá-la é o teste comparar o anúncio com o código que a cumpre. Por
+    isso a asserção é bidirecional — ligar o campo sem implementar reprova, e
+    implementar sem ligar também (aí o trabalho feito não serve para nada).
+
+    O sinal de implementação é `resolver_cliente` saber tratar `client_id` que
+    é URL. Enquanto ele só fizer o `select` na tabela, não há CIMD.
+    """
+    import pathlib
+    import re
+
+    anunciado = autorizador.get("client_id_metadata_document_supported") is True
+
+    servico = pathlib.Path(oauth.__file__).read_text(encoding="utf-8")
+    m = re.search(r'def resolver_cliente\(.*?(?=\ndef |\Z)', servico, re.S)
+    if not m:
+        falhas.append("não achei `resolver_cliente` para conferir o par.")
+        return
+    corpo = m.group(0)
+    # Comentário e docstring citam CIMD sem implementá-lo (a armadilha da v2.71):
+    # afirmar sobre o texto cru daria implementado por causa de uma menção.
+    codigo = "\n".join(l for l in corpo.splitlines()
+                       if not l.lstrip().startswith("#"))
+    implementado = bool(re.search(r"cimd|https?://|urlsplit|httpx|requests", codigo))
+
+    if anunciado and not implementado:
         falhas.append(
-            "`client_id_metadata_document_supported` não é `true`. ⚠️ Se o CIMD "
-            "não for implementado de fato, REMOVA este campo em vez de deixá-lo "
-            "mentindo — anunciar e falhar é pior que não anunciar.")
+            "`client_id_metadata_document_supported: true` está anunciado, mas "
+            "`resolver_cliente` só procura na tabela `mcp_cliente_oauth`. O "
+            "cliente vai ABANDONAR o `/register` e mandar uma URL como "
+            "`client_id` — e receber 'Aplicativo não reconhecido' sempre. "
+            "Implemente CIMD (com allowlist de host: é requisição de saída para "
+            "destino que o cliente escolhe) ou retire o anúncio.")
+    if implementado and not anunciado:
+        falhas.append(
+            "`resolver_cliente` parece tratar CIMD, mas o campo "
+            "`client_id_metadata_document_supported` não está anunciado — sem o "
+            "anúncio nenhum cliente usa o caminho, e o código fica órfão.")
 
 
 def teste_iss_anunciado():
@@ -127,7 +173,8 @@ def teste_issuer_vazio_recusa():
 
 
 for t in (teste_recurso_aponta_para_si, teste_offline_access_nao_entra_no_recurso,
-          teste_pkce_anunciado, teste_cliente_publico_e_cimd, teste_iss_anunciado,
+          teste_pkce_anunciado, teste_cliente_publico,
+          teste_cimd_anunciado_so_se_implementado, teste_iss_anunciado,
           teste_endpoints_sao_do_issuer, teste_issuer_vazio_recusa):
     t()
 

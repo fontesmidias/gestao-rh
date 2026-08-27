@@ -74,6 +74,23 @@ def _validar(db: Session, client_id: str, redirect_uri: str, response_type: str,
     # ── Bloco A — vira TELA: o destino ainda não é confiável ──
     cliente = oauth.resolver_cliente(db, client_id)
     if cliente is None:
+        # ⚠️ `client_id` que é URL significa CIMD (o cliente mandou o endereço do
+        # próprio metadata em vez de se registrar). A orientação TEM que ser
+        # outra: mandar "remova e adicione de novo" nesse caso é um LAÇO —
+        # reconectar refaz a descoberta, lê o mesmo `.well-known` e falha
+        # idêntico. Foi o que aconteceu em 26/08/2026, quando o metadata ainda
+        # anunciava `client_id_metadata_document_supported` sem implementá-lo.
+        # A distinção fica aqui, e não some quando o CIMD for implementado: aí
+        # este ramo passa a significar "a URL não resolveu", que também não se
+        # conserta reconectando.
+        if (client_id or "").startswith(("http://", "https://")):
+            return _erro_em_tela(
+                "Aplicativo não reconhecido",
+                "Este aplicativo tentou identificar-se por um endereço de "
+                "metadados (CIMD), e este servidor não aceita essa forma — ele "
+                "usa registro dinâmico.",
+                "Reconectar não resolve: avise quem administra o portal, "
+                "citando esta tela.")
         return _erro_em_tela(
             "Aplicativo não reconhecido",
             "O aplicativo que pediu este acesso não está registrado, ou o "

@@ -14,6 +14,60 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.15.1] — 2026-08-26 — O conectar volta a conectar
+
+Correção do "Vincular" do assistente, que falhava em **toda** tentativa desde a
+v3.15 com *"Aplicativo não reconhecido"* — com o serviço perfeitamente no ar.
+
+### Corrigido
+
+- **O metadata anunciava uma capacidade que não existia.** O
+  `/.well-known/oauth-authorization-server` devolvia
+  `client_id_metadata_document_supported: true`, e esse campo **junto com**
+  `token_endpoint_auth_methods_supported: ["none"]` é exatamente a condição
+  para o cliente usar **CIMD**: em vez de chamar `/register`, ele manda a URL
+  do próprio documento de metadados como `client_id`. O Claude fez isso
+  (`client_id=https://claude.ai/oauth/mcp-oauth-client-...`) — e CIMD **nunca
+  foi implementado**. O `resolver_cliente` só consulta `mcp_cliente_oauth`,
+  que por isso ficava **vazia** (confirmado no banco de produção: `0 rows`).
+  O campo saiu do anúncio; o registro dinâmico, que está implementado e
+  testado, volta a ser o caminho.
+
+- **A mensagem de erro ensinava o laço.** Ela dizia *"remova o conector e
+  adicione-o de novo"* — que refaz a descoberta, lê o mesmo `.well-known`, usa
+  CIMD de novo e falha idêntico. Agora `client_id` que é URL recebe texto
+  próprio, dizendo que reconectar **não** resolve e que é caso de avisar quem
+  administra. A distinção continua fazendo sentido quando o CIMD for
+  implementado: ali o ramo passa a significar "a URL não resolveu", que também
+  não se conserta reconectando.
+
+- **O nginx do frontend derrubava a stack de produção** com
+  `host not found in upstream "mcp"`, reiniciando em loop — o portal inteiro
+  respondia **502**. A imagem nova do frontend referencia `http://mcp:8100`, e
+  o nginx resolve nomes de upstream **no startup**: sem o serviço `mcp` na
+  stack, ele aborta antes de escutar em qualquer porta. Quem atualizar as
+  imagens sem atualizar o `portainer-stack.yml` reproduz isto — o serviço já
+  está no arquivo do repositório desde a v3.15; o que faltava era aplicá-lo na
+  VPS.
+
+### O que ficou travado em teste
+
+O `test_mcp_oauth_metadata.py` **já avisava** disto, e travava o lado errado:
+ele EXIGIA o anúncio, com a mensagem *"se o CIMD não for implementado de fato,
+REMOVA este campo em vez de deixá-lo mentindo — anunciar e falhar é pior que
+não anunciar"*. O aviso estava certo e a asserção era a inversa dele.
+
+Agora a asserção é **bidirecional** e compara o anúncio com o código que o
+cumpre: ligar o campo sem `resolver_cliente` tratar URL reprova, e tratar URL
+sem anunciar também (aí o código fica órfão). Validado por **3 mutações** —
+inclusive a que só MENCIONA `cimd` num comentário, que continua reprovando
+(a armadilha da v2.71: menção não é implementação).
+
+**A regra que fica: capacidade anunciada é promessa.** Um campo de descoberta
+não descreve intenção, ele muda o caminho que o cliente escolhe — e o cliente
+que segue o anúncio abandona o caminho que funciona. Nada denuncia: o serviço
+sobe, responde, e a tela de erro é a nossa.
+
 ## [3.15.0] — 2026-08-20 — Clicar e autenticar, sem instalar nada
 
 Conectar o assistente ao portal virou o que já é em qualquer outra plataforma:

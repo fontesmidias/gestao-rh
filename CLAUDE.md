@@ -140,6 +140,40 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   credencial**, que é justamente o passo que o padrão de mercado não tem.
   ⚠️ Quando o caminho tem um padrão que todo mundo conhece, sair dele precisa de
   justificativa — e *"conseguimos contornar"* não é uma.
+- **CAPACIDADE ANUNCIADA É PROMESSA — o cliente muda de caminho por causa dela**
+  (v3.15.1, defeito de campo 26/08/2026, o "Vincular" falhando em 100% das
+  tentativas): o `/.well-known/oauth-authorization-server` devolvia
+  `client_id_metadata_document_supported: true` **junto com**
+  `token_endpoint_auth_methods_supported: ["none"]` — e esse par é exatamente a
+  condição para o cliente usar **CIMD**: em vez de chamar `/register`, ele manda
+  a URL do próprio metadata como `client_id`. O Claude obedeceu; CIMD **nunca
+  foi implementado** (`resolver_cliente` só faz `select` em `mcp_cliente_oauth`,
+  medido VAZIA em produção: `0 rows`). Campo de descoberta não descreve intenção
+  — ele **desvia o cliente do caminho que funciona**. ⚠️ **E a tela de erro
+  ensinava o laço**: *"remova o conector e adicione-o de novo"* refaz a
+  descoberta, lê o mesmo `.well-known`, usa CIMD de novo e falha idêntico —
+  recusa que manda consertar a coisa errada (v2.93) numa porta nova. Hoje
+  `client_id` que é URL recebe texto próprio dizendo que reconectar NÃO resolve.
+  ⚠️ **O teste já avisava e travava o lado ERRADO**: ele EXIGIA o anúncio, com a
+  mensagem *"se o CIMD não for implementado de fato, REMOVA este campo em vez de
+  deixá-lo mentindo"*. Asserção sobre capacidade tem que ser **bidirecional** e
+  comparar o anúncio com o CÓDIGO que o cumpre — anunciar sem implementar
+  reprova, implementar sem anunciar também (código órfão). Coberto por
+  `test_mcp_oauth_metadata.py`, 3 mutações — inclusive a que só MENCIONA `cimd`
+  num comentário, que continua reprovando (v2.71: menção não é implementação).
+- **`nginx` resolve upstream no STARTUP — serviço que falta derruba o site
+  inteiro** (v3.15.1, o 502 que acompanhou o defeito acima): a imagem nova do
+  frontend referencia `http://mcp:8100`, e sem o serviço `mcp` na stack o nginx
+  aborta com `[emerg] host not found in upstream "mcp"` **antes de escutar em
+  qualquer porta** — reinicia em loop e o portal responde 502, com backend e
+  banco perfeitamente no ar. Atualizar as IMAGENS sem atualizar o
+  `portainer-stack.yml` da VPS reproduz isto. É o par de arquivos de deploy
+  (v2.66) cobrando de um jeito novo: lá o worker faltante gerava SILÊNCIO; aqui
+  o upstream faltante gera QUEDA TOTAL, e a causa está num serviço que a tela
+  fora do ar nem menciona. ⚠️ Ao acrescentar `proxy_pass` para serviço novo no
+  `frontend/nginx.conf`, confira que o serviço existe nos DOIS composes **e na
+  stack que está colada no Portainer** — o arquivo do repo não sobe sozinho.
+
 - **Papel de token de IA que vaza dá ACESSO A MAIS, e ninguém reporta** (v3.15,
   o risco nº 1 do MCP remoto): `permissoes_do_usuario` lê `usuario.papel` **do
   objeto**. Devolver o `UsuarioRH` do banco no `/mcp` faria a pessoa agir com o
