@@ -140,6 +140,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   credencial**, que é justamente o passo que o padrão de mercado não tem.
   ⚠️ Quando o caminho tem um padrão que todo mundo conhece, sair dele precisa de
   justificativa — e *"conseguimos contornar"* não é uma.
+- **SERVIÇO com `main` PRÓPRIO não herda os imports do `main.py` — e o teste
+  que "conserta" isso ESCONDE o defeito** (v3.15.2, `/register` em 500 na
+  produção): `app/models/__init__.py` é **vazio** neste projeto; quem registra
+  os modelos no `metadata` é a cadeia de imports do `main.py`. O `mcp_app.py`
+  importa só os quatro módulos do MCP, e `EventoAuditoria` tem
+  `ForeignKey("candidato.id")` — que o SQLAlchemy só resolve no primeiro
+  `flush`. Resultado no formato mais enganoso possível: o container **sobe**,
+  `/mcp/health` responde `ok`, o `.well-known` serve JSON certo, e **só a rota
+  que ESCREVE** estoura (`NoReferencedTableError` → `PendingRollbackError` →
+  500 em texto puro). `docker ps` diz `Up`; nada denuncia. ⚠️ **E o teste que
+  deveria pegar isso o escondeu**: o `test_mcp_oauth_fluxo` faz
+  `import app.models.candidato` à mão — certo lá (ele não sobe app; é a v2.64)
+  — e com isso exercitava o `/register` num ambiente que o serviço real não
+  monta. **Import de conveniência que compensa falta do código de produção
+  desliga a verificação em silêncio.** Serviço com `main` próprio precisa de um
+  teste que suba ESSE `main` e mais nada (`test_mcp_registro_servico.py`,
+  1 mutação que reproduz a mensagem idêntica à de produção). Ao acrescentar rota
+  ao MCP que ESCREVA no banco, confira as FKs das tabelas que ela toca.
 - **CAPACIDADE ANUNCIADA É PROMESSA — o cliente muda de caminho por causa dela**
   (v3.15.1, defeito de campo 26/08/2026, o "Vincular" falhando em 100% das
   tentativas): o `/.well-known/oauth-authorization-server` devolvia
