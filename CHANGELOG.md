@@ -14,6 +14,44 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.15.2] — 2026-08-27 — O serviço que sobe inteiro
+
+Segunda metade do "Vincular": com a v3.15.1 o cliente parou de usar CIMD e
+passou a chamar `/register` — que respondia **500**.
+
+### Corrigido
+
+- **O serviço do MCP não registrava os próprios modelos.** `EventoAuditoria`
+  tem `ForeignKey("candidato.id")` e `registrar()` grava lá, mas o
+  `mcp_app.py` importava só os quatro módulos do MCP. Neste projeto
+  `app/models/__init__.py` é **vazio** — quem registra tudo é a cadeia de
+  imports do `main.py`, que este serviço não tem. O SQLAlchemy só resolve FK
+  no primeiro `flush`, então o container **subia**, o `/mcp/health` respondia
+  `ok`, o `.well-known` servia JSON correto, e **só** o `/register` estourava:
+  `NoReferencedTableError` → `PendingRollbackError` → 500 em texto puro.
+
+  Para quem conectava: *"Não foi possível registrar no serviço de login"*.
+  Para quem operava: `Up`, `healthy`, nada fora do lugar.
+
+### O teste que existia escondia o defeito
+
+O `test_mcp_oauth_fluxo.py` importa `app.models.candidato` à mão para resolver
+as FKs — **correto lá**, porque ele não sobe app nenhuma (v2.64). Só que, ao
+fazer isso, ele montava um ambiente que o serviço real não monta: exercitava o
+`/register` num mundo onde a tabela já estava registrada. Passou verde no CI
+com o defeito vivo em produção.
+
+O `test_mcp_registro_servico.py` sobe `app.mcp_app` e **mais nada**, e afirma
+sobre o estado (o cliente tem que ficar em `mcp_cliente_oauth`, com
+`origem="dcr"`), não só sobre o 201. Validado por mutação: sem o import, a
+falha reproduz a mensagem **idêntica** à do traceback de produção.
+
+**A regra que fica: teste que conserta o ambiente não testa o ambiente.** Um
+import de conveniência que compensa uma falta do código de produção desliga a
+verificação sem que nada denuncie — o teste fica verde justamente sobre o que
+ele deveria pegar. Quando o serviço tem um `main` próprio, o teste tem que
+subir esse `main`.
+
 ## [3.15.1] — 2026-08-26 — O conectar volta a conectar
 
 Correção do "Vincular" do assistente, que falhava em **toda** tentativa desde a

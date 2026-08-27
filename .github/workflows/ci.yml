@@ -328,6 +328,7 @@ jobs:
                    test_matricula test_nome_arquivo \
                    test_talento_recadastro \
                    test_mcp_oauth_metadata test_mcp_oauth_fluxo \
+                   test_mcp_registro_servico \
                    test_mcp_endpoint; do
             echo "::group::$t"
             docker exec -e PYTHONPATH=. "$api" python "tests/$t.py" || exit 1

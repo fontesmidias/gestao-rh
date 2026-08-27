@@ -25,6 +25,23 @@ from app.api import mcp_autorizacao, mcp_endpoint, mcp_oauth, mcp_token
 from app.core.config import get_settings
 from app.services.logs import configurar as _configurar_logs
 
+# ⚠️ IMPORTADO SÓ PARA REGISTRAR A TABELA NO `metadata` — não se usa aqui, e por
+# isso o `# noqa: F401`. Defeito de produção 27/08/2026: `EventoAuditoria` tem
+# `ForeignKey("candidato.id")`, e o SQLAlchemy só resolve a FK no primeiro
+# `flush`. Este app importa apenas os quatro módulos do MCP — a app principal
+# registra tudo pela cadeia de imports do `main.py`, que aqui não existe
+# (`app/models/__init__.py` é VAZIO neste projeto).
+#
+# O resultado era o pior formato possível: o container SOBE, o `/mcp/health`
+# responde "ok", o `.well-known` serve JSON correto — e só o `/register`
+# estoura, com `PendingRollbackError` escondendo a causa real atrás de um 500
+# em texto puro. Para quem conecta, "Não foi possível registrar"; para quem
+# opera, nada fora do lugar.
+#
+# ⚠️ Ao acrescentar rota ao MCP que ESCREVA no banco, confira as FKs das tabelas
+# que ela toca: a que não estiver registrada aqui derruba a rota, e só ela.
+from app.models import candidato as _candidato  # noqa: F401
+
 settings = get_settings()
 
 logging.basicConfig(level=logging.INFO,
