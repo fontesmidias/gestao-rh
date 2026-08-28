@@ -68,6 +68,39 @@ from app.services.roteiro_assinatura import (ORIGEM_CRECHE,  # noqa: E402
 FALHAS = []
 db = SessionLocal()
 
+# ---------------------------------------------------------------------------
+# SMTP substituído: no CI não há servidor de e-mail, e o sistema — CORRETAMENTE
+# — não carimba o aviso nem conta como avisado quando o envio falha. Sem este
+# duplo, 9 asserções caem lá e passam aqui, onde o M365 está ligado: é a
+# armadilha "passar na sua máquina não prova nada sobre lá" (v2.72.1).
+#
+# ⚠️ Substituir o LIMITE EXTERNO, nunca as funções do próprio sistema (v2.68):
+# o caminho de produção continua sendo percorrido inteiro
+# (`_avisar_requerimento` → `_email_requerimento_disponivel` → `enviar_modelo`
+# → `enviar_email`); só o último passo é que não abre socket. `_ENVIADOS`
+# guarda o que "saiu", para as asserções falarem do e-mail e não da intenção.
+# ---------------------------------------------------------------------------
+_ENVIADOS = []
+_FALHAR_ENVIO = {"ativo": False}
+
+
+def _envio_falso(destinatario, assunto, corpo_texto, corpo_html=None, *a, **kw):
+    if _FALHAR_ENVIO["ativo"] or not destinatario:
+        return False
+    _ENVIADOS.append({"para": destinatario, "assunto": assunto})
+    return True
+
+
+import app.services.email as _email_mod  # noqa: E402
+
+_email_mod.enviar_email = _envio_falso
+# `email_templates` importou o símbolo direto (`from ... import enviar_email`),
+# então trocar só no módulo de origem deixaria o envio real de pé — o tipo de
+# meia-substituição que faz o teste parecer coberto sem estar.
+import app.services.email_templates as _tpl_mod  # noqa: E402
+
+_tpl_mod.enviar_email = _envio_falso
+
 # O usuário do RH precisa existir DE VERDADE no banco: a etapa 2 do roteiro tem
 # FK para `usuario_rh`, e um objeto solto estouraria no flush.
 _RH = db.scalar(
