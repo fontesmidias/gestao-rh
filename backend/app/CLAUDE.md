@@ -347,7 +347,15 @@ continuam no raiz** — aquelas precisam ser lidas antes de se saber onde se est
   serviço compartilhado) antes de cadastrar/atualizar o e-mail e receber o 2FA.
   A **assinatura do requerimento** usa o multi-signatário: roteiro colaborador→RH
   criado e disparado no `ativar_beneficio` (`criar_roteiro_creche`), com
-  `origem="creche_requerimento"` na `solicitacao_assinatura` — o colaborador
+  `origem=ORIGEM_CRECHE` na `solicitacao_assinatura` — ⚠️ a consulta
+  (`tem_roteiro`) tem que **filtrar essa origem no SQL**, senão devolve o
+  roteiro de ADMISSÃO mais recente e a sessão do colaborador responde
+  `disponivel: false` com o requerimento pronto (v3.16). O RH gerencia isso pela
+  ficha (**Requerimento e declaração**): o benefício ativo sem roteiro é acusado
+  com aviso âmbar, `disparar-requerimento` refaz um, `disparar-pendentes` varre
+  todos os ativos (nomeando quem falhou) e `enviar-declaracao` manda a
+  declaração-modelo ANEXA ao e-mail (quem a assina é o cuidador PF, fora do
+  sistema). O colaborador
   assina na PRÓPRIA sessão de creche (já 2FA; etapa `candidato` SEM `assinatura_id`,
   por isso não aparece no wizard), o RH contra-assina pela fila. Na consolidação,
   `_consolidar_pdf_final` desvia p/ `gerar_requerimento_creche(vistos=...)` (mantém

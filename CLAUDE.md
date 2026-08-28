@@ -158,6 +158,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   teste que suba ESSE `main` e mais nada (`test_mcp_registro_servico.py`,
   1 mutação que reproduz a mensagem idêntica à de produção). Ao acrescentar rota
   ao MCP que ESCREVA no banco, confira as FKs das tabelas que ela toca.
+- **Consulta que devolve "o mais recente de qualquer tipo" e filtra DEPOIS
+  responde sobre o documento ERRADO** (v3.16, defeito de campo 26/08/2026 — o
+  requerimento de creche que nunca chegava a quem tinha de assinar):
+  `tem_roteiro(db, candidato_id)` ordena por `criado_em desc` sobre TODOS os
+  documentos da pessoa, e o creche comparava `sol.origem != "creche_requerimento"`
+  em Python, depois. Quem foi efetivado ganha roteiros de ADMISSÃO; assim que um
+  deles ficou mais novo, a sessão do colaborador passou a responder
+  `{"disponivel": false}` **com o requerimento pronto no banco**. Nada denuncia:
+  a tela do RH diz "ativo", a do colaborador não mostra botão nenhum, e o log
+  registra um **200**. O mesmo bug tinha um segundo efeito no
+  `criar_roteiro_creche`, onde o guard de idempotência não retornava e ele
+  criava um SEGUNDO roteiro — um para o colaborador assinar, outro para o RH.
+  ⚠️ Ao consultar entidade que tem VÁRIAS espécies por pessoa, **filtre a
+  espécie no SQL** (`origem=`), nunca depois; e use CONSTANTE para o valor
+  (`ORIGEM_CRECHE`), porque string solta digitada errado não dá erro — devolve
+  "não existe", que é indistinguível do caso legítimo. Coberto por
+  `test_creche_requerimento.py`, 7 mutações.
+- **Ação que só existe DENTRO de outra ação, num `except`, não tem porta**
+  (v3.16, o irmão do defeito acima): o disparo do requerimento acontecia só no
+  `ativar_beneficio`, e a falha virava o evento `creche_roteiro_falhou` — que
+  **nenhuma tela mostrava**. Quem ficasse sem o roteiro não tinha rota, botão
+  nem varredura: ficava `ativo` para sempre esperando um e-mail que não vinha.
+  É a v2.74 ao contrário (lá, promessa na tela sem rota atrás; aqui, rota sem
+  porta na tela). ⚠️ Ao pendurar efeito colateral dentro de um `except` de
+  outra rota, pergunte **por onde se refaz quando ele falhar** — e faça o
+  estado aparecer na ficha: estado que ninguém vê equivale a não existir, e foi
+  por não aparecer que este durou. Regra que ficou: benefício ativo sem roteiro
+  é ACUSADO na tela, com o botão que resolve no mesmo lugar.
 - **CAPACIDADE ANUNCIADA É PROMESSA — o cliente muda de caminho por causa dela**
   (v3.15.1, defeito de campo 26/08/2026, o "Vincular" falhando em 100% das
   tentativas): o `/.well-known/oauth-authorization-server` devolvia

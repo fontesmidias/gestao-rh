@@ -14,6 +14,81 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.16.0] — 2026-08-27 — O requerimento que chega a quem tem de assinar
+
+Relato do Bruno: *"nos que foram aprovados e ativados, não chegou para esse
+pessoal automaticamente o processo de assinar"*. O roteiro **existia no banco**
+— quem mentia era a consulta.
+
+### Corrigido
+
+- **O roteiro de admissão escondia o do creche.**
+  `tem_roteiro(db, candidato_id)` devolve a solicitação mais RECENTE de
+  **qualquer** documento da pessoa (`order_by criado_em desc`), e o creche
+  comparava a origem *depois*, em Python. Quem foi efetivado tem roteiros de
+  admissão; assim que um deles ficava mais novo, `_etapa_colaborador`
+  reprovava a comparação e a sessão do colaborador respondia
+  `{"disponivel": false}` — **com o requerimento pronto ao lado**. Nada dava
+  erro: a tela do RH dizia "ativo", a do colaborador não mostrava botão nenhum,
+  e o log registrava um 200. Agora `tem_roteiro` aceita `origem=` e **filtra no
+  SQL**; a origem virou a constante `ORIGEM_CRECHE`, comparada em três arquivos
+  (string solta erra em silêncio, devolvendo "não há roteiro").
+- **`criar_roteiro_creche` criava um SEGUNDO roteiro.** Pela mesma causa: quando
+  a origem do mais recente não batia, o guard de idempotência não retornava e
+  o código seguia para criar outro — o colaborador assinaria um e o RH
+  contra-assinaria o outro. A idempotência passou a ser por origem.
+- **O anexo de e-mail em formato inventado.** O contrato é
+  `list[tuple[nome, bytes]]` (o MIME sai da extensão do nome); passar
+  dicionário compila e só quebra no envio, com `ValueError: too many values to
+  unpack` vindo de dentro do `m365`. Pego pelo teste, não em produção.
+
+### Adicionado
+
+- **Gerenciamento do requerimento pela tela** (`Requerimento e declaração` na
+  ficha do benefício). O disparo vivia SÓ dentro do `ativar_beneficio`, num
+  `except Exception` que registrava `creche_roteiro_falhou` — evento que
+  **nenhuma tela mostrava**. Quem ficasse sem o roteiro não tinha porta
+  nenhuma: nem rota, nem botão. É a v2.74 ao contrário — lá era promessa na
+  tela sem rota atrás; aqui, rota sem porta.
+  - `POST …/{id}/disparar-requerimento` — dispara um, idempotente.
+  - `POST /rh/creche/requerimentos/disparar-pendentes` — varre os ATIVOS sem
+    roteiro e **presta contas de quem não foi**, com nome (v2.14).
+  - `POST …/{id}/enviar-declaracao` — manda a declaração-modelo **anexa** ao
+    e-mail. Vai anexa e não por link porque quem a preenche e assina é o
+    cuidador PF, fora do sistema: a pessoa precisa imprimir e levar (mesmo
+    raciocínio da planilha de uniformes, v2.81), e o documento em branco não
+    tem dado pessoal a proteger atrás de 2FA.
+- **O estado do requerimento aparece na ficha** (`requerimento` no dump):
+  benefício ativo sem roteiro é acusado com aviso âmbar e o botão que resolve
+  no mesmo lugar. Era exatamente por **não aparecer** que o defeito durou —
+  estado que ninguém vê equivale a não existir.
+- **E-mail próprio avisando que há requerimento a assinar**
+  (`creche_requerimento_disponivel`). O `creche_ativado` fala só da entrega
+  mensal: quem era ativado não recebia uma linha sequer dizendo que faltava
+  assinar algo. Agora sai na ativação **e** no disparo manual.
+
+### Decisões
+
+- **Só o benefício ATIVO dispara.** Num `aguardando_repactuacao` a pessoa
+  assinaria documento cujo valor ainda vai mudar. A recusa (409) **oferece a
+  saída** — diz que o caminho é aprovar o benefício —, em vez de só bloquear
+  (v2.93).
+- **A declaração continua sendo MODELO em branco**, conforme o procedimento do
+  Jurídico (e-mail do Dr. Lucas, 18/08/2026): quem assina é o cuidador PF, e
+  ela volta como comprovante mensal. O que faltava não era gerá-la — era o RH
+  poder **enviá-la** quando quisesse.
+- **O bloco vem ANTES dos comprovantes mensais** na ficha: assinar o
+  requerimento é o passo que abre o ciclo, e cobrar comprovante de quem ainda
+  não assinou o pedido é cobrar a etapa errada.
+
+### Testes
+
+`test_creche_requerimento.py` (no CI, 21 cenários, **7 mutações**) reproduz o
+defeito original — cria o roteiro de creche, depois um de admissão mais novo, e
+exige que a sessão do colaborador continue enxergando o requerimento. As
+asserções afirmam sobre o **estado do banco**, não só sobre o status code: a
+mutação que faz a rota não criar nada responderia 200 igual (v2.84).
+
 ## [3.15.2] — 2026-08-27 — O serviço que sobe inteiro
 
 Segunda metade do "Vincular": com a v3.15.1 o cliente parou de usar CIMD e

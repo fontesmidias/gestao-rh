@@ -870,9 +870,14 @@ def _etapa_colaborador(db: Session, ben: BeneficioCreche):
     """A etapa (ordem 1) do colaborador no roteiro do requerimento, se houver."""
     from app.models.solicitacao_assinatura import (EtapaAssinatura,
                                                    SolicitacaoAssinatura)
-    from app.services.roteiro_assinatura import tem_roteiro
-    sol = tem_roteiro(db, ben.candidato_id)
-    if sol is None or sol.origem != "creche_requerimento":
+    from app.services.roteiro_assinatura import ORIGEM_CRECHE, tem_roteiro
+    # Filtrar a ORIGEM na consulta, não depois: sem isso vem o roteiro mais
+    # recente de qualquer documento da pessoa (quem foi efetivado tem os da
+    # admissão), a comparação abaixo reprova e a sessão responde
+    # `disponivel: false` com o requerimento pronto no banco — o defeito de
+    # campo de 26/08/2026, em que o colaborador ativado nunca via o botão.
+    sol = tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE)
+    if sol is None:
         return None, None
     etapa = db.scalar(select(EtapaAssinatura)
                       .where(EtapaAssinatura.solicitacao_id == sol.id,

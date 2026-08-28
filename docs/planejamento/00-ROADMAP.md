@@ -65,6 +65,26 @@ O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
 (ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
 competência anterior à vigência.
 
+### 25ª leva (2026-08-27) — v3.16
+**O requerimento de creche que não chegava a quem tinha de assinar.** Relato do
+Bruno sobre os benefícios já aprovados e ativados. O roteiro **existia no
+banco**: quem mentia era a consulta — `tem_roteiro` devolve o documento mais
+recente de QUALQUER tipo, e o creche comparava a origem depois, em Python; quem
+foi efetivado tem roteiro de admissão mais novo, e a sessão do colaborador
+respondia `disponivel: false` com o requerimento pronto ao lado. Nada dava
+erro, e o log registrava 200.
+
+O conserto veio com a porta que faltava: o disparo vivia SÓ dentro do
+`ativar_beneficio`, num `except` cujo evento nenhuma tela mostrava — quem
+ficasse sem o roteiro não tinha rota nem botão. Agora o benefício ativo sem
+requerimento é **acusado na ficha**, com disparo individual, varredura em lote
+(que nomeia quem falhou) e envio da declaração-modelo anexa ao e-mail.
+
+Fica a regra geral: **consulta que devolve "o mais recente de qualquer tipo" e
+filtra depois responde sobre o documento errado** — filtre a espécie no SQL, e
+use constante para o valor, porque string errada não dá erro: devolve "não
+existe".
+
 ### 24ª leva (2026-08-19/20) — v3.11 → v3.15
 **O MCP saiu do papel.** O papel `assistente_rh` (v3.13) e, na v3.14, as
 seis ferramentas registradas e funcionando no Claude Desktop — cascas finas

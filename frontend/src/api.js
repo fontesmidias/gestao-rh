@@ -1051,6 +1051,18 @@ export const rh = {
   crecheSuspender: (beneficioId, motivo, encerrar) =>
     req(`/rh/creche/levantamentos/${beneficioId}/suspender`,
         { method: 'POST', headers: authRH(), body: JSON.stringify({ motivo, encerrar: !!encerrar }) }),
+  // Requerimento e declaração — gerenciamento pelo RH (v3.16). O disparo
+  // acontecia SÓ dentro da ativação, num try/except: quem ficasse sem o
+  // roteiro não tinha porta nenhuma para reprocessar.
+  crecheDispararRequerimento: (beneficioId) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/disparar-requerimento`,
+        { method: 'POST', headers: authRH() }),
+  crecheDispararPendentes: () =>
+    req('/rh/creche/requerimentos/disparar-pendentes',
+        { method: 'POST', headers: authRH() }),
+  crecheEnviarDeclaracao: (beneficioId) =>
+    req(`/rh/creche/levantamentos/${beneficioId}/enviar-declaracao`,
+        { method: 'POST', headers: authRH() }),
   crechePendentesResposta: () => req('/rh/creche/pendentes-resposta', { headers: authRH() }),
   crecheHistorico: (beneficioId) =>
     req(`/rh/creche/levantamentos/${beneficioId}/historico`, { headers: authRH() }),
