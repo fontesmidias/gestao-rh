@@ -535,6 +535,37 @@ function Levantamentos() {
   // dois cards, acho que apenas um, tudo concentrado e coeso de filtros").
   // Ele NÃO vira filtro de coluna: recarrega a API, e a base é a folha inteira
   // — trazer tudo ao cliente seria regressão de performance e de LGPD.
+  // Varredura dos ativos sem requerimento liberado (v3.16). É a saída para
+  // quem já estava ativo quando o disparo falhava em silêncio — um a um seriam
+  // dezenas de cliques. PRESTA CONTAS de quem não foi (v2.14): lote que só diz
+  // "pronto" faz acreditar que resolveu o que não resolveu.
+  const dispararPendentes = async () => {
+    const pendentes = (lista || []).filter((b) => b.requerimento
+                                                  && b.requerimento.pendente_disparo).length
+    const quantos = pendentes ? `${pendentes} benefício(s) ativo(s)` : 'os benefícios ativos'
+    if (!window.confirm(`Liberar o requerimento para assinatura de ${quantos} `
+                        + 'que ainda não receberam?\n\nCada pessoa recebe um e-mail '
+                        + 'avisando que há documento a assinar.')) return
+    setMsg(null); setErro(null)
+    try {
+      const r = await comAmpulheta('Liberando os requerimentos pendentes…',
+        () => api.crecheDispararPendentes())
+      const n = (r.disparados || []).length
+      const falhas = r.falhas || []
+      setMsg(n === 0
+        ? 'Nenhum benefício ativo estava sem requerimento — nada a fazer.'
+        : `${n} requerimento(s) liberado(s): ${r.disparados.map((d) => d.nome).join(', ')}.`)
+      if (falhas.length) {
+        // Quem falhou aparece NOMEADO, não some no total.
+        setErro(`Não foi possível liberar para: ${falhas.map((f) => f.nome).join(', ')}. `
+                + 'Tente pela ficha de cada um para ver o motivo.')
+      }
+      await carregar()
+    } catch (e) {
+      setErro(`Falha na varredura (${e.detail || e.message}).`)
+    }
+  }
+
   const filtrosExtras = [{
     chave: 'situacao', rotulo: 'Situação', valor: filtro,
     vazioRotulo: 'Situação: todas',
@@ -558,6 +589,12 @@ function Levantamentos() {
       {!lista ? <p>Carregando…</p> : (
         <DashPlanilha id="creche" colunas={colunas} dados={lista} cards={cards}
                       filtrosExtras={filtrosExtras}
+                      acoesFiltro={
+                        /* Ação, não filtro: fica na barra e NUNCA dentro de
+                           bloco que se recolhe (v2.76.1). */
+                        <button className="btn-secundario btn-mini" onClick={dispararPendentes}
+                                title="Libera o requerimento de todos os benefícios ativos que ainda não receberam">
+                          📨 Liberar requerimentos pendentes</button>}
                       acoesLinha={acoesLinha}
                       linhaExpandida={(b) => (aberto === b.id
                         ? <DetalheBeneficio
@@ -892,6 +929,11 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
                     onClick={() => verDocumento(b, 'declaracao')}>📄 Declaração-modelo</button>
             <button className="btn-secundario btn-mini" onClick={() => baixarDossie(b)}>⬇ Dossiê do benefício</button>
           </div>
+          {/* Vem ANTES dos comprovantes mensais: assinar o requerimento é o
+              passo que abre o ciclo — cobrar comprovante de quem ainda não
+              assinou o pedido é cobrar a etapa errada. */}
+          {b.status === 'ativo' && (
+            <RequerimentoBeneficio b={b} recarregar={recarregar} />)}
           {/* Só faz sentido depois de ativo: antes disso não há entrega mensal
               a cobrar, e a seção só ocuparia espaço dizendo "nada aqui". */}
           {b.status === 'ativo' && (
@@ -919,6 +961,76 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
 // Duas coisas que o RH não tinha e agora tem: ANEXAR o comprovante ele mesmo
 // (antes, faltando documento, o único caminho era devolver o levantamento
 // inteiro e esperar) e ver quantas FOLHAS o envio tem.
+// --- Requerimento e declaração (v3.16) --------------------------------------
+// O disparo do requerimento vivia SÓ dentro da ativação, num try/except: quando
+// falhava, o benefício ficava `ativo` e o colaborador nunca via o que assinar —
+// sem nada na tela denunciando (defeito de campo de 26/08/2026). Aqui o estado
+// fica VISÍVEL e as duas ações ganham porta própria.
+function RequerimentoBeneficio({ b, recarregar }) {
+  const [msg, setMsg] = useState(null)
+  const [erro, setErro] = useState(null)
+  const r = b.requerimento || {}
+
+  const disparar = async () => {
+    setMsg(null); setErro(null)
+    try {
+      await comAmpulheta('Liberando o requerimento…',
+        () => api.crecheDispararRequerimento(b.id))
+      setMsg('Requerimento liberado. O colaborador recebeu o aviso por e-mail '
+             + 'e já pode assinar pelo link do creche.')
+      await recarregar()
+    } catch (e) {
+      // Recusa que oferece a SAÍDA (v2.93): o backend manda `resolve` dizendo
+      // o que destrava — repetir só "não deu" faria procurar no lugar errado.
+      setErro((e.dados && e.dados.resolve)
+        || `Não foi possível liberar o requerimento (${e.detail || e.message}).`)
+    }
+  }
+
+  const enviarDeclaracao = async () => {
+    setMsg(null); setErro(null)
+    try {
+      const res = await comAmpulheta('Enviando a declaração-modelo…',
+        () => api.crecheEnviarDeclaracao(b.id))
+      setMsg(`Declaração-modelo enviada para ${res.enviado_para}.`)
+    } catch (e) {
+      setErro((e.dados && e.dados.resolve)
+        || `Não foi possível enviar a declaração (${e.detail || e.message}).`)
+    }
+  }
+
+  return (
+    <div className="rh-card" style={{ margin: '.6rem 0' }}>
+      <h4 style={{ margin: '0 0 .4rem' }}>Requerimento e declaração</h4>
+      {/* O impedimento vai no TOPO, com o atalho que resolve (§ 8c do design).
+          Âmbar, não vermelho: nada quebrou — falta um passo. */}
+      {r.pendente_disparo && (
+        <p className="aviso-inline" style={{ margin: '0 0 .6rem' }}>
+          ⚠️ <strong>O requerimento ainda não foi liberado para assinatura.</strong>{' '}
+          O benefício está ativo, mas o colaborador não recebeu nada para
+          assinar — libere aqui.</p>)}
+      {r.disparado && (
+        <p className="explica" style={{ margin: '0 0 .6rem' }}>
+          {r.concluido
+            ? '✅ Assinado por todos — o documento está concluído.'
+            : r.assinado_colaborador
+              ? `✍️ O colaborador já assinou. Aguardando: ${r.aguardando || 'RH'} `
+                + '(assine pela fila "Minhas assinaturas").'
+              : '⏳ Liberado — aguardando a assinatura do colaborador.'}</p>)}
+      {msg && <p className="sucesso" style={{ margin: '0 0 .6rem' }}>{msg}</p>}
+      {erro && <p className="alerta" style={{ margin: '0 0 .6rem' }}>{erro}</p>}
+      <div className="rh-lote">
+        {r.pendente_disparo && (
+          <button className="btn-principal btn-mini" onClick={disparar}>
+            📨 Liberar requerimento para assinatura</button>)}
+        <button className="btn-secundario btn-mini" onClick={enviarDeclaracao}
+                title="Envia ao colaborador, por e-mail, o modelo de declaração de quitação em anexo">
+          ✉️ Enviar declaração-modelo</button>
+      </div>
+    </div>
+  )
+}
+
 function ComprovantesMensais({ beneficio, criancas }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)

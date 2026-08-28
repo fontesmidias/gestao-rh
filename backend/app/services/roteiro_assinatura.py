@@ -18,12 +18,30 @@ from app.models.solicitacao_assinatura import (EtapaAssinatura,
                                                SolicitacaoAssinatura,
                                                StatusSolicitacao)
 
+# Origem do roteiro do requerimento de creche. Existe como CONSTANTE porque é
+# comparada em três arquivos: quem cria (aqui), quem serve a sessão do
+# colaborador (`creche_publico`) e quem reprocessa (`creche`). Como string solta
+# um erro de digitação não daria erro nenhum — devolveria "não há roteiro", que
+# é exatamente o sintoma silencioso que esta leva veio consertar.
+ORIGEM_CRECHE = "creche_requerimento"
+
 
 def tem_roteiro(db: Session, candidato_id: uuid.UUID, *, documento: str | None = None,
-                modelo_id: uuid.UUID | None = None) -> SolicitacaoAssinatura | None:
+                modelo_id: uuid.UUID | None = None,
+                origem: str | None = None) -> SolicitacaoAssinatura | None:
     """Devolve a solicitação ATIVA (não cancelada/expirada) para aquele
     documento/modelo daquele candidato, se existir — a decisão central de
-    'este documento é multi-signatário?'."""
+    'este documento é multi-signatário?'.
+
+    ⚠️ `origem` NÃO é refinamento opcional para quem procura roteiro de MÓDULO
+    (creche hoje; o próximo que vier). Sem ele a consulta devolve o roteiro mais
+    RECENTE de qualquer documento da pessoa, e o chamador que compara a origem
+    depois conclui "não existe" quando existe — foi o defeito de campo de
+    26/08/2026: o colaborador efetivado ganha roteiro de admissão, ele fica mais
+    novo que o do creche, e a sessão do creche respondia `disponivel: false` com
+    o requerimento pronto no banco. Filtrar no SQL é o que garante que a resposta
+    fala do documento perguntado.
+    """
     q = select(SolicitacaoAssinatura).where(
         SolicitacaoAssinatura.candidato_id == candidato_id,
         SolicitacaoAssinatura.status.in_((StatusSolicitacao.rascunho,
@@ -34,6 +52,8 @@ def tem_roteiro(db: Session, candidato_id: uuid.UUID, *, documento: str | None =
         q = q.where(SolicitacaoAssinatura.documento == documento)
     if modelo_id is not None:
         q = q.where(SolicitacaoAssinatura.modelo_id == modelo_id)
+    if origem is not None:
+        q = q.where(SolicitacaoAssinatura.origem == origem)
     return db.scalar(q.order_by(SolicitacaoAssinatura.criado_em.desc()))
 
 
@@ -51,13 +71,13 @@ def criar_roteiro_creche(db: Session, beneficio, rh) -> SolicitacaoAssinatura:
 
     Idempotente: se já existe roteiro de creche ativo para o colaborador, devolve
     o existente (não recria a cada re-ativação)."""
-    existente = tem_roteiro(db, beneficio.candidato_id)
-    if existente is not None and existente.origem == "creche_requerimento":
+    existente = tem_roteiro(db, beneficio.candidato_id, origem=ORIGEM_CRECHE)
+    if existente is not None:
         return existente
     sol = SolicitacaoAssinatura(
         candidato_id=beneficio.candidato_id,
         titulo_doc="Requerimento de Reembolso-Creche",
-        origem="creche_requerimento",
+        origem=ORIGEM_CRECHE,
         criada_por=getattr(rh, "email", None),
         status=StatusSolicitacao.aguardando,
         etapa_atual_ordem=1)
@@ -125,7 +145,7 @@ def _consolidar_pdf_final(db: Session, sol: SolicitacaoAssinatura,
             metodo=e.prova_metodo or "")
         for e in etapas if e.assinado_em is not None
     ]
-    if sol.origem == "creche_requerimento":
+    if sol.origem == ORIGEM_CRECHE:
         # requerimento de creche: mantém o layout oficial (gerado por
         # creche_pdf) e empilha os blocos de visto + manifesto por cima.
         from app.models.beneficio import BeneficioCreche

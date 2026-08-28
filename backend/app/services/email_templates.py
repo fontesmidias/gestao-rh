@@ -269,6 +269,49 @@ CATALOGO: tuple[ModeloEmail, ...] = (
                 "criancas": "Ana Clara", "dia": "25", "dias": "2",
                 "link": "https://exemplo/creche"}),
 
+    # O requerimento a assinar (v3.16). O e-mail de ativação fala da entrega
+    # MENSAL e não menciona que há um documento esperando assinatura — quem
+    # ativou e não recebeu este aviso não tinha como saber que faltava algo.
+    _m(chave="creche_requerimento_disponivel", grupo="Reembolso-Creche",
+       rotulo="Requerimento disponível para assinar",
+       quando=("O requerimento de concessão é liberado para a assinatura do "
+               "colaborador — na ativação do benefício ou quando o RH dispara "
+               "pela tela."),
+       assunto="Green House — Reembolso-Creche: assine seu requerimento",
+       corpo="Olá, {{nome}}!\n\n"
+             "Seu Reembolso-Creche foi aprovado e o requerimento de concessão "
+             "já está disponível para a sua assinatura eletrônica.\n\n"
+             "Acesse com seu CPF e assine: {{link}}\n\n"
+             "A assinatura é rápida e feita na própria tela — não é preciso "
+             "imprimir nada. Depois dela, o RH assina e o documento fica "
+             "concluído.",
+       variaveis={"nome": "primeiro nome do colaborador",
+                  "link": "endereço do link do creche"},
+       obrigatorias=("link",),
+       exemplo={"nome": "Maria", "link": "https://exemplo/creche"}),
+
+    # A declaração-modelo ANEXA (v3.16). Vai anexa e não por link porque quem a
+    # preenche e assina é o cuidador PF, FORA do sistema — a pessoa precisa
+    # imprimir e levar. Documento em branco, sem dado pessoal a proteger.
+    _m(chave="creche_declaracao_modelo", grupo="Reembolso-Creche",
+       rotulo="Declaração de quitação (modelo em anexo)",
+       quando=("O RH envia ao colaborador o modelo de declaração de quitação, "
+               "para o cuidador pessoa física preencher e assinar."),
+       assunto="Green House — Reembolso-Creche: modelo de declaração de quitação",
+       corpo="Olá, {{nome}}!\n\n"
+             "Segue em anexo o MODELO de declaração de quitação, para o caso "
+             "de quem cuida da criança ser pessoa física (cuidador(a)/babá).\n\n"
+             "Como usar:\n"
+             "1. Imprima o modelo e peça a quem cuida da criança que preencha "
+             "e assine;\n"
+             "2. Envie a declaração assinada até o dia {{dia_entrega}} de cada "
+             "mês, uma por criança.\n\n"
+             "Se quem cuida for uma creche ou pré-escola (empresa), não use "
+             "este modelo: envie a NOTA FISCAL no lugar dele.",
+       variaveis={"nome": "primeiro nome do colaborador",
+                  "dia_entrega": "dia limite da entrega mensal"},
+       exemplo={"nome": "Maria", "dia_entrega": "25"}),
+
     _m(chave="creche_indeferido", grupo="Reembolso-Creche",
        rotulo="Pedido indeferido",
        quando="O RH indefere o pedido de Reembolso-Creche.",

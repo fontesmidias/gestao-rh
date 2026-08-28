@@ -410,11 +410,51 @@ def _valor_total(ben: BeneficioCreche, criancas: list[dict]) -> str | None:
     return _reais(unit * sum(1 for c in decididas if c["decisao"] == "deferida"))
 
 
+def _estado_requerimento(db: Session, ben: BeneficioCreche) -> dict:
+    """Em que pé está a assinatura do requerimento daquele benefício.
+
+    Existe porque o disparo falhava em SILÊNCIO: a tela mostrava o benefício
+    `ativo` e nada dizia que o colaborador nunca tinha recebido o que assinar
+    (defeito de campo de 26/08/2026). Estado que ninguém vê equivale a não ter
+    estado — é a mesma lição da marca de competência na fila (v3.02).
+
+    `pendente_disparo` é o que a tela usa para cobrar: benefício ATIVO em que
+    o roteiro não existe. Só o ativo cobra — quem está aguardando repactuação
+    ainda não deve assinar nada, e acusá-lo criaria alarme falso, que ensina a
+    equipe a ignorar o alarme (v2.91).
+    """
+    from app.models.solicitacao_assinatura import (EtapaAssinatura,
+                                                   StatusSolicitacao)
+    from app.services.roteiro_assinatura import ORIGEM_CRECHE, tem_roteiro
+    sol = tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE)
+    if sol is None:
+        return {"disparado": False,
+                "pendente_disparo": ben.status == StatusBeneficio.ativo,
+                "assinado_colaborador": False, "concluido": False,
+                "aguardando": None}
+    etapas = db.scalars(select(EtapaAssinatura)
+                        .where(EtapaAssinatura.solicitacao_id == sol.id)
+                        .order_by(EtapaAssinatura.ordem)).all()
+    col_etapa = next((e for e in etapas if e.ordem == 1), None)
+    pendente = next((e for e in etapas
+                     if e.assinado_em is None and e.recusada_em is None), None)
+    return {
+        "disparado": True, "pendente_disparo": False,
+        "solicitacao_id": str(sol.id),
+        "assinado_colaborador": col_etapa is not None and col_etapa.assinado_em is not None,
+        "concluido": sol.status == StatusSolicitacao.concluida,
+        # de quem o documento está esperando agora — o RH precisa saber se
+        # cobra o colaborador ou se a bola está com a própria equipe.
+        "aguardando": (pendente.papel if pendente is not None else None),
+    }
+
+
 def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
     col = db.get(Candidato, ben.candidato_id)
     posto = db.get(PostoServico, col.posto_servico_id) if col.posto_servico_id else None
     criancas = [_dump_crianca_rh(c) for c in ben.criancas]
     return {
+        "requerimento": _estado_requerimento(db, ben),
         "id": ben.id, "candidato_id": col.id,
         "nome": col.nome_completo, "cpf": col.cpf, "matricula": col.matricula,
         "email": ben.email_confirmado or col.email, "telefone": ben.telefone,
@@ -618,6 +658,8 @@ _HIST_ROTULO = {
     "creche_link_reenviado": "RH reenviou o link/código",
     "creche_codigo_enviado": "Código de acesso enviado",
     "creche_roteiro_falhou": "⚠️ Falha ao gerar o requerimento (reprocessar)",
+    "creche_requerimento_disparado": "RH disparou o requerimento para assinatura",
+    "creche_declaracao_enviada": "RH enviou a declaração-modelo",
 }
 
 
@@ -794,6 +836,15 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
     try:
         if ben.status == StatusBeneficio.ativo:
             _email_orientacoes_mensais(db, ben, col)
+            # Aviso PRÓPRIO do requerimento: o `creche_ativado` fala só da
+            # entrega mensal, então quem era ativado não recebia uma linha
+            # sequer dizendo que havia documento a assinar. Vai em try/except
+            # separado — falhar aqui não pode cancelar as orientações que já
+            # saíram, nem o contrário.
+            try:
+                _email_requerimento_disponivel(db, ben, col)
+            except Exception:
+                pass
         else:
             _email_aguardando_repactuacao(db, ben, col)
     except Exception:
@@ -962,6 +1013,150 @@ def reenviar_link_creche(beneficio_id: uuid.UUID, payload: ReenviarLinkIn,
     _gerar_e_enviar_codigo(db, col, ben, destino)
     registrar(db, "creche_link_reenviado", ator="rh", ator_detalhe=rh.email,
               candidato_id=col.id)
+    db.commit()
+    return {"enviado_para": destino}
+
+
+# ==========================================================================
+# Gerenciamento do requerimento e da declaração — lado do RH (v3.16)
+#
+# Até aqui o disparo do requerimento acontecia SÓ dentro do `ativar_beneficio`,
+# dentro de um `except Exception`. Quem ficasse sem o roteiro (o defeito de
+# campo de 26/08/2026) não tinha porta nenhuma: nem rota, nem botão — o
+# benefício ficava `ativo` para sempre com o colaborador esperando um e-mail
+# que nunca ia chegar. É a v2.74 ao contrário: lá era promessa na tela sem rota
+# atrás; aqui é rota sem porta na tela.
+# ==========================================================================
+
+
+def _disparar_requerimento(db: Session, ben: BeneficioCreche,
+                           rh: UsuarioRH) -> tuple[bool, str]:
+    """Cria o roteiro de assinatura do requerimento, se couber.
+
+    Devolve `(disparou, motivo)`. NÃO commita — quem chama decide a transação,
+    porque o lote precisa que uma falha não desfaça as demais.
+    """
+    from app.services.roteiro_assinatura import (ORIGEM_CRECHE,
+                                                 criar_roteiro_creche,
+                                                 tem_roteiro)
+    if ben.status != StatusBeneficio.ativo:
+        # Só o benefício ATIVO tem requerimento a assinar. Disparar num
+        # `aguardando_repactuacao` mandaria a pessoa assinar um documento cujo
+        # valor ainda vai mudar.
+        return False, "beneficio_nao_ativo"
+    if tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE) is not None:
+        return False, "ja_disparado"
+    criar_roteiro_creche(db, ben, rh)
+    return True, "disparado"
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/disparar-requerimento")
+def disparar_requerimento(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                          rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
+    """Dispara (ou redispara) o requerimento de UM benefício ativo.
+
+    Idempotente: se o roteiro já existe, responde `ja_disparado` em vez de
+    criar um segundo — dois roteiros para o mesmo requerimento deixariam o
+    colaborador assinando um e o RH contra-assinando o outro.
+    """
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    col = db.get(Candidato, ben.candidato_id)
+    disparou, motivo = _disparar_requerimento(db, ben, rh)
+    if not disparou and motivo == "beneficio_nao_ativo":
+        # Recusa que OFERECE a saída (v2.93): dizer só "não pode" faria o RH
+        # procurar defeito onde não há — o que resolve é aprovar o benefício.
+        raise HTTPException(status_code=409, detail={
+            "erro": "beneficio_nao_ativo", "status": ben.status.value,
+            "resolve": ("O requerimento só existe depois da aprovação. "
+                        "Aprove o benefício primeiro — o disparo é automático.")})
+    if disparou:
+        registrar(db, "creche_requerimento_disparado", ator="rh",
+                  ator_detalhe=rh.email, candidato_id=col.id,
+                  detalhe={"beneficio": str(ben.id)})
+        db.commit()
+        try:
+            _email_requerimento_disponivel(db, ben, col)
+        except Exception:
+            pass  # o e-mail é aviso; o requerimento já está lá para assinar
+    return {"disparado": disparou, "motivo": motivo,
+            "requerimento": _estado_requerimento(db, ben)}
+
+
+@router.post("/rh/creche/requerimentos/disparar-pendentes")
+def disparar_pendentes(db: Session = Depends(get_db),
+                       rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
+    """Varre os benefícios ATIVOS sem roteiro e dispara o requerimento de todos.
+
+    É a saída para quem já estava ativo quando o disparo falhava. **Presta
+    contas de quem NÃO foi** (a lição do lote de talentos, v2.14): lote que só
+    diz "pronto" faz o RH acreditar que resolveu o que não resolveu.
+    """
+    ativos = db.scalars(select(BeneficioCreche)
+                        .where(BeneficioCreche.status == StatusBeneficio.ativo)).all()
+    disparados, falhas = [], []
+    for ben in ativos:
+        col = db.get(Candidato, ben.candidato_id)
+        nome = col.nome_completo if col else str(ben.candidato_id)
+        try:
+            disparou, motivo = _disparar_requerimento(db, ben, rh)
+            if not disparou:
+                continue  # já tinha roteiro: não é falha, é nada a fazer
+            registrar(db, "creche_requerimento_disparado", ator="rh",
+                      ator_detalhe=rh.email, candidato_id=ben.candidato_id,
+                      detalhe={"beneficio": str(ben.id), "em_lote": True})
+            db.commit()
+            disparados.append({"id": str(ben.id), "nome": nome})
+            try:
+                _email_requerimento_disponivel(db, ben, col)
+            except Exception:
+                pass
+        except Exception as exc:
+            # Uma pessoa que falha não pode derrubar as demais — e a falha
+            # precisa CHEGAR à tela com o nome de quem foi, senão o RH não tem
+            # como saber quem ficou de fora.
+            db.rollback()
+            falhas.append({"id": str(ben.id), "nome": nome, "erro": str(exc)[:200]})
+    return {"disparados": disparados, "falhas": falhas,
+            "total_ativos": len(ativos)}
+
+
+@router.post("/rh/creche/levantamentos/{beneficio_id}/enviar-declaracao")
+def enviar_declaracao(beneficio_id: uuid.UUID, db: Session = Depends(get_db),
+                      rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
+    """Manda ao colaborador a declaração-modelo de quitação, ANEXA ao e-mail.
+
+    A declaração é documento em BRANCO: quem a preenche e assina é o cuidador
+    PF, fora do sistema, e ela volta como comprovante mensal. Por isso vai
+    anexa e não por link — é o que a pessoa consegue imprimir e levar (mesmo
+    raciocínio da planilha de uniformes, v2.81). Ela não tem dado pessoal a
+    proteger atrás de 2FA.
+    """
+    from app.services.creche_pdf import gerar_declaracao_modelo
+    from app.services.nome_arquivo import do_colaborador
+    ben = db.get(BeneficioCreche, beneficio_id)
+    if ben is None:
+        raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
+    col = db.get(Candidato, ben.candidato_id)
+    destino = ben.email_confirmado or (col.email if col else None)
+    if not destino:
+        raise HTTPException(status_code=422, detail={
+            "erro": "sem_email",
+            "resolve": ("Este colaborador não tem e-mail cadastrado. "
+                        "Corrija o e-mail em 'Reenviar link' e tente de novo.")})
+    pdf = gerar_declaracao_modelo(db, ben)
+    nome_arq = do_colaborador(col, "DECLARACAO DE QUITACAO MODELO")
+    enviar_modelo(db, "creche_declaracao_modelo", destino, {
+        "nome": (col.nome_completo or "").split(" ")[0],
+        "dia_entrega": str(ben.dia_entrega_mensal or 25),
+    # ⚠️ O contrato de `anexos` é `list[tuple[nome, bytes]]` — o tipo MIME sai
+    # da extensão do nome (`_tipo_do_anexo`/`_tipo_grafo`), nunca de um campo.
+    # Passar dicionário compila e só quebra no envio, com
+    # `ValueError: too many values to unpack` vindo de dentro do m365.
+    }, anexos=[(nome_arq, pdf)])
+    registrar(db, "creche_declaracao_enviada", ator="rh", ator_detalhe=rh.email,
+              candidato_id=col.id, detalhe={"para": destino})
     db.commit()
     return {"enviado_para": destino}
 
@@ -1222,6 +1417,24 @@ def _email_orientacoes_mensais(db: Session, ben: BeneficioCreche,
     enviar_modelo(db, "creche_ativado", email, {
         "nome": col.nome_completo.split()[0].title(),
         "dia": ben.dia_entrega_mensal,
+    })
+
+
+def _email_requerimento_disponivel(db: Session, ben: BeneficioCreche,
+                                   col: Candidato) -> None:
+    """Avisa que há requerimento esperando a assinatura do colaborador.
+
+    Separado do `creche_ativado` de propósito: aquele fala da entrega MENSAL e
+    é o mesmo texto para quem assina e para quem não tem o que assinar. Sem
+    este aviso, o colaborador ativado não tinha como saber que faltava algo —
+    o requerimento ficava lá, esperando, sem nada convidá-lo a entrar.
+    """
+    email = ben.email_confirmado or (col.email if col else None)
+    if not email:
+        return
+    enviar_modelo(db, "creche_requerimento_disponivel", email, {
+        "nome": (col.nome_completo or "").split()[0].title() if col else "",
+        "link": _url_creche(),
     })
 
 
