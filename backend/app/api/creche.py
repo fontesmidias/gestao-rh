@@ -426,27 +426,58 @@ def _estado_requerimento(db: Session, ben: BeneficioCreche) -> dict:
     from app.models.solicitacao_assinatura import (EtapaAssinatura,
                                                    StatusSolicitacao)
     from app.services.roteiro_assinatura import ORIGEM_CRECHE, tem_roteiro
+    ativo = ben.status == StatusBeneficio.ativo
+    avisado_em = _ultimo_aviso_requerimento(db, ben.candidato_id)
     sol = tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE)
     if sol is None:
         return {"disparado": False,
-                "pendente_disparo": ben.status == StatusBeneficio.ativo,
+                "pendente_disparo": ativo,
                 "assinado_colaborador": False, "concluido": False,
-                "aguardando": None}
+                "aguardando": None, "avisado_em": avisado_em,
+                "pode_avisar": ativo}
     etapas = db.scalars(select(EtapaAssinatura)
                         .where(EtapaAssinatura.solicitacao_id == sol.id)
                         .order_by(EtapaAssinatura.ordem)).all()
     col_etapa = next((e for e in etapas if e.ordem == 1), None)
     pendente = next((e for e in etapas
                      if e.assinado_em is None and e.recusada_em is None), None)
+    assinou = col_etapa is not None and col_etapa.assinado_em is not None
+    concluido = sol.status == StatusSolicitacao.concluida
     return {
         "disparado": True, "pendente_disparo": False,
         "solicitacao_id": str(sol.id),
-        "assinado_colaborador": col_etapa is not None and col_etapa.assinado_em is not None,
-        "concluido": sol.status == StatusSolicitacao.concluida,
+        "assinado_colaborador": assinou,
+        "concluido": concluido,
         # de quem o documento está esperando agora — o RH precisa saber se
         # cobra o colaborador ou se a bola está com a própria equipe.
         "aguardando": (pendente.papel if pendente is not None else None),
+        # ---- o AVISO é outra coisa que o roteiro (correção da v3.16.1) -----
+        # Roteiro criado NÃO é pessoa avisada: quem foi ativado antes da v3.16
+        # tem documento a assinar e nunca soube — o e-mail não existia. Por
+        # isso o estado carrega a data do último aviso (nula = nunca avisado) e
+        # diz se ainda cabe cobrar.
+        "avisado_em": avisado_em,
+        "nunca_avisado": avisado_em is None and not assinou,
+        # Enquanto o colaborador não assinou, cobrar faz sentido — reenviar
+        # depois de assinado seria pedir de novo o que já foi feito.
+        "pode_avisar": ativo and not assinou,
     }
+
+
+def _ultimo_aviso_requerimento(db: Session, candidato_id) -> datetime | None:
+    """Quando o colaborador foi avisado, pela última vez, de que há requerimento
+    a assinar. `None` = nunca.
+
+    A fonte é a AUDITORIA, não um campo novo: o aviso já é registrado lá, e um
+    carimbo paralelo teria de ser mantido em sincronia com ele — duas verdades
+    sobre o mesmo fato, que é como se criam divergências silenciosas.
+    """
+    from app.models.evento import EventoAuditoria
+    return db.scalar(
+        select(EventoAuditoria.criado_em)
+        .where(EventoAuditoria.candidato_id == candidato_id,
+               EventoAuditoria.acao == "creche_requerimento_avisado")
+        .order_by(EventoAuditoria.criado_em.desc()).limit(1))
 
 
 def _dump_beneficio(db: Session, ben: BeneficioCreche) -> dict:
@@ -659,6 +690,7 @@ _HIST_ROTULO = {
     "creche_codigo_enviado": "Código de acesso enviado",
     "creche_roteiro_falhou": "⚠️ Falha ao gerar o requerimento (reprocessar)",
     "creche_requerimento_disparado": "RH disparou o requerimento para assinatura",
+    "creche_requerimento_avisado": "Colaborador avisado do requerimento a assinar",
     "creche_declaracao_enviada": "RH enviou a declaração-modelo",
 }
 
@@ -841,8 +873,12 @@ def ativar_beneficio(beneficio_id: uuid.UUID, payload: AtivarIn, db: Session = D
             # sequer dizendo que havia documento a assinar. Vai em try/except
             # separado — falhar aqui não pode cancelar as orientações que já
             # saíram, nem o contrário.
+            # Passa pelo `_avisar_requerimento` (e não pelo e-mail direto) para
+            # que o aviso seja REGISTRADO: sem o carimbo, a ficha de quem
+            # acabou de ser ativado diria "nunca avisado" e o lote o cobraria
+            # de novo minutos depois.
             try:
-                _email_requerimento_disponivel(db, ben, col)
+                _avisar_requerimento(db, ben, col, rh)
             except Exception:
                 pass
         else:
@@ -1031,11 +1067,21 @@ def reenviar_link_creche(beneficio_id: uuid.UUID, payload: ReenviarLinkIn,
 
 def _disparar_requerimento(db: Session, ben: BeneficioCreche,
                            rh: UsuarioRH) -> tuple[bool, str]:
-    """Cria o roteiro de assinatura do requerimento, se couber.
+    """Garante que o colaborador TENHA o requerimento e SAIBA disso.
 
-    Devolve `(disparou, motivo)`. NÃO commita — quem chama decide a transação,
-    porque o lote precisa que uma falha não desfaça as demais.
+    ⚠️ São dois fatos independentes, e confundi-los foi o defeito da v3.16:
+    "o roteiro existe" NÃO é "a pessoa foi avisada". Quem foi ativado antes
+    daquela versão ganhou o roteiro sem e-mail nenhum (o aviso não existia), e
+    o lote via o roteiro, respondia `ja_disparado` e pulava — verdade sobre o
+    roteiro, mentira sobre o aviso. O caso da Daphne, 27/08/2026.
+
+    Devolve `(avisar, motivo)`; `motivo` diz o que MUDOU:
+      criado_e_avisado · avisado (o roteiro já existia) · ja_assinado ·
+      beneficio_nao_ativo. Quem chama envia o e-mail depois do commit — SMTP
+      fora não pode desfazer o roteiro.
+    NÃO commita: o lote precisa que uma falha não derrube as demais.
     """
+    from app.models.solicitacao_assinatura import EtapaAssinatura
     from app.services.roteiro_assinatura import (ORIGEM_CRECHE,
                                                  criar_roteiro_creche,
                                                  tem_roteiro)
@@ -1044,10 +1090,18 @@ def _disparar_requerimento(db: Session, ben: BeneficioCreche,
         # `aguardando_repactuacao` mandaria a pessoa assinar um documento cujo
         # valor ainda vai mudar.
         return False, "beneficio_nao_ativo"
-    if tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE) is not None:
-        return False, "ja_disparado"
-    criar_roteiro_creche(db, ben, rh)
-    return True, "disparado"
+    sol = tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE)
+    if sol is None:
+        criar_roteiro_creche(db, ben, rh)
+        return True, "criado_e_avisado"
+    # O roteiro já existe. Só não se cobra quem JÁ ASSINOU — pedir de novo o
+    # que a pessoa já fez destrói a confiança na cobrança seguinte.
+    etapa = db.scalar(select(EtapaAssinatura)
+                      .where(EtapaAssinatura.solicitacao_id == sol.id,
+                             EtapaAssinatura.ordem == 1))
+    if etapa is not None and etapa.assinado_em is not None:
+        return False, "ja_assinado"
+    return True, "avisado"
 
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/disparar-requerimento")
@@ -1055,71 +1109,127 @@ def disparar_requerimento(beneficio_id: uuid.UUID, db: Session = Depends(get_db)
                           rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
     """Dispara (ou redispara) o requerimento de UM benefício ativo.
 
-    Idempotente: se o roteiro já existe, responde `ja_disparado` em vez de
-    criar um segundo — dois roteiros para o mesmo requerimento deixariam o
-    colaborador assinando um e o RH contra-assinando o outro.
+    Nunca cria um SEGUNDO roteiro (dois deixariam o colaborador assinando um e
+    o RH contra-assinando o outro): quando ele já existe, esta rota REENVIA o
+    aviso — que é o que faltava na v3.16, onde ela respondia "já disparado" e
+    não mandava nada a quem tinha o documento e nunca soubera dele.
     """
     ben = db.get(BeneficioCreche, beneficio_id)
     if ben is None:
         raise HTTPException(status_code=404, detail="beneficio_nao_encontrado")
     col = db.get(Candidato, ben.candidato_id)
-    disparou, motivo = _disparar_requerimento(db, ben, rh)
-    if not disparou and motivo == "beneficio_nao_ativo":
+    avisar, motivo = _disparar_requerimento(db, ben, rh)
+    if not avisar and motivo == "beneficio_nao_ativo":
         # Recusa que OFERECE a saída (v2.93): dizer só "não pode" faria o RH
         # procurar defeito onde não há — o que resolve é aprovar o benefício.
         raise HTTPException(status_code=409, detail={
             "erro": "beneficio_nao_ativo", "status": ben.status.value,
             "resolve": ("O requerimento só existe depois da aprovação. "
                         "Aprove o benefício primeiro — o disparo é automático.")})
-    if disparou:
-        registrar(db, "creche_requerimento_disparado", ator="rh",
-                  ator_detalhe=rh.email, candidato_id=col.id,
-                  detalhe={"beneficio": str(ben.id)})
+    if not avisar and motivo == "ja_assinado":
+        raise HTTPException(status_code=409, detail={
+            "erro": "ja_assinado",
+            "resolve": ("Este colaborador já assinou o requerimento. "
+                        "Se falta a contra-assinatura, ela é sua — está na "
+                        "fila 'Minhas assinaturas'.")})
+    enviado = False
+    if avisar:
+        if motivo == "criado_e_avisado":
+            registrar(db, "creche_requerimento_disparado", ator="rh",
+                      ator_detalhe=rh.email, candidato_id=col.id,
+                      detalhe={"beneficio": str(ben.id)})
         db.commit()
-        try:
-            _email_requerimento_disponivel(db, ben, col)
-        except Exception:
-            pass  # o e-mail é aviso; o requerimento já está lá para assinar
-    return {"disparado": disparou, "motivo": motivo,
+        # O aviso só entra na auditoria se o e-mail REALMENTE saiu: carimbar
+        # antes faria a ficha dizer "avisado em dd/mm" sobre um e-mail que
+        # falhou, e o RH deixaria de cobrar justamente quem não recebeu.
+        enviado = _avisar_requerimento(db, ben, col, rh)
+    return {"disparado": avisar, "motivo": motivo, "email_enviado": enviado,
             "requerimento": _estado_requerimento(db, ben)}
 
 
-@router.post("/rh/creche/requerimentos/disparar-pendentes")
+@router.post("/rh/creche/requerimentos/disparar-pendentes", status_code=202)
 def disparar_pendentes(db: Session = Depends(get_db),
                        rh: UsuarioRH = Depends(exige("creche:decidir"))) -> dict:
-    """Varre os benefícios ATIVOS sem roteiro e dispara o requerimento de todos.
+    """Enfileira a varredura dos benefícios ATIVOS: cria o requerimento de quem
+    não tem e **avisa quem tem mas ainda não assinou**.
 
-    É a saída para quem já estava ativo quando o disparo falhava. **Presta
-    contas de quem NÃO foi** (a lição do lote de talentos, v2.14): lote que só
-    diz "pronto" faz o RH acreditar que resolveu o que não resolveu.
+    ⚠️ **ASSÍNCRONA de propósito.** Cada pessoa avisada custa ~1s de SMTP
+    (medido: 951ms por e-mail contra 4ms de consulta) e o nginx corta acima de
+    60s — com 149 ativos a varredura leva ~2,5 min. Sincronamente, o RH veria
+    "erro de rede" **com metade dos e-mails já enviados**, sem saber quem
+    recebeu; e o defeito só apareceria com a base cheia, nunca em teste com
+    poucos registros. É o mesmo raciocínio do ranqueamento do Match (v2.00).
+
+    Devolve 202 + a CONTAGEM do que será feito, para a tela dizer o tamanho do
+    trabalho; o relatório com nomes chega em `GET .../requerimentos/varredura`.
     """
+    from app.services import fila
+    from app.workers import creche_requerimentos as worker
+
+    # A prévia é consulta pura (4ms por pessoa), então cabe na resposta e
+    # responde "vai acontecer alguma coisa?" antes de o worker começar.
+    previa = _previa_varredura(db)
+    try:
+        fila.enfileirar(worker.varrer, str(rh.id), rh.email)
+    except Exception as exc:
+        # Fila fora: RECUSA HONESTA em vez de fingir que enfileirou (v2.00).
+        # Prometer silenciosamente é pior que falhar — o RH esperaria e-mails
+        # que ninguém mandou.
+        raise HTTPException(status_code=503, detail={
+            "erro": "fila_indisponivel",
+            "resolve": ("A fila de tarefas não respondeu, então NADA foi "
+                        "enviado. Tente de novo em alguns minutos; se "
+                        "persistir, avise o suporte (o serviço `worker` pode "
+                        "estar fora)."),
+            "detalhe": str(exc)[:200]}) from exc
+    registrar(db, "creche_varredura_enfileirada", ator="rh",
+              ator_detalhe=rh.email, detalhe=previa)
+    db.commit()
+    return {"enfileirado": True, **previa}
+
+
+def _previa_varredura(db: Session) -> dict:
+    """Quantos serão criados e quantos serão avisados — sem enviar nada."""
+    from app.models.solicitacao_assinatura import EtapaAssinatura
+    from app.services.roteiro_assinatura import ORIGEM_CRECHE, tem_roteiro
+    a_criar = a_avisar = 0
     ativos = db.scalars(select(BeneficioCreche)
                         .where(BeneficioCreche.status == StatusBeneficio.ativo)).all()
-    disparados, falhas = [], []
     for ben in ativos:
-        col = db.get(Candidato, ben.candidato_id)
-        nome = col.nome_completo if col else str(ben.candidato_id)
-        try:
-            disparou, motivo = _disparar_requerimento(db, ben, rh)
-            if not disparou:
-                continue  # já tinha roteiro: não é falha, é nada a fazer
-            registrar(db, "creche_requerimento_disparado", ator="rh",
-                      ator_detalhe=rh.email, candidato_id=ben.candidato_id,
-                      detalhe={"beneficio": str(ben.id), "em_lote": True})
-            db.commit()
-            disparados.append({"id": str(ben.id), "nome": nome})
-            try:
-                _email_requerimento_disponivel(db, ben, col)
-            except Exception:
-                pass
-        except Exception as exc:
-            # Uma pessoa que falha não pode derrubar as demais — e a falha
-            # precisa CHEGAR à tela com o nome de quem foi, senão o RH não tem
-            # como saber quem ficou de fora.
-            db.rollback()
-            falhas.append({"id": str(ben.id), "nome": nome, "erro": str(exc)[:200]})
-    return {"disparados": disparados, "falhas": falhas,
-            "total_ativos": len(ativos)}
+        sol = tem_roteiro(db, ben.candidato_id, origem=ORIGEM_CRECHE)
+        if sol is None:
+            a_criar += 1
+            continue
+        etapa = db.scalar(select(EtapaAssinatura)
+                          .where(EtapaAssinatura.solicitacao_id == sol.id,
+                                 EtapaAssinatura.ordem == 1))
+        if etapa is None or etapa.assinado_em is None:
+            a_avisar += 1
+    return {"total_ativos": len(ativos), "a_criar": a_criar, "a_avisar": a_avisar}
+
+
+@router.get("/rh/creche/requerimentos/varredura")
+def resultado_varredura(db: Session = Depends(get_db),
+                        _rh: UsuarioRH = Depends(exige("creche:ler"))) -> dict:
+    """O relatório da ÚLTIMA varredura: quem foi criado, avisado, ficou sem
+    e-mail ou falhou — com nome.
+
+    Fica guardado porque o trabalho é assíncrono: sem isso, quem fecha a aba
+    perde o relatório, e é ele que diz para quem NÃO ir cobrar de novo.
+    """
+    import json
+
+    from app.services.config_dinamica import ler_config
+    from app.workers.creche_requerimentos import CHAVE_RESULTADO
+    bruto = (ler_config(db, (CHAVE_RESULTADO,)) or {}).get(CHAVE_RESULTADO)
+    if not bruto:
+        return {"houve": False, **_previa_varredura(db)}
+    try:
+        return {"houve": True, **json.loads(bruto)}
+    except (ValueError, TypeError):
+        # Valor corrompido não pode derrubar a tela: melhor dizer que não há
+        # relatório do que estourar 500 numa consulta de leitura.
+        return {"houve": False, **_previa_varredura(db)}
 
 
 @router.post("/rh/creche/levantamentos/{beneficio_id}/enviar-declaracao")
@@ -1420,8 +1530,31 @@ def _email_orientacoes_mensais(db: Session, ben: BeneficioCreche,
     })
 
 
+def _avisar_requerimento(db: Session, ben: BeneficioCreche, col: Candidato,
+                         rh: UsuarioRH, em_lote: bool = False) -> bool:
+    """Manda o aviso de "há requerimento a assinar" e REGISTRA que ele saiu.
+
+    Devolve se o e-mail foi enviado. O carimbo na auditoria acontece **só
+    quando o envio dá certo**: gravar antes faria a ficha exibir "avisado em
+    dd/mm" sobre um e-mail que falhou, e o RH deixaria de cobrar justamente
+    quem não recebeu — que é o oposto do que este registro existe para
+    permitir. Sem e-mail cadastrado, devolve False sem registrar nada.
+    """
+    try:
+        enviado = _email_requerimento_disponivel(db, ben, col)
+    except Exception:
+        enviado = False
+    if enviado:
+        registrar(db, "creche_requerimento_avisado", ator="rh",
+                  ator_detalhe=getattr(rh, "email", None), candidato_id=col.id,
+                  detalhe={"beneficio": str(ben.id), "em_lote": em_lote,
+                           "para": ben.email_confirmado or (col.email if col else None)})
+        db.commit()
+    return enviado
+
+
 def _email_requerimento_disponivel(db: Session, ben: BeneficioCreche,
-                                   col: Candidato) -> None:
+                                   col: Candidato) -> bool:
     """Avisa que há requerimento esperando a assinatura do colaborador.
 
     Separado do `creche_ativado` de propósito: aquele fala da entrega MENSAL e
@@ -1431,11 +1564,11 @@ def _email_requerimento_disponivel(db: Session, ben: BeneficioCreche,
     """
     email = ben.email_confirmado or (col.email if col else None)
     if not email:
-        return
-    enviar_modelo(db, "creche_requerimento_disponivel", email, {
+        return False
+    return bool(enviar_modelo(db, "creche_requerimento_disponivel", email, {
         "nome": (col.nome_completo or "").split()[0].title() if col else "",
         "link": _url_creche(),
-    })
+    }))
 
 
 def _url_creche() -> str:

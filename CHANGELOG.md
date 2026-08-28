@@ -14,6 +14,80 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.16.1] — 2026-08-27 — Ter o documento não é saber que ele existe
+
+O Bruno mandou o print: a ficha da colaboradora dizia *"Liberado — aguardando a
+assinatura do colaborador"*, **sem botão de enviar o requerimento** (só o da
+declaração), e o lote respondia que já havia sido enviado — quando não havia
+sido enviado para ninguém.
+
+### Corrigido
+
+- **A v3.16 tratou "o roteiro existe" como "a pessoa foi avisada".** São fatos
+  independentes, e o caso prova: quem foi ativado **antes** daquela versão
+  ganhou o roteiro sem e-mail nenhum, porque o aviso não existia ainda. Então
+  `_disparar_requerimento` via o roteiro, devolvia `ja_disparado` e pulava —
+  verdade sobre o roteiro, **mentira sobre o aviso**. O lote dizia "nada a
+  fazer" com gente esperando para assinar. Agora as duas rotas garantem as
+  duas coisas: cria o roteiro se faltar **e** avisa a pessoa; quem já tem o
+  documento e não assinou é cobrado do mesmo jeito.
+- **O botão sumia justamente de quem precisava dele.** Ele só aparecia com
+  `pendente_disparo` (roteiro ausente), então bastava o roteiro existir para a
+  ficha ficar sem saída — exatamente o print. Agora aparece enquanto **couber
+  cobrar**: "Liberar requerimento" quando falta o documento, "Avisar o
+  colaborador" quando ele existe e ninguém foi avisado, "Reenviar aviso" nos
+  demais casos. Some só depois que o colaborador assina.
+
+### Adicionado
+
+- **A ficha distingue "liberado" de "avisado".** Aviso âmbar quando o
+  requerimento existe e o colaborador nunca foi avisado, e a **data do último
+  aviso** ao lado do estado. Reenviar para quem já foi avisado pede
+  confirmação mostrando essa data — sem trava automática: quem decide cobrar
+  de novo é o RH, mas com a informação na mão (e-mail repetido demais faz a
+  pessoa ignorar o próximo).
+- **A varredura virou ASSÍNCRONA (202 + fila) — e foi o teste que cobrou.** Ele
+  travou ao rodar contra um banco com 149 benefícios ativos, e a medição
+  explicou: **951ms por e-mail** contra 4ms de consulta, ou seja ~2,5 min de
+  trabalho contra os **60s do corte do nginx**. Sincronamente, o RH veria "erro
+  de rede" **com metade dos e-mails já enviados**, sem saber quem recebeu — e o
+  defeito só apareceria com a base cheia, nunca em teste com poucos registros.
+  Agora enfileira no `worker` que já existe (fila `default`, nenhuma mudança de
+  deploy) e devolve a prévia do que será feito; fila fora vira **503 honesto**,
+  nunca promessa silenciosa (v2.00).
+- **O lote relata os dois desfechos**: `criados` (documento novo) e `avisados`
+  (cobrança reenviada), mais `sem_email` e `ja_assinados`. A confirmação diz
+  quantos são de cada grupo **antes** de disparar, e o relatório fica
+  **guardado** (`GET …/requerimentos/varredura`): sem isso, quem fecha a aba
+  perde a lista de quem foi avisado — e é ela que diz para quem NÃO cobrar de
+  novo. "Criei o documento" e "cobrei de novo" não podiam sair no mesmo número.
+- **Quem não tem e-mail cadastrado vira lista própria**, com nome. Antes
+  entraria na conta de avisados — e o RH leria como cobrado quem continua sem
+  saber de nada.
+
+### Decisões
+
+- **O carimbo do aviso só existe se o e-mail SAIU** (`_avisar_requerimento`).
+  Registrar antes faria a ficha exibir "avisado em dd/mm" sobre um envio que
+  falhou, e o RH deixaria de cobrar justamente quem não recebeu — o oposto do
+  que esse registro existe para permitir. A fonte é a auditoria
+  (`creche_requerimento_avisado`), não um campo novo: carimbo paralelo teria de
+  ser mantido em sincronia com ela, e são duas verdades sobre o mesmo fato.
+- **Quem já assinou não é cobrado de novo** (409 `ja_assinado`, com a saída:
+  se falta a contra-assinatura, ela é do RH). Pedir de novo o que a pessoa já
+  fez destrói a confiança na cobrança seguinte.
+
+### Testes
+
+`test_creche_requerimento.py` sobe para **34 cenários** e **6 mutações novas**
+(13 no total). Duas asserções da v3.16 foram **invertidas**, porque descreviam
+o defeito: "quem já tinha roteiro não aparece como disparado" e "segundo clique
+responde `ja_disparado`" viraram, respectivamente, "é avisado" e "reenvia o
+aviso, sem criar um segundo roteiro". As asserções do lote passaram a casar por
+**ID**, não por nome: `_cenario` cria uma pessoa nova a cada execução, e em
+banco já usado os homônimos faziam a asserção falar de outro registro (a
+armadilha do "só passa em banco limpo", v2.14).
+
 ## [3.16.0] — 2026-08-27 — O requerimento que chega a quem tem de assinar
 
 Relato do Bruno: *"nos que foram aprovados e ativados, não chegou para esse

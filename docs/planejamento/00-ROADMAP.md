@@ -65,7 +65,7 @@ O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
 (ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
 competência anterior à vigência.
 
-### 25ª leva (2026-08-27) — v3.16
+### 25ª leva (2026-08-27) — v3.16 → v3.16.1
 **O requerimento de creche que não chegava a quem tinha de assinar.** Relato do
 Bruno sobre os benefícios já aprovados e ativados. O roteiro **existia no
 banco**: quem mentia era a consulta — `tem_roteiro` devolve o documento mais
@@ -84,6 +84,26 @@ Fica a regra geral: **consulta que devolve "o mais recente de qualquer tipo" e
 filtra depois responde sobre o documento errado** — filtre a espécie no SQL, e
 use constante para o valor, porque string errada não dá erro: devolve "não
 existe".
+
+**v3.16.1, no mesmo dia:** o Bruno mandou um print mostrando que a correção
+estava pela metade. A ficha dizia "Liberado — aguardando a assinatura",
+**sem botão de enviar o requerimento**, e o lote respondia que já havia sido
+enviado — sem ter enviado para ninguém. A v3.16 tratou *"o roteiro existe"*
+como *"a pessoa foi avisada"*, e quem foi ativado antes dela tinha o documento
+sem nunca ter recebido e-mail (o aviso não existia). Agora as rotas garantem as
+duas coisas, o botão aparece enquanto couber cobrar, a ficha mostra a data do
+último aviso e o lote separa "documento criado" de "cobrança reenviada".
+
+Segunda regra da leva: **ter o registro não é saber que ele existe** — ao
+escrever reprocessamento, separe *o artefato existir* de *a pessoa ter sido
+avisada*, e carimbe o aviso só quando o envio dá certo.
+
+Terceira, achada porque o TESTE travou: **ação em lote que manda e-mail é
+trabalho de fila**. Medido, 951ms por e-mail contra 4ms de consulta — com 157
+ativos são ~2,5 min contra os 60s do corte do nginx, e o sintoma em produção
+seria "erro de rede" com metade dos e-mails já enviados. A varredura foi para o
+`worker` que já existia (fila `default`, sem mudança de deploy), com o
+relatório guardado para não sumir quando alguém fecha a aba.
 
 ### 24ª leva (2026-08-19/20) — v3.11 → v3.15
 **O MCP saiu do papel.** O papel `assistente_rh` (v3.13) e, na v3.14, as
