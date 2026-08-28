@@ -158,6 +158,38 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
   teste que suba ESSE `main` e mais nada (`test_mcp_registro_servico.py`,
   1 mutação que reproduz a mensagem idêntica à de produção). Ao acrescentar rota
   ao MCP que ESCREVA no banco, confira as FKs das tabelas que ela toca.
+- **Ação em LOTE que manda e-mail é trabalho de FILA, não de request** (v3.16.1,
+  achado porque o teste TRAVOU): a varredura de requerimentos do creche gastava
+  **951ms por e-mail** contra 4ms de consulta — com os 149 benefícios ativos do
+  banco de desenvolvimento, ~2,5 min contra os **60s do corte do nginx**. O
+  sintoma em produção seria "erro de rede" **com metade dos e-mails já
+  enviados** e ninguém sabendo quem recebeu; e não apareceria em teste com
+  poucos registros, só com a base cheia. ⚠️ Ao escrever ação em massa, meça o
+  custo do passo EXTERNO (SMTP, OCR, IA) e multiplique pelo tamanho da base
+  REAL — otimizar SQL não ajuda, o gargalo não é o banco. A infra já existe
+  (`services/fila.py` + o container `worker` na fila `default`, nos dois
+  composes), então enfileirar não custa deploy novo; fila fora devolve **503
+  honesto**, nunca promessa silenciosa. E o relatório do lote precisa ficar
+  GUARDADO (aqui, na config dinâmica): trabalho assíncrono cujo resultado só
+  vive na tela some quando alguém fecha a aba — justamente a lista que diz para
+  quem NÃO cobrar de novo.
+- **Ter o registro NÃO é saber que ele existe — e o guard de idempotência
+  confunde os dois** (v3.16.1, defeito visto pelo Bruno num print, um dia
+  depois da v3.16): o requerimento de creche passou a ser criado na ativação, e
+  o reprocessamento perguntava *"já existe roteiro?"* para decidir se fazia
+  algo. Só que **quem foi ativado ANTES do e-mail de aviso existir tinha o
+  roteiro e nunca soubera dele** — então o lote respondia `ja_disparado`, não
+  mandava nada, e relatava "nada a fazer" com gente esperando para assinar; o
+  botão da ficha, ligado ao mesmo `pendente`, sumia justamente de quem
+  precisava. ⚠️ Ao escrever ação de reprocessamento, separe **o artefato
+  existir** de **a pessoa ter sido avisada**: são fatos independentes, e o
+  segundo quase nunca tem coluna própria — aqui a fonte virou a AUDITORIA
+  (`creche_requerimento_avisado`), porque carimbo paralelo teria de ser mantido
+  em sincronia com ela. ⚠️ E o carimbo só se grava **se o envio deu certo**:
+  registrar antes faz a tela dizer "avisado em dd/mm" sobre e-mail que falhou,
+  e quem opera para de cobrar exatamente quem não recebeu. Corolário do teste:
+  duas asserções da v3.16 **descreviam o defeito** e tiveram de ser invertidas
+  — quando a regra muda, o teste que a cobria vira réu, não testemunha (v3.06).
 - **Consulta que devolve "o mais recente de qualquer tipo" e filtra DEPOIS
   responde sobre o documento ERRADO** (v3.16, defeito de campo 26/08/2026 — o
   requerimento de creche que nunca chegava a quem tinha de assinar):

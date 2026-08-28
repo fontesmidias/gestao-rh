@@ -351,11 +351,16 @@ continuam no raiz** — aquelas precisam ser lidas antes de se saber onde se est
   (`tem_roteiro`) tem que **filtrar essa origem no SQL**, senão devolve o
   roteiro de ADMISSÃO mais recente e a sessão do colaborador responde
   `disponivel: false` com o requerimento pronto (v3.16). O RH gerencia isso pela
-  ficha (**Requerimento e declaração**): o benefício ativo sem roteiro é acusado
-  com aviso âmbar, `disparar-requerimento` refaz um, `disparar-pendentes` varre
-  todos os ativos (nomeando quem falhou) e `enviar-declaracao` manda a
-  declaração-modelo ANEXA ao e-mail (quem a assina é o cuidador PF, fora do
-  sistema). O colaborador
+  ficha (**Requerimento e declaração**). ⚠️ **Roteiro criado NÃO é pessoa
+  avisada** (v3.16.1): quem foi ativado antes do e-mail de aviso existir tem o
+  documento e nunca soube — por isso as rotas garantem as DUAS coisas (criam o
+  roteiro se faltar E avisam), o estado carrega `avisado_em`/`nunca_avisado` e o
+  botão fica visível enquanto `pode_avisar` (some só depois que o colaborador
+  assina). O carimbo `creche_requerimento_avisado` só é gravado **se o e-mail
+  saiu** — registrar antes faria a ficha dizer "avisado" sobre envio que falhou.
+  `disparar-pendentes` varre os ativos separando `criados`/`avisados`/
+  `sem_email`/`ja_assinados`, e `enviar-declaracao` manda a declaração-modelo
+  ANEXA ao e-mail (quem a assina é o cuidador PF, fora do sistema). O colaborador
   assina na PRÓPRIA sessão de creche (já 2FA; etapa `candidato` SEM `assinatura_id`,
   por isso não aparece no wizard), o RH contra-assina pela fila. Na consolidação,
   `_consolidar_pdf_final` desvia p/ `gerar_requerimento_creche(vistos=...)` (mantém

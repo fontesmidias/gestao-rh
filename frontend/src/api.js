@@ -1054,12 +1054,24 @@ export const rh = {
   // Requerimento e declaração — gerenciamento pelo RH (v3.16). O disparo
   // acontecia SÓ dentro da ativação, num try/except: quem ficasse sem o
   // roteiro não tinha porta nenhuma para reprocessar.
+  //
+  // ⚠️ As duas rotas de requerimento CRIAM o roteiro **e** avisam a pessoa —
+  // são fatos independentes (v3.16.1). Quem já tem o documento e nunca foi
+  // avisado é cobrado do mesmo jeito; quem já assinou, não. A resposta traz
+  // `email_enviado` (individual) e as listas `criados`/`avisados`/`sem_email`/
+  // `ja_assinados` (lote): "criei o documento" e "cobrei de novo" são
+  // desfechos diferentes, e a tela precisa distingui-los.
   crecheDispararRequerimento: (beneficioId) =>
     req(`/rh/creche/levantamentos/${beneficioId}/disparar-requerimento`,
         { method: 'POST', headers: authRH() }),
+  // 202 + fila: cada aviso custa ~1s de SMTP e o nginx corta em 60s, então a
+  // varredura roda no worker. A resposta traz só a CONTAGEM; o relatório com
+  // nomes vem depois, por `crecheVarredura()`.
   crecheDispararPendentes: () =>
     req('/rh/creche/requerimentos/disparar-pendentes',
         { method: 'POST', headers: authRH() }),
+  crecheVarredura: () =>
+    req('/rh/creche/requerimentos/varredura', { headers: authRH() }),
   crecheEnviarDeclaracao: (beneficioId) =>
     req(`/rh/creche/levantamentos/${beneficioId}/enviar-declaracao`,
         { method: 'POST', headers: authRH() }),

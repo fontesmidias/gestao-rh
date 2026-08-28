@@ -292,7 +292,8 @@ function Levantamentos() {
   const [msg, setMsg] = useState(null)
   const [aberto, setAberto] = useState(null) // benefício em detalhe
   const [doc, setDoc] = useState(null)       // {blob, nome} exibido na tela
-  const [historico, setHistorico] = useState(null) // timeline do benefício aberto
+  const [historico, setHistorico] = useState(null)
+  const [varredura, setVarredura] = useState(null) // timeline do benefício aberto
 
   const verHistorico = async (ben) => {
     // TOGGLE: clicar de novo recolhe. Botão que só abre e nunca fecha entulha a
@@ -539,30 +540,56 @@ function Levantamentos() {
   // quem já estava ativo quando o disparo falhava em silêncio — um a um seriam
   // dezenas de cliques. PRESTA CONTAS de quem não foi (v2.14): lote que só diz
   // "pronto" faz acreditar que resolveu o que não resolveu.
+  // Varredura dos requerimentos pendentes. É ASSÍNCRONA (202 + fila): cada
+  // aviso custa ~1s de SMTP e o nginx corta em 60s — sincronamente, com a base
+  // cheia, o RH veria "erro de rede" com metade dos e-mails já enviados.
   const dispararPendentes = async () => {
-    const pendentes = (lista || []).filter((b) => b.requerimento
-                                                  && b.requerimento.pendente_disparo).length
-    const quantos = pendentes ? `${pendentes} benefício(s) ativo(s)` : 'os benefícios ativos'
-    if (!window.confirm(`Liberar o requerimento para assinatura de ${quantos} `
-                        + 'que ainda não receberam?\n\nCada pessoa recebe um e-mail '
-                        + 'avisando que há documento a assinar.')) return
+    // A prévia vem do SERVIDOR, não da lista da tela: o filtro pode estar
+    // escondendo gente, e prometer um número menor do que o que vai acontecer
+    // é pior que não prometer nada.
+    let previa = null
+    try { previa = await api.crecheVarredura() } catch { /* segue sem prévia */ }
+    const aCriar = previa ? previa.a_criar : null
+    const aAvisar = previa ? previa.a_avisar : null
+    const total = previa ? aCriar + aAvisar : null
+    if (total === 0) {
+      setMsg('Nada a fazer: todos os benefícios ativos já estão com o '
+             + 'requerimento entregue ou assinado.')
+      return
+    }
+    if (!window.confirm(total === null
+      ? 'Rodar a varredura em todos os benefícios ativos?'
+      : `Serão avisados ${total} colaborador(es):\n`
+        + `· ${aCriar} sem o requerimento criado\n`
+        + `· ${aAvisar} com o requerimento pronto, aguardando assinatura\n\n`
+        + 'Cada um recebe um e-mail com o link para assinar. Continuar?')) return
     setMsg(null); setErro(null)
     try {
-      const r = await comAmpulheta('Liberando os requerimentos pendentes…',
+      const r = await comAmpulheta('Enfileirando a varredura…',
         () => api.crecheDispararPendentes())
-      const n = (r.disparados || []).length
-      const falhas = r.falhas || []
-      setMsg(n === 0
-        ? 'Nenhum benefício ativo estava sem requerimento — nada a fazer.'
-        : `${n} requerimento(s) liberado(s): ${r.disparados.map((d) => d.nome).join(', ')}.`)
-      if (falhas.length) {
-        // Quem falhou aparece NOMEADO, não some no total.
-        setErro(`Não foi possível liberar para: ${falhas.map((f) => f.nome).join(', ')}. `
-                + 'Tente pela ficha de cada um para ver o motivo.')
-      }
+      // O trabalho roda no worker: dizer "pronto" agora seria mentira, e o RH
+      // fecharia a tela achando que acabou.
+      setMsg(`Varredura iniciada para ${r.a_criar + r.a_avisar} colaborador(es) `
+             + '— os e-mails saem em segundo plano (cerca de 1 por segundo). '
+             + 'Use "Ver resultado da varredura" para acompanhar.')
+      setVarredura('rodando')
+    } catch (e) {
+      setErro((e.dados && e.dados.resolve)
+        || `Falha ao iniciar a varredura (${e.detail || e.message}).`)
+    }
+  }
+
+  // O relatório fica GUARDADO no servidor: sem isso, quem fecha a aba perde a
+  // lista de quem foi avisado — e é ela que diz para quem NÃO cobrar de novo.
+  const verVarredura = async () => {
+    if (varredura && varredura !== 'rodando') { setVarredura(null); return }
+    setErro(null)
+    try {
+      const r = await api.crecheVarredura()
+      setVarredura(r)
       await carregar()
     } catch (e) {
-      setErro(`Falha na varredura (${e.detail || e.message}).`)
+      setErro(`Não foi possível ler o resultado (${e.detail || e.message}).`)
     }
   }
 
@@ -586,15 +613,21 @@ function Levantamentos() {
       {msg && <div className="sucesso">{msg}</div>}
       {erro && <div className="alerta">{erro}</div>}
 
+      {varredura && varredura !== 'rodando' && <RelatorioVarredura r={varredura} />}
       {!lista ? <p>Carregando…</p> : (
         <DashPlanilha id="creche" colunas={colunas} dados={lista} cards={cards}
                       filtrosExtras={filtrosExtras}
                       acoesFiltro={
                         /* Ação, não filtro: fica na barra e NUNCA dentro de
                            bloco que se recolhe (v2.76.1). */
-                        <button className="btn-secundario btn-mini" onClick={dispararPendentes}
-                                title="Libera o requerimento de todos os benefícios ativos que ainda não receberam">
-                          📨 Liberar requerimentos pendentes</button>}
+                        <>
+                          <button className="btn-secundario btn-mini" onClick={dispararPendentes}
+                                  title="Cria o requerimento de quem não tem e reenvia o aviso a quem tem mas ainda não assinou">
+                            📨 Avisar requerimentos pendentes</button>
+                          <button className="btn-secundario btn-mini" onClick={verVarredura}
+                                  title="Relatório da última varredura: quem foi criado, avisado, ficou sem e-mail ou falhou">
+                            📋 {varredura && varredura !== 'rodando' ? 'Ocultar' : 'Ver'} resultado da varredura</button>
+                        </>}
                       acoesLinha={acoesLinha}
                       linhaExpandida={(b) => (aberto === b.id
                         ? <DetalheBeneficio
@@ -961,6 +994,42 @@ function DetalheBeneficio({ b, historico, verHistorico, verDocCrianca, verDocume
 // Duas coisas que o RH não tinha e agora tem: ANEXAR o comprovante ele mesmo
 // (antes, faltando documento, o único caminho era devolver o levantamento
 // inteiro e esperar) e ver quantas FOLHAS o envio tem.
+// Relatório da varredura em lote. Cada grupo aparece NOMEADO: um número só não
+// deixa distinguir "criei o documento" de "cobrei de novo", e quem ficou de
+// fora (sem e-mail, falha) precisa de nome para o RH agir.
+function RelatorioVarredura({ r }) {
+  if (!r.houve) {
+    return (
+      <div className="rh-card" style={{ margin: '0 0 .8rem' }}>
+        <p className="explica" style={{ margin: 0 }}>
+          Nenhuma varredura foi executada ainda. Pendentes agora:{' '}
+          <strong>{r.a_criar}</strong> sem requerimento ·{' '}
+          <strong>{r.a_avisar}</strong> aguardando assinatura.</p>
+      </div>
+    )
+  }
+  const grupo = (rot, lista, cor) => (lista && lista.length ? (
+    <p className="explica" style={{ margin: '0 0 .3rem', color: cor }}>
+      <strong>{rot} ({lista.length}):</strong>{' '}
+      {lista.map((d) => d.nome).join(', ')}</p>) : null)
+  return (
+    <div className="rh-card" style={{ margin: '0 0 .8rem' }}>
+      <h4 style={{ margin: '0 0 .4rem' }}>Última varredura de requerimentos</h4>
+      <p className="explica" style={{ margin: '0 0 .5rem' }}>
+        {r.concluido_em ? `Concluída em ${fmtDataHora(r.concluido_em)}` : 'Em andamento'}
+        {r.por && ` · por ${r.por}`} · {r.total_ativos} benefício(s) ativo(s).</p>
+      {grupo('Requerimento criado e avisado', r.criados)}
+      {grupo('Aviso reenviado', r.avisados)}
+      {grupo('Já haviam assinado', r.ja_assinados)}
+      {grupo('SEM e-mail — ninguém foi avisado', r.sem_email, '#7a5b1a')}
+      {grupo('Falhou', r.falhas, '#d9534f')}
+      {!(r.criados || []).length && !(r.avisados || []).length && (
+        <p className="explica" style={{ margin: 0 }}>
+          Nenhum aviso precisou ser enviado nesta passada.</p>)}
+    </div>
+  )
+}
+
 // --- Requerimento e declaração (v3.16) --------------------------------------
 // O disparo do requerimento vivia SÓ dentro da ativação, num try/except: quando
 // falhava, o benefício ficava `ativo` e o colaborador nunca via o que assinar —
@@ -973,11 +1042,25 @@ function RequerimentoBeneficio({ b, recarregar }) {
 
   const disparar = async () => {
     setMsg(null); setErro(null)
+    // Reenviar para quem JÁ foi avisado é decisão do RH, não do sistema — mas
+    // com a informação na mão: sem saber a data do último aviso, dá para
+    // disparar o mesmo e-mail várias vezes sem perceber, e e-mail repetido
+    // demais faz a pessoa ignorar o próximo.
+    if (r.disparado && r.avisado_em
+        && !window.confirm('O último aviso foi enviado em '
+                           + `${fmtDataHora(r.avisado_em)}.\n\nEnviar de novo?`)) return
     try {
-      await comAmpulheta('Liberando o requerimento…',
+      const res = await comAmpulheta(r.disparado ? 'Reenviando o aviso…' : 'Liberando o requerimento…',
         () => api.crecheDispararRequerimento(b.id))
-      setMsg('Requerimento liberado. O colaborador recebeu o aviso por e-mail '
-             + 'e já pode assinar pelo link do creche.')
+      // O e-mail é o que a pessoa recebe: dizer "avisado" quando ele não saiu
+      // faria o RH parar de cobrar justamente quem não soube de nada.
+      setMsg(res.email_enviado
+        ? (res.motivo === 'criado_e_avisado'
+            ? 'Requerimento liberado e aviso enviado. Já dá para assinar pelo link do creche.'
+            : 'Aviso reenviado — o colaborador recebeu o link para assinar.')
+        : 'O requerimento está liberado, mas o AVISO NÃO SAIU (sem e-mail '
+          + 'cadastrado ou falha no envio). Corrija o e-mail em "reenviar link" '
+          + 'e tente de novo.')
       await recarregar()
     } catch (e) {
       // Recusa que oferece a SAÍDA (v2.93): o backend manda `resolve` dizendo
@@ -1009,6 +1092,14 @@ function RequerimentoBeneficio({ b, recarregar }) {
           ⚠️ <strong>O requerimento ainda não foi liberado para assinatura.</strong>{' '}
           O benefício está ativo, mas o colaborador não recebeu nada para
           assinar — libere aqui.</p>)}
+      {/* "Liberado" e "avisado" são coisas DIFERENTES — confundi-las foi o
+          defeito da v3.16. Quem foi ativado antes dela tem o documento e nunca
+          soube disso, então o estado diz as duas coisas. */}
+      {r.disparado && !r.concluido && !r.assinado_colaborador && r.nunca_avisado && (
+        <p className="aviso-inline" style={{ margin: '0 0 .6rem' }}>
+          ⚠️ <strong>O colaborador nunca foi avisado.</strong> O requerimento
+          está liberado, mas nenhum e-mail saiu pedindo a assinatura — provável
+          para quem foi ativado antes desta correção.</p>)}
       {r.disparado && (
         <p className="explica" style={{ margin: '0 0 .6rem' }}>
           {r.concluido
@@ -1016,13 +1107,23 @@ function RequerimentoBeneficio({ b, recarregar }) {
             : r.assinado_colaborador
               ? `✍️ O colaborador já assinou. Aguardando: ${r.aguardando || 'RH'} `
                 + '(assine pela fila "Minhas assinaturas").'
-              : '⏳ Liberado — aguardando a assinatura do colaborador.'}</p>)}
+              : '⏳ Liberado — aguardando a assinatura do colaborador.'}
+          {r.avisado_em && ` · último aviso em ${fmtDataHora(r.avisado_em)}`}</p>)}
       {msg && <p className="sucesso" style={{ margin: '0 0 .6rem' }}>{msg}</p>}
       {erro && <p className="alerta" style={{ margin: '0 0 .6rem' }}>{erro}</p>}
       <div className="rh-lote">
-        {r.pendente_disparo && (
-          <button className="btn-principal btn-mini" onClick={disparar}>
-            📨 Liberar requerimento para assinatura</button>)}
+        {/* O botão existe enquanto COUBER COBRAR — não só quando falta o
+            roteiro. Escondê-lo depois de criado deixava sem saída quem tinha o
+            documento e nunca recebeu o aviso (o caso da Daphne, 27/08/2026). */}
+        {r.pode_avisar && (
+          <button className={r.pendente_disparo || r.nunca_avisado
+                    ? 'btn-principal btn-mini' : 'btn-secundario btn-mini'}
+                  onClick={disparar}
+                  title={r.disparado
+                    ? 'Reenvia ao colaborador o e-mail com o link para assinar'
+                    : 'Cria o requerimento e avisa o colaborador por e-mail'}>
+            📨 {r.pendente_disparo ? 'Liberar requerimento para assinatura'
+                 : r.nunca_avisado ? 'Avisar o colaborador' : 'Reenviar aviso'}</button>)}
         <button className="btn-secundario btn-mini" onClick={enviarDeclaracao}
                 title="Envia ao colaborador, por e-mail, o modelo de declaração de quitação em anexo">
           ✉️ Enviar declaração-modelo</button>
