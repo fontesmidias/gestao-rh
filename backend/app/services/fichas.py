@@ -620,9 +620,17 @@ def aplicar_marca(db) -> None:
         EMPRESA_RODAPE = f"{d['empresa_endereco']}\n{d['empresa_contato']}"
     except Exception:
         pass  # config indisponível: mantém os padrões
-# Assinantes-padrão; podem ser trocados pelo painel (Configurações → Assinantes).
-EMPRESA_ASSINANTES = (("Leandro de Sá", "CEO", "[CPF-REMOVIDO-LGPD]"),
-                      ("Láysa Beatriz", "Assistente de RH", "[CPF-REMOVIDO-LGPD]"))
+# Assinantes-padrão: vazios de propósito.
+#
+# Até 2026-08-29 esta tupla trazia nome, cargo e CPF de duas pessoas reais como
+# valor embutido. O repositório é público, então isso era dado pessoal exposto.
+#
+# Os assinantes de verdade são cadastrados pelo RH em Configurações → Assinantes
+# e chegam aqui por `aplicar_marca(db)`, que já roda antes de cada emissão. Com a
+# tupla vazia, um sistema recém-instalado gera a ficha sem bloco de assinatura
+# até que o RH cadastre os signatários — o que é o comportamento correto: ninguém
+# deve assinar por padrão.
+EMPRESA_ASSINANTES: tuple[tuple[str, str, str], ...] = ()
 NAVY = (23, 26, 60)
 _ASSETS = Path(__file__).resolve().parent.parent / "assets"
 LOGO = str(_ASSETS / "logo.png")
@@ -646,14 +654,25 @@ def _desenhar_marca_dagua(pdf) -> None:
 
 
 def assinantes_config(db: Session) -> list[tuple[str, str, str]]:
-    """Assinantes dos documentos oficiais: config do painel ou o padrão."""
+    """Assinantes dos documentos oficiais, lidos do painel.
+
+    Percorre os dois slots de configuração, e não `EMPRESA_ASSINANTES`: desde que
+    o padrão passou a ser vazio (ver o comentário na definição), iterar sobre ele
+    faria a função devolver lista vazia mesmo com assinantes cadastrados.
+
+    Um slot sem nome é omitido — assinatura em branco não deve ir para o
+    documento. Cargo e CPF caem no padrão da posição, quando ele existir.
+    """
     from app.services.config_dinamica import ler_config
     cfg = ler_config(db, ("doc_ass1_nome", "doc_ass1_cargo", "doc_ass1_cpf",
                           "doc_ass2_nome", "doc_ass2_cargo", "doc_ass2_cpf"))
     saida = []
-    for i, padrao in enumerate(EMPRESA_ASSINANTES, start=1):
-        nome = cfg.get(f"doc_ass{i}_nome", "")
-        saida.append((nome or padrao[0],
+    for i in (1, 2):
+        padrao = EMPRESA_ASSINANTES[i - 1] if len(EMPRESA_ASSINANTES) >= i else ("", "", "")
+        nome = cfg.get(f"doc_ass{i}_nome", "") or padrao[0]
+        if not nome:
+            continue
+        saida.append((nome,
                       cfg.get(f"doc_ass{i}_cargo", "") or padrao[1],
                       cfg.get(f"doc_ass{i}_cpf", "") or padrao[2]))
     return saida
