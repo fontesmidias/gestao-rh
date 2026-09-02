@@ -15,7 +15,8 @@ import unicodedata
 from sqlalchemy.orm import Session
 
 from app.models.candidato import Candidato, Empresa, Jornada, PostoServico
-from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco)
+from app.models.ficha import (DadosPessoais, DocumentosIdentificacao, Endereco,
+                              ValeTransporte)
 
 
 def normalizar_cargo(texto) -> str:
@@ -53,6 +54,16 @@ COLUNAS_TIRVU = [
     "Endereço", "Endereço - Número", "Endereço - Complemento",
     "Endereço - CEP", "Endereço - Bairro", "Endereço - Cidade",
     "Endereço - UF", "Login Sign-On",
+    # --- AC→AH: layout novo do fornecedor (02/09/2026) ---
+    # As 28 acima são as do modelo antigo, na ordem original: o Tirvu continua
+    # aceitando aquele layout, então NADA nelas muda. Estas seis são OPCIONAIS —
+    # campo vazio não vira pendência (regra do fornecedor), e por isso nenhuma
+    # entra em `pendencias_linha`.
+    #
+    # Nenhum campo novo foi perguntado a ninguém: os seis já eram coletados na
+    # ficha. O trabalho aqui foi LIGAR o que existe às colunas novas.
+    "Nome do Pai", "Nome da Mãe", "Nº Cartão DF Trans", "Nº do RG",
+    "Órgão Expedidor do RG", "Data de Emissão do RG",
 ]
 
 
@@ -212,7 +223,7 @@ def garantir_matricula(db: Session, c: Candidato) -> str:
 
 
 def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dict:
-    """Uma linha do layout, na ordem exata das 28 colunas.
+    """Uma linha do layout, na ordem exata das 34 colunas.
 
     `gerar_matricula=True` (só no EXPORT) gera e GRAVA a matrícula automática
     quando faltar. Na pré-checagem de pendências fica False — consulta não muta
@@ -220,6 +231,9 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
     p = db.get(DadosPessoais, c.id)
     e = db.get(Endereco, c.id)
     d = db.get(DocumentosIdentificacao, c.id)
+    # O cartão do DF Trans mora no VALE-TRANSPORTE, não em DadosPessoais — é o
+    # único dos seis campos novos que exige uma consulta a mais aqui.
+    vt = db.get(ValeTransporte, c.id)
     posto = db.get(PostoServico, c.posto_servico_id) if c.posto_servico_id else None
     jornada = db.get(Jornada, c.jornada_id) if c.jornada_id else None
     # Empresa: usa a razão social da empregadora vinculada; sem vínculo (a
@@ -320,6 +334,24 @@ def linha_tirvu(db: Session, c: Candidato, gerar_matricula: bool = False) -> dic
         "Endereço - Cidade": (e.cidade if e else "") or "",
         "Endereço - UF": (e.uf if e else "") or "",
         "Login Sign-On": "",
+        # --- as seis do layout novo (02/09/2026) ---
+        # `getattr` com padrão em vez de `x.campo if x else ""`: o registro pode
+        # nem existir (ninguém preencheu aquela seção da ficha). Nos dois casos a
+        # coluna sai vazia, que é o comportamento certo — as seis são opcionais.
+        # Todas OPCIONAIS: quem não tem o dado exporta com a célula vazia, e o
+        # `montar_workbook_tirvu` simplesmente não escreve a célula. Nenhuma
+        # entra em `pendencias_linha` — o Tirvu aceita o layout de 28 colunas.
+        "Nome do Pai": getattr(p, "nome_pai", "") or "",
+        "Nome da Mãe": getattr(p, "nome_mae", "") or "",
+        # ⚠️ TEXTO, nunca número (orientação do fornecedor). Como número, o Excel
+        # come o zero à esquerda e o cartão entra ERRADO na integração — sem erro
+        # nenhum, que é o pior tipo de defeito. A coluna já é `String(40)` no
+        # banco: o valor nasce texto e **não deve ser convertido nem "limpo"**
+        # (nada de `_so_digitos` aqui, ao contrário do Whatsapp e do PIS).
+        "Nº Cartão DF Trans": getattr(vt, "cartao_dftrans", "") or "",
+        "Nº do RG": getattr(d, "rg_numero", "") or "",
+        "Órgão Expedidor do RG": getattr(d, "rg_orgao_emissor", "") or "",
+        "Data de Emissão do RG": _data(getattr(d, "rg_data_expedicao", None)),
     }
 
 
@@ -328,7 +360,7 @@ ABA_TIRVU = "Plan1"
 
 def montar_workbook_tirvu(linhas: list[dict]) -> bytes:
     """Gera a planilha EXATAMENTE no formato que o Tirvu aceita na importação:
-    aba 'Plan1', as 28 colunas de COLUNAS_TIRVU em ordem FIXA (nunca a união das
+    aba 'Plan1', as 34 colunas de COLUNAS_TIRVU em ordem FIXA (nunca a união das
     chaves), SEM auto-filtro, SEM painel congelado e SEM cabeçalho estilizado —
     o importador do Tirvu recusa planilhas com essa "decoração" (autoFilter no
     XML, aba com outro nome). Célula vazia é string vazia (não célula ausente/

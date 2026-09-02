@@ -14,6 +14,44 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.19.0] — 2026-09-02 — As 34 colunas do Tirvu
+
+Fecha o **Épico 1 da Onda 1** da 24ª leva (histórias 1.3 e 1.4, item 16). O Bruno
+trouxe o layout novo do Tirvu no mesmo dia do brain dump: a planilha de importação
+passou de **28 para 34 colunas**.
+
+**Era ligar, não coletar.** Os seis campos novos — nome do pai, nome da mãe,
+cartão do DF Trans, número do RG, órgão expedidor e data de emissão — **já eram
+coletados na ficha**. Nenhuma pergunta nova ao candidato, nenhuma migration,
+nenhuma tela alterada. O trabalho foi ligar o que existe às colunas novas.
+
+⚠️ **O Nº Cartão DF Trans sai como TEXTO**, e isso é regra do fornecedor: como
+número, o Excel come o zero à esquerda e o cartão entra errado na integração —
+sem erro nenhum, que é o pior tipo de defeito. A asserção do teste é sobre o
+**tipo da célula**, não só sobre o valor: numa comparação frouxa, `12345678`
+passaria por igual a `"0012345678"`. Verificado também numa planilha real, gerada
+e reaberta: as seis caíram exatamente em AC→AH, todas como texto.
+
+⚠️ **As seis são opcionais e nenhuma vira pendência.** Quem não tem RG ou DF Trans
+exporta como sempre exportou. Exigi-las bloquearia gente que hoje sai sem
+problema — é a armadilha do "Registra Ponto" (v1.82) ao contrário: lá o campo
+vazio precisava virar pendência porque o Tirvu o aceitava calado; aqui o vazio é
+legítimo.
+
+**O teste compara com o arquivo do fornecedor, não com uma lista.** Ele lê o
+`.xlsx` oficial e confere as 34 células do cabeçalho contra o código. Uma cópia
+escrita no teste divergiria do modelo na primeira revisão dele e seguiria verde
+(v2.54). Acrescentada uma trava que não estava pedida: o layout antigo de 28
+colunas tem de continuar sendo o **prefixo exato** do novo — é o que sustenta a
+compatibilidade que o fornecedor promete.
+
+Três mutações validadas: gravar o DF Trans como número (o teste mostra o zero
+comido), tornar um dos seis obrigatório, e trocar a ordem de duas colunas novas.
+
+A história 1.4 foi **fechada sem alterações**: os três critérios dela já eram
+cumpridos pela 1.3, como o próprio documento de épicos previa. Verificada por
+execução, incluindo a mutação.
+
 ## [3.18.0] — 2026-09-02 — Admissões também leva quem você marcou
 
 Segunda história da Onda 1 da 24ª leva. Fecha o segundo dos três sintomas que o

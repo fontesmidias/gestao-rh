@@ -24,8 +24,8 @@ da leva que o RH não tem como perceber sozinho.
 |---|---|---|---|
 | 1.1 | [Exportar entrega quem está marcado](22-historia-1-1-exportar-por-selecao.md) | 1 | **review** |
 | 1.2 | [Exportar também em Admissões](23-historia-1-2-exportar-admissoes.md) | 1 | **review** |
-| 1.3 | A planilha do Tirvu sai com as 34 colunas do modelo novo | 1 | backlog |
-| 1.4 | A opcionalidade das colunas novas fica travada em teste | 1 | backlog |
+| 1.3 | [A planilha do Tirvu sai com as 34 colunas](24-historia-1-3-tirvu-34-colunas.md) | 1 | **review** |
+| 1.4 | [A opcionalidade das colunas novas fica travada](25-historia-1-4-opcionalidade-travada.md) | 1 | **review** |
 | 2.1 | A interrogação de ajuda é legível no tema escuro | 2 | backlog |
 | 2.2 | O RH gera a autodeclaração de residência pela ficha | 2 | backlog |
 | 2.3 | O link devolve a pessoa à etapa pendente | 2 | backlog |
@@ -33,12 +33,13 @@ da leva que o RH não tem como perceber sozinho.
 | 3.2 | O RH exclui pela tela da pessoa | 3 | backlog |
 | 3.3 | O candidato excluído volta da lixeira | 3 | backlog |
 
-As histórias **1.1 e 1.2 estão implementadas e em revisão** — os docs
-[22](22-historia-1-1-exportar-por-selecao.md) e
-[23](23-historia-1-2-exportar-admissoes.md) trazem contexto e registro de
-execução. As outras oito seguem em `backlog`, que aqui significa "existe no
-documento de épicos, sem arquivo de história criado ainda". O épico 1 está
-`in-progress`.
+O **Épico 1 está completo**: as quatro histórias (1.1 a 1.4) estão implementadas
+e em revisão — docs [22](22-historia-1-1-exportar-por-selecao.md),
+[23](23-historia-1-2-exportar-admissoes.md),
+[24](24-historia-1-3-tirvu-34-colunas.md) e
+[25](25-historia-1-4-opcionalidade-travada.md). As seis dos épicos 2 e 3 seguem em
+`backlog`, que aqui significa "existe no documento de épicos, sem arquivo de
+história criado ainda".
 
 ## Como o status anda
 
@@ -63,8 +64,8 @@ development_status:
   epic-1: in-progress
   1-1-exportar-entrega-quem-esta-marcado: review
   1-2-exportar-tambem-em-admissoes: review
-  1-3-a-planilha-do-tirvu-sai-com-as-34-colunas-do-modelo-novo: backlog
-  1-4-a-opcionalidade-das-colunas-novas-fica-travada-em-teste: backlog
+  1-3-a-planilha-do-tirvu-sai-com-as-34-colunas-do-modelo-novo: review
+  1-4-a-opcionalidade-das-colunas-novas-fica-travada-em-teste: review
   epic-1-retrospective: optional
 
   epic-2: backlog

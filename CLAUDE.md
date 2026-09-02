@@ -116,6 +116,28 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Layout do Tirvu agora tem 34 colunas — e as 6 novas são OPCIONAIS** (v3.19,
+  item 16 da 24ª leva): o fornecedor mandou modelo novo em 02/09/2026. As 28
+  primeiras são idênticas e na mesma ordem; AC→AH são Nome do Pai, Nome da Mãe,
+  Nº Cartão DF Trans, Nº do RG, Órgão Expedidor do RG e Data de Emissão do RG.
+  **Os seis já eram coletados** (`ficha.py` 86, 87, 141, 142, 143 e 204) — foi
+  ligar, não coletar. ⚠️ **`cartao_dftrans` mora em `ValeTransporte`**, não em
+  `DadosPessoais`: é o único que exigiu `db.get` novo em `linha_tirvu`.
+  ⚠️ **O Nº Cartão DF Trans é TEXTO, nunca número** — como número o Excel come o
+  zero à esquerda e o cartão entra ERRADO na integração, sem erro nenhum. A
+  coluna já é `String(40)`: o valor nasce texto e **não se converte nem se
+  "limpa"** (nada de `_so_digitos` ali, ao contrário do Whatsapp e do PIS); o
+  teste afirma sobre o `data_type` da célula, porque numa comparação frouxa
+  `12345678` passa por igual a `"0012345678"`. ⚠️ **Nenhuma das seis entra em
+  `pendencias_linha`**: campo vazio é legítimo e o layout de 28 continua aceito —
+  exigi-las bloquearia quem hoje exporta sem problema. É o "Registra Ponto"
+  (v1.82) ao contrário: lá o vazio precisava virar pendência porque o Tirvu o
+  aceitava calado. O `test_export_tirvu.py` compara com o `.xlsx` do fornecedor
+  (nunca com lista escrita no teste — v2.54) e ainda exige que as 28 antigas
+  sejam o **prefixo exato** das 34, que é o que sustenta a compatibilidade.
+  ⚠️ **O modelo do fornecedor só tem cabeçalho, sem linha de exemplo**: ele valida
+  a FORMA, não o CONTEÚDO. Passar no teste de layout não prova que os valores
+  estão certos — gere uma planilha e olhe (v2.83).
 - **SELEÇÃO por `ids` não pode afrouxar o RECORTE da tela** (v3.18, ao levar o
   export por seleção para Admissões): em Colaboradores, `ids` é retorno
   antecipado e ignora os demais filtros — **correto lá**, porque o RH marcou

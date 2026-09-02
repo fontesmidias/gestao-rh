@@ -9,6 +9,8 @@ Rode: PYTHONPATH=. .venv/Scripts/python.exe tests/test_export_tirvu.py
 
 from openpyxl import load_workbook
 import io
+import pathlib
+from datetime import date
 
 from app.services import export_tirvu as t
 
@@ -166,5 +168,122 @@ assert ws.cell(row=2, column=i_cargo + 1).value == "Analista DF Jr", \
 i_posto = cabecalho.index("Posto de Serviço")
 assert ws.cell(row=2, column=i_posto + 1).value == "GHS", \
     ws.cell(row=2, column=i_posto + 1).value
+
+
+# ===========================================================================
+# LAYOUT NOVO — 34 colunas (v3.19, item 16 da 24ª leva)
+#
+# O fornecedor mandou um modelo novo em 02/09/2026. As 28 primeiras colunas são
+# idênticas e na mesma ordem; as seis últimas (AC→AH) são novas e OPCIONAIS.
+#
+# Os seis campos JÁ eram coletados na ficha — o trabalho foi ligar o que existe
+# às colunas novas, sem perguntar nada a ninguém e sem migration de coleta.
+# ===========================================================================
+print("\n[34 colunas: o layout bate com o arquivo do FORNECEDOR]")
+
+# A referência é o .xlsx oficial, nunca uma lista escrita aqui: cópia à mão
+# diverge do modelo na primeira revisão dele e o teste segue verde (v2.54).
+#
+# ⚠️ O caminho sai de `__file__`, não do diretório atual: este teste roda com o
+# CWD em `backend/` e o modelo mora em `docs/`, na raiz do repositório.
+MODELO = (pathlib.Path(__file__).resolve().parents[2]
+          / "docs" / "Layout de Importação de Admissões (1).xlsx")
+
+if not MODELO.exists():                                   # pragma: no cover
+    print(f"  FALHOU  modelo do fornecedor não encontrado em {MODELO}")
+    raise SystemExit(1)
+
+ws_modelo = load_workbook(MODELO).active
+cabecalho_oficial = [c.value for c in ws_modelo[1] if c.value is not None]
+
+assert ws_modelo.title == "Plan1", ws_modelo.title
+assert cabecalho_oficial == t.COLUNAS_TIRVU, (
+    "COLUNAS_TIRVU divergiu do modelo oficial.\n"
+    f"  modelo ({len(cabecalho_oficial)}): {cabecalho_oficial}\n"
+    f"  código ({len(t.COLUNAS_TIRVU)}): {t.COLUNAS_TIRVU}")
+
+# O layout ANTIGO continua sendo o prefixo do novo — é o que sustenta a regra do
+# fornecedor de que a planilha de 28 colunas segue aceita.
+MODELO_ANTIGO = MODELO.parent / "Layout de Importação de Admissões.xlsx"
+if MODELO_ANTIGO.exists():
+    antigo = [c.value for c in load_workbook(MODELO_ANTIGO).active[1] if c.value is not None]
+    assert t.COLUNAS_TIRVU[:len(antigo)] == antigo, (
+        "as 28 primeiras colunas mudaram de nome ou de ordem — o layout antigo "
+        "precisa continuar sendo o PREFIXO exato do novo")
+
+print("\n[as seis colunas novas saem preenchidas para quem tem o dado]")
+cid34 = "cand-34"
+cand34 = _Stub(id=cid34, nome_completo="Beltrano de Tal", cpf="123.456.789-09",
+               cargo_funcao="Analista DF Jr", posto_servico_id="p1", empresa_id="e1",
+               jornada_id="j1", registra_ponto=True, celular_whatsapp="(61) 99999-8888",
+               salario_base="R$ 2.000,00", matricula="0001234",
+               data_admissao="01/02/2026", data_nascimento="10/10/1990")
+objs34 = {
+    **objetos,
+    ("Candidato", cid34): cand34,
+    ("DadosPessoais", cid34): _Stub(sexo=_Stub(value="masculino"),
+                                    data_nascimento="10/10/1990",
+                                    nome_pai="Pai Fictício da Silva",
+                                    nome_mae="Mãe Fictícia de Souza"),
+    ("DocumentosIdentificacao", cid34): _Stub(
+        cpf="123.456.789-09", ctps_numero="12345678909", ctps_serie="0000",
+        pis_nis_pasep="12345678901", rg_numero="1234567",
+        rg_orgao_emissor="SSP/DF", rg_data_expedicao=date(2015, 3, 20)),
+    # ⚠️ O cartão do DF Trans mora no VALE-TRANSPORTE, não em DadosPessoais.
+    # Com zero à ESQUERDA de propósito: é o caso que a regra do fornecedor
+    # protege.
+    ("ValeTransporte", cid34): _Stub(cartao_dftrans="0012345678"),
+    ("Endereco", cid34): objetos[("Endereco", cid)],
+}
+linha34 = t.linha_tirvu(_DBFake(objs34, cargo_id="50"), cand34, gerar_matricula=False)
+
+assert linha34["Nome do Pai"] == "Pai Fictício da Silva", linha34["Nome do Pai"]
+assert linha34["Nome da Mãe"] == "Mãe Fictícia de Souza", linha34["Nome da Mãe"]
+assert linha34["Nº do RG"] == "1234567", linha34["Nº do RG"]
+assert linha34["Órgão Expedidor do RG"] == "SSP/DF", linha34["Órgão Expedidor do RG"]
+# data no formato do layout, como as demais datas da planilha
+assert linha34["Data de Emissão do RG"] == "20/03/2015", linha34["Data de Emissão do RG"]
+assert linha34["Nº Cartão DF Trans"] == "0012345678", linha34["Nº Cartão DF Trans"]
+
+print("\n[Nº Cartão DF Trans sai como TEXTO — o zero à esquerda sobrevive]")
+# Regra do fornecedor. Como NÚMERO, o Excel come o zero e o cartão entra errado
+# na integração — sem erro nenhum, que é o pior tipo de defeito.
+#
+# ⚠️ A asserção é sobre o `data_type` da célula, não só sobre o valor: numa
+# comparação frouxa "0012345678" e 12345678 podem passar por iguais. E o cartão
+# precisa estar PREENCHIDO, porque `montar_workbook_tirvu` omite célula vazia —
+# com o campo em branco não haveria célula para ter tipo.
+ws34 = load_workbook(io.BytesIO(t.montar_workbook_tirvu([linha34]))).active
+cab34 = [c.value for c in ws34[1]]
+assert len(cab34) == 34, len(cab34)
+cel_dftrans = ws34.cell(row=2, column=cab34.index("Nº Cartão DF Trans") + 1)
+assert cel_dftrans.value == "0012345678", cel_dftrans.value
+assert cel_dftrans.data_type == "s", (
+    f"o DF Trans saiu como {cel_dftrans.data_type!r} (n = número): o Excel comeria "
+    "o zero à esquerda e o cartão entraria errado na integração")
+
+# as colunas novas caíram nas posições AC→AH (27..32, base 0)
+for pos, nome in enumerate(["Nome do Pai", "Nome da Mãe", "Nº Cartão DF Trans",
+                            "Nº do RG", "Órgão Expedidor do RG",
+                            "Data de Emissão do RG"], start=29):
+    assert cab34[pos - 1] == nome, f"coluna {pos}: esperado {nome!r}, veio {cab34[pos - 1]!r}"
+
+print("\n[as seis são OPCIONAIS: sem elas, exporta igual e não vira pendência]")
+# `linha` (o cenário do topo) não tem NENHUM dos seis campos — os stubs dele não
+# os declaram, exatamente como a ficha de quem nunca preencheu.
+for nome in ("Nome do Pai", "Nome da Mãe", "Nº Cartão DF Trans", "Nº do RG",
+             "Órgão Expedidor do RG", "Data de Emissão do RG"):
+    assert linha[nome] == "", f"{nome} deveria sair vazio, veio {linha[nome]!r}"
+    assert nome not in t.pendencias_linha(linha), (
+        f"{nome} virou PENDÊNCIA — as seis colunas novas são opcionais e o layout "
+        "de 28 continua aceito; exigi-las bloquearia o export de quem hoje sai "
+        "sem problema")
+
+# e a planilha de quem não tem os seis campos continua saindo
+ws_vazio = load_workbook(io.BytesIO(t.montar_workbook_tirvu([linha]))).active
+assert len([c.value for c in ws_vazio[1]]) == 34
+# célula vazia é OMITIDA de propósito (evita o inlineStr malformado que o parser
+# do Tirvu recusa) — então aqui se afirma a AUSÊNCIA, não o tipo.
+assert ws_vazio.cell(row=2, column=cab34.index("Nº Cartão DF Trans") + 1).value is None
 
 print("test_export_tirvu: OK")
