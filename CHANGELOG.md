@@ -14,6 +14,50 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.20.0] — 2026-09-02 — O que estava invisível e o que não tinha porta
+
+Duas histórias do Épico 2 da Onda 1 (itens 6 e 9 da 24ª leva). Nada em comum
+entre elas, além de serem coisas que o Bruno sentiu no mesmo dia.
+
+### O "?" que não dava para ver no tema escuro
+
+A regra era `background: var(--tinta); color: #fff`. Cada metade parece
+inofensiva; juntas produzem o defeito, porque `--tinta` **inverte** com o tema
+(quase-preto no claro, quase-branco no escuro) e o `#fff` **não**. No escuro era
+"?" branco sobre círculo branco.
+
+Medido no navegador, com a fórmula do WCAG sobre o estilo computado: **1,13:1**
+antes, **5,94:1** depois. O mínimo é 4,5:1. No tema claro foi de 16,28:1 para
+4,77:1 — o botão deixou de ser de alto contraste e virou discreto, que é o
+desenho do `.ajuda-q` do painel do RH, corrigido lá na v2.46. Este é do portal do
+CANDIDATO e tinha ficado para trás.
+
+⚠️ **A trava pega a CLASSE do defeito, não o caso.** O `test_design_system.py`
+ganhou um bloco que reprova qualquer regra misturando cor **fixa** com token que
+**inverte**. Tokens de marca e sinal ficam de fora: o verde da casa é o mesmo nos
+dois temas, então `#fff` sobre `var(--verde)` é legítimo.
+
+### A autodeclaração de residência que não tinha porta
+
+O gerador sempre existiu. O documento só nascia **dentro do wizard**, quando o
+candidato declara que o comprovante está no nome de outra pessoa. Se ele não
+declarou — ou se o caso apareceu depois, que é o normal — o RH não tinha como
+emitir. É o padrão da v3.16: *ação que só existe dentro de outra ação não tem
+porta*.
+
+Agora sai pela ficha, com motivo obrigatório na auditoria e recusa nomeando o
+estado quando a pessoa já tem o documento (pendente e assinada pedem ações
+diferentes de quem opera).
+
+⚠️ **Ela NÃO entrou em `DOCS_ESPECIFICOS_DISPONIVEIS`**, e isso é deliberado:
+aquele catálogo alimenta o **kit por posto**. Bastaria alguém marcá-la num kit
+para o sistema passar a exigi-la de **todo mundo daquele posto** — e ela é
+documento da pessoa, não do posto. Na tela, porém, aparece na mesma lista de
+documentos avulsos: mesma natureza, e um segundo bloco competiria por atenção
+repetindo o formulário inteiro por uma opção a mais.
+
+Seis mutações validadas entre as duas histórias. Smoke 15/15.
+
 ## [3.19.0] — 2026-09-02 — As 34 colunas do Tirvu
 
 Fecha o **Épico 1 da Onda 1** da 24ª leva (histórias 1.3 e 1.4, item 16). O Bruno

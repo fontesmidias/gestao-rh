@@ -26,8 +26,8 @@ da leva que o RH não tem como perceber sozinho.
 | 1.2 | [Exportar também em Admissões](23-historia-1-2-exportar-admissoes.md) | 1 | **review** |
 | 1.3 | [A planilha do Tirvu sai com as 34 colunas](24-historia-1-3-tirvu-34-colunas.md) | 1 | **review** |
 | 1.4 | [A opcionalidade das colunas novas fica travada](25-historia-1-4-opcionalidade-travada.md) | 1 | **review** |
-| 2.1 | A interrogação de ajuda é legível no tema escuro | 2 | backlog |
-| 2.2 | O RH gera a autodeclaração de residência pela ficha | 2 | backlog |
+| 2.1 | [A interrogação de ajuda é legível no tema escuro](26-historia-2-1-contraste-ajuda.md) | 2 | **review** |
+| 2.2 | [O RH gera a autodeclaração de residência pela ficha](27-historia-2-2-autodeclaracao-ficha.md) | 2 | **review** |
 | 2.3 | O link devolve a pessoa à etapa pendente | 2 | backlog |
 | 3.1 | A rota de exclusão existe e recusa quem não pode sair | 3 | backlog |
 | 3.2 | O RH exclui pela tela da pessoa | 3 | backlog |
@@ -68,9 +68,9 @@ development_status:
   1-4-a-opcionalidade-das-colunas-novas-fica-travada-em-teste: review
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-a-interrogacao-de-ajuda-e-legivel-no-tema-escuro: backlog
-  2-2-o-rh-gera-a-autodeclaracao-de-residencia-pela-ficha: backlog
+  epic-2: in-progress
+  2-1-a-interrogacao-de-ajuda-e-legivel-no-tema-escuro: review
+  2-2-o-rh-gera-a-autodeclaracao-de-residencia-pela-ficha: review
   2-3-o-link-devolve-a-pessoa-a-etapa-pendente: backlog
   epic-2-retrospective: optional
 

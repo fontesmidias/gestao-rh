@@ -883,7 +883,7 @@ def listar_documentos_especificos(candidato_id: uuid.UUID,
     evitado.
     """
     from app.api.postos import DOCS_ESPECIFICOS_DISPONIVEIS
-    from app.models.assinatura import Assinatura
+    from app.models.assinatura import Assinatura, DocumentoAssinavel
 
     cand = db.get(Candidato, candidato_id)
     if cand is None:
@@ -900,6 +900,13 @@ def listar_documentos_especificos(candidato_id: uuid.UUID,
             {"chave": chave, "rotulo": rotulo, "ja_tem": chave in ja_tem}
             for chave, rotulo in DOCS_ESPECIFICOS_DISPONIVEIS.items()
         ],
+        # A autodeclaração de residência NÃO está no catálogo de kit por posto
+        # (ela não é documento de posto), mas a ficha a oferece na mesma lista de
+        # documentos avulsos — então o estado dela vem junto. Sem isto, a opção
+        # continuaria aparecendo para quem já a tem, e o RH levaria um 409 que o
+        # sistema podia ter evitado.
+        "tem_autodeclaracao":
+            DocumentoAssinavel.autodeclaracao_residencia.value in ja_tem,
     }
 
 
@@ -976,6 +983,92 @@ def acrescentar_documento_especifico(candidato_id: uuid.UUID,
     db.commit()
     return {"ok": True, "documento": chave,
             "rotulo": DOCS_ESPECIFICOS_DISPONIVEIS[chave]}
+
+
+# --------------------------------------------------------------------------
+# AUTODECLARAÇÃO DE RESIDÊNCIA pela ficha (v3.20)
+# --------------------------------------------------------------------------
+#
+# Feedback do Bruno (item 9 da 24ª leva): ele precisa emitir a autodeclaração a
+# partir da página da pessoa.
+#
+# O gerador SEMPRE existiu (`fichas.gerar_autodeclaracao_residencia`) — o que não
+# existia era a PORTA. Ela só nascia dentro do wizard, quando o candidato declara
+# que o comprovante de endereço é de terceiro
+# (`ficha.py::_sincronizar_autodeclaracao_residencia`). Se ele não declarou, ou
+# se o caso apareceu depois, o RH não tinha como emitir: é o padrão da v3.16 —
+# *ação que só existe dentro de outra ação não tem porta*.
+
+
+class AutodeclaracaoIn(BaseModel):
+    """Motivo é obrigatório porque este documento é uma EXCEÇÃO.
+
+    A autodeclaração existe para o caso em que o comprovante está no nome de
+    outra pessoa. Emiti-la pela ficha, fora do fluxo em que o candidato declara
+    isso, é uma decisão do RH — e daqui a seis meses o registro precisa dizer
+    por quê (mesmo desenho do `documento-especifico` e do `reverter` da v1.65).
+    """
+
+    motivo: str
+
+
+@router.post("/rh/candidatos/{candidato_id}/autodeclaracao-residencia")
+def emitir_autodeclaracao_residencia(candidato_id: uuid.UUID,
+                                     payload: AutodeclaracaoIn,
+                                     db: Session = Depends(get_db),
+                                     rh: UsuarioRH = Depends(exige("admissao:escrever"))) -> dict:
+    """Cria a autodeclaração de residência para UMA pessoa, pela ficha.
+
+    O documento nasce como qualquer outro do kit (`Assinatura` liberada) e segue
+    o fluxo normal: aparece para a pessoa assinar, entra no dossiê, conta como
+    pendência. Nada de gerador novo — é o mesmo PDF que o wizard já produzia.
+
+    **Não duplica assinatura viva**: se a pessoa já tem esta autodeclaração
+    pendente ou assinada, responde 409 dizendo em qual dos dois estados ela está.
+    A tela precisa distinguir os casos — "já foi assinada" e "está esperando a
+    pessoa" pedem ações diferentes de quem opera.
+    """
+    from app.models.assinatura import Assinatura, DocumentoAssinavel
+
+    cand = db.get(Candidato, candidato_id)
+    if cand is None:
+        raise HTTPException(status_code=404, detail="candidato_nao_encontrado")
+    if cand.status == StatusCandidato.expurgado:
+        raise HTTPException(status_code=409, detail="candidato_expurgado")
+
+    motivo = (payload.motivo or "").strip()
+    if not motivo:
+        raise HTTPException(status_code=422, detail="motivo_obrigatorio")
+
+    doc = DocumentoAssinavel.autodeclaracao_residencia
+    ja = db.scalar(select(Assinatura).where(
+        Assinatura.candidato_id == cand.id,
+        Assinatura.documento == doc,
+        Assinatura.invalidada_em.is_(None)))
+    if ja is not None:
+        raise HTTPException(status_code=409, detail={
+            "erro": "documento_ja_existe",
+            "assinado": ja.assinado_em is not None,
+            "rotulo": "Autodeclaração de residência",
+        })
+
+    db.add(Assinatura(candidato_id=cand.id, documento=doc,
+                      aguardando_liberacao=False))
+    # O titular do comprovante vai para a auditoria quando existe: é o contraste
+    # que torna o registro verificável — se a ficha já dizia que o comprovante é
+    # de terceiro, o documento era esperado; se não dizia, o motivo escrito pelo
+    # RH é a única explicação que vai restar.
+    from app.models.ficha import Endereco
+    end = db.get(Endereco, cand.id)
+    registrar(db, "autodeclaracao_residencia_emitida", ator="rh",
+              ator_detalhe=rh.email, candidato_id=cand.id,
+              detalhe={"motivo": motivo,
+                       "titular_do_comprovante": (
+                           getattr(end, "comprovante_titular", None) or None)})
+    db.commit()
+    return {"ok": True, "documento": doc.value,
+            "rotulo": "Autodeclaração de residência"}
+
 
 
 # --------------------------------------------------------------------------

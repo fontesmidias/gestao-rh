@@ -854,8 +854,22 @@ function DocumentosEspecificos({ id, setMsg }) {
   const [motivo, setMotivo] = useState('')
   const [salvando, setSalvando] = useState(false)
 
+  // A AUTODECLARAÇÃO entra na mesma lista, e não num bloco próprio: é a mesma
+  // natureza — documento avulso, emitido para UMA pessoa, com motivo obrigatório
+  // e por decisão do RH. Um segundo bloco competiria com este pela atenção e
+  // repetiria o formulário inteiro por causa de uma opção a mais.
+  //
+  // A chave `autodeclaracao_residencia` NÃO está em `DOCS_ESPECIFICOS_DISPONIVEIS`
+  // de propósito: aquele catálogo alimenta o kit POR POSTO, e a autodeclaração
+  // não é documento de posto — oferecê-la ali faria o RH marcá-la num kit e
+  // passar a exigi-la de todo mundo daquele posto.
+  const CHAVE_AUTODECL = 'autodeclaracao_residencia'
   const carregar = () => api.documentosEspecificos(id)
-    .then((r) => setItens(r.disponiveis || []))
+    .then((r) => setItens([
+      ...(r.disponiveis || []),
+      { chave: CHAVE_AUTODECL, rotulo: 'Autodeclaração de residência',
+        ja_tem: !!r.tem_autodeclaracao },
+    ]))
     .catch(() => setItens([]))
   useEffect(() => { carregar() }, [id])
 
@@ -867,7 +881,9 @@ function DocumentosEspecificos({ id, setMsg }) {
     }
     setSalvando(true)
     try {
-      const r = await api.acrescentarDocumentoEspecifico(id, escolhido, motivo.trim())
+      const r = escolhido === CHAVE_AUTODECL
+        ? await api.emitirAutodeclaracaoResidencia(id, motivo.trim())
+        : await api.acrescentarDocumentoEspecifico(id, escolhido, motivo.trim())
       setMsg?.({ tipo: 'ok', texto: `${r.rotulo} acrescentado — já aparece para a pessoa assinar.` })
       setEscolhido(''); setMotivo('')
       carregar()
@@ -886,12 +902,15 @@ function DocumentosEspecificos({ id, setMsg }) {
 
   return (
     <details>
-      <summary>📎 Acrescentar documento específico (cobertura, caso excepcional)</summary>
+      <summary>📎 Emitir documento avulso (cobertura ou autodeclaração)</summary>
       <div className="rh-card">
         <p className="explica">
           Para quem vai <strong>dar cobertura</strong> num posto que exige documento
           próprio — Presidência, INFRAERO — sem mudar a lotação dela. Vale só para
           esta pessoa; o posto e os demais colaboradores não mudam.
+          {' '}Aqui também sai a <strong>autodeclaração de residência</strong>, para
+          quando o comprovante está no nome de outra pessoa e isso não foi
+          declarado no preenchimento.
         </p>
         {livres.length === 0 ? (
           <p className="explica">Esta pessoa já tem todos os documentos específicos.</p>

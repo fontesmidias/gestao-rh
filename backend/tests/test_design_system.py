@@ -132,6 +132,54 @@ checar(not sem_par,
        + ("" if not sem_par else f" — sem par: {', '.join(sem_par)}"))
 
 
+
+print("\n3b. Cor FIXA na mesma regra que um token que INVERTE com o tema?")
+# O defeito do item 6 da 24ª leva, relatado pelo Bruno: o "?" de ajuda do portal
+# do candidato era invisível no tema escuro.
+#
+#     .btn-ajuda { background: var(--tinta); color: #fff; }
+#
+# Cada metade parece inofensiva. Juntas produzem o defeito: `--tinta` INVERTE
+# (quase-preto no claro, quase-branco no escuro) e o `#fff` NÃO — então no
+# escuro era "?" branco sobre círculo branco. **1,13:1**, contra o mínimo de
+# 4,5:1 do WCAG AA.
+#
+# É a v2.46 numa variante nova: lá o problema era o FALLBACK de cor dentro do
+# `var()` (item 2 acima); aqui é uma cor fixa ao lado, na propriedade
+# complementar. O `.ajuda-q` do painel do RH tinha sido corrigido na época; este
+# botão, que é do CANDIDATO, ficou para trás por três versões.
+#
+# A regra: numa mesma declaração, se `background` usa token que inverte, o
+# `color` não pode ser cor fixa (e vice-versa). Um dos dois acompanha o tema e o
+# outro não, e o par sempre falha num dos lados.
+_PARES = (("background", "color"), ("color", "background"))
+# Tokens de SUPERFÍCIE/TEXTO invertem; os de MARCA e SINAL são iguais nos dois
+# temas de propósito (o verde da casa é o verde), então `#fff` sobre
+# `var(--verde)` é legítimo e não entra aqui.
+INVERTEM = {t for t in TOKENS_CLARO
+            if t in TOKENS_ESCURO
+            and not t.startswith(NAO_E_COR)
+            and t not in DE_MARCA}
+
+# Cada bloco `seletor { ... }` do CSS, sem comentários (a explicação de um
+# defeito não pode ser confundida com o defeito — v2.71).
+_css_sem_coment = re.sub(r"/\*.*?\*/", "", fonte_css, flags=re.S)
+mistos = []
+for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", _css_sem_coment):
+    seletor, corpo = m.group(1).strip().splitlines()[-1].strip(), m.group(2)
+    for prop_token, prop_fixa in _PARES:
+        mt = re.search(rf"(?<![\w-]){prop_token}\s*:\s*var\(\s*--([a-z0-9-]+)", corpo)
+        mf = re.search(rf"(?<![\w-]){prop_fixa}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*[;}}]", corpo)
+        if mt and mf and mt.group(1) in INVERTEM:
+            mistos.append(f"{seletor} ({prop_token}: var(--{mt.group(1)}) + "
+                          f"{prop_fixa}: {mf.group(1)})")
+            break
+
+checar(not mistos,
+       "nenhuma regra mistura cor FIXA com token que inverte no tema"
+       + ("" if not mistos else
+          " — um acompanha o tema e o outro não, e o par falha num dos lados: "
+          + "; ".join(sorted(set(mistos)))))
 print("\n4. Toda .rh-tabela está dentro de um .dash-scroll?")
 # `display: table` IGNORA overflow — o wrapper é o único jeito de a tabela
 # rolar dentro de si em vez de empurrar a página (medido em v2.46/v2.48).

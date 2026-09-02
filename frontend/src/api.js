@@ -967,6 +967,14 @@ export const rh = {
     req(`/rh/candidatos/${candidatoId}/documento-especifico`, {
       method: 'POST', headers: authRH(),
       body: JSON.stringify({ documento, motivo }) }),
+  // Autodeclaração de residência pela FICHA (v3.20). O gerador sempre existiu;
+  // faltava a porta — ela só nascia dentro do wizard, quando o candidato declara
+  // que o comprovante é de terceiro. Se ele não declarou, ou se o caso apareceu
+  // depois, o RH não tinha como emitir (o padrão da v3.16: ação que só existe
+  // dentro de outra ação não tem porta).
+  emitirAutodeclaracaoResidencia: (candidatoId, motivo) =>
+    req(`/rh/candidatos/${candidatoId}/autodeclaracao-residencia`, {
+      method: 'POST', headers: authRH(), body: JSON.stringify({ motivo }) }),
   // Anexar/trocar o currículo pelo painel (v2.74). Faltava: o cadastro à mão
   // dizia "anexe depois pela ficha" e não havia rota para isso — a única era a
   // pública, autorizada por um token com TTL que o RH não tem.

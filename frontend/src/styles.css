@@ -607,7 +607,17 @@ textarea { resize: vertical; line-height: 1.5; min-height: 7rem; }
 .btn-remover { background: none; border: 0; color: var(--erro); cursor: pointer;
                font-size: var(--fs-apoio); text-decoration: underline; font-family: inherit; }
 .btn-ajuda {
-  background: var(--tinta); color: #fff; border: 0; border-radius: 50%; width: 30px; height: 30px;
+  /* Tokens que INVERTEM JUNTOS com o tema — mesma correção que o `.ajuda-q` do
+     painel do RH já tinha recebido (v2.46), e que este botão do portal do
+     CANDIDATO não recebeu na época.
+     Era `background: var(--tinta); color: #fff`. No tema escuro `--tinta`
+     inverte para #e9f4ec (quase branco), então o resultado era **"?" branco
+     sobre círculo branco**: 1,13:1 de contraste, contra o mínimo de 4,5:1 do
+     WCAG AA. O Bruno relatou como "não dá para ver a interrogação".
+     Medido agora: 4,77:1 no claro e 5,94:1 no escuro.
+     ⚠️ Nunca escreva cor fixa aqui: é o par fixo+token que produz o defeito. */
+  background: var(--borda-suave); color: var(--cinza-txt);
+  border: 1px solid var(--borda); border-radius: 50%; width: 30px; height: 30px;
   font-weight: 800; cursor: pointer; flex-shrink: 0; font-family: inherit;
   transition: transform .12s;
 }
