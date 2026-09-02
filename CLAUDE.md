@@ -116,6 +116,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Cor FIXA na mesma regra que token que INVERTE = defeito invisível no código**
+  (v3.20, item 6 da 24ª leva): `.btn-ajuda` era `background: var(--tinta);
+  color: #fff`. Cada metade parece inofensiva; juntas produzem "?" branco sobre
+  círculo branco no tema escuro, porque `--tinta` inverte e o `#fff` não.
+  **Medido: 1,13:1**, contra o mínimo de 4,5:1 do WCAG AA. É a v2.46 numa
+  variante nova — lá o problema era o FALLBACK dentro do `var()`, aqui é a cor
+  fixa na propriedade complementar. ⚠️ O `.ajuda-q` do painel do RH já tinha sido
+  corrigido; **o do portal do CANDIDATO ficou para trás por três versões** — ao
+  corrigir um token que inverte, `grep` pelos irmãos. O `test_design_system.py`
+  (bloco 3b) agora reprova a classe inteira do defeito; tokens de MARCA e SINAL
+  ficam de fora, porque o verde da casa é o mesmo nos dois temas e `#fff` sobre
+  `var(--verde)` é legítimo. ⚠️ **Contraste se MEDE no navegador**
+  (`getComputedStyle` + fórmula WCAG), nunca se estima: o valor depende do que o
+  CSS resolve, e um token pode ter mudado sem ninguém tocar na regra.
+- **Catálogo de kit POR POSTO não é lugar de documento da PESSOA** (v3.20, ao
+  dar porta à autodeclaração de residência): a tentação é acrescentar a chave a
+  `postos.DOCS_ESPECIFICOS_DISPONIVEIS` e reusar a rota de documento específico.
+  **Não faça**: aquele catálogo alimenta o kit do POSTO (`postos.py` o consome em
+  cinco lugares), e bastaria alguém marcá-la num kit para o sistema passar a
+  exigir a autodeclaração de **todo mundo daquele posto**. Rota própria; na TELA
+  as duas convivem na mesma lista de documentos avulsos (mesma natureza — avulso,
+  para uma pessoa, com motivo obrigatório), e a listagem devolve o estado dela à
+  parte (`tem_autodeclaracao`), senão a tela oferece o que vai levar 409.
+  ⚠️ Corolário de teste: o campo da auditoria chama-se **`acao`**, não `evento`; e
+  limpar candidato em teste exige **dois commits** (auditoria e assinaturas
+  primeiro, commit, depois o candidato) — no mesmo commit o SQLAlchemy ordena os
+  DELETEs por tabela e estoura `ForeignKeyViolation` numa limpeza que parece
+  certa no código.
 - **Layout do Tirvu agora tem 34 colunas — e as 6 novas são OPCIONAIS** (v3.19,
   item 16 da 24ª leva): o fornecedor mandou modelo novo em 02/09/2026. As 28
   primeiras são idênticas e na mesma ordem; AC→AH são Nome do Pai, Nome da Mãe,
