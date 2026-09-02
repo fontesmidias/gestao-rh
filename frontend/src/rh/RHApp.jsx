@@ -598,6 +598,11 @@ function PainelConteudo({ aoSair }) {
   const [erroConvite, setErroConvite] = useState(null)
   const [enviandoConvite, setEnviandoConvite] = useState(false)
   const [filtros, setFiltros] = useState({ status: '', busca: '', posto_id: '' })
+  // Quem está marcado na lista. Exportar precisa disso e NÃO pode morar no bloco
+  // de ações em massa: aquele bloco só existe quando há seleção, e exportar tem
+  // de continuar alcançável sem ela (v2.76.1 — nada que age some junto com um
+  // bloco que se recolhe). Ver a história 1.1 da 24ª leva.
+  const [marcados, setMarcados] = useState([])
 
   // Tour do painel: dispara UMA vez, na primeira visita, e fica disponível pelo
   // "?" do rodapé do menu. O atraso deixa a sidebar montar — sem ele o driver
@@ -924,6 +929,19 @@ function PainelConteudo({ aoSair }) {
         <DashPlanilha id="admissoes" colunas={COLUNAS_ADMISSAO()}
                       dados={candidatos} cards={cardsAdmissao(candidatos, metricas)}
                       acoesLinha={(c) => acoesAdmissao(c, abrirPessoa)}
+                      /* `acoesMassa` é o que FAZ os checkboxes existirem — o
+                         DashPlanilha só renderiza a coluna de seleção quando a
+                         recebe. Aqui ela não oferece ação (exportar mora no card
+                         de ações, sempre visível): diz o que está marcado, ao lado
+                         do "limpar seleção" que o próprio dash acrescenta. */
+                      acoesMassa={(linhas) => (
+                        <span className="explica">
+                          Use <strong>Exportar planilha completa</strong> acima para
+                          levar {linhas.length === 1 ? 'este candidato'
+                                                     : `estes ${linhas.length} candidatos`}.
+                        </span>
+                      )}
+                      aoSelecionar={setMarcados}
                       filtrosExtras={[
                         { chave: 'busca', rotulo: 'Candidato', valor: filtros.busca,
                           placeholder: '🔎 Nome, e-mail ou CPF',
@@ -944,15 +962,26 @@ function PainelConteudo({ aoSair }) {
                           }}>limpar filtros</button>
                         )}
                         <button className="btn-secundario btn-mini"
-                                title="Baixa uma planilha das admissões que casam o filtro"
+                                title={marcados.length
+                                  ? `Planilha completa dos ${marcados.length} candidatos marcados`
+                                  : 'Planilha completa das admissões que casam o filtro'}
                                 onClick={() => comAmpulheta('Gerando a planilha…', async () => {
-                                  const blob = await api.exportarAdmissoes(Object.fromEntries(
-                                    Object.entries(filtros).filter(([, v]) => v)))
+                                  /* Com seleção, `ids` manda e o servidor ignora os
+                                     filtros; sem seleção, vão os filtros — que é o
+                                     conjunto que a tela está mostrando. */
+                                  const pedido = marcados.length
+                                    ? { ids: marcados.map((c) => c.id) }
+                                    : Object.fromEntries(
+                                        Object.entries(filtros).filter(([, v]) => v))
+                                  const blob = await api.exportarAdmissoesSelecao(pedido)
                                   const a = document.createElement('a')
                                   a.href = URL.createObjectURL(blob)
                                   a.download = `admissoes-${new Date().toISOString().slice(0, 10)}.xlsx`
                                   a.click()
-                                })}>⬇ Exportar planilha</button>
+                                  URL.revokeObjectURL(a.href)
+                                })}>
+                          ⬇ Exportar planilha completa
+                          {marcados.length ? ` (${marcados.length})` : ''}</button>
                       </>}
                       vazio={(filtros.busca || filtros.status || filtros.posto_id)
                         ? 'Nenhuma admissão com esses filtros.'

@@ -23,7 +23,7 @@ da leva que o RH não tem como perceber sozinho.
 | # | História | Épico | Status |
 |---|---|---|---|
 | 1.1 | [Exportar entrega quem está marcado](22-historia-1-1-exportar-por-selecao.md) | 1 | **review** |
-| 1.2 | Exportar também em Admissões | 1 | backlog |
+| 1.2 | [Exportar também em Admissões](23-historia-1-2-exportar-admissoes.md) | 1 | **review** |
 | 1.3 | A planilha do Tirvu sai com as 34 colunas do modelo novo | 1 | backlog |
 | 1.4 | A opcionalidade das colunas novas fica travada em teste | 1 | backlog |
 | 2.1 | A interrogação de ajuda é legível no tema escuro | 2 | backlog |
@@ -33,10 +33,12 @@ da leva que o RH não tem como perceber sozinho.
 | 3.2 | O RH exclui pela tela da pessoa | 3 | backlog |
 | 3.3 | O candidato excluído volta da lixeira | 3 | backlog |
 
-A **1.1 está implementada e em revisão** — o [doc 22](22-historia-1-1-exportar-por-selecao.md)
-traz o contexto e o registro de execução. As outras nove seguem em `backlog`, que
-aqui significa "existe no documento de épicos, sem arquivo de história criado
-ainda". O épico 1 está `in-progress`.
+As histórias **1.1 e 1.2 estão implementadas e em revisão** — os docs
+[22](22-historia-1-1-exportar-por-selecao.md) e
+[23](23-historia-1-2-exportar-admissoes.md) trazem contexto e registro de
+execução. As outras oito seguem em `backlog`, que aqui significa "existe no
+documento de épicos, sem arquivo de história criado ainda". O épico 1 está
+`in-progress`.
 
 ## Como o status anda
 
@@ -60,7 +62,7 @@ ainda". O épico 1 está `in-progress`.
 development_status:
   epic-1: in-progress
   1-1-exportar-entrega-quem-esta-marcado: review
-  1-2-exportar-tambem-em-admissoes: backlog
+  1-2-exportar-tambem-em-admissoes: review
   1-3-a-planilha-do-tirvu-sai-com-as-34-colunas-do-modelo-novo: backlog
   1-4-a-opcionalidade-das-colunas-novas-fica-travada-em-teste: backlog
   epic-1-retrospective: optional

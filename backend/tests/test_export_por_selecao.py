@@ -1,4 +1,4 @@
-"""Exportar entrega EXATAMENTE quem o RH marcou (v3.17).
+"""Exportar entrega EXATAMENTE quem o RH marcou — Colaboradores (v3.17) e Admissões (v3.18).
 
 Feedback do Bruno (02/09/2026), item 13 da 24ª leva:
 
@@ -67,6 +67,8 @@ for _chave, _valor in dict(
 from fastapi.testclient import TestClient  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
 
+from sqlalchemy import select  # noqa: E402
+
 from app.core.db import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.candidato import Candidato, StatusCandidato  # noqa: E402
@@ -98,6 +100,9 @@ def checar(cond, msg):
 
 
 def nomes_da_planilha(conteudo: bytes, coluna: str = "Nome Completo") -> set[str]:
+    # ⚠️ O rótulo difere entre os layouts: o do Tirvu é "Nome Completo" e o da
+    # planilha do RH (`export_planilha`, usada por Admissões e pelo destino
+    # `excel`) é "Nome completo", com minúscula. Passe o certo por parâmetro.
     """Os nomes que REALMENTE saíram no arquivo.
 
     Conferir a contagem não bastaria: exportar o conjunto errado do mesmo
@@ -221,6 +226,107 @@ r = c.post("/api/rh/colaboradores/exportar-selecao?destino=inventado",
            headers=RH, json={"ids": MARCADOS})
 checar(r.status_code == 422,
        f"destino fora do catálogo responde 422 (veio {r.status_code})")
+
+
+# ===========================================================================
+# ADMISSÕES (v3.18) — a mesma regra, na outra tela.
+#
+# O Bruno: *"isso nem tem opção no módulo candidatos"*. Admissões não tinha
+# seleção nenhuma (o `DashPlanilha` só renderiza checkbox quando recebe
+# `acoesMassa`) e a exportação só aceitava filtros na querystring.
+#
+# ⚠️ O que esta tela tem e Colaboradores NÃO tem: o RECORTE é fixo. Admissões
+# mostra só `situacao IS NULL` (v1.63, quando um registro deixou de vazar nas
+# duas telas). Em Colaboradores, `ids` é retorno antecipado e ignora os demais
+# filtros — correto lá, porque o RH marcou aquelas pessoas. Copiar isso para cá
+# deixaria um COLABORADOR EFETIVADO entrar numa planilha de admissões, calado.
+# É o que o bloco 11 trava.
+# ===========================================================================
+print("\n9. Admissões: a seleção manda")
+db = SessionLocal()
+adm_ids, adm_nomes = [], []
+try:
+    for i in range(4):
+        cand = Candidato(
+            nome_completo=f"Candidato Teste {i} {SUF}",
+            email=f"cand{i}.{SUF}@exemplo.com.br",
+            cargo_funcao="Auxiliar de Teste",
+            status=StatusCandidato.convidado,
+            # situacao NULL = está em ADMISSÃO. É o recorte da tela.
+            origem="admissao",
+        )
+        db.add(cand)
+        adm_nomes.append(cand.nome_completo)
+    db.commit()
+    for n in adm_nomes:
+        obj = db.scalar(select(Candidato).where(Candidato.nome_completo == n))
+        adm_ids.append(str(obj.id))
+finally:
+    db.close()
+
+MARCADOS_ADM = adm_ids[:2]
+NOMES_MARCADOS_ADM = set(adm_nomes[:2])
+NOMES_FORA_ADM = set(adm_nomes[2:])
+
+r = c.post("/api/rh/candidatos-exportar", headers=RH, json={"ids": MARCADOS_ADM})
+checar(r.status_code == 200, f"exportar admissões por seleção responde 200 (veio {r.status_code})")
+if r.status_code == 200:
+    saiu = nomes_da_planilha(r.content, "Nome completo")
+    checar(NOMES_MARCADOS_ADM <= saiu, "os 2 marcados estão na planilha de admissões")
+    checar(not (NOMES_FORA_ADM & saiu),
+           "nenhum dos 2 NÃO marcados entrou"
+           + (f" — vazaram: {sorted(NOMES_FORA_ADM & saiu)}" if NOMES_FORA_ADM & saiu else ""))
+
+print("\n10. Admissões: sem seleção, vale o filtro")
+r = c.post("/api/rh/candidatos-exportar", headers=RH, json={"busca": SUF})
+checar(r.status_code == 200, f"exportar por filtro responde 200 (veio {r.status_code})")
+if r.status_code == 200:
+    saiu = nomes_da_planilha(r.content, "Nome completo")
+    checar(set(adm_nomes) <= saiu, "sem `ids`, a busca traz os 4 candidatos")
+
+print("\n11. Admissões NÃO exporta quem já é colaborador (o recorte da tela)")
+# `criados` são os 5 colaboradores dos blocos anteriores: `situacao='ativo'`.
+# Pedi-los por id numa planilha de ADMISSÕES tem de ser recusado — e nomeado.
+colaborador_id = IDS[0]
+r = c.post("/api/rh/candidatos-exportar", headers=RH,
+           json={"ids": MARCADOS_ADM + [colaborador_id]})
+checar(r.status_code == 200, f"a exportação acontece com os válidos (veio {r.status_code})")
+if r.status_code == 200:
+    saiu = nomes_da_planilha(r.content, "Nome completo")
+    checar(NOMES[0] not in saiu,
+           f"o colaborador efetivado NÃO entrou na planilha de admissões — "
+           f"{'vazou: ' + NOMES[0] if NOMES[0] in saiu else 'ok'}")
+    checar(r.headers.get("X-Fora-Do-Recorte") == "1",
+           "a resposta DIZ que 1 ficou de fora do recorte — veio "
+           f"{r.headers.get('X-Fora-Do-Recorte')!r}; sumiço calado é o defeito que "
+           "esta leva combate")
+
+print("\n12. Admissões: só ids fora do recorte -> 404, não planilha vazia")
+r = c.post("/api/rh/candidatos-exportar", headers=RH, json={"ids": [colaborador_id]})
+checar(r.status_code == 404,
+       f"pedir só quem não é de admissão responde 404 (veio {r.status_code}) — "
+       "planilha vazia pareceria sucesso")
+
+print("\n13. Admissões: UUID malformado é 422, nunca 500")
+r = c.post("/api/rh/candidatos-exportar", headers=RH, json={"ids": ["nao-e-uuid"]})
+checar(r.status_code == 422, f"id inválido responde 422 (veio {r.status_code})")
+
+print("\n14. Admissões: o GET por filtros continua servindo")
+r = c.get(f"/api/rh/candidatos-exportar?busca={SUF}", headers=RH)
+checar(r.status_code == 200,
+       f"o GET antigo continua respondendo 200 (veio {r.status_code}) — quem "
+       "chama a rota direto não pode quebrar")
+
+# limpeza dos candidatos de admissão
+db = SessionLocal()
+try:
+    for cid in adm_ids:
+        obj = db.get(Candidato, uuid.UUID(cid))
+        if obj is not None:
+            db.delete(obj)
+    db.commit()
+finally:
+    db.close()
 
 # ---------------------------------------------------------------------------
 # Limpeza: o teste cria registros num banco reaproveitado. Sem isto, cada

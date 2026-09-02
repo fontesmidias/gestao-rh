@@ -14,6 +14,45 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.18.0] — 2026-09-02 — Admissões também leva quem você marcou
+
+Segunda história da Onda 1 da 24ª leva. Fecha o segundo dos três sintomas que o
+Bruno relatou no item 13: **"não achei onde selecionar/exportar"** — em Admissões
+*"isso nem tem opção no módulo candidatos"*.
+
+Eram **duas lacunas, não uma**. A tela não tinha exportação por seleção porque
+não tinha **seleção nenhuma**: o `DashPlanilha` só cria a coluna de checkbox
+quando recebe `acoesMassa`, e Admissões não passava essa prop. Agora dá para
+marcar candidatos, e a planilha traz exatamente eles. Sem marcar ninguém, traz o
+que a tela mostra — o comportamento antigo, preservado.
+
+⚠️ **A seleção NÃO afrouxa o recorte da tela**, e este era o ponto mais fácil de
+errar. Admissões mostra só quem está em admissão (`situacao IS NULL`, v1.63,
+quando um registro deixou de vazar nas duas telas). Em Colaboradores, a seleção
+por `ids` ignora os demais filtros — correto lá, porque o RH marcou aquelas
+pessoas. Copiar isso para cá deixaria um **colaborador efetivado entrar numa
+planilha de admissões**, sem nada denunciando. A rota confere o recorte também no
+caminho por seleção e **nomeia quem recusou**, em vez de descartar calado.
+
+**Escopo deliberado: Admissões exporta a planilha do RH, e só ela.** Não há botão
+de Tirvu nem de Dexion aqui, e isso não é esquecimento: quem está em admissão não
+tem vínculo a criar no Tirvu (decisão do Bruno, 2026-07-19).
+
+**Dois botões vizinhos, rótulos que os distinguem.** Ao ligar a seleção, o
+`⬇ Exportar CSV` do próprio painel passou a respeitá-la sozinho, por efeito da
+v3.17. Ele ficaria ao lado do xlsx com nomes quase idênticos e conteúdos
+diferentes — o CSV traz as colunas visíveis, o xlsx traz a ficha completa. Daí
+"Exportar planilha completa".
+
+Corrigido de passagem: faltava liberar o objeto de download em Admissões, o que
+vazava um por exportação.
+
+**Verificação:** o `test_export_por_selecao.py` foi de 8 para 14 blocos, sempre
+conferindo os nomes dentro da planilha. Duas mutações rodadas e reprovadas —
+tirar a trava do recorte e ignorar a seleção. No navegador, os checkboxes
+aparecem, o rótulo mostra a contagem e a requisição sai por POST. As 12 medições
+da régua de largura passam com a coluna nova.
+
 ## [3.17.0] — 2026-09-02 — A planilha leva quem você marcou
 
 Primeira história da **Onda 1 da 24ª leva** ([doc 19](docs/planejamento/19-feedbacks-24a-leva.md)),

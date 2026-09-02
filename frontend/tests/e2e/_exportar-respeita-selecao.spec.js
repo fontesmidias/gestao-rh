@@ -75,3 +75,40 @@ test('exportar fica alcançável e manda a seleção no corpo', async ({ page })
   expect(req.url().length, 'a URL não carrega os ids (o nginx corta em 8 KB)')
     .toBeLessThan(300)
 })
+
+test('Admissões ganhou seleção e exporta quem está marcado', async ({ page }) => {
+  await entrar(page)
+  await page.goto(`${BASE}/rh`)
+  await page.waitForSelector('.dash-acoes', { timeout: 20000 })
+  await page.waitForSelector('.rh-tabela tbody tr', { timeout: 20000 })
+
+  const acoes = page.locator('.dash-acoes')
+
+  // 1. O botão existe e é alcançável SEM seleção — antes desta versão a tela
+  //    não tinha exportação nenhuma ("isso nem tem opção no módulo candidatos").
+  const exportar = acoes.getByRole('button', { name: /Exportar planilha completa/i })
+  await expect(exportar, 'exportar visível sem seleção').toBeVisible()
+  await expect(exportar, 'exportar habilitado sem seleção').toBeEnabled()
+
+  // 2. A coluna de seleção passou a existir. Ela só aparece quando o
+  //    DashPlanilha recebe `acoesMassa` — sem essa prop não há o que marcar.
+  const caixas = page.locator('.rh-tabela tbody input[type="checkbox"]')
+  const total = await caixas.count()
+  test.skip(total < 2, 'a base local precisa de ao menos 2 candidatos em admissão')
+
+  await caixas.nth(0).check()
+  await caixas.nth(1).check()
+  await expect(acoes.getByRole('button', { name: /Exportar planilha completa\s*\(2\)/ }))
+    .toBeVisible()
+
+  // 3. O que sai na requisição é a seleção, no CORPO.
+  const [req] = await Promise.all([
+    page.waitForRequest((r) => r.url().includes('/candidatos-exportar') && r.method() === 'POST',
+                        { timeout: 20000 }),
+    acoes.getByRole('button', { name: /Exportar planilha completa\s*\(2\)/ }).click(),
+  ])
+  const corpo = JSON.parse(req.postData() || '{}')
+  expect(corpo.ids, 'a seleção viaja no corpo da requisição').toHaveLength(2)
+  expect(req.url().length, 'a URL não carrega os ids (o nginx corta em 8 KB)')
+    .toBeLessThan(300)
+})

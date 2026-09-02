@@ -116,6 +116,31 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **SELEÇÃO por `ids` não pode afrouxar o RECORTE da tela** (v3.18, ao levar o
+  export por seleção para Admissões): em Colaboradores, `ids` é retorno
+  antecipado e ignora os demais filtros — **correto lá**, porque o RH marcou
+  aquelas pessoas. Copiar o mesmo desenho para Admissões deixaria um
+  **colaborador efetivado entrar numa planilha de ADMISSÕES**, calado: aquela
+  tela mostra só `situacao IS NULL` (v1.63), e o recorte é a identidade dela, não
+  um filtro a mais. A rota confere o recorte também no caminho por `ids` e
+  **nomeia** quem recusou (cabeçalho `X-Fora-Do-Recorte`, mesmo desenho do
+  `X-Tirvu-Pendencias`); pedir só gente fora do recorte devolve **404**, porque
+  planilha vazia pareceria sucesso. ⚠️ Ao levar seleção para uma tela nova,
+  pergunte **o que aquela tela é** antes de copiar: onde o recorte for a
+  identidade da lista, `ids` o respeita.
+- **`acoesMassa` é o que FAZ o checkbox existir — `aoSelecionar` sozinho não
+  mostra nada** (v3.18): o `DashPlanilha` só renderiza a coluna de seleção
+  quando recebe `acoesMassa` (`DashPlanilha.jsx:340` e `366`). Passar só o
+  `aoSelecionar` da v3.17 deixaria o callback disparando com lista vazia para
+  sempre, sem nada na tela — as duas props andam juntas. ⚠️ E numa tela cuja
+  única ação é EXPORTAR (que mora no `.dash-acoes`, sempre visível), o
+  `acoesMassa` não deve repetir o botão: devolva um RESUMO do que está marcado,
+  senão viram dois controles para a mesma escolha (v2.75). ⚠️ Corolário que
+  aparece sozinho: desde a v3.17 o `⬇ Exportar CSV` do próprio dash respeita a
+  seleção, então **ligar `acoesMassa` muda o comportamento dele sem ninguém
+  tocar no código** — se houver outro botão de exportar ao lado, os rótulos
+  precisam dizer o que cada um leva (o CSV traz as colunas VISÍVEIS; a planilha
+  do RH traz a ficha completa, ~57 campos).
 - **`setX(...)` sem `useState` declarado não dá erro no build — e some com a
   AÇÃO, não com a tela** (v3.17, defeito vivo desde a v1.76): `Colaboradores.jsx`
   chamava `setAviso` **oito vezes** e o estado tinha sido removido no commit que

@@ -441,6 +441,12 @@ export const rh = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/candidatos${q ? `?${q}` : ''}`, { headers: authRH() })
   },
+  // Admissões por SELEÇÃO (v3.18): POST com os ids no corpo, mesmo contrato do
+  // `exportarSelecao` de Colaboradores — na querystring, 1.171 UUIDs dariam
+  // 44,6 KB contra o buffer de 8 KB do nginx.
+  exportarAdmissoesSelecao: (pedido) =>
+    req('/rh/candidatos-exportar',
+        { method: 'POST', headers: authRH(), body: JSON.stringify(pedido) }),
   exportarAdmissoes: (filtros = {}) => {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/candidatos-exportar${q ? `?${q}` : ''}`, { headers: authRH() })

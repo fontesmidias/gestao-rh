@@ -198,6 +198,87 @@ def exportar_admissoes(status: str | None = None, busca: str | None = None,
         headers={"Content-Disposition": f'attachment; filename="admissoes-{agora}.xlsx"'})
 
 
+class SelecaoAdmissoesIn(BaseModel):
+    """Seleção explícita do RH em Admissões. `ids` vazio/ausente = 'use os filtros'.
+
+    Menor que o `SelecaoExportIn` de Colaboradores de propósito: aqui não existe
+    `situacao`, `incluir_importados` nem `incluir_admissao` — o recorte desta tela
+    é FIXO (só quem está em admissão) e não se afrouxa por parâmetro.
+
+    `list[uuid.UUID]` faz o FastAPI validar antes de a rota rodar: UUID
+    malformado vira 422 nomeando o campo, em vez de 500.
+    """
+
+    ids: list[uuid.UUID] | None = None
+    status: str | None = None
+    busca: str | None = None
+    posto_id: uuid.UUID | None = None
+
+
+@router.post("/rh/candidatos-exportar")
+def exportar_admissoes_selecao(pedido: SelecaoAdmissoesIn,
+                               db: Session = Depends(get_db),
+                               rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
+    """Planilha das admissões com quem o RH MARCOU na tela.
+
+    Feedback do Bruno (02/09/2026, item 13b da 24ª leva): *"isso nem tem opção no
+    módulo candidatos"*. A tela de Admissões não tinha seleção nenhuma — o
+    `DashPlanilha` só renderiza a coluna de checkbox quando recebe `acoesMassa`.
+
+    ⚠️ **A seleção vai no CORPO, nunca na querystring.** Medido na v3.17: 1.171
+    UUIDs dão 44,6 KB contra o buffer default do nginx (`4 8k`), e o corte fica em
+    ~180 selecionados — com um 414 que o `api.js` não trata e que chega à tela
+    como "erro" genérico. O GET abaixo continua servindo o caminho por filtros,
+    que cabe folgado na URL.
+
+    ⚠️ **A seleção NÃO afrouxa o recorte da tela.** Em Colaboradores, `ids` é
+    retorno antecipado e ignora os demais filtros — lá isso é correto, porque o RH
+    marcou aquelas pessoas. Aqui não: Admissões mostra só `situacao IS NULL`
+    (v1.63, quando um registro deixou de vazar nas duas telas), e um id de
+    colaborador efetivado entraria numa planilha de ADMISSÕES sem nada
+    denunciando. Quem não é de admissão é **recusado e nomeado**, não descartado
+    em silêncio.
+    """
+    from app.services.export_planilha import linha_completa, montar_workbook
+
+    fora: list[str] = []
+    if pedido.ids:
+        candidatos = []
+        for cid in pedido.ids:
+            c = db.get(Candidato, cid)
+            # Duas ausências diferentes, mesma resposta ao RH: o id não existe
+            # mais, ou existe e não é de admissão. O que não pode é sumir calado.
+            if c is None or c.situacao is not None:
+                fora.append(str(cid))
+            else:
+                candidatos.append(c)
+    else:
+        candidatos = _candidatos_admissao(db, pedido.status, pedido.busca,
+                                          pedido.posto_id)
+    if not candidatos:
+        raise HTTPException(status_code=404, detail="nenhum_candidato")
+
+    conteudo = montar_workbook([linha_completa(db, c) for c in candidatos])
+    registrar(db, "admissoes_exportadas", ator="rh", ator_detalhe=rh.email,
+              detalhe={"linhas": len(candidatos),
+                       "status": pedido.status or "todos",
+                       # distingue, na auditoria, o export que o RH escolheu
+                       # pessoa a pessoa do que saiu por filtro
+                       "por_selecao": bool(pedido.ids),
+                       "fora_do_recorte": len(fora)})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="admissoes-{agora}.xlsx"',
+                 # Quem o RH pediu e não entrou. Cabeçalho (e não corpo) porque a
+                 # resposta É o arquivo; mesmo desenho do `X-Tirvu-Pendencias`.
+                 "X-Fora-Do-Recorte": str(len(fora)),
+                 "Access-Control-Expose-Headers": "X-Fora-Do-Recorte"})
+
+
+
 # O export EM MASSA para o Tirvu vive em `colaboradores.py`: só se manda para
 # lá quem já virou colaborador (efetivado) — quem ainda está em admissão não
 # tem vínculo para criar no Tirvu. Aqui fica apenas o export individual, usado
