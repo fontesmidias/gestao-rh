@@ -251,6 +251,17 @@ claude-opus-5 (1M context)
 
 ### Debug Log References
 
+- **O CI reprovou na primeira subida, e a causa é instrutiva.** O teste exigia o
+  `.xlsx` do fornecedor, mas dentro do container da API ele roda em `/app` — e a
+  imagem copia só `app/`, `migrations/` e configuração. `docs/` fica de fora **de
+  propósito**: guarda planilhas com dados de gente real, e o repositório é
+  público. Passar `Path(__file__)` resolveu o CWD, mas não a ausência do arquivo.
+  Hoje a comparação com o modelo **roda em desenvolvimento e é pulada com aviso**
+  onde ele não está; reprovar ali seria acusar a ausência de um arquivo que nunca
+  deveria estar na imagem (v2.88). ⚠️ **E a proteção não foi enfraquecida**: as
+  asserções de que são 34 colunas e de que as seis novas estão no fim, na ordem,
+  **não dependem do arquivo** e rodam em qualquer ambiente — verificado rodando a
+  mutação de ordem num diretório sem `docs/`, onde ela continua reprovando.
 - Nenhum container necessário: `test_export_tirvu.py` usa stubs, sem banco.
 - Um ajuste durante a implementação: os stubs do teste não declaram os campos
   novos, e `p.nome_pai` estourava `AttributeError`. Trocado para `getattr` com

@@ -189,27 +189,45 @@ print("\n[34 colunas: o layout bate com o arquivo do FORNECEDOR]")
 MODELO = (pathlib.Path(__file__).resolve().parents[2]
           / "docs" / "Layout de Importação de Admissões (1).xlsx")
 
-if not MODELO.exists():                                   # pragma: no cover
-    print(f"  FALHOU  modelo do fornecedor não encontrado em {MODELO}")
-    raise SystemExit(1)
+# ⚠️ O modelo pode NÃO EXISTIR aqui, e isso é legítimo: dentro do container da
+# API este teste roda em `/app`, e a imagem copia só `app/`, `migrations/` e a
+# configuração — `docs/` fica de fora DE PROPÓSITO (guarda planilhas com dados de
+# gente real, e o repositório é público). Então a comparação com o arquivo do
+# fornecedor roda no ambiente de desenvolvimento e é PULADA, com aviso, onde ele
+# não está: reprovar ali seria acusar a ausência de um arquivo que nunca deveria
+# estar na imagem, e um teste que acusa o certo ensina a ignorar o teste (v2.88).
+#
+# As asserções que NÃO dependem do arquivo estão logo abaixo e rodam sempre.
+if MODELO.exists():
+    ws_modelo = load_workbook(MODELO).active
+    cabecalho_oficial = [c.value for c in ws_modelo[1] if c.value is not None]
 
-ws_modelo = load_workbook(MODELO).active
-cabecalho_oficial = [c.value for c in ws_modelo[1] if c.value is not None]
+    assert ws_modelo.title == "Plan1", ws_modelo.title
+    assert cabecalho_oficial == t.COLUNAS_TIRVU, (
+        "COLUNAS_TIRVU divergiu do modelo oficial.\n"
+        f"  modelo ({len(cabecalho_oficial)}): {cabecalho_oficial}\n"
+        f"  código ({len(t.COLUNAS_TIRVU)}): {t.COLUNAS_TIRVU}")
 
-assert ws_modelo.title == "Plan1", ws_modelo.title
-assert cabecalho_oficial == t.COLUNAS_TIRVU, (
-    "COLUNAS_TIRVU divergiu do modelo oficial.\n"
-    f"  modelo ({len(cabecalho_oficial)}): {cabecalho_oficial}\n"
-    f"  código ({len(t.COLUNAS_TIRVU)}): {t.COLUNAS_TIRVU}")
+    # O layout ANTIGO continua sendo o prefixo do novo — é o que sustenta a regra
+    # do fornecedor de que a planilha de 28 colunas segue aceita.
+    MODELO_ANTIGO = MODELO.parent / "Layout de Importação de Admissões.xlsx"
+    if MODELO_ANTIGO.exists():
+        antigo = [c.value for c in load_workbook(MODELO_ANTIGO).active[1]
+                  if c.value is not None]
+        assert t.COLUNAS_TIRVU[:len(antigo)] == antigo, (
+            "as 28 primeiras colunas mudaram de nome ou de ordem — o layout "
+            "antigo precisa continuar sendo o PREFIXO exato do novo")
+    print("  ok      layout conferido contra o arquivo do fornecedor")
+else:
+    print("  PULADO  o modelo do fornecedor não está neste ambiente"
+          f" ({MODELO}); a comparação de layout roda em desenvolvimento")
 
-# O layout ANTIGO continua sendo o prefixo do novo — é o que sustenta a regra do
-# fornecedor de que a planilha de 28 colunas segue aceita.
-MODELO_ANTIGO = MODELO.parent / "Layout de Importação de Admissões.xlsx"
-if MODELO_ANTIGO.exists():
-    antigo = [c.value for c in load_workbook(MODELO_ANTIGO).active[1] if c.value is not None]
-    assert t.COLUNAS_TIRVU[:len(antigo)] == antigo, (
-        "as 28 primeiras colunas mudaram de nome ou de ordem — o layout antigo "
-        "precisa continuar sendo o PREFIXO exato do novo")
+# Estas NÃO dependem do arquivo e rodam em qualquer ambiente, inclusive no CI
+# dentro do container: são 34 colunas, e as seis novas estão no fim, na ordem.
+assert len(t.COLUNAS_TIRVU) == 34, len(t.COLUNAS_TIRVU)
+assert t.COLUNAS_TIRVU[-6:] == [
+    "Nome do Pai", "Nome da Mãe", "Nº Cartão DF Trans", "Nº do RG",
+    "Órgão Expedidor do RG", "Data de Emissão do RG"], t.COLUNAS_TIRVU[-6:]
 
 print("\n[as seis colunas novas saem preenchidas para quem tem o dado]")
 cid34 = "cand-34"
