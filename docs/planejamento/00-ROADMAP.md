@@ -27,6 +27,7 @@
 |---|---|---|
 | **Comunicado da data de corte** | Decidir QUANDO disparar. O padrão foi corrigido para dia 25, mas quem foi ativado antes recebeu "envie até o dia 5" por e-mail | v3.02 |
 | **Validar a 23ª leva na homologação** | Olhar as telas novas e dizer se está bom | v3.09 |
+| **24ª leva — 6 perguntas em aberto** | Banco da conta salário (um por posto?) · marco dos "5 dias úteis" do VT · termo de VT de quem ainda não está na base · quais movimentações o módulo cobre e quem aprova · base legal do RG/filiação no cadastro público · certificado de quê e quem assina. **Não bloqueiam a Onda 1.** Ver `19-feedbacks-24a-leva.md` | 24ª leva |
 
 ## 🤔 A decidir
 
@@ -38,6 +39,8 @@
 
 | O quê | Por quê | Origem |
 |---|---|---|
+| **24ª leva — Onda 1 (6 itens)** | Exportar respeitando a seleção (hoje marca pessoas e exporta outras — planilha de folha errada em silêncio) · layout novo do Tirvu de 34 colunas · "?" invisível no dark mode · autodeclaração pela ficha · excluir candidato duplicado · voltar pelo link cai na etapa pendente. **Todos já decididos, nenhum espera resposta.** Ver **`19-feedbacks-24a-leva.md`** | 24ª leva |
+| **24ª leva — Ondas 2 a 5** | Módulo de assinaturas (o documento **não é disparado a ninguém** ao concluir — confirmado no código) · conta salário por posto · prazos de VT/VA customizáveis · Banco de Talentos configurável · MCP utilizável · 3 módulos novos (Termo de VT, movimentação funcional, certificados) | 24ª leva |
 | **Declaração PF pré-preenchida** | **Decidido pelo Bruno (19/08/2026)**: *"tem que vir pré-preenchida com os dados já mapeados em relação ao filho do colaborador"*. Hoje o sistema gera o modelo EM BRANCO. O que já existe: nome do colaborador, CPF, e nome + data de nascimento da criança. ⚠️ O que **falta** e o modelo do Dr. Lucas pede: nome, CPF, RG e endereço do CUIDADOR, e o valor pago no mês — esses precisam ser coletados (decidir se por criança, uma vez, ou a cada competência) | 23ª leva |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
 | **Lote-piloto de 50 currículos** | O MCP já cadastra talento (v3.14). Falta a primeira rodada medida: 50, taxa de acerto, ajuste — antes de pensar nos 14 mil. ⚠️ O intervalo de datas é parâmetro do RH, nunca constante, e vai para a auditoria. **`13-mcp-do-portal.md` § 7** | 22ª leva |
