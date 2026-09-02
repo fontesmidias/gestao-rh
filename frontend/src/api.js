@@ -617,6 +617,23 @@ export const rh = {
     const q = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
     return req(`/rh/colaboradores/exportar-dexion${q ? `?${q}` : ''}`, { headers: authRH() })
   },
+  // Export POR SELEÇÃO (v3.17): a seleção vai no CORPO, nunca na URL.
+  //
+  // Medido com a base real: 1.171 UUIDs dão 44,6 KB de querystring, contra o
+  // buffer default do nginx (4 8k). Quebraria a partir de ~180 selecionados,
+  // com um 414 que o `lancarErro` abaixo NÃO trata — o nginx responde HTML, o
+  // `r.json()` falha e o `detail` fica nulo. Exportar 30 pessoas funciona (é
+  // como se testa), a base inteira falha com "erro" genérico. Mesmo desenho do
+  // `arquivoLote`: POST com corpo JSON, resposta binária.
+  //
+  // `destino` é 'tirvu' | 'dexion' | 'excel' — o mesmo conjunto serve os três,
+  // e é o MESMO que a pré-checagem enxerga (antes cada um montava o seu).
+  pendenciasSelecao: (pedido, destino = 'tirvu') =>
+    req(`/rh/colaboradores/exportar-selecao/pendencias?destino=${destino}`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(pedido) }),
+  exportarSelecao: (pedido, destino = 'tirvu') =>
+    req(`/rh/colaboradores/exportar-selecao?destino=${destino}`,
+        { method: 'POST', headers: authRH(), body: JSON.stringify(pedido) }),
   backfillEnderecos: () => req('/rh/enderecos-backfill', { headers: authRH() }),
   aplicarBackfillEnderecos: (itens) =>
     req('/rh/enderecos-backfill', { method: 'POST', headers: authRH(),

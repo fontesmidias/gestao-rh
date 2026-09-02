@@ -143,6 +143,74 @@ if entrevistas.exists():
     checar("api.talentos(" not in codigo,
            "EntrevistasRH não voltou a chamar `api.talentos()` (era `listarTalentos`)")
 
+# --------------------------------------------------------------------------
+print("\n4. nenhum `setX(...)` aponta para estado que não existe")
+# --------------------------------------------------------------------------
+# Mesma família dos blocos acima, num alvo diferente: lá é a FUNÇÃO que não
+# existe no api.js; aqui é o ESTADO que não existe no próprio componente.
+#
+# Achado em 02/09/2026, ao escrever a história 1.1 da 24ª leva:
+# `Colaboradores.jsx` chamava **`setAviso` oito vezes** e nunca declarava
+# `const [aviso, setAviso] = useState(...)`. O estado existiu e foi removido na
+# v1.76 (commit 4577710), quando a tela migrou para o DashPlanilha — as chamadas
+# ficaram apontando para nada.
+#
+# Por que passou despercebido: o projeto **não tem ESLint** (`frontend/` não tem
+# `.eslintrc*` nem `eslint.config.*`), o `npm run build` passa, e a exceção
+# acontece dentro de um handler de clique — não apaga a tela como um erro de
+# render apagaria. O efeito era mudo e caro: **toda ação em massa de
+# Colaboradores** (efetivar, desligar, reativar, reverter, Domínio) estourava
+# `ReferenceError` na PRIMEIRA linha do handler. A ação não acontecia e nada era
+# dito; quem operava clicava e a tela ficava igual.
+#
+# ⚠️ A lista de nativas não é preguiça: `setTimeout` e companhia casam com a
+# convenção `setAlgo(` e apareceriam em 22 arquivos. Teste que acusa o que está
+# certo ensina a equipe a ignorar o teste — que é o oposto do que ele existe
+# para fazer (v2.88). Ao acrescentar aqui, confira que é MESMO de plataforma.
+SETTERS_NATIVOS = {
+    "setTimeout", "setInterval", "setItem", "setProperty", "setSelectionRange",
+    "setAttribute", "setDate", "setHours", "setMinutes", "setSeconds",
+    "setMonth", "setFullYear", "setTime", "setCustomValidity", "setData",
+    "setRequestHeader", "setPointerCapture", "setSelectionRangeText",
+}
+
+def _sem_comentarios_ordem_segura(codigo: str) -> str:
+    """Como `_sem_comentarios`, mas remove o comentário de LINHA primeiro.
+
+    Necessário aqui, e não nos blocos acima: `RHApp.jsx:571` tem
+    `// Splat /rh/* reservado em App.jsx…` — esse `/*`, dentro de um comentário
+    de linha, ABRE um bloco falso para a regra `/* … */`, que então engole ~300
+    linhas até achar o próximo `*/` de verdade. Entre as linhas comidas está a
+    declaração `const [filtros, setFiltros] = useState(...)`, e o teste acusaria
+    como órfão um estado perfeitamente declarado.
+
+    Acusar código correto é pior do que não acusar nada: ensina a equipe a
+    ignorar o teste, que é o oposto do que ele existe para fazer (v2.88).
+    """
+    codigo = re.sub(r"^\s*//.*$", "", codigo, flags=re.M)        # linha // PRIMEIRO
+    codigo = re.sub(r"\{/\*.*?\*/\}", "", codigo, flags=re.S)    # comentário JSX
+    return re.sub(r"/\*.*?\*/", "", codigo, flags=re.S)          # bloco /* */
+
+
+for arquivo in sorted(FRONT.rglob("*.jsx")):
+    codigo = _sem_comentarios_ordem_segura(arquivo.read_text(encoding="utf-8"))
+    usados = {n for n in re.findall(r"\b(set[A-Z]\w*)\s*\(", codigo)
+              if n not in SETTERS_NATIVOS}
+    if not usados:
+        continue
+    # Declaração aceita em qualquer forma que o projeto usa: o par da
+    # desestruturação do `useState` (com ou sem valor inicial no par), o setter
+    # recebido por PROP (o `setMsg` que vários componentes recebem do pai), e a
+    # função própria com esse nome.
+    declarados = set(re.findall(r",\s*(set[A-Z]\w*)\s*\]", codigo))
+    declarados |= set(re.findall(r"\b(set[A-Z]\w*)\s*[,}\)]", codigo))
+    declarados |= set(re.findall(r"(?:const|let|var|function)\s+(set[A-Z]\w*)\b", codigo))
+    orfaos = sorted(usados - declarados)
+    checar(not orfaos,
+           f"{arquivo.relative_to(FRONT)}: todo `setX(...)` tem estado declarado"
+           + (f" — órfão(s): {', '.join(orfaos)}" if orfaos else ""))
+
+
 print()
 if FALHAS:
     print(f"test_api_front_existe: {len(FALHAS)} FALHA(S)")

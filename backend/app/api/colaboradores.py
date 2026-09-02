@@ -337,6 +337,154 @@ def exportar_dexion_massa(status: str | None = None, busca: str | None = None,
                  f'attachment; filename="conversao-dexion-{agora}.xlsx"'})
 
 
+# ----------------------------------------------------------------------
+# Exportar POR SELEÇÃO — a seleção vai no CORPO, não na URL
+# ----------------------------------------------------------------------
+#
+# Feedback do Bruno (02/09/2026): *"marca as pessoas, exporta, e vêm outras"*.
+# A capacidade de exportar por seleção SEMPRE existiu no servidor (`ids` em
+# `_colaboradores_para_tirvu`) e nunca foi usada — o botão vivia no cabeçalho da
+# tela, fora do `DashPlanilha`, e montava o próprio conjunto pelos filtros.
+#
+# ⚠️ **Por que POST e não `?ids=` na URL.** Medido com a base real (1.171
+# colaboradores): 1.171 UUIDs dão **44,6 KB** de querystring, contra o buffer
+# default do nginx (`large_client_header_buffers 4 8k`, não declarado no
+# `frontend/nginx.conf`). Quebra a partir de ~180 selecionados, com **414** —
+# que o `api.js` não trata, porque o nginx responde HTML e o `detail` fica nulo.
+# O sintoma seria o pior possível: exportar 30 pessoas funciona (é como se
+# testa), exportar a base inteira falha com "erro" genérico, e nada liga a causa
+# ao tamanho da URL. Some-se a isso que a URL levaria 1.171 identificadores de
+# pessoas para o log de acesso.
+#
+# Subir o buffer do nginx NÃO resolve: conserta um ambiente e deixa o outro
+# quebrado (o arquivo do repo não sobe sozinho para o Portainer — v3.15.1).
+#
+# O precedente da casa é `POST /rh/arquivo/lote` (`arquivo.py`), que recebe a
+# seleção no corpo e devolve arquivo. É a mesma forma aqui.
+#
+# As rotas GET continuam existindo e funcionando: sem seleção o front manda os
+# FILTROS, que cabem folgado na URL.
+
+
+class SelecaoExportIn(BaseModel):
+    """Seleção explícita do RH. `ids` vazio/ausente = 'use os filtros'.
+
+    `list[uuid.UUID]` faz o FastAPI validar antes de a rota rodar: UUID
+    malformado vira **422 nomeando o campo**, em vez do 500 que o caminho do
+    `?ids=` produz (lá o `uuid.UUID(i)` estoura `ValueError` não tratado).
+    """
+
+    ids: list[uuid.UUID] | None = None
+    status: str | None = None
+    busca: str | None = None
+    situacao: str | None = None
+    posto_id: uuid.UUID | None = None
+    incluir_importados: bool = False
+    incluir_admissao: bool = False
+
+
+def _selecionados(db: Session, pedido: SelecaoExportIn) -> tuple[list[Candidato], list[str]]:
+    """Resolve o conjunto a exportar e diz QUEM PEDIU E NÃO EXISTE.
+
+    O caminho por querystring descarta id inexistente em silêncio (`db.get`
+    devolve `None` e o walrus filtra). Numa ação que gera folha de pagamento,
+    sumiço calado é exatamente o defeito que esta leva existe para eliminar —
+    então aqui a ausência é DEVOLVIDA ao chamador, que a mostra na tela.
+    """
+    if pedido.ids:
+        achados, faltando = [], []
+        for cid in pedido.ids:
+            c = db.get(Candidato, cid)
+            (achados if c is not None else faltando).append(c if c is not None else str(cid))
+        return achados, faltando
+    return _colaboradores_para_tirvu(
+        db, pedido.status, pedido.busca, pedido.situacao, pedido.posto_id,
+        None, pedido.incluir_importados), []
+
+
+@router.post("/rh/colaboradores/exportar-selecao/pendencias")
+def pendencias_selecao(pedido: SelecaoExportIn, destino: str = "tirvu",
+                       db: Session = Depends(get_db),
+                       _rh: UsuarioRH = Depends(exige("colaboradores:ler"))) -> dict:
+    """Pré-checagem do export, sobre o MESMO conjunto que a exportação usará.
+
+    Permissão é `colaboradores:ler` (não `dados:exportar_base`): conferir
+    pendência é leitura, e é o que as rotas GET equivalentes já exigem — elevar
+    aqui tiraria a pré-checagem de quem pode consultar mas não exportar.
+    """
+    if destino not in ("tirvu", "dexion"):
+        raise HTTPException(status_code=422, detail="destino_desconhecido")
+    from app.services.export_dexion import linha_dexion
+    from app.services.export_dexion import pendencias_linha as pend_dexion
+    from app.services.export_tirvu import linha_tirvu
+    from app.services.export_tirvu import pendencias_linha as pend_tirvu
+
+    candidatos, faltando = _selecionados(db, pedido)
+    monta, pend = ((linha_tirvu, pend_tirvu) if destino == "tirvu"
+                   else (linha_dexion, pend_dexion))
+    problemas = []
+    for c in candidatos:
+        faltas = pend(monta(db, c))
+        if faltas:
+            problemas.append({"id": c.id, "nome": c.nome_completo, "faltam": faltas})
+    return {"total": len(candidatos), "com_pendencia": problemas,
+            "nao_encontrados": faltando}
+
+
+@router.post("/rh/colaboradores/exportar-selecao")
+def exportar_selecao(pedido: SelecaoExportIn, destino: str = "tirvu",
+                     db: Session = Depends(get_db),
+                     rh: UsuarioRH = Depends(exige("dados:exportar_base"))) -> Response:
+    """Planilha do Tirvu, do Dexion ou do Excel, com quem o RH marcou na tela.
+
+    `destino` decide o layout. Os três compartilham a resolução do conjunto —
+    montar cada um do seu jeito é o que fez a pré-checagem e a exportação
+    divergirem no caminho antigo.
+    """
+    from app.services.export_dexion import linha_dexion, montar_workbook_dexion
+    from app.services.export_tirvu import linha_tirvu, montar_workbook_tirvu
+
+    if destino not in ("tirvu", "dexion", "excel"):
+        raise HTTPException(status_code=422, detail="destino_desconhecido")
+
+    candidatos, faltando = _selecionados(db, pedido)
+    if not candidatos:
+        raise HTTPException(status_code=404, detail="nenhum_colaborador")
+
+    if destino == "excel":
+        conteudo = montar_workbook([_linha_completa(db, c) for c in candidatos])
+        arquivo, evento = "colaboradores", "colaboradores_exportados"
+    elif destino == "tirvu":
+        # gerar_matricula=True: quem não tem matrícula recebe a automática
+        # (999+seq) e ela FICA GRAVADA no cadastro (o commit abaixo persiste).
+        # Exportar não é leitura pura — mais um motivo para o conjunto ser
+        # exatamente o que o RH marcou.
+        conteudo = montar_workbook_tirvu(
+            [linha_tirvu(db, c, gerar_matricula=True) for c in candidatos])
+        arquivo, evento = "importacao-tirvu", "tirvu_exportado"
+    else:
+        conteudo = montar_workbook_dexion(
+            [linha_dexion(db, c, gerar_matricula=True) for c in candidatos])
+        arquivo, evento = "conversao-dexion", "dexion_exportado"
+
+    registrar(db, evento, ator="rh", ator_detalhe=rh.email,
+              detalhe={"linhas": len(candidatos),
+                       # `por_selecao` distingue, na auditoria, o export que o RH
+                       # escolheu pessoa a pessoa do que saiu por filtro.
+                       "por_selecao": bool(pedido.ids),
+                       "nao_encontrados": len(faltando),
+                       "postos": sorted({c.posto_servico_id and str(c.posto_servico_id)
+                                         or "sem-posto" for c in candidatos})[:20]})
+    db.commit()
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{arquivo}-{agora}.xlsx"'},
+    )
+
+
 # ======================================================================
 # Importação em massa da base do Tirvu
 # ======================================================================

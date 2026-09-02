@@ -6,6 +6,7 @@ import { fmtCpf as fmtCpfBase, soDigitos } from '../fmt.js'
 import { fmtData } from '../fmt.js'
 import SelectBusca from '../SelectBusca.jsx'
 import Espera from '../Espera.jsx'
+import Aviso from '../Aviso.jsx'
 import DashPlanilha from './DashPlanilha.jsx'
 
 // exibição em tabela: CPF completo mascarado, senão travessão
@@ -96,8 +97,24 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
   const [postoId, setPostoId] = useState('')
   const [incluirAdmissao, setIncluirAdmissao] = useState(false)
   const [busca, setBusca] = useState('')
-  const [exportando, setExportando] = useState(false)
   const [erro, setErro] = useState(null)
+  // `aviso` é a confirmação de AÇÃO (efetivar, desligar, reverter, exportar) e
+  // por isso é o `<Aviso>` FLUTUANTE, não um `.alerta` inline: quem clica num
+  // botão da barra de ações em massa está no meio da lista, e mensagem no topo
+  // do componente não é vista (v2.75). O `erro` acima continua inline porque
+  // descreve ESTADO da tela, não resposta a um clique.
+  //
+  // ⚠️ Este estado EXISTIU e foi removido por engano na v1.76 (commit 4577710),
+  // quando a tela migrou para o DashPlanilha — as oito chamadas a `setAviso`
+  // ficaram apontando para nada. Como o projeto não tem ESLint, o build passava
+  // e TODA ação em massa estourava `ReferenceError` na primeira linha: a ação
+  // não acontecia e nada era dito. Não remova sem procurar quem chama.
+  const [aviso, setAviso] = useState(null)
+  // Quem está marcado no DashPlanilha. Exportar precisa disso e NÃO pode
+  // morar no bloco de ações em massa: aquele bloco só existe quando há
+  // seleção, e exportar tem de continuar alcançável sem ela (v2.76.1 —
+  // nada que age some junto com um bloco que se recolhe).
+  const [marcados, setMarcados] = useState([])
   const timer = useRef(null)
 
   const carregar = (f = {}) => {
@@ -118,65 +135,85 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
     timer.current = setTimeout(() => carregar({ busca: texto }), 400)
   }
 
-  const exportar = async () => {
-    setErro(null); setExportando(true)
-    try {
-      const blob = await api.exportarColaboradores({ status, busca, situacao,
-        posto_id: postoId, incluir_admissao: incluirAdmissao || undefined })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `colaboradores-${new Date().toISOString().slice(0, 10)}.xlsx`
-      a.click()
-      URL.revokeObjectURL(a.href)
-    } catch {
-      setErro('A exportação falhou. Tente novamente — se persistir, veja a auditoria.')
-    } finally { setExportando(false) }
+  // Planilha para o sistema de folha ou para o Excel do RH.
+  //
+  // ⚠️ **O QUE SAI É O QUE ESTÁ MARCADO** (v3.17, feedback do Bruno: *"marca as
+  // pessoas, exporta, e vêm outras"*). Antes esta função montava o próprio
+  // conjunto a partir dos filtros do topo, ignorando a seleção — e o arquivo ia
+  // para a FOLHA DE PAGAMENTO com gente que ninguém escolheu, sem nada
+  // denunciando. Sem seleção o comportamento antigo continua valendo: vale o
+  // filtro da tela.
+  //
+  // UMA função para os três destinos: o fluxo é idêntico — confere as
+  // pendências, mostra quem barrou COM NOME E MOTIVO, e só então baixa. Só
+  // mudam o layout e o nome do arquivo. Duplicar faria a correção de um caber
+  // só num dos outros, que é como o "Registra Ponto" ficou fora do aviso por
+  // uma versão inteira.
+  //
+  // A seleção vai no CORPO da requisição, nunca na URL: 1.171 UUIDs dariam
+  // 44,6 KB de querystring contra o buffer de 8 KB do nginx, e o 414 resultante
+  // chega ao front como "erro" genérico. Ver o comentário em `api.js`.
+  const DESTINOS = {
+    tirvu: { rotulo: 'Tirvu', arquivo: 'importacao-tirvu' },
+    dexion: { rotulo: 'Dexion', arquivo: 'conversao-dexion' },
+    excel: { rotulo: 'Excel', arquivo: 'colaboradores' },
   }
 
-  // Planilha para o sistema de folha. Só colaborador vai — quem ainda está em
-  // admissão não tem vínculo a criar lá.
-  //
-  // UMA função para os dois destinos (Tirvu e Dexion): o fluxo é idêntico
-  // — confere as pendências, mostra quem barrou COM NOME E MOTIVO, e só então
-  // baixa. Só mudam o layout e o nome do arquivo. Duplicar faria a correção de
-  // um caber só num dos dois, que é como o "Registra Ponto" ficou fora do
-  // aviso por uma versão inteira.
-  const DESTINOS = {
-    tirvu: { rotulo: 'Tirvu', arquivo: 'importacao-tirvu',
-             pendencias: api.pendenciasTirvu, exportar: api.exportarTirvu },
-    dexion: { rotulo: 'Dexion', arquivo: 'conversao-dexion',
-              pendencias: api.pendenciasDexion, exportar: api.exportarDexion },
-  }
+  // Rótulo que muda com a seleção: sem marcados, o botão exporta o que a tela
+  // mostra; com marcados, exporta exatamente eles — e diz quantos são.
+  const sufixoSelecao = marcados.length ? ` (${marcados.length})` : ''
 
   const exportarFolha = async (destino) => {
     const d = DESTINOS[destino]
-    setErro(null)
-    const filtros = { status, busca, situacao, posto_id: postoId }
+    setErro(null); setAviso(null)
+    // Com seleção, `ids` manda e os filtros são ignorados pelo servidor. Sem
+    // seleção, vão os filtros — é o mesmo conjunto que a tela está mostrando.
+    const pedido = marcados.length
+      ? { ids: marcados.map((c) => c.id) }
+      : { status, busca, situacao, posto_id: postoId || null,
+          incluir_admissao: incluirAdmissao }
+    const quantos = marcados.length
     try {
-      const p = await comAmpulheta('Conferindo as admissões…',
-                                   () => d.pendencias(filtros))
-      if (p.total === 0) {
-        setErro('Nenhum colaborador vindo da admissão nos filtros atuais. '
-                + 'Quem foi importado do Tirvu já existe lá e não precisa ser reenviado.')
-        return
-      }
-      if (p.com_pendencia.length) {
-        const nomes = p.com_pendencia.slice(0, 8)
-          .map((x) => `• ${x.nome} (falta: ${x.faltam.join(', ')})`).join('\n')
-        const extra = p.com_pendencia.length > 8
-          ? `\n…e mais ${p.com_pendencia.length - 8}.` : ''
-        if (!window.confirm(`${p.com_pendencia.length} de ${p.total} colaborador(es) têm campos que o ${d.rotulo} exige:\n\n${nomes}${extra}\n\nExportar mesmo assim?`)) return
+      // O Excel do RH sai com todo mundo que o filtro pega (não é layout de
+      // importação), então não tem pré-checagem de pendência.
+      if (destino !== 'excel') {
+        const p = await comAmpulheta('Conferindo as admissões…',
+                                     () => api.pendenciasSelecao(pedido, destino))
+        if (p.total === 0) {
+          setErro(quantos
+            ? 'Ninguém do que você marcou pode ir para a folha.'
+            : 'Nenhum colaborador vindo da admissão nos filtros atuais. '
+              + 'Quem foi importado do Tirvu já existe lá e não precisa ser reenviado.')
+          return
+        }
+        // Id pedido que não existe mais: some do arquivo, e a tela DIZ. Sumiço
+        // calado é o defeito que esta leva existe para eliminar.
+        if (p.nao_encontrados?.length) {
+          setErro(`${p.nao_encontrados.length} registro(s) selecionado(s) não `
+                  + 'existem mais e ficaram de fora. Atualize a lista.')
+        }
+        if (p.com_pendencia.length) {
+          const nomes = p.com_pendencia.slice(0, 8)
+            .map((x) => `• ${x.nome} (falta: ${x.faltam.join(', ')})`).join('\n')
+          const extra = p.com_pendencia.length > 8
+            ? `\n…e mais ${p.com_pendencia.length - 8}.` : ''
+          if (!window.confirm(`${p.com_pendencia.length} de ${p.total} colaborador(es) têm campos que o ${d.rotulo} exige:\n\n${nomes}${extra}\n\nExportar mesmo assim?`)) return
+        }
       }
       const blob = await comAmpulheta(`Gerando a planilha do ${d.rotulo}…`,
-                                      () => d.exportar(filtros))
+                                      () => api.exportarSelecao(pedido, destino))
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `${d.arquivo}-${new Date().toISOString().slice(0, 10)}.xlsx`
       a.click()
       URL.revokeObjectURL(a.href)
+      setAviso(quantos
+        ? `Planilha do ${d.rotulo} gerada com ${quantos} selecionado(s).`
+        : `Planilha do ${d.rotulo} gerada com quem está na tela.`)
     } catch (e) {
       setErro(e.detail === 'nenhum_colaborador'
-        ? 'Nenhum colaborador nos filtros escolhidos.'
+        ? (quantos ? 'Ninguém do que você marcou pôde ser exportado.'
+                   : 'Nenhum colaborador nos filtros escolhidos.')
         : `Não foi possível gerar a planilha do ${d.rotulo}. Tente novamente.`)
     }
   }
@@ -428,26 +465,18 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
 
   return (
     <main className="rh-painel">
+      {/* Flutuante: as ações em massa ficam no meio da lista, e a confirmação
+          precisa aparecer onde a pessoa está olhando (v2.75). */}
+      {aviso && <Aviso texto={aviso} aoFechar={() => setAviso(null)} />}
       <header className="rh-topo">
         <button className="btn-link" onClick={aoVoltar}>← Voltar</button>
         <h1>👥 Colaboradores</h1>
-        <div style={{ display: 'flex', gap: '.5rem' }}>
-          <button className="btn-secundario btn-mini" disabled={!lista?.length}
-                  title="Planilha no layout de importação de admissões do Tirvu (28 colunas)"
-                  onClick={() => exportarFolha('tirvu')}>⬆ Exportar p/ Tirvu</button>
-          <button className="btn-secundario btn-mini" disabled={!lista?.length}
-                  title="Planilha no layout de conversão de trabalhadores do Dexion (97 colunas)"
-                  onClick={() => exportarFolha('dexion')}>⬆ Exportar p/ Dexion</button>
-          <button className="btn-principal btn-mini" disabled={exportando || !lista?.length}
-                  onClick={exportar}>{exportando ? 'Gerando…' : '⬇ Exportar Excel'}</button>
-        </div>
       </header>
       <p className="explica">Clique nos cards para filtrar; ordene e filtre por qualquer coluna.
         Contém dados pessoais e de saúde — trate conforme a LGPD. Para importar a base do Tirvu em
         massa, veja <strong>Configurações → 📥 Importações</strong>.</p>
 
       {/* filtros de topo SERVER-SIDE (recarregam a base) */}
-      {exportando && <Espera texto="Montando sua planilha com tudo dentro…" />}
       {erro && <div className="alerta">{erro}</div>}
 
       {!lista ? <p>Carregando…</p> : (
@@ -467,13 +496,31 @@ export default function Colaboradores({ aoVoltar, aoAbrir }) {
                           opcoes: postos.map((p) => ({ v: p.id, r: p.nome })),
                           aoMudar: (v) => { setPostoId(v); carregar({ posto_id: v }) } },
                       ]}
-                      acoesFiltro={
+                      aoSelecionar={setMarcados}
+                      /* Exportar vive AQUI, no card `.dash-acoes`, e não no
+                         cabeçalho da tela (onde não enxergava a seleção) nem
+                         no bloco de ações em massa (que só existe quando há
+                         alguém marcado). O rótulo diz quantos vão, para a
+                         pessoa saber o que leva ANTES de clicar. */
+                      acoesFiltro={<>
                         <label className="explica campo-check">
                           <input type="checkbox" checked={incluirAdmissao}
                                  onChange={(e) => { setIncluirAdmissao(e.target.checked); carregar({ incluirAdmissao: e.target.checked }) }} />
                           incluir em admissão
                         </label>
-                      }
+                        <button className="btn-secundario btn-mini" disabled={!lista?.length}
+                                title="Planilha no layout de importação de admissões do Tirvu"
+                                onClick={() => exportarFolha('tirvu')}>
+                          ⬆ <span className="so-desktop">Exportar p/ </span>Tirvu{sufixoSelecao}</button>
+                        <button className="btn-secundario btn-mini" disabled={!lista?.length}
+                                title="Planilha no layout de conversão de trabalhadores do Dexion"
+                                onClick={() => exportarFolha('dexion')}>
+                          ⬆ <span className="so-desktop">Exportar p/ </span>Dexion{sufixoSelecao}</button>
+                        <button className="btn-secundario btn-mini" disabled={!lista?.length}
+                                title="Excel com uma linha por pessoa e todas as respostas do formulário"
+                                onClick={() => exportarFolha('excel')}>
+                          ⬇ <span className="so-desktop">Exportar </span>Excel{sufixoSelecao}</button>
+                      </>}
                       vazio="Nenhum colaborador com esses filtros." />
       )}
     </main>

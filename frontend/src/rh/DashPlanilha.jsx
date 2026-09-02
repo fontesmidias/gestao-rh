@@ -36,6 +36,13 @@ export default function DashPlanilha({
   acoesLinha,       // (linha) => JSX  (opcional)
   linhaExpandida,   // (linha) => JSX | null — detalhe aberto LOGO ABAIXO da linha
   acoesMassa,       // (linhasSelecionadas, limparSelecao) => JSX  (opcional)
+  // Avisa o PAI de quem está marcado, para ações que precisam da seleção mas
+  // NÃO podem morar no bloco de ações em massa — ele só existe quando há ≥1
+  // marcado (v3.17). O caso é exportar: precisa da seleção quando há uma, e
+  // precisa continuar alcançável quando não há; escondê-lo sem seleção repetiria
+  // o defeito da v2.76.1 (o botão que sumiu junto com o card recolhido).
+  // Recebe as linhas VISÍVEIS que estão marcadas — a mesma lista que `acoesMassa`.
+  aoSelecionar,     // (linhasSelecionadas) => void  (opcional)
   vazio = 'Nenhum registro.',
 }) {
   const [sort, setSort] = useState({ chave: null, dir: 'asc' })
@@ -135,6 +142,14 @@ export default function DashPlanilha({
   const alternar = (i) => setSelec((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
   const limparSelecao = () => setSelec(new Set())
   const selecionadas = linhas.filter((l) => selec.has(chaveLinha(l)))
+  // Chaves numa string estável: o array `selecionadas` é recriado a cada render
+  // (é `filter` sobre `linhas`), então usá-lo como dependência dispararia o
+  // efeito sem parar. O que muda de verdade é o conjunto de chaves visíveis.
+  const chavesSelecionadas = selecionadas.map(chaveLinha).join(',')
+  useEffect(() => {
+    if (aoSelecionar) aoSelecionar(selecionadas)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chavesSelecionadas])
 
   const toggleColuna = (chave) => setOcultas((o) => {
     const n = new Set(o); n.has(chave) ? n.delete(chave) : n.add(chave)
@@ -144,9 +159,15 @@ export default function DashPlanilha({
   const exportarCsv = () => {
     const cols = visiveis
     const escape = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`
+    // Mesmo contrato dos demais botões de exportar da tela (v3.17): o que sai é
+    // o que está MARCADO; sem seleção, o que está na tela. Antes o CSV exportava
+    // sempre o visível, então numa mesma barra dois botões vizinhos levavam
+    // conjuntos diferentes, sem nada dizendo — "dois controles para a mesma
+    // escolha" (v2.75), no lugar mais caro: o arquivo que vai para a folha.
+    const fonte = selecionadas.length ? selecionadas : linhas
     const linhasCsv = [
       cols.map((c) => escape(c.rotulo)).join(';'),
-      ...linhas.map((l) => cols.map((c) => escape(textoDe(l, c))).join(';')),
+      ...fonte.map((l) => cols.map((c) => escape(textoDe(l, c))).join(';')),
     ]
     // BOM UTF-8 para o Excel brasileiro abrir com acentos corretos
     const blob = new Blob(['﻿' + linhasCsv.join('\r\n')], { type: 'text/csv;charset=utf-8' })
@@ -201,8 +222,11 @@ export default function DashPlanilha({
             lista para fora da primeira tela. O `title` mantém o significado
             para quem passa o mouse no desktop. */}
         <button className="btn-secundario btn-mini" onClick={exportarCsv}
-                title="Exportar para CSV o que está filtrado na tela">
-          ⬇ <span className="so-desktop">Exportar </span>CSV</button>
+                title={selecionadas.length
+                  ? `Exportar para CSV os ${selecionadas.length} marcados`
+                  : 'Exportar para CSV o que está filtrado na tela'}>
+          ⬇ <span className="so-desktop">Exportar </span>CSV
+          {selecionadas.length ? ` (${selecionadas.length})` : ''}</button>
         <button className="btn-secundario btn-mini"
                 title="Escolher quais colunas aparecem"
                 onClick={() => setConfigAberta((v) => !v)}>⚙ Colunas</button>

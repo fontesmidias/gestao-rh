@@ -14,7 +14,10 @@ O que este teste protege:
 
 1. **A resposta DIZ o que ficou faltando** (`X-Tirvu-Pendencias`), com as
    mesmas regras do export em massa. Quem chama a rota direto também é avisado,
-   não só quem passa pela tela.
+   não só quem passa pela tela. ⚠️ *Quais* campos faltam mudou na v2.83: o
+   export voltou a mandar TEXTO em vez de ID do Tirvu, então posto, cargo e
+   jornada preenchidos deixaram de ser pendência. O que se afirma aqui é a
+   pendência de hoje (PIS, data de admissão, Registra Ponto).
 2. **O download continua acontecendo** — às vezes se quer a planilha
    incompleta mesmo, e travar seria trocar um problema por outro.
 3. **A pendência vai para a AUDITORIA**: "exportei e não sabia" deixa de ser
@@ -86,9 +89,19 @@ checar(r.status_code == 200, f"o download ACONTECE ({r.status_code}) — travar 
        "trocar um problema por outro")
 aviso = r.headers.get("X-Tirvu-Pendencias", "")
 checar(aviso and aviso != "nenhuma", f"e vem acompanhado do que falta: {aviso!r}")
-for esperado in ("Posto", "Cargo", "Jornada"):
+# ⚠️ Estas asserções JÁ FORAM "Posto, Cargo, Jornada" e viraram réu na v2.83,
+# quando o export voltou a mandar TEXTO em vez de ID do Tirvu (commit fdd1878).
+# Enquanto ia o ID, quem não tivesse `tirvu_id` cadastrado saía com célula vazia
+# e virava pendência; hoje o valor vem do próprio cadastro (`posto.nome`,
+# `cargo_funcao`, `jornada.descricao`) e existe sempre — a pessoa deste cenário
+# TEM os três preenchidos, então acusá-los seria alarme falso.
+#
+# Quando a regra muda, o teste que a cobria vira réu, não testemunha (v3.06).
+# O que ele protege continua igual: a resposta DIZ o que falta, com as mesmas
+# regras do export em massa.
+for esperado in ("PIS", "Data de Admiss", "Registra Ponto"):
     checar(esperado.lower() in aviso.lower(),
-           f"{esperado} aparece entre as pendências")
+           f"{esperado} aparece entre as pendências — veio {aviso!r}")
 checar(aviso.isascii(),
        "o cabeçalho é ASCII — acento em header HTTP derruba a resposta inteira")
 checar(len(r.content) > 1000, "e a planilha em si veio inteira")

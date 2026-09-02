@@ -14,6 +14,77 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.17.0] — 2026-09-02 — A planilha leva quem você marcou
+
+Primeira história da **Onda 1 da 24ª leva** ([doc 19](docs/planejamento/19-feedbacks-24a-leva.md)),
+e a primeira da fila por um motivo: era a única **falha silenciosa** do lote.
+
+O Bruno descreveu em uma frase — *"marca as pessoas, exporta, e vêm outras"*. Os
+outros defeitos da leva incomodam e são relatados; este não. A planilha saía,
+abria, parecia certa, e ia para a **folha de pagamento** com gente que ninguém
+escolheu.
+
+**A capacidade existia no servidor e nunca foi usada.** `_colaboradores_para_tirvu`
+sempre aceitou `ids`. O defeito era estrutural no front: efetivar, desligar e
+reverter viviam em `acoesMassa` e recebiam a seleção do `DashPlanilha`; exportar
+era botão de cabeçalho, fora do dash, montando o próprio conjunto pelos filtros
+do topo.
+
+Agora exportar entrega **exatamente quem está marcado**; sem marcação, o que a
+tela mostra. Vale para Tirvu, Dexion, Excel — e para o CSV do próprio dash, que
+antes exportava sempre o visível: quatro botões vizinhos levando conjuntos
+diferentes, sem nada dizendo, seria "dois controles para a mesma escolha"
+(v2.75) no lugar mais caro. O rótulo mostra a contagem, para se saber o que vai
+**antes** de clicar.
+
+⚠️ **A seleção vai no CORPO, nunca na URL** — e isso foi medido, não estimado:
+1.171 UUIDs dão **44,6 KB** de querystring contra o buffer default do nginx
+(`4 8k`, não declarado no `frontend/nginx.conf`). Quebraria a partir de ~180
+selecionados com um **414** que o `api.js` não trata (o nginx responde HTML, o
+`detail` fica nulo, a tela diz só "erro"). Exportar 30 pessoas funcionaria — que
+é exatamente como alguém testaria. Segue o precedente de `POST /rh/arquivo/lote`.
+
+**Id pedido que não existe mais é NOMEADO, não sumido.** O caminho por
+querystring o descarta em silêncio; numa ação que gera folha, sumiço calado é o
+defeito que esta leva existe para eliminar.
+
+### Dois defeitos que já estavam lá, achados no caminho
+
+**`setAviso` órfão desde a v1.76** (`Colaboradores.jsx`, commit `4577710`):
+chamado oito vezes, nunca declarado. Quando a tela migrou para o `DashPlanilha`,
+o estado saiu e as chamadas ficaram. **Toda ação em massa** — efetivar, desligar,
+reativar, reverter, marcar na Domínio — estourava `ReferenceError` na primeira
+linha do handler: a ação não acontecia e nada era dito. Como o projeto **não tem
+ESLint** e o `npm run build` passa, nada acusava.
+
+Corrigir não bastava, porque nada impediria a volta. O `test_api_front_existe.py`
+ganhou um bloco que varre todo `.jsx` e reprova `setX(...)` sem estado declarado.
+Duas armadilhas pagas ali, ambas do tipo *teste que acusa código correto ensina a
+ignorar o teste*: o padrão pegava `setTimeout` e companhia (22 arquivos, daí a
+lista de nativas); e o `// Splat /rh/* reservado em App.jsx` de `RHApp.jsx:571`
+abre um bloco de comentário falso que engolia ~300 linhas — inclusive a
+declaração de `setFiltros`, acusada como órfã estando correta.
+
+**`test_tirvu_individual_pendencias` estava VERMELHO** (confirmado rodando-o
+contra o código sem as mudanças desta versão). Ele exigia Posto, Cargo e Jornada
+entre as pendências — o que valia quando o export mandava ID do Tirvu, e deixou
+de valer na **v2.83**, quando voltou a mandar TEXTO. A pessoa do cenário tem os
+três preenchidos, então acusá-los era alarme falso. As asserções passaram a
+afirmar a pendência de hoje. Quando a regra muda, o teste que a cobria vira réu,
+não testemunha (v3.06).
+
+### Verificação
+
+`test_export_por_selecao.py` (novo, no CI): 8 blocos conferindo os nomes **dentro
+da planilha** — contagem passaria com o conjunto errado do mesmo tamanho. Três
+mutações rodadas, todas reprovadas: ignorar `ids` e cair nos filtros; devolver
+`nao_encontrados` sempre vazio; pré-checagem montando o próprio conjunto.
+
+Conferido também **na tela**, não só no build:
+`_exportar-respeita-selecao.spec.js` abre o navegador, marca duas linhas e
+verifica que a requisição sai por POST com os `ids` no corpo e URL de menos de
+300 caracteres. Smoke 15/15; as 12 medições da régua de largura passam.
+
 ## [3.16.1] — 2026-08-27 — Ter o documento não é saber que ele existe
 
 O Bruno mandou o print: a ficha da colaboradora dizia *"Liberado — aguardando a

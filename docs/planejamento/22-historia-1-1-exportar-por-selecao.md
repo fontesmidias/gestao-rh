@@ -1,16 +1,16 @@
 > **Origem.** Gerado com `bmad-create-story` a partir de
-> `20-epicos-24a-leva-onda-1.md`, em 02/09/2026. Levantado contra o código real e
-> validado em contexto independente.
+> `20-epicos-24a-leva-onda-1.md` e IMPLEMENTADO com `bmad-dev-story`, em
+> 02/09/2026. Levantado contra o código real e validado em contexto independente.
 >
 > O arquivo que o agente de implementação consome vive em
 > `_bmad-output/implementation-artifacts/` (não versionado). **Esta é a cópia
-> canônica versionada.** Ao mexer, re-derivar lá e republicar aqui.
+> canônica versionada**, com o registro de execução ao final.
 
 ---
 
 # Story 1.1: Exportar entrega quem está marcado
 
-Status: ready-for-dev
+Status: review
 
 Épico 1 (Onda 1, 24ª leva) · Contrato: `docs/planejamento/19-feedbacks-24a-leva.md` ·
 Épicos: `docs/planejamento/20-epicos-24a-leva-onda-1.md`
@@ -77,31 +77,32 @@ A mutação que faz a exportação ignorar `ids` e cair nos filtros **reprova** 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0 — corrigir o `setAviso` inexistente** (bloqueia AC1/AC3; ver "Defeito achado")
-  - [ ] Declarar o estado `aviso` em `Colaboradores.jsx` e renderizar com `<Aviso>`
-  - [ ] Conferir que efetivar, desligar, reativar e reverter deixam de estourar
-- [ ] **Task 1 — rotas aceitam seleção grande** (AC5, AC6)
-  - [ ] Variantes `POST` das **cinco** rotas, com `ids` no CORPO — as três de
+- [x] **Task 0 — corrigir o `setAviso` inexistente** (bloqueia AC1/AC3; ver "Defeito achado")
+  - [x] Declarar o estado `aviso` em `Colaboradores.jsx` e renderizar com `<Aviso>`
+  - [x] Conferir que efetivar, desligar, reativar e reverter deixam de estourar
+  - [x] Travar em teste: bloco 4 do `test_api_front_existe.py` (já roda no CI)
+- [x] **Task 1 — rotas aceitam seleção grande** (AC5, AC6)
+  - [x] Variantes `POST` das **cinco** rotas, com `ids` no CORPO — as três de
         exportação (`exportar`, `exportar-tirvu`, `exportar-dexion`) **e as duas de
         pendências** (`tirvu-pendencias`, `dexion-pendencias`), senão AC4 não fecha:
         a pré-checagem receberia conjunto diferente do da exportação
-  - [ ] `GET` continua existindo e funcionando (AC2 e compatibilidade)
-  - [ ] `exportar` (Excel) passa a resolver `ids` como as outras duas
-  - [ ] Permissão: exportações declaram `dados:exportar_base`; **pendências mantêm
+  - [x] `GET` continua existindo e funcionando (AC2 e compatibilidade)
+  - [x] `exportar` (Excel) passa a resolver `ids` como as outras duas
+  - [x] Permissão: exportações declaram `dados:exportar_base`; **pendências mantêm
         `colaboradores:ler`** (é o que usam hoje, L225 e L288) — não eleve
-- [ ] **Task 2 — front passa a seleção** (AC1, AC2, AC4)
-  - [ ] `api.js`: funções de export aceitam `ids` e usam POST quando houver seleção
-  - [ ] `exportarFolha` e `exportar` recebem as linhas selecionadas
-  - [ ] Pendências e exportação compartilham **um único** conjunto resolvido
-- [ ] **Task 3 — mover os controles** (AC3)
-  - [ ] Botões de exportar vão para o card `.dash-acoes` (sempre visível), **não**
+- [x] **Task 2 — front passa a seleção** (AC1, AC2, AC4)
+  - [x] `api.js`: funções de export aceitam `ids` e usam POST quando houver seleção
+  - [x] `exportarFolha` e `exportar` recebem as linhas selecionadas
+  - [x] Pendências e exportação compartilham **um único** conjunto resolvido
+- [x] **Task 3 — mover os controles** (AC3)
+  - [x] Botões de exportar vão para o card `.dash-acoes` (sempre visível), **não**
         para `acoesMassa` — ver "Onde os botões ficam", que explica por quê
-  - [ ] O rótulo reflete a seleção (ex.: `⬆ Exportar p/ Tirvu (12 marcados)`)
-  - [ ] Remover o bloco do cabeçalho (L434-443) — sem deixar controle duplicado
-  - [ ] Resolver a convivência com o `⬇ Exportar CSV` do próprio dash (ver abaixo)
-- [ ] **Task 4 — teste** (AC7)
-  - [ ] `backend/tests/test_export_por_selecao.py`, com a mutação nomeada
-  - [ ] Acrescentar ao `ci.yml` no bloco que sobe a app (ver "Testes")
+  - [x] O rótulo reflete a seleção (ex.: `⬆ Exportar p/ Tirvu (12 marcados)`)
+  - [x] Remover o bloco do cabeçalho (L434-443) — sem deixar controle duplicado
+  - [x] Resolver a convivência com o `⬇ Exportar CSV` do próprio dash (ver abaixo)
+- [x] **Task 4 — teste** (AC7)
+  - [x] `backend/tests/test_export_por_selecao.py`, com 3 mutações validadas
+  - [x] Acrescentar ao `ci.yml` no bloco que sobe a app (ver "Testes")
 
 ---
 
@@ -355,8 +356,133 @@ Fora de escopo: `export_tirvu.py` (história 1.3), a tela de Admissões (histór
 
 ### Agent Model Used
 
+claude-opus-5 (1M context)
+
 ### Debug Log References
+
+- Ambiente: Docker estava desligado; subido junto com os containers efêmeros
+  (`pg-teste` em 55432, `minio-teste` em 59000) e migrations aplicadas.
+- A stack local não subiu de primeira depois do rebuild: `deploy-frontend-1`
+  reiniciava em laço com `[emerg] host not found in upstream "mcp"`. **Não era
+  regressão desta história** — é a armadilha registrada na v3.15.1 (o nginx
+  resolve upstream na PARTIDA, e o serviço `mcp` não estava no ar). Subir
+  `deploy-mcp-1` resolveu.
 
 ### Completion Notes List
 
+**Task 0 — o defeito que estava lá antes da história.** `Colaboradores.jsx`
+chamava `setAviso` oito vezes sem o estado declarado, desde a v1.76 (commit
+`4577710`). Toda ação em massa — efetivar, desligar, reativar, reverter, marcar
+na Domínio — estourava `ReferenceError` na primeira linha do handler: a ação não
+acontecia e nada era dito. Corrigido com `<Aviso>` flutuante, que é o padrão da
+casa para confirmação de AÇÃO.
+
+Como o build passava e o projeto não tem ESLint, a correção sozinha não impede a
+volta. Por isso entrou o **bloco 4 do `test_api_front_existe.py`** (que já roda no
+CI): varre todo `.jsx` e reprova `setX(...)` sem estado declarado. Ciclo
+vermelho-verde feito de verdade — com o código original ele acusa `setAviso` e
+mais nada; com a correção, passa.
+
+Duas armadilhas pagas ao escrever esse bloco, ambas do tipo "teste que acusa
+código correto ensina a ignorar o teste":
+
+1. O padrão pegava `setTimeout`, `setItem`, `setInterval`, `setProperty` e
+   `setSelectionRange` — funções da plataforma, em 22 arquivos. Daí a lista
+   `SETTERS_NATIVOS`.
+2. `RHApp.jsx:571` tem `// Splat /rh/* reservado em App.jsx…`, e esse `/*` dentro
+   de um comentário de linha abre um bloco falso para a regra `/* … */`, que
+   engolia ~300 linhas — inclusive a declaração de `setFiltros`, acusada como
+   órfã estando correta. Daí o `_sem_comentarios_ordem_segura`, que remove
+   comentário de linha primeiro.
+
+**Task 1 — POST em vez de querystring.** Medido antes de decidir: 1.171 UUIDs
+dão 44,6 KB de querystring contra o buffer default do nginx (`4 8k`, não
+declarado no `frontend/nginx.conf`), quebrando a partir de ~180 selecionados com
+um 414 que o `api.js` não trata. Exportar 30 pessoas funcionaria — que é como se
+testaria. Seguido o precedente de `POST /rh/arquivo/lote`.
+
+Duas rotas novas (`/exportar-selecao` e `/exportar-selecao/pendencias`) com o
+parâmetro `destino` cobrindo tirvu, dexion e excel, em vez de seis rotas. As GET
+antigas continuam intactas. `SelecaoExportIn` usa `list[uuid.UUID]`, então UUID
+malformado vira 422 pelo FastAPI, e não o 500 que o caminho antigo produz.
+
+**Decisão registrada: id inexistente é NOMEADO.** O caminho por querystring o
+descarta em silêncio (`db.get` devolve `None`). Numa ação que gera folha de
+pagamento, sumiço calado é o defeito que esta leva existe para eliminar — então
+`_selecionados` devolve `faltando`, a rota o expõe e a tela avisa.
+
+**Task 3 — onde os botões ficam (a decisão que a história deixou em aberto).**
+Escolhido o **callback `aoSelecionar`** no `DashPlanilha`, e não mudar o contrato
+de `acoesFiltro`. Motivo: `acoesFiltro` é um nó JSX, não função — transformá-lo
+em função obrigaria a mexer em todos os consumidores (`Creche`, `JornadasRH`,
+`RHApp`, `TalentosRH`, além de Colaboradores) por uma necessidade de uma tela só.
+O callback é aditivo: quem não passa a prop não muda em nada. **A história 1.2
+(Admissões) deve reusar esta decisão.**
+
+Os botões ficam no card `.dash-acoes` (sempre visível), e não no bloco de ações
+em massa, que só existe quando há seleção — pô-los lá esconderia exportar de quem
+não marcou ninguém, repetindo o defeito da v2.76.1. O rótulo mostra a contagem,
+para a pessoa saber o que leva antes de clicar.
+
+**O `⬇ Exportar CSV` do próprio dash foi alinhado ao mesmo contrato.** Ele
+exportava sempre o visível; com os três botões novos ao lado, seriam quatro
+controles vizinhos levando conjuntos diferentes, sem nada dizendo — "dois
+controles para a mesma escolha" (v2.75) no lugar mais caro. Agora os quatro
+respeitam a seleção e mostram a mesma contagem.
+
+**Task 4 — teste e mutações.** `test_export_por_selecao.py`, 8 blocos,
+conferindo os nomes DENTRO da planilha (contagem passaria com o conjunto errado
+do mesmo tamanho). Três mutações rodadas e todas reprovaram:
+
+| Mutação | O que o teste disse |
+|---|---|
+| `_selecionados` ignora `ids` e cai nos filtros | "vazaram: Pessoa Teste 3, Pessoa Teste 4" |
+| `faltando` volta sempre vazio | "o id inexistente é devolvido em `nao_encontrados` — veio []" |
+| pré-checagem monta o próprio conjunto | "pré-checagem e exportação contam o mesmo conjunto" |
+
+**Achado fora do escopo, corrigido: `test_tirvu_individual_pendencias` estava
+VERMELHO antes desta história.** Confirmado rodando-o contra o código original,
+com as minhas mudanças no stash. Ele exigia Posto, Cargo e Jornada entre as
+pendências — o que valia quando o export mandava ID do Tirvu, e deixou de valer
+na v2.83 (commit `fdd1878`), quando voltou a mandar TEXTO. A pessoa do cenário
+tem os três preenchidos, então acusá-los era alarme falso. As três asserções
+passaram a afirmar as pendências de hoje (PIS, data de admissão, Registra Ponto);
+o resto do teste, que é bom, ficou como estava. Quando a regra muda, o teste que
+a cobria vira réu, não testemunha (v3.06).
+
+**Verificação de tela, não só de build.** `_exportar-respeita-selecao.spec.js`
+(prefixo `_`, roda à mão) confirma no navegador que os botões existem sem
+seleção, que vivem no card de ações e não no cabeçalho, que o rótulo mostra a
+contagem, e — o coração — que a requisição sai por POST com os `ids` no corpo e
+URL de menos de 300 caracteres. Conferido também por captura de tela.
+
+**Regressão:** smoke test 15/15; `test_export_tirvu`, `test_export_dexion`,
+`test_tirvu_individual_pendencias`, `test_permissoes_efeito`,
+`test_lixeira_restaura`, `test_matricula`, `test_documentos_catalogo`,
+`test_exigencias`, `test_duplicar`, `test_data_documentos`, `test_processos`,
+`test_creche_requerimento`, `test_talento_recadastro`, `test_nome_arquivo`,
+`test_api_front_existe`, `test_design_system`, `test_permissoes_declaradas`,
+`test_versao`, `test_upload_multipart` — todos OK. Playwright: as 12 medições da
+régua de largura (incluindo celular), `deploy-tela-branca` e
+`lista-suspensa-nao-corta` passam.
+
 ### File List
+
+| Arquivo | O quê |
+|---|---|
+| `backend/app/api/colaboradores.py` | `SelecaoExportIn`, `_selecionados`, rotas POST de exportação e pré-checagem |
+| `backend/tests/test_export_por_selecao.py` | NOVO — 8 blocos, 3 mutações validadas |
+| `backend/tests/test_api_front_existe.py` | bloco 4: `setX(...)` sem estado declarado |
+| `backend/tests/test_tirvu_individual_pendencias.py` | asserções obsoletas desde a v2.83 corrigidas |
+| `frontend/src/api.js` | `pendenciasSelecao` e `exportarSelecao` (POST, corpo JSON) |
+| `frontend/src/rh/Colaboradores.jsx` | estado `aviso`; exportar unificado e por seleção; botões no card de ações |
+| `frontend/src/rh/DashPlanilha.jsx` | prop `aoSelecionar`; CSV respeita a seleção |
+| `frontend/tests/e2e/_exportar-respeita-selecao.spec.js` | NOVO — verificação de tela |
+| `.github/workflows/ci.yml` | registra `test_export_por_selecao` |
+
+### Change Log
+
+- 02/09/2026 — História 1.1 implementada. Exportar passa a entregar exatamente
+  quem está marcado; sem seleção, o que a tela mostra. Corrigido, no caminho, o
+  `setAviso` órfão que quebrava toda ação em massa desde a v1.76, e o
+  `test_tirvu_individual_pendencias`, vermelho desde a v2.83.

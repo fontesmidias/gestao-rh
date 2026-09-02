@@ -116,6 +116,61 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **`setX(...)` sem `useState` declarado não dá erro no build — e some com a
+  AÇÃO, não com a tela** (v3.17, defeito vivo desde a v1.76): `Colaboradores.jsx`
+  chamava `setAviso` **oito vezes** e o estado tinha sido removido no commit que
+  migrou a tela para o `DashPlanilha` (`4577710`). O projeto **não tem ESLint**
+  (`frontend/` não tem `.eslintrc*` nem `eslint.config.*`) e o `npm run build`
+  passa, então nada acusou por versões a fio. O sintoma é o mais silencioso da
+  família: `ReferenceError` na PRIMEIRA linha do handler de clique — como não é
+  erro de render, o ErrorBoundary não aparece e **a tela fica igual**; quem opera
+  clica em efetivar, desligar, reativar, reverter ou "Na Domínio" e conclui que
+  não funcionou. ⚠️ Corrigir não basta: o bloco 4 do `test_api_front_existe.py`
+  varre todo `.jsx` e reprova setter órfão. Duas armadilhas ao escrever esse tipo
+  de varredura, ambas do gênero *teste que acusa código correto ensina a ignorar
+  o teste* (v2.88): (1) `setTimeout`/`setItem`/`setInterval`/`setProperty`/
+  `setSelectionRange` casam com a convenção e apareceriam em 22 arquivos — daí a
+  lista `SETTERS_NATIVOS`; (2) `RHApp.jsx:571` tem `// Splat /rh/* reservado…`, e
+  esse `/*` dentro de comentário de LINHA abre um bloco falso para a regra
+  `/* … */`, que engolia ~300 linhas e fazia o teste acusar `setFiltros`, que
+  está declarado. **Remova comentário de linha ANTES do de bloco.**
+- **Seleção do usuário vai no CORPO, nunca na querystring — o teto é 8 KB**
+  (v3.17): passar os ids da seleção por `?ids=` funciona em teste e quebra em
+  produção. Medido com a base real: **1.171 UUIDs = 44,6 KB** contra o
+  `large_client_header_buffers` default do nginx (`4 8k`, **não declarado** no
+  `frontend/nginx.conf`), então o corte é em ~**180 selecionados**. O sintoma é
+  duplamente enganoso: o nginx devolve **414 antes de a requisição chegar ao
+  FastAPI** (nada no log da API), e o `api.js::lancarErro` **não trata 414** — a
+  resposta vem em HTML, o `r.json()` falha, o `detail` fica nulo e a tela diz só
+  "erro". Exportar 30 pessoas funciona, que é exatamente como alguém testaria.
+  ⚠️ **Não conserte subindo o buffer do nginx**: arruma um ambiente e deixa o
+  outro quebrado (o arquivo do repo não sobe sozinho para o Portainer — v3.15.1),
+  e a URL passa a levar 1.171 identificadores de pessoas para o log de acesso. O
+  precedente da casa é `POST /rh/arquivo/lote` — seleção no corpo, resposta
+  binária; `api.js::arquivoLote` é o espelho no front. Corolário: `list[uuid.UUID]`
+  num modelo Pydantic faz o FastAPI recusar UUID malformado com **422 nomeando o
+  campo**, enquanto o caminho por querystring estoura `ValueError` não tratado e
+  vira **500**. E **id que não existe tem de ser NOMEADO**: `db.get` devolve
+  `None` e o filtro o descarta calado — numa ação que gera folha de pagamento,
+  sumiço silencioso é o defeito que se está tentando eliminar.
+- **Exportar é AÇÃO EM MASSA: mora no card `.dash-acoes` e enxerga a seleção**
+  (v3.17, feedback do Bruno: *"marca as pessoas, exporta, e vêm outras"*): o
+  backend aceitava `ids` desde sempre e **nunca foi usado** — efetivar/desligar/
+  reverter viviam em `acoesMassa` e recebiam a seleção do `DashPlanilha`;
+  exportar era botão de CABEÇALHO, fora do dash, montando o próprio conjunto
+  pelos filtros do topo. O arquivo ia para a **folha de pagamento** com gente que
+  ninguém escolheu, sem nada denunciando. ⚠️ **Não ponha exportar dentro de
+  `acoesMassa`**: aquele bloco só existe quando há ≥1 marcado (`{alguns && …}`),
+  e exportar precisa continuar alcançável sem seleção — escondê-lo repetiria o
+  defeito da v2.76.1. O lugar é o `.dash-acoes`, sempre visível, com a CONTAGEM
+  no rótulo (`Exportar p/ Tirvu (12)`), para se saber o que vai antes de clicar.
+  Quem informa o pai é a prop **`aoSelecionar`** do `DashPlanilha` (escolhida em
+  vez de mudar o contrato de `acoesFiltro`, que é nó JSX e obrigaria a mexer nos
+  cinco consumidores por uma necessidade de uma tela só). ⚠️ E **alinhe TODOS os
+  botões de exportar da mesma barra ao mesmo contrato**: o `⬇ Exportar CSV` do
+  próprio dash exportava o visível, então quatro botões vizinhos levariam
+  conjuntos diferentes sem nada dizendo — "dois controles para a mesma escolha"
+  (v2.75) no lugar mais caro.
 - **`console_scripts` do pip NÃO entra no PATH do Windows — no MCP isso vira
   "o servidor não conecta"** (v3.14, achado instalando o pacote de verdade): o
   `pyproject.toml` declara `portal-rh-mcp = "portal_rh_mcp.servidor:main"`, o
