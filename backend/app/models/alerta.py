@@ -42,6 +42,12 @@ class TipoAlerta(str, enum.Enum):
     friccao_pico = "friccao_pico"
     # "Uma página passou do tempo aceitável." MinIO cheio, banco lento.
     lentidao = "lentidao"
+    # "O e-mail parou de sair." (2026-09-22) Acrescentado depois do incidente
+    # em que a caixa que autenticava o M365 foi EXTINTA: o sistema só FALHAVA,
+    # e ninguém soube até um candidato reclamar que não recebeu o código.
+    # ⚠️ Lê a AUDITORIA (`email_falhou`), não a telemetria — envio é ato de
+    # SERVIDOR, não tem sessão de navegador para contar.
+    email_falhou = "email_falhou"
 
 
 class RegraAlerta(Base):

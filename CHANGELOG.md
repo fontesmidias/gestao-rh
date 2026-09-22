@@ -14,6 +14,79 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.25.0] — 2026-09-22 — O sistema avisa quando o e-mail para
+
+A outra metade do incidente de hoje. A v3.22 fez a cadeia de provedores não
+parar numa credencial morta; faltava **alguém ficar sabendo** quando nenhum
+provedor consegue entregar.
+
+No incidente real, a caixa que autenticava o M365 foi extinta e o sistema só
+FALHAVA — ninguém soube até um candidato reclamar que não recebeu o código de
+acesso. Com o SMTP reconectado o sintoma some, mas volta igual se a caixa nova
+for desativada.
+
+### A solução de menor energia: reusar o vigia que já existe
+
+Três caminhos foram considerados:
+
+| Opção | Custo | Por quê |
+|---|---|---|
+| Worker novo testando SMTP | alto | mais um container, mais um relógio, mais um ponto de falha |
+| Testar a conexão a cada envio | alto | dobra a latência de todo e-mail |
+| **Regra de alerta nova** | **~40 linhas** | vigia, matriz, tela e anti-spam **já existem** |
+
+O desenho escolhido:
+
+```
+enviar_email falha
+  ↓ registra `email_falhou` na auditoria
+  ↓
+alertas_telemetria (já roda a cada 15 min)
+  ↓ conta os eventos na janela
+  ↓ avisa pela matriz de avisos internos
+```
+
+Nenhum container novo, nenhum relógio novo. E pega **qualquer causa** de falha
+— conta extinta, senha trocada, caixa cheia, tenant bloqueado, rede caída —,
+não só o cenário que motivou o recurso. Um teste de conexão diria apenas "o
+servidor responde".
+
+### As decisões que separam aviso útil de ruído
+
+- **Limiar 3 em 30 min, configurável.** Uma falha isolada pode ser rede; três
+  seguidas são problema. Silêncio de 2h.
+- **Destinatário VAZIO não conta.** É candidato cadastrado sem e-mail (convite
+  pelo WhatsApp), caso legítimo e frequente — contá-lo encheria o alerta de
+  ruído, e ruído ensina a ignorar o alerta (v2.88).
+- **Assinatura FIXA por regra.** Por destinatário, cada pessoa viraria um
+  alerta próprio, o `silencio_min` não seguraria nada e a enxurrada esconderia
+  o fato único que interessa.
+- **O aviso NOMEIA quem ficou sem receber** e diz onde resolver — é a pergunta
+  que se faz no incidente.
+- **O registro nunca derruba o envio.** É chamado do `finally` de todo e-mail;
+  sessão própria, `try/except`, e uma exceção ali seria a ação do candidato
+  caindo por causa de um carimbo (regra do `avisar()`, v1.82).
+
+### A regra nasce SEMEADA
+
+Tipo de alerta sem regra cadastrada **nunca dispara** — seria código órfão, e o
+esquecimento só apareceria no próximo incidente, que é exatamente quando não se
+pode contar com ele. Migration idempotente (`NOT EXISTS`), testada no upgrade e
+no downgrade.
+
+⚠️ Não precisou das duas revisões da armadilha do enum: `regra_alerta.tipo` é
+`String(20)`, conferido **no banco** antes de escrever.
+
+### Validado por mutação — e a segunda mutação achou uma lacuna no teste
+
+`test_alerta_email_falhou.py`, 12 asserções, no CI.
+
+A mutação que faz o envio sem destinatário contar foi pega. A que troca a
+assinatura fixa por uma **por destinatário passou verde** — a asserção contava
+itens, e o avaliador devolve uma lista de um em qualquer desenho. O teste
+ganhou a asserção que faltava: a assinatura não muda quando entra outro
+destinatário. Sem ela, alguém poderia quebrar o silêncio sem nada acusar.
+
 ## [3.24.0] — 2026-09-22 — O formulário que brigava com quem digitava
 
 Lido no log de produção: uma candidata levou **12 recusas 422 em 4 minutos**

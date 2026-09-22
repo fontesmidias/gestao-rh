@@ -104,6 +104,13 @@ def enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html: 
                 "ok" if ok else "FALHOU", destinatario or "(sem destinatário)",
                 (assunto or "")[:80], len(anexos or []), ms,
             )
+            # ⚠️ `destinatario` VAZIO não é falha de envio (2026-09-22): é
+            # candidato cadastrado sem e-mail, com o convite copiado para o
+            # WhatsApp — caso legítimo e frequente. Registrá-lo como falha
+            # encheria o alerta de ruído e ensinaria a equipe a ignorá-lo, que
+            # é o oposto do que ele existe para fazer (v2.88).
+            if not ok and destinatario:
+                _registrar_falha(destinatario, assunto)
         except Exception:  # log nunca atrapalha o envio
             pass
 
@@ -238,6 +245,45 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
         if levantar_erro:
             raise
         return False
+
+
+ACAO_FALHA = "email_falhou"
+
+
+def _registrar_falha(destinatario: str, assunto: str) -> None:
+    """Carimba a falha de envio na auditoria, para o vigia contar (2026-09-22).
+
+    Existe porque a caixa que autenticava o M365 foi EXTINTA e o sistema só
+    FALHAVA — ninguém soube até um candidato reclamar que não recebeu o código.
+    A cadeia de reservas (v3.22) garante que o e-mail tente sair por outro
+    provedor; isto garante que alguém FIQUE SABENDO quando nenhum consegue.
+
+    Quem conta e avisa é o `alertas.py` (o vigia que já roda a cada 15 min):
+    aqui só se deixa o rastro. Assim não há worker novo, relógio novo nem
+    container novo — e a regra é configurável na tela que já existe.
+
+    ⚠️ **NUNCA levanta e nunca deixa transação pendente.** É chamado do
+    `finally` de todo envio; uma exceção aqui derrubaria a ação que disparou o
+    e-mail (a mesma regra do `avisar()`, v1.82). A sessão é PRÓPRIA e fecha
+    sozinha — reusar a do chamador marcaria a falha como parte de uma
+    transação que pode sofrer rollback, e aí o rastro sumiria exatamente no
+    caso em que ele importa.
+
+    O destinatário é gravado porque ele responde "quem ficou sem receber?" —
+    a pergunta que se faz num incidente. Assunto entra CURTO: identifica o
+    fluxo (código de acesso, convite) sem copiar conteúdo.
+    """
+    try:
+        from app.core.db import SessionLocal
+        from app.services.auditoria import registrar
+
+        with SessionLocal() as db:
+            registrar(db, ACAO_FALHA, ator="sistema",
+                      detalhe={"destino": destinatario[:120],
+                               "assunto": (assunto or "")[:120]})
+            db.commit()
+    except Exception:  # noqa: BLE001 — o envelope não derruba a carta
+        log.debug("não foi possível registrar a falha de envio", exc_info=True)
 
 
 def _resumo_tentativas(tentativas: list[str]) -> str:

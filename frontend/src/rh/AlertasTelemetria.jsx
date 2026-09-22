@@ -41,6 +41,18 @@ const TIPOS = {
       + '(mediana). Um caso isolado de lentidão não dispara.',
     unidade: 'milissegundos',
   },
+  email_falhou: {
+    rotulo: '📭 E-mail não está saindo',
+    ajuda: 'E-mails que falharam ao sair. Nasceu do incidente de 22/09, quando '
+      + 'a caixa que autenticava o provedor foi desativada e o sistema só '
+      + 'falhava — sem e-mail ninguém recebe código de acesso, e só se '
+      + 'descobriu quando um candidato reclamou. Pega qualquer causa: conta '
+      + 'desativada, senha trocada, caixa cheia, rede fora.',
+    unidade: 'e-mails',
+    // Os filtros de origem/página não se aplicam: envio é ato do SERVIDOR,
+    // não tem sessão de navegador nem página.
+    semFiltrosDeTela: true,
+  },
 }
 
 const ORIGENS = [
@@ -315,6 +327,11 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
         </label>
       </div>
 
+      {/* Envio de e-mail é ato do SERVIDOR: não tem sessão de navegador,
+          origem nem página. Oferecer esses filtros aqui seria controle que não
+          decide nada — e campo que não faz efeito ensina a desconfiar dos que
+          fazem. */}
+      {!TIPOS[rascunho.tipo]?.semFiltrosDeTela && (
       <details>
         <summary>Restringir a regra (opcional)</summary>
         <div className="rh-grid-2">
@@ -333,6 +350,7 @@ function Formulario({ rascunho, setRascunho, salvar, cancelar, ocupado }) {
           </label>
         </div>
       </details>
+      )}
 
       <label className="campo">
         <input type="checkbox" checked={rascunho.ativa}

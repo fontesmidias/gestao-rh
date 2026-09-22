@@ -40,7 +40,6 @@
 | O quê | Por quê | Origem |
 |---|---|---|
 | **24ª leva — Ondas 2 a 5** | Módulo de assinaturas (o documento **não é disparado a ninguém** ao concluir — confirmado no código) · conta salário por posto · prazos de VT/VA customizáveis · Banco de Talentos configurável · MCP utilizável · 3 módulos novos (Termo de VT, movimentação funcional, certificados) | 24ª leva |
-| **Detectar remetente que deixou de existir** | O `bruno.fontes@` foi extinto e o sistema só FALHAVA — não tinha como saber. Hoje o SMTP está funcionando e a cadeia não trava mais numa credencial morta (v3.22), mas **se o `nao-responda@` for desativado, o sintoma volta**: falha silenciosa até alguém reclamar. Falta o sistema PERCEBER e avisar | 22/09 |
 | **Stack do Portainer × arquivo do repo** | A stack de produção é uma CÓPIA colada e não se atualiza sozinha — em 22/09 ela estava sem `creche_lembretes` (nunca rodou na VPS) e sem a rede do e-mail. Já cobrou 5 vezes. A defesa real é o Portainer puxar do git (ele suporta), em vez da cópia manual | 22/09 |
 | **Ambiente de homologação para o assistente** | O Bruno ofereceu acesso por `.env` para eu validar telas com dados reais (a v3.21 foi medida com 7 cargos; a base tem 111). Faltam 3 decisões: dados reais ou fictícios · leitura ou escrita · qual papel | 22/09 |
 | **Declaração PF pré-preenchida** | **Decidido pelo Bruno (19/08/2026)**: *"tem que vir pré-preenchida com os dados já mapeados em relação ao filho do colaborador"*. Hoje o sistema gera o modelo EM BRANCO. O que já existe: nome do colaborador, CPF, e nome + data de nascimento da criança. ⚠️ O que **falta** e o modelo do Dr. Lucas pede: nome, CPF, RG e endereço do CUIDADOR, e o valor pago no mês — esses precisam ser coletados (decidir se por criança, uma vez, ou a cada competência) | 23ª leva |
@@ -70,7 +69,7 @@ O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
 (ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
 competência anterior à vigência.
 
-### 27ª leva (2026-09-22) — v3.21 → v3.24
+### 27ª leva (2026-09-22) — v3.21 → v3.25
 **O dia em que três coisas quebraram por credencial ou referência inválida.**
 Começou com o pedido de juntar a importação de cargos (que estava em três
 telas) e terminou com o portal de produção sem e-mail nenhum.
@@ -92,6 +91,11 @@ telas) e terminou com o portal de produção sem e-mail nenhum.
 - **v3.24 — O formulário que brigava com quem digitava.** Uma candidata levou
   **12 recusas 422 em 4 minutos**: o autosave mandava meia linha e o CPF era
   acusado a cada tecla.
+
+- **v3.25 — O sistema avisa quando o e-mail para.** A outra metade: a cadeia
+  não parava mais, mas ninguém ficava sabendo quando nenhum provedor entregava.
+  Resolvido reusando o vigia que já roda a cada 15 min — ~40 linhas, nenhum
+  container novo.
 
 Fica a regra que liga as três: **credencial ou referência inválida bloqueia o
 caminho que funcionaria sem ela** — e o erro nunca fala disso.

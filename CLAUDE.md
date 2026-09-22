@@ -116,6 +116,34 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Falha que se REPETE precisa de quem CONTE — e o vigia já existe** (v3.25,
+  a outra metade do incidente do e-mail): a v3.22 fez a cadeia de provedores não
+  parar numa credencial morta, mas ninguém FICAVA SABENDO quando nenhum
+  entregava. ⚠️ **Antes de construir worker novo, olhe o `alertas.py`**: ele já
+  roda a cada 15 min, já tem matriz de destinatários, tela de configuração e
+  anti-spam por assinatura — acrescentar um AVALIADOR custou ~40 linhas contra
+  um container, um relógio e um ponto de falha novos. O avaliador novo lê a
+  AUDITORIA (envio é ato de SERVIDOR: não há sessão nem página, então os
+  filtros de origem/página da regra não se aplicam, e a tela os esconde para
+  não oferecer controle que não decide nada). ⚠️ **Contar falhas REAIS pega
+  qualquer causa** (conta extinta, senha trocada, caixa cheia, rede fora);
+  testar a conexão periodicamente só diria "o servidor responde" — e custaria
+  96 conexões/dia. Três decisões que separam aviso de ruído: limiar > 1 (falha
+  isolada pode ser rede), **entrada que não é falha fica FORA** (destinatário
+  vazio é candidato sem e-mail, caso legítimo — contá-lo ensina a ignorar o
+  alerta, v2.88), e **assinatura FIXA por regra**: por item, cada ocorrência
+  vira um alerta próprio, o `silencio_min` não segura nada e a enxurrada
+  esconde o fato único. ⚠️ **Tipo de alerta sem REGRA cadastrada nunca dispara**
+  — semeie por migration idempotente, senão é código órfão cujo esquecimento só
+  aparece no próximo incidente. Coberto por `test_alerta_email_falhou.py`, 12
+  asserções.
+- **Contar ITENS não prova estabilidade de ASSINATURA** (v3.25, lacuna do meu
+  próprio teste, achada por mutação): a asserção `len(itens) == 1` passava
+  verde com a assinatura trocada para "por destinatário" — o avaliador devolve
+  uma lista de um em qualquer desenho, então o número não distingue os dois. O
+  que prova é a assinatura **não mudar** quando o conjunto de itens muda. Vale
+  para todo dedup por assinatura: afirme sobre a ESTABILIDADE dela entre duas
+  avaliações com dados diferentes, nunca sobre a contagem do resultado.
 - **AUTOSAVE manda estado PARCIAL; validação cobra estado FINAL — e a briga
   aparece na cara de quem digita** (v3.24, caso de campo lido no log): o wizard
   salva a cada 900ms e `DependenteIn`/`ContatoEmergenciaIn` exigem todo campo.

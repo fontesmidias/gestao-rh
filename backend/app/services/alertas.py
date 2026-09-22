@@ -167,8 +167,61 @@ def _avaliar_lentidao(db: Session, regra: RegraAlerta, corte: datetime) -> list[
     } for pagina, med, n in linhas]
 
 
+def _avaliar_email_falhou(db: Session, regra: RegraAlerta, corte: datetime) -> list[dict]:
+    """O e-mail parou de sair (2026-09-22, incidente da caixa extinta).
+
+    Lê a AUDITORIA, não a telemetria: envio é ato de SERVIDOR — não há sessão
+    de navegador nem página para contar, então os filtros de origem/página da
+    regra não se aplicam aqui (e não fazem sentido).
+
+    **Por que contar em vez de testar a conexão:** um teste periódico diria
+    apenas "o servidor responde"; contar falhas REAIS pega qualquer causa —
+    conta extinta, senha trocada, caixa cheia, tenant bloqueado, rede caída.
+    E não custa 96 conexões por dia ao servidor de e-mail.
+
+    A assinatura é FIXA por regra, de propósito: o que importa é *"o e-mail
+    parou"*, não *"falhou para fulano"*. Assinatura por destinatário faria
+    cada pessoa virar um alerta próprio e a enxurrada esconderia o fato único
+    que interessa — e o `silencio_min` não seguraria nada, porque cada
+    assinatura tem silêncio próprio.
+    """
+    from app.models.evento import EventoAuditoria
+    from app.services.email import ACAO_FALHA
+
+    linhas = db.execute(
+        select(func.count().label("n"),
+               func.count(func.distinct(
+                   EventoAuditoria.detalhe["destino"].astext)).label("pessoas"))
+        .where(EventoAuditoria.acao == ACAO_FALHA,
+               EventoAuditoria.criado_em >= corte)).first()
+    n, pessoas = (linhas or (0, 0))
+    if not n or n < max(1, regra.limiar):
+        return []
+
+    # Os últimos destinatários entram no texto porque respondem a pergunta que
+    # se faz no incidente: "quem ficou sem receber?". Sem isso, o aviso diz que
+    # algo quebrou e deixa quem opera sem por onde começar.
+    ultimos = db.scalars(
+        select(EventoAuditoria.detalhe["destino"].astext)
+        .where(EventoAuditoria.acao == ACAO_FALHA,
+               EventoAuditoria.criado_em >= corte)
+        .order_by(EventoAuditoria.criado_em.desc()).limit(3)).all()
+    amostra = ", ".join(d for d in ultimos if d)
+
+    return [{
+        "assinatura": _assinatura("email_falhou", str(regra.id)),
+        "n": n, "pessoas": pessoas,
+        "texto": (f"{n} e-mail(s) não saíram em {regra.janela_min} min, para "
+                  f"{pessoas} destinatário(s)"
+                  + (f" (últimos: {amostra})" if amostra else "")
+                  + ". Confira o provedor em Configurações → E-mail e "
+                    "integrações — sem e-mail, ninguém recebe código de acesso."),
+    }]
+
+
 AVALIADORES = {
     TipoAlerta.erro_novo.value: _avaliar_erro_novo,
+    TipoAlerta.email_falhou.value: _avaliar_email_falhou,
     TipoAlerta.erro_volume.value: _avaliar_erro_volume,
     TipoAlerta.friccao_pico.value: _avaliar_friccao_pico,
     TipoAlerta.lentidao.value: _avaliar_lentidao,
