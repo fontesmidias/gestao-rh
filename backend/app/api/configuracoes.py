@@ -763,7 +763,33 @@ def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("co
                      "use uma senha de aplicativo (mysignins.microsoft.com/security-info).")
         raise HTTPException(status_code=422, detail=dica) from exc
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"falha_no_envio: {exc}") from exc
+        # Três falhas comuns cujo texto cru manda consertar a coisa errada
+        # (2026-09-22, diagnóstico medido no servidor de e-mail). A dica vem
+        # ANTES do erro do servidor, não no lugar dele: quem sabe ler o
+        # protocolo continua vendo a resposta exata.
+        cru = str(exc)
+        dica = ""
+        porta = smtp_config(db).get("port")
+        if "AUTH extension not supported" in cru:
+            dica = ("A porta não aceita autenticação — a 25 é de ENTREGA entre "
+                    "servidores, não de submissão. Use 465 (TLS direto) ou "
+                    "587/2525 (STARTTLS). ")
+        elif "5.5.4" in cru or "Invalid sender" in cru or "sender address" in cru.lower():
+            dica = ("O remetente (From) provavelmente difere do usuário da "
+                    "conta. Muitos servidores recusam enviar em nome de outro "
+                    "endereço — deixe os dois idênticos, atenção a variações "
+                    "como no-reply@ e noreply@. ")
+        elif "getreply" in cru or "SSLError" in cru or "WRONG_VERSION" in cru:
+            dica = (f"A porta {porta} parece exigir TLS desde o início (465) ou "
+                    f"o contrário. Confira se a porta bate com o que o servidor "
+                    f"oferece. ")
+        elif "Connection refused" in cru or "Errno 111" in cru:
+            dica = (f"Não foi possível conectar em {smtp_config(db).get('host')}:"
+                    f"{porta}. Se o servidor de e-mail roda em outro container, "
+                    f"confira se as redes continuam ligadas — ligação feita a "
+                    f"quente NÃO sobrevive a um redeploy da stack. ")
+        raise HTTPException(status_code=422,
+                            detail=f"{dica}Resposta do servidor: {cru}") from exc
     registrar(db, "smtp_teste_ok", ator="rh", ator_detalhe=rh.email)
     db.commit()
     return {"enviado_para": rh.email}

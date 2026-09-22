@@ -116,6 +116,49 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Cadastro que ALIMENTA um seletor precisa entrar na FONTE que o seletor lê**
+  (v3.23, defeito visto pelo Bruno um dia depois da v3.21 — e causado por ela):
+  `GET /rh/cargos` (o seletor do convite de Admissões e de mais duas telas) lia
+  só `Candidato.cargo_funcao`, ou seja **quem OCUPA o cargo**; a página de
+  Cargos grava em `CargoTirvu`, o de-para. Cargo recém-cadastrado ficava
+  invisível até alguém ser admitido nele — **a ordem inversa do trabalho**,
+  porque se cadastra o cargo ANTES de admitir. ⚠️ O sintoma engana: o cadastro
+  funciona, a tela de origem mostra o registro, nada dá erro; ele só some onde
+  ia ser USADO. Ao criar tela de cadastro, `grep` por quem LÊ aquele dado e
+  confira se a fonte é a mesma — "gravou" não é "aparece". Hoje a rota UNE as
+  duas fontes, casando por texto NORMALIZADO (a chave do export, senão "Vigia"
+  e "vigia " viram duas entradas), e quem tem gente mantém o rótulo **da
+  ficha**: é o texto que vai ao Tirvu. ⚠️ O filtro do Arquivo continua lendo só
+  quem ocupa, DE PROPÓSITO — ali é filtro de lista existente, e oferecer cargo
+  sem ninguém daria filtro que sempre devolve zero. Coberto por
+  `test_cargos_seletor.py`, 9 asserções; 2 reprovam com o código anterior.
+- **A cifra do SMTP depende da PORTA — e errar dá TIMEOUT, não erro de TLS**
+  (v3.23, incidente de produção 2026-09-22): o código chamava `starttls()`
+  **sempre**, o que quebra a **465**. O log mostrou a assinatura: trocado o
+  servidor, o `Connection refused` virou **timeout de 30s no `getreply`** — o
+  socket abre, o Python espera a saudação em texto claro e o servidor espera o
+  handshake TLS; ninguém fala. A mensagem sugere rede, e a causa é a porta.
+  Medido: **25** não anuncia AUTH (é porta de ENTREGA entre servidores, não de
+  submissão — o `login()` falha com "SMTP AUTH extension not supported", que
+  manda procurar credencial errada); **465** exige `SMTP_SSL`; **2525/587**
+  exigem `SMTP` + `starttls()`. Hoje a escolha é pela porta. ⚠️ E `From`
+  diferente do usuário da conta dá **501 5.5.4** com o log dizendo
+  "Authentication successful" — outra recusa que aponta o lugar errado (v2.93);
+  a rota de teste agora nomeia os quatro casos antes de ecoar o erro cru.
+  Coberto por `test_email_cadeia_provedores.py` (3 das 11 asserções).
+- **`external: true` no compose BASE quebra toda máquina que não tem a rede**
+  (v3.23, testado e revertido antes de subir): ligar os serviços à rede do
+  servidor de e-mail (outra stack da mesma VPS) parece pertencer à base — e
+  medido aqui a stack local **parou de subir** com `network stalwart_default
+  declared as external, but could not be found`, porque `external: true` exige
+  que a rede JÁ EXISTA. Seria dano colateral em todo ambiente de
+  desenvolvimento e no CI. A ligação vive em `deploy/docker-compose.mail.yml`,
+  sobreposição OPCIONAL: o caminho padrão segue funcionando e o e-mail se liga
+  só onde ele existe. ⚠️ São QUATRO serviços, não três — o `expurgo` também
+  envia (`avisar_vencimentos`, `creche_lembretes`), e deixá-lo de fora faria só
+  aquele worker falhar em silêncio (v2.66). ⚠️ E ligação feita A QUENTE
+  (`docker network connect`) **não sobrevive a um redeploy**: o serviço é
+  recriado sem ela e o envio volta a falhar com `Connection refused`.
 - **CREDENCIAL MORTA bloqueia a cadeia de reservas — pior que não ter
   credencial** (v3.22, incidente de 2026-09-22): a caixa que autenticava o M365
   foi EXTINTA; o `m365_refresh_token` ficou no banco, inútil, e o

@@ -201,7 +201,74 @@ try:
 finally:
     c.restaurar()
 
-print("\n=== 6. quem entrega de primeira NAO gera aviso (sem ruido) ===")
+print("\n=== 6. a CIFRA depende da PORTA (incidente de 2026-09-22) ===")
+# O log de produção mostrou a assinatura exata do erro: trocado o servidor, o
+# `Connection refused` virou **timeout de 30s no `getreply`** — o socket abre,
+# o Python espera a saudação em texto claro e o servidor espera o handshake
+# TLS. Ninguém fala. `SMTP` + `starttls()` na 465 produz isso; `SMTP` sem
+# `starttls()` na 587/2525 faz o servidor recusar a autenticação.
+_usados: list[tuple[str, int]] = []
+
+
+class _FakeSMTP:
+    def __init__(self, host, port, timeout=None):
+        _usados.append(("SMTP", port))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def starttls(self):
+        _usados.append(("starttls", 0))
+
+    def login(self, *a):
+        pass
+
+    def send_message(self, *a):
+        pass
+
+
+class _FakeSSL(_FakeSMTP):
+    def __init__(self, host, port, timeout=None):
+        _usados.append(("SMTP_SSL", port))
+
+
+def _cifra_na_porta(porta: int) -> list[tuple[str, int]]:
+    import app.services.gmail as g
+    import app.services.m365 as m
+    import app.services.webhook_email as w
+    from app.services import config_dinamica as cd
+
+    orig = (mod.smtplib.SMTP, mod.smtplib.SMTP_SSL, m.config_m365,
+            g.config_gmail, w.url_webhook, cd.smtp_config)
+    mod.smtplib.SMTP, mod.smtplib.SMTP_SSL = _FakeSMTP, _FakeSSL
+    m.config_m365 = lambda db: {}
+    g.config_gmail = lambda db: {}
+    w.url_webhook = lambda db: ""
+    cd.smtp_config = lambda db: {"host": "mail.exemplo", "port": porta,
+                                 "user": "u", "password": "s", "from_": "u"}
+    _usados.clear()
+    try:
+        mod._enviar_email("a@b.com", "x", "y")
+        return list(_usados)
+    finally:
+        (mod.smtplib.SMTP, mod.smtplib.SMTP_SSL, m.config_m365,
+         g.config_gmail, w.url_webhook, cd.smtp_config) = orig
+
+
+u465 = _cifra_na_porta(465)
+checar(u465 == [("SMTP_SSL", 465)],
+       f"porta 465 usa SMTP_SSL e NAO chama starttls (veio {u465}) — "
+       f"`SMTP`+starttls ali da timeout de 30s no getreply, que parece rede")
+for p in (587, 2525):
+    u = _cifra_na_porta(p)
+    checar(u == [("SMTP", p), ("starttls", 0)],
+           f"porta {p} usa SMTP + STARTTLS (veio {u}) — sem ele o servidor "
+           f"recusa a autenticacao")
+
+print("\n=== 7. quem entrega de primeira NAO gera aviso (sem ruido) ===")
 c = _Cenario(m365=True, entrega=["m365"])
 aviso = [None]
 ok = enviar(c, aviso=aviso)

@@ -1,0 +1,56 @@
+# ============================================================================
+# SOBREPOSIÇÃO OPCIONAL — servidor de e-mail em OUTRA stack da mesma máquina
+#
+# Use APENAS quando o SMTP (Stalwart, Mailu, Poste…) roda em containers ao lado,
+# e o portal precisa alcançá-lo pelo nome interno em vez de sair para a
+# internet. Combine DEPOIS da base e da variante:
+#
+#   docker compose --env-file .env \
+#     -f deploy/docker-compose.base.yml \
+#     -f deploy/docker-compose.ip.yml \
+#     -f deploy/docker-compose.mail.yml up -d
+#
+# ⚠️ POR QUE ISTO É UM ARQUIVO À PARTE, e não está na base (2026-09-22):
+# `external: true` exige que a rede JÁ EXISTA. Posto na base, o
+# `docker compose up` falha com
+#
+#     network stalwart_default declared as external, but could not be found
+#
+# em toda máquina que não tenha o servidor de e-mail — inclusive a de quem
+# desenvolve e a do CI. Medido: a stack local parou de subir. Sobreposição
+# separada mantém o caminho padrão funcionando e liga o e-mail só onde ele
+# existe.
+#
+# ⚠️ A ligação de rede feita A QUENTE (`docker network connect`) NÃO sobrevive
+# a um redeploy: o serviço é recriado sem ela e o envio volta a falhar com
+# `Connection refused` — sintoma que não fala em rede e manda procurar a
+# credencial. Este arquivo é o que a torna permanente.
+#
+# Os QUATRO serviços abaixo são os que enviam e-mail:
+#   api      → todo o fluxo do painel e do candidato
+#   worker   → o que a fila processa
+#   expurgo  → avisar_vencimentos, creche_lembretes
+#   alertas  → alertas_telemetria, logs_email
+# Deixar um de fora faz só aquele worker falhar, em silêncio (v2.66).
+#
+# Ajuste `name:` ao final se a sua stack de e-mail usar outro nome de rede
+# (`docker network ls` mostra o nome real).
+# ============================================================================
+
+services:
+  api:
+    networks: [internal, mail]
+
+  worker:
+    networks: [internal, mail]
+
+  expurgo:
+    networks: [internal, mail]
+
+  alertas:
+    networks: [internal, mail]
+
+networks:
+  mail:
+    external: true
+    name: stalwart_default

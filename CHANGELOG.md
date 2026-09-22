@@ -14,6 +14,85 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.23.0] — 2026-09-22 — O cargo invisível e a porta do e-mail
+
+### O cargo cadastrado não aparecia em lugar nenhum
+
+Feedback do Bruno, um dia depois da v3.21: *"o cargo recém criado não aparece
+nas demais páginas, por exemplo, na página de admissões"*. **Defeito meu, da
+própria v3.21**: são DUAS fontes e eu liguei a tela nova só a uma.
+
+| Tela | Grava em | Lê de |
+|---|---|---|
+| Cargos (nova) | `CargoTirvu` | `CargoTirvu` |
+| Convite de Admissões | — | `Candidato.cargo_funcao` |
+
+`GET /rh/cargos` montava a lista só a partir de quem **OCUPA** o cargo, então
+cargo recém-cadastrado ficava invisível até alguém ser admitido nele — **a
+ordem inversa do trabalho**, porque se cadastra o cargo ANTES de admitir. O
+sintoma engana: o cadastro funciona, a tela de Cargos mostra o registro, nada
+dá erro. Ele só some onde ia ser usado.
+
+Agora a rota UNE as duas fontes, casando por texto normalizado (a mesma chave
+do export, para "Vigia" e "vigia " não virarem duas entradas). Quem tem gente
+mantém o rótulo **da ficha** — é o texto que vai ao Tirvu, e trocá-lo pelo do
+de-para mudaria a planilha sem ninguém pedir.
+
+⚠️ O filtro do Arquivo (`arquivo.py`) segue lendo só quem ocupa, **de
+propósito**: ali é filtro de uma lista existente, e oferecer cargo sem ninguém
+daria filtro que sempre devolve zero.
+
+`test_cargos_seletor.py` (9 asserções, no CI): com o código anterior, **2
+reprovam** — exatamente o que o Bruno viu.
+
+### O e-mail: a cifra depende da PORTA
+
+O log de produção mostrou a evolução, e ela é a chave do diagnóstico:
+
+| Hora | Erro | Significa |
+|---|---|---|
+| 15:59 | `Connection refused` | não alcança o servidor |
+| 16:05 | (troca do SMTP) | — |
+| 16:06+ | **timeout de 30s no `getreply`** | conecta, e ninguém fala |
+
+O segundo é a assinatura de `SMTP` simples numa porta **465**: o socket abre, o
+Python espera a saudação em texto claro, o servidor espera o handshake TLS.
+Trinta segundos de silêncio — e o erro fala de rede, não de TLS.
+
+Diagnóstico medido no servidor de e-mail (por quem o administra):
+
+| Porta | AUTH | Serve? |
+|---|---|---|
+| 25 | não | ❌ porta de ENTREGA entre servidores, não de submissão |
+| 465 | sim | ✅ exige `SMTP_SSL` |
+| 2525 | sim + STARTTLS | ✅ exige `starttls()` |
+
+O código chamava `starttls()` **sempre** — o que quebra a 465. Agora a escolha é
+pela porta: `SMTP_SSL` na 465, `SMTP` + `STARTTLS` nas demais. Coberto por 3
+asserções novas no `test_email_cadeia_provedores.py` (11 no total).
+
+A rota de teste também parou de devolver o erro cru: os quatro casos conhecidos
+(porta sem AUTH, `From` diferente do usuário, TLS trocado, rede perdida) ganham
+uma frase que diz **onde** mexer, antes da resposta do servidor.
+
+### A rede do servidor de e-mail, sem quebrar o ambiente de quem desenvolve
+
+O SMTP roda em outra stack da mesma máquina, e a ligação de rede feita a quente
+**não sobrevive a um redeploy** — o serviço é recriado sem ela e o envio volta a
+falhar com `Connection refused`.
+
+A correção óbvia (pôr `mail` na base com `external: true`) foi **testada e
+revertida**: `external: true` exige que a rede já exista, e medido aqui a stack
+local parou de subir com `network stalwart_default declared as external, but
+could not be found`. Viraria dano colateral em toda máquina sem o servidor de
+e-mail, inclusive o CI.
+
+Ficou em `deploy/docker-compose.mail.yml`, sobreposição **opcional**: o caminho
+padrão continua funcionando e o e-mail se liga só onde ele existe. São QUATRO
+serviços, não três — `expurgo` também envia (`avisar_vencimentos`,
+`creche_lembretes`), e deixá-lo de fora faria só aquele worker falhar, em
+silêncio (v2.66).
+
 ## [3.22.1] — 2026-09-22 — O teste no bloco errado do CI
 
 `test_email_cadeia_provedores` foi para o bloco **stdlib pura** do `ci.yml` e

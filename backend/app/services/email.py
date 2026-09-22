@@ -200,8 +200,32 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
         msg.add_attachment(dados, maintype=maintype, subtype=subtype, filename=nome)
 
     try:
-        with smtplib.SMTP(cfg["host"], cfg["port"], timeout=30) as smtp:
-            smtp.starttls()
+        # A forma de cifrar DEPENDE DA PORTA (2026-09-22), e errar não dá um
+        # erro que fale da causa:
+        #
+        #   465  → TLS desde o primeiro byte (`SMTP_SSL`). Abrir com `SMTP` e
+        #          chamar `starttls()` estoura num erro obscuro de `getreply`,
+        #          que parece defeito de rede.
+        #   587/2525 → texto claro e depois `STARTTLS`. Sem ele, o servidor
+        #          recusa a autenticação.
+        #   25   → porta de ENTREGA entre servidores, NÃO de submissão: não
+        #          anuncia AUTH, e o `login()` falha com "SMTP AUTH extension
+        #          not supported" — que manda procurar credencial errada
+        #          quando o problema é a porta.
+        #
+        # Chamar `starttls()` sempre (como era até aqui) quebra a 465; nunca
+        # chamar quebra a 587/2525. Por isso a escolha é pela porta.
+        porta = int(cfg["port"] or 587)
+        if porta == 465:
+            conexao = smtplib.SMTP_SSL(cfg["host"], porta, timeout=30)
+        else:
+            conexao = smtplib.SMTP(cfg["host"], porta, timeout=30)
+        with conexao as smtp:
+            if porta != 465:
+                # `starttls` em servidor que não a oferece levanta
+                # `SMTPNotSupportedError`; deixamos subir, porque enviar em
+                # texto claro a senha e o dado da pessoa seria pior que falhar.
+                smtp.starttls()
             if cfg["user"]:
                 smtp.login(cfg["user"], cfg["password"])
             smtp.send_message(msg)

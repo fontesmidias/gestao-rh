@@ -50,7 +50,11 @@ services:
       - minio
     volumes:
       - logs-data:/var/log/gestao-rh
-    networks: [internal]
+    # `mail`: rede do servidor de e-mail (Stalwart), que roda em OUTRA stack.
+    # ⚠️ Sem esta declaração o envio funciona até o próximo redeploy e depois
+    # falha com `Connection refused` — ligação de rede feita a quente NÃO
+    # sobrevive à recriação do serviço, e o sintoma não fala em rede.
+    networks: [internal, mail]
     restart: unless-stopped
     # Marca a API como saudável só quando ela RESPONDE — `restart: unless-stopped`
     # sozinho só reage a processo morto, e container vivo e travado continuaria
@@ -86,7 +90,11 @@ services:
       - minio
     volumes:
       - logs-data:/var/log/gestao-rh
-    networks: [internal]
+    # `mail`: rede do servidor de e-mail (Stalwart), que roda em OUTRA stack.
+    # ⚠️ Sem esta declaração o envio funciona até o próximo redeploy e depois
+    # falha com `Connection refused` — ligação de rede feita a quente NÃO
+    # sobrevive à recriação do serviço, e o sintoma não fala em rede.
+    networks: [internal, mail]
     restart: unless-stopped
 
   # Transcrição de entrevistas (v2.97). IMAGEM PRÓPRIA (`-transcricao`): o
@@ -171,7 +179,11 @@ services:
       - minio
     volumes:
       - logs-data:/var/log/gestao-rh
-    networks: [internal]
+    # `mail`: rede do servidor de e-mail (Stalwart), que roda em OUTRA stack.
+    # ⚠️ Sem esta declaração o envio funciona até o próximo redeploy e depois
+    # falha com `Connection refused` — ligação de rede feita a quente NÃO
+    # sobrevive à recriação do serviço, e o sintoma não fala em rede.
+    networks: [internal, mail]
     restart: unless-stopped
 
   # Vigia da telemetria (v2.25): avalia as regras de alerta a cada 15 minutos e
@@ -204,7 +216,11 @@ services:
       - db
     volumes:
       - logs-data:/var/log/gestao-rh
-    networks: [internal]
+    # `mail`: rede do servidor de e-mail (Stalwart), que roda em OUTRA stack.
+    # ⚠️ Sem esta declaração o envio funciona até o próximo redeploy e depois
+    # falha com `Connection refused` — ligação de rede feita a quente NÃO
+    # sobrevive à recriação do serviço, e o sintoma não fala em rede.
+    networks: [internal, mail]
     restart: unless-stopped
 
   frontend:
@@ -263,6 +279,11 @@ services:
 
 networks:
   internal:
+  # Rede do servidor de e-mail, criada por OUTRA stack (Stalwart).
+  # `external: true` = o compose NÃO a cria; espera que já exista.
+  mail:
+    external: true
+    name: stalwart_default
 
 volumes:
   postgres-data:

@@ -189,13 +189,42 @@ def listar_cargos(db: Session = Depends(get_db),
     RH escolhe um existente (evita "Vigia"/"vigia"/"Vigía" virando 3 cargos) ou
     digita um novo, que passa a aparecer aqui para o próximo.
 
-    Ordenado por frequência (o cargo comum vem primeiro) e depois por nome."""
+    Ordenado por frequência (o cargo comum vem primeiro) e depois por nome.
+
+    ⚠️ **São DUAS fontes** (corrigido em 2026-09-22, defeito visto pelo Bruno):
+    quem OCUPA o cargo hoje (`Candidato.cargo_funcao`) **e** quem está no
+    de-para do Tirvu (`CargoTirvu`). Ler só a primeira fazia o cargo cadastrado
+    na página de Cargos **não aparecer no convite de Admissões** — e a ordem do
+    trabalho é justamente essa: cadastra-se o cargo ANTES de admitir alguém
+    nele. O sintoma engana, porque o cadastro funciona e a tela de Cargos o
+    mostra; ele só some onde vai ser usado.
+
+    Cargo do de-para que ninguém ocupa entra com `pessoas: 0` e vai para o fim
+    da lista — aparece, sem competir com os que têm gente."""
+    from app.models.candidato import CargoTirvu
+    from app.services.export_tirvu import normalizar_cargo
+
     linhas = db.execute(
         select(Candidato.cargo_funcao, func.count())
         .where(Candidato.cargo_funcao.isnot(None), Candidato.cargo_funcao != "")
         .group_by(Candidato.cargo_funcao)
     ).all()
-    cargos = sorted(({"nome": nome, "pessoas": qtd} for nome, qtd in linhas),
+    por_chave: dict[str, dict] = {}
+    for nome, qtd in linhas:
+        chave = normalizar_cargo(nome)
+        if not chave:
+            continue
+        # Casa NORMALIZADO para "Vigia" e "vigia " não virarem duas entradas —
+        # é a mesma chave que o de-para e o export usam.
+        item = por_chave.setdefault(chave, {"nome": nome.strip(), "pessoas": 0})
+        item["pessoas"] += qtd
+    for m in db.scalars(select(CargoTirvu)).all():
+        # `setdefault`: quem já tem gente mantém o rótulo COMO ESTÁ NA FICHA —
+        # é o texto que o export leva ao Tirvu, e trocá-lo pelo do de-para
+        # mudaria o que sai na planilha sem ninguém pedir.
+        por_chave.setdefault(m.cargo_normalizado,
+                             {"nome": m.cargo_rotulo, "pessoas": 0})
+    cargos = sorted(por_chave.values(),
                     key=lambda c: (-c["pessoas"], c["nome"].lower()))
     return {"cargos": cargos}
 
