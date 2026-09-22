@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { rh as api } from '../api.js'
 import { comAmpulheta } from '../Carregando.jsx'
 import SelectBusca from '../SelectBusca.jsx'
@@ -139,19 +140,17 @@ export default function Importacoes() {
       <CardDeParaLotacoes />
       <CardVinculos />
 
-      <CardTirvuTxt
-        titulo="🧾 Cargos (arquivo .txt copiado do Tirvu)"
-        instrucoes={<>O Tirvu não exporta cargos: selecione a lista inteira na tela dele,
-          cole no Bloco de Notas e salve o <strong>.txt</strong>. O sistema lê o ID, o cargo e
-          o <strong>CBO</strong> de cada linha. Cargo com dois IDs ativos (o CBO diferencia)
-          nunca é resolvido sozinho — fica separado para você decidir.</>}
-        aoEnviar={api.previewCargosArquivo}
-        aoAplicar={api.confirmarCargosTirvu}
-        campoNome="cargo"
-        montarItem={(p) => ({ tirvu_id: p.tirvu_id, cargo: p.cargo, cbo: p.cbo, aplicar: true })}
-        rotuloAmbiguo="cargo com mais de um ID ativo"
-        ondeDecidir="Configurações → Empresas e jornadas"
-      />
+      {/* Cargos saiu daqui para a página própria (2026-09-22): importar era só
+          a METADE do trabalho — o passo seguinte (conferir o ID de cada cargo)
+          vivia noutra aba, e quem acabava de importar não tinha como saber que
+          faltava. Fica o atalho, porque este é o lugar onde se procura. */}
+      <div className="rh-card">
+        <h3>🧾 Cargos (importar do Tirvu)</h3>
+        <p className="explica">A importação de cargos mudou de lugar: agora fica na página{' '}
+          <strong>Cargos</strong>, junto do passo a passo para trazer a lista do Tirvu e da
+          conferência do ID de cada um — que é o que a exportação de admissões usa.</p>
+        <Link className="btn-secundario btn-mini" to="/rh/cargos">💼 Abrir Cargos</Link>
+      </div>
 
       <CardTirvuTxt
         titulo="🕕 Jornadas (arquivo .txt copiado do Tirvu)"
@@ -166,7 +165,10 @@ export default function Importacoes() {
                               escala: p.escala || '', tratamento: p.tratamento || '',
                               aplicar: true })}
         rotuloAmbiguo="descrição repetida com IDs diferentes"
-        ondeDecidir="Configurações → Empresas e jornadas"
+        /* Aponta para onde a decisão REALMENTE se toma: a aba "Duplicidades
+           suspeitas" da página de Jornadas. O texto anterior mandava para
+           Configurações, onde não há o que resolver. */
+        ondeDecidir="Jornadas → Duplicidades suspeitas"
       />
     </div>
   )

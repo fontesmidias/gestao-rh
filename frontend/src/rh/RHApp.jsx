@@ -10,6 +10,7 @@ import Config from './Config.jsx'
 import Colaboradores from './Colaboradores.jsx'
 import TalentosRH from './TalentosRH.jsx'
 import PostosRH from './PostosRH.jsx'
+import CargosRH from './CargosRH.jsx'
 import JornadasRH from './JornadasRH.jsx'
 import UniformesRH from './UniformesRH.jsx'
 import DesenvolvimentoRH from './DesenvolvimentoRH.jsx'
@@ -447,6 +448,9 @@ const GRUPOS = [
     ['colaboradores', '👥', 'Colaboradores', 'colaboradores:ler'],
     ['postos', '🏢', 'Postos', 'organizacao:ler'],
     ['jornadas', '🕒', 'Jornadas', 'organizacao:escrever'],
+    // `escrever`, não `ler`: a tela existe para ATRIBUIR o ID do Tirvu a cada
+    // cargo — quem só lê veria uma tabela cujos campos todos recusam o salvar.
+    ['cargos', '💼', 'Cargos', 'organizacao:escrever'],
     ['uniformes', '👕', 'Uniformes', 'colaboradores:ler'],
   ]],
   ['Documentos', [
@@ -698,6 +702,7 @@ function PainelConteudo({ aoSair }) {
           <Colaboradores aoVoltar={() => navegar('inicio')} aoAbrir={abrirPessoa} />
         )}
         {pagina === 'postos' && <PostosRH />}
+        {pagina === 'cargos' && <CargosRH />}
         {pagina === 'jornadas' && <JornadasRH aoVoltar={() => navegar('inicio')} />}
         {pagina === 'uniformes' && <UniformesRH aoVoltar={() => navegar('inicio')}
                                                 abrirPessoa={abrirPessoa} />}

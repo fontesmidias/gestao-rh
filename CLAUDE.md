@@ -116,6 +116,46 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Duas PORTAS para o mesmo trabalho envelhecem em capacidades DIFERENTES**
+  (v3.21, ao juntar a importação de cargos): havia `previewCargosTirvuTxt`
+  (colar texto, v1.96) e `previewCargosArquivo` (subir .txt, v2.38) gravando
+  pela **MESMA rota** `/rh/tirvu-txt/confirmar-cargos` — a segunda nasceu porque
+  o Bruno pediu o upload, e ninguém removeu a primeira. Não é só o "dois
+  controles para a mesma escolha" da v2.75: o `.txt` ganhou `decodificar` (os
+  três encodings do Bloco de Notas, v2.38) e o caminho de colar **não**, então a
+  porta velha quebrava o acento em silêncio. ⚠️ Ao acrescentar porta nova para
+  um trabalho que já tem uma, **remova a antiga na mesma leva** — mantê-la custa
+  a correção aplicada a um lado só, e o lado esquecido é sempre o que ninguém
+  testa. E ao remover, `grep` pelo texto que MANDA a pessoa para o card
+  removido: o `ondeDecidir` das jornadas apontava para "Configurações →
+  Empresas e jornadas" e a decisão se toma em *Jornadas → Duplicidades
+  suspeitas* — instrução órfã sobrevive à remoção e manda procurar onde não há
+  nada.
+- **ETAPAS do mesmo trabalho em telas diferentes = a segunda não acontece**
+  (v3.21, feedback do Bruno: *"seria o próximo passo após importar, que precisa
+  estar próximo"*): importar os cargos do Tirvu vivia em Importações e conferir
+  o ID de cada um vivia em Config → Empresas e jornadas. **Quem importava não
+  tinha como saber que faltava metade** — e o efeito de não saber só aparece
+  depois, quando o export sai com a coluna Cargo vazia e o Tirvu recusa a linha.
+  É a v2.75 (*"tela que existe mas ninguém acha não está entregue"*) numa
+  variante pior: aqui a tela nem precisava ser achada por curiosidade, era **o
+  passo seguinte obrigatório**. ⚠️ Ao desenhar tela de importação, pergunte **o
+  que a pessoa tem que fazer DEPOIS de importar** — se houver um passo, ele mora
+  na mesma página, na ordem do trabalho. Medido na base real: 7 cargos sem ID,
+  **145 pessoas** afetadas, com as duas telas verdes.
+- **Campo que o LOTE grava e o caminho UNITÁRIO não tem nasce vazio, calado**
+  (v3.21): `confirmar-cargos` (lote) gravava `cbo`; o `PUT /rh/cargos-tirvu`
+  (um a um) **não tinha o campo no schema**, então o Pydantic descartava o que
+  fosse enviado e o cargo cadastrado à mão nascia sem a ÚNICA informação que
+  distingue homônimo ("AUXILIAR DE SERVIÇOS GERAIS" = 514225 limpeza × 763125
+  produção, 87 pessoas no mesmo texto). Nada denuncia: a coluna fica vazia, e a
+  tela seguinte pede a decisão escondendo o que a fundamenta. ⚠️ Quando o mesmo
+  dado tem caminho de LOTE e caminho UNITÁRIO, compare os schemas campo a campo
+  — e leve junto a regra de PRESERVAÇÃO (aqui, "CBO vazio não apaga o gravado"),
+  senão quem edita só o ID pelo teclado perde por omissão o que a importação
+  trouxe. Corolário de teste: afirmar sobre o **ESTADO do banco**, nunca só
+  sobre o status code — remover o campo do schema devolve **200 igual** (v2.84).
+  Coberto por `test_cargo_tirvu_unitario.py`, 5 asserções, validado por mutação.
 - **Cor FIXA na mesma regra que token que INVERTE = defeito invisível no código**
   (v3.20, item 6 da 24ª leva): `.btn-ajuda` era `background: var(--tinta);
   color: #fff`. Cada metade parece inofensiva; juntas produzem "?" branco sobre

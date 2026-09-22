@@ -537,19 +537,13 @@ export const rh = {
       return r.json()
     } finally { saiuRH() }
   },
-  // Padronização em massa: cargos/jornadas colados da tela do Tirvu
-  // (feedback 2026-07-27) — preview PROPÕE, o RH decide linha a linha,
-  // confirmar GRAVA só o que foi marcado (nunca merge cego).
-  previewCargosTirvuTxt: (texto) =>
-    req('/rh/tirvu-txt/preview-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
-  confirmarCargosTirvuTxt: (itens) =>
-    req('/rh/tirvu-txt/confirmar-cargos', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
-  previewJornadasTirvuTxt: (texto) =>
-    req('/rh/tirvu-txt/preview-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ texto }) }),
-  confirmarJornadasTirvuTxt: (itens) =>
-    req('/rh/tirvu-txt/confirmar-jornadas', { method: 'POST', headers: authRH(), body: JSON.stringify({ itens }) }),
-  // Mesma coisa a partir do .txt salvo pelo RH (v2.38) — só muda a porta de
-  // entrada; a proposta e a confirmação continuam idênticas.
+  // Padronização em massa a partir do .txt salvo pelo RH (v2.38).
+  //
+  // As funções de COLAR TEXTO (`previewCargosTirvuTxt` e irmãs) foram removidas
+  // em 2026-09-22: eram a porta antiga (v1.96) para o MESMO trabalho, gravando
+  // pelas MESMAS rotas — "dois controles para a mesma escolha" (v2.75). As
+  // rotas de texto continuam no backend (o .txt é lido por elas, via
+  // `preview-cargos-arquivo`); o que saiu foi a segunda porta na tela.
   // ATENÇÃO: upload NÃO passa por `req()` — ele força
   // `Content-Type: application/json`, e aí o navegador não escreve o
   // `boundary` do multipart. O FastAPI recebe um corpo que não sabe separar e

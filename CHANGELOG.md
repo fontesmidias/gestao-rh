@@ -14,6 +14,79 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.21.0] — 2026-09-22 — Cargos num lugar só
+
+Feedback do Bruno: *"a parte de importar os cargos... precisa ter as orientações
+para o usuário, de como extrair as informações do Tirvu... não entendi por que
+ficou separado, mas tem um card 'Cargos x Id do TIRVU' em Empresas e jornadas,
+que seria o próximo passo após importar, que precisa estar próximo"*.
+
+### Um trabalho em três telas, e nenhuma dizia que as outras existiam
+
+Cadastrar cargo do Tirvu estava espalhado assim:
+
+| Onde | O quê | Desde |
+|---|---|---|
+| Importações | subir o `.txt` | v2.38 |
+| Empresas e jornadas | **colar o texto** | v1.96 |
+| Empresas e jornadas | conferir o ID de cada cargo | — |
+
+Os dois primeiros eram **o mesmo passo por duas portas** — gravando pela MESMA
+rota (`/rh/tirvu-txt/confirmar-cargos`), que é o "dois controles para a mesma
+escolha" da v2.75. O terceiro é o passo **seguinte**, e morava noutra aba: quem
+acabava de importar não tinha como saber que ainda faltava conferir os IDs — e é
+o ID que o export usa, então o efeito de não saber aparece lá na frente, numa
+planilha que o Tirvu recusa.
+
+Agora é uma página só (`Cargos`, no menu lateral), na ordem em que o trabalho
+acontece: **orientação → importar em lote → conferir e cadastrar um a um**.
+
+### O CRUD que faltava: cadastrar UM cargo
+
+*"quando o rh quer subir apenas um cargo, daí seria interessante ter uma
+funcionalidade para isso, o CRUD, na vdd ne"*. Para gravar duas colunas, o
+caminho era o ritual inteiro do lote: abrir o Tirvu, selecionar, copiar, colar
+no Bloco de Notas, salvar, subir.
+
+O defeito por trás disso era mais silencioso que a inconveniência: o
+`PUT /rh/cargos-tirvu` **não tinha campo `cbo`**, enquanto o lote gravava. Ou
+seja, o cargo cadastrado à mão nascia sem a única informação que distingue
+homônimo — nos dados reais, "AUXILIAR DE SERVIÇOS GERAIS" é 514225 (limpeza) e
+763125 (produção), com 87 pessoas usando o mesmo texto. Nada denunciava: a
+coluna ficava vazia, e a tela seguinte pedia a decisão sobre qual ID usar
+escondendo o que a fundamenta. A regra do lote veio junto: **CBO vazio não apaga
+o gravado** — quem edita só o ID pelo teclado não pode perder por omissão o que
+a importação trouxe.
+
+### As orientações que só existiam no WhatsApp
+
+O passo a passo para extrair os cargos (Colaboradores → Dados Cadastrais →
+Cadastros → Cargos, copiar, colar no Bloco de Notas, salvar) era o que o Bruno
+mandava por WhatsApp para quem precisava. O Tirvu não tem botão de exportar
+cargos, então ninguém adivinha o caminho. Agora está na tela, num `<details>`
+que nasce fechado.
+
+### Medido na tela, com os dados reais
+
+O alerta do topo (§ 8c do design: impedimento no topo, com o atalho que resolve)
+mostrou **7 cargos sem ID — 145 pessoas** que sairiam com a coluna Cargo vazia
+na próxima exportação. Zero vazamento lateral em 1440px e em 390px.
+
+### Também nesta versão
+
+- **O aviso de duplicata distingue "sem ID" de "com ID"** — travessão no lugar
+  do ID não separava "não tem" de "não sei" (a lição do creche, v2.27/v2.54), e
+  as duas situações pedem ações opostas: uma é preencher, a outra é substituir.
+- **O "onde decidir" das jornadas apontava para o lugar errado** — mandava para
+  Configurações, e a decisão sobre jornada ambígua se toma em
+  *Jornadas → Duplicidades suspeitas*. Achado ao remover o card vizinho.
+- **`test_cargo_tirvu_unitario.py`** (5 asserções, no CI): validado por mutação
+  — com o código anterior, 5 reprovam; a asserção é sobre o ESTADO do banco,
+  não só sobre o status code, porque remover o campo devolveria 200 igual.
+- A página nova entrou em `TELAS` do `tabelas-cabem-na-tela.spec.js` no MESMO
+  commit (regra da v2.62: tela de lista que não se enumera dá falsa sensação de
+  proteção).
+
 ## [3.20.0] — 2026-09-02 — O que estava invisível e o que não tinha porta
 
 Duas histórias do Épico 2 da Onda 1 (itens 6 e 9 da 24ª leva). Nada em comum

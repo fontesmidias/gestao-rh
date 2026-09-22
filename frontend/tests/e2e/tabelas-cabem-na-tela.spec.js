@@ -39,6 +39,7 @@ const TELAS = [
   ['Talentos', '/rh/talentos'],
   ['Postos', '/rh/postos'],
   ['Jornadas', '/rh/jornadas'],          // faltava — e era a que mais estourava
+  ['Cargos', '/rh/cargos'],              // 2026-09-22 — lista nova entra AQUI no mesmo commit
   ['Desenvolvimento', '/rh/desenvolvimento'],
   ['Creche', '/rh/creche'],
   ['Entrevistas', '/rh/entrevistas'],    // v2.64 — lista nova entra AQUI no mesmo commit

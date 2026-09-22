@@ -118,6 +118,12 @@ def editar_empresa(empresa_id: uuid.UUID, dados: EmpresaIn,
 class CargoTirvuIn(BaseModel):
     cargo_rotulo: str
     tirvu_id: str
+    # CBO é o que DISTINGUE cargo homônimo ("AUXILIAR DE SERVIÇOS GERAIS" tem
+    # 514225 de limpeza e 763125 de produção, 87 pessoas com o mesmo texto). O
+    # lote já o gravava; o cadastro UNITÁRIO não tinha o campo, então cadastrar
+    # um cargo à mão nascia sem a única informação que resolve a ambiguidade
+    # depois — e nada denunciava, porque a coluna simplesmente ficava vazia.
+    cbo: str | None = None
 
 
 @router.get("/rh/cargos-tirvu")
@@ -145,7 +151,11 @@ def listar_cargos_tirvu(db: Session = Depends(get_db),
         m = mapa.get(chave)
         saida.append({"cargo_normalizado": chave, "cargo_rotulo": info["cargo_rotulo"],
                       "qtd": info["qtd"], "id": m.id if m else None,
-                      "tirvu_id": m.tirvu_id if m else None})
+                      "tirvu_id": m.tirvu_id if m else None,
+                      # O CBO já era gravado pelo lote e nunca chegava à tela: a
+                      # decisão sobre homônimo era pedida escondendo o que a
+                      # fundamenta.
+                      "cbo": m.cbo if m else None})
     return saida
 
 
@@ -167,18 +177,24 @@ def salvar_cargo_tirvu(dados: CargoTirvuIn, db: Session = Depends(get_db),
                       detalhe={"cargo": dados.cargo_rotulo})
             db.commit()
         return {"cargo_normalizado": chave, "tirvu_id": None}
+    cbo = (dados.cbo or "").strip()[:10] or None
     if m:
         m.tirvu_id = tid
         m.cargo_rotulo = dados.cargo_rotulo.strip()
+        # Mesma regra do lote (`confirmar_cargos_tirvu`): CBO vazio NÃO apaga o
+        # que já estava gravado. Quem edita só o ID pelo teclado não deveria
+        # perder por omissão o CBO que a importação trouxe.
+        if cbo:
+            m.cbo = cbo
     else:
         m = CargoTirvu(cargo_normalizado=chave, cargo_rotulo=dados.cargo_rotulo.strip(),
-                       tirvu_id=tid)
+                       tirvu_id=tid, cbo=cbo)
         db.add(m)
     registrar(db, "cargo_tirvu_salvo", ator="rh", ator_detalhe=rh.email,
-              detalhe={"cargo": dados.cargo_rotulo, "tirvu_id": tid})
+              detalhe={"cargo": dados.cargo_rotulo, "tirvu_id": tid, "cbo": cbo})
     db.commit()
     return {"id": m.id, "cargo_normalizado": chave, "cargo_rotulo": m.cargo_rotulo,
-            "tirvu_id": m.tirvu_id}
+            "tirvu_id": m.tirvu_id, "cbo": m.cbo}
 
 
 # ======================================================================

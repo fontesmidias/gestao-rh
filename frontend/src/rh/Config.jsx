@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fmtDataHora } from '../fmt.js'
 import { rh as api } from '../api.js'
 import InputSenha from '../InputSenha.jsx'
@@ -411,8 +412,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'identidade' && <IdentidadeVisual />}
       {aba === 'organizacao' && <>
         <div className="rh-grid-2"><Empresas /><JornadasConfig /></div>
-        <CargosTirvu />
-        <PadronizacaoTirvuTxt />
+        <AtalhoCargos />
         <BackfillEnderecos />
       </>}
       {aba === 'importacoes' && <Importacoes />}
@@ -1687,211 +1687,6 @@ function Empresas() {
   )
 }
 
-// De-para cargo → ID do Tirvu. Cargo é texto livre; o Tirvu casa por ID. Lista
-// os cargos já usados na base (com contagem) para o RH atribuir o ID de cada um.
-function CargosTirvu() {
-  const [cargos, setCargos] = useState(null)
-  const [edicao, setEdicao] = useState({}) // {cargo_normalizado: tirvu_id}
-  const [msg, setMsg] = useState(null)
-  const carregar = () => api.cargosTirvu().then(setCargos)
-  useEffect(() => { carregar().catch(() => setCargos([])) }, [])
-  if (!cargos) return null
-
-  const salvar = async (c) => {
-    const tid = (edicao[c.cargo_normalizado] ?? c.tirvu_id ?? '').trim()
-    if (tid === (c.tirvu_id || '')) return
-    setMsg(null)
-    try {
-      await api.salvarCargoTirvu({ cargo_rotulo: c.cargo_rotulo, tirvu_id: tid })
-      setMsg({ tipo: 'ok', texto: `ID Tirvu de "${c.cargo_rotulo}" salvo.` })
-      setEdicao((s) => { const n = { ...s }; delete n[c.cargo_normalizado]; return n }); carregar()
-    } catch (err) { setMsg({ tipo: 'erro', texto: `Não foi possível salvar (${err.detail || err.message}).` }) }
-  }
-
-  const semId = cargos.filter((c) => !c.tirvu_id).length
-  return (
-    <div className="rh-card">
-      <h3>💼 Cargos × ID do Tirvu</h3>
-      <p className="explica">O cargo é texto livre na ficha, mas a importação de admissões
-        do Tirvu casa por <strong>ID numérico</strong> (sem ele, a coluna Cargo sai vazia e
-        o Tirvu recusa). Atribua o ID de cada cargo usado na base — vale para todos os
-        colaboradores com aquele cargo.
-        {semId > 0 && <> <strong style={{ color: 'var(--ambar)' }}>{semId} cargo(s) ainda sem ID.</strong></>}</p>
-      {cargos.length === 0
-        ? <p className="explica">Nenhum cargo cadastrado na base ainda.</p>
-        : (
-          <div className="dash-scroll">
-            <table className="rh-tabela">
-              <thead><tr><th>Cargo</th><th>Pessoas</th><th>ID Tirvu</th></tr></thead>
-              <tbody>{cargos.map((c) => (
-                <tr key={c.cargo_normalizado}>
-                  <td><strong>{c.cargo_rotulo}</strong></td>
-                  <td>{c.qtd}</td>
-                  <td><input style={{ maxWidth: '6rem' }} placeholder="ex.: 50"
-                             value={edicao[c.cargo_normalizado] ?? c.tirvu_id ?? ''}
-                             onChange={(ev) => setEdicao({ ...edicao, [c.cargo_normalizado]: ev.target.value })}
-                             onBlur={() => salvar(c)}
-                             className={c.tirvu_id ? '' : 'campo-pendente'} /></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      <Msg msg={msg} />
-    </div>
-  )
-}
-
-// Padronização em massa: cargos/jornadas colados da tela do Tirvu (feedback
-// de campo 2026-07-27: "tive problemas para subir cadastro em massa para o
-// Tirvu por conta das padronizações... tenho que fazer muita coisa
-// manualmente"). O RH copia a lista inteira da tela do Tirvu (Cargos ou
-// Jornadas) num .txt; preview PROPÕE o casamento, e SÓ grava o que for
-// confirmado linha a linha — nunca merge cego (mesma regra da Incidência de
-// Benefícios). Ver docs/planejamento/09-roadmap-feedbacks-16a-leva.md, item A2.
-function PadronizacaoTirvuTxt() {
-  return (
-    <div className="rh-card">
-      <h3>📋 Padronizar cargos e jornadas em massa (colar da tela do Tirvu)</h3>
-      <p className="explica">Copie a lista inteira da tela <strong>Cargos</strong> ou
-        <strong> Jornadas</strong> do Tirvu (Ctrl+A, Ctrl+C na tabela) e cole abaixo. O
-        sistema PROPÕE o ID de cada um; você revisa e confirma linha a linha — nada é
-        gravado sem confirmação, e cargos/jornadas ambíguos (mesmo texto, IDs diferentes)
-        ficam destacados para você decidir.</p>
-      <div className="rh-grid-2">
-        <ImportarTirvuTxt tipo="cargos" titulo="Cargos" />
-        <ImportarTirvuTxt tipo="jornadas" titulo="Jornadas" />
-      </div>
-    </div>
-  )
-}
-
-function ImportarTirvuTxt({ tipo, titulo }) {
-  const [texto, setTexto] = useState('')
-  const [propostas, setPropostas] = useState(null) // resultado do preview
-  const [selecionadas, setSelecionadas] = useState({}) // {tirvu_id: bool}
-  const [msg, setMsg] = useState(null)
-  const [resultado, setResultado] = useState(null)
-
-  const ehCargo = tipo === 'cargos'
-
-  const analisar = async () => {
-    if (!texto.trim()) return
-    setMsg(null); setResultado(null); setPropostas(null)
-    try {
-      const r = await comAmpulheta('Analisando…', () => ehCargo
-        ? api.previewCargosTirvuTxt(texto)
-        : api.previewJornadasTirvuTxt(texto))
-      setPropostas(r)
-      const marcadas = {}
-      r.propostas.forEach((p) => { marcadas[p.tirvu_id] = p.aplicar_sugerido })
-      setSelecionadas(marcadas)
-    } catch (err) {
-      setMsg({ tipo: 'erro', texto: `Não foi possível analisar (${err.detail || err.message}).` })
-    }
-  }
-
-  const confirmar = async () => {
-    const itens = propostas.propostas
-      .filter((p) => selecionadas[p.tirvu_id])
-      .map((p) => ehCargo
-        ? { tirvu_id: p.tirvu_id, cargo: p.cargo, aplicar: true }
-        : { tirvu_id: p.tirvu_id, descricao: p.descricao, escala: p.escala,
-           tratamento: p.tratamento, aplicar: true })
-    if (!itens.length) {
-      setMsg({ tipo: 'erro', texto: 'Nenhuma linha selecionada para gravar.' }); return
-    }
-    setMsg(null)
-    try {
-      const r = await comAmpulheta('Gravando…', () => ehCargo
-        ? api.confirmarCargosTirvuTxt(itens)
-        : api.confirmarJornadasTirvuTxt(itens))
-      setResultado(r)
-      setPropostas(null); setTexto(''); setSelecionadas({})
-    } catch (err) {
-      setMsg({ tipo: 'erro', texto: `Não foi possível gravar (${err.detail || err.message}).` })
-    }
-  }
-
-  const marcarTodas = (valor) => {
-    const m = {}
-    propostas.propostas.forEach((p) => { m[p.tirvu_id] = valor })
-    setSelecionadas(m)
-  }
-
-  return (
-    <div>
-      <strong>{titulo}</strong>
-      {!propostas && (
-        <>
-          <textarea rows={6} style={{ width: '100%', marginTop: '.4rem', fontFamily: 'monospace', fontSize: '.8rem' }}
-                    placeholder={`Cole aqui o texto copiado da tela de ${titulo} do Tirvu…`}
-                    value={texto} onChange={(e) => setTexto(e.target.value)} />
-          <button className="btn-secundario btn-mini" style={{ marginTop: '.4rem' }}
-                  disabled={!texto.trim()} onClick={analisar}>🔍 Analisar</button>
-        </>
-      )}
-      {propostas && (
-        <>
-          <p className="explica">
-            {propostas.total} registro(s) encontrado(s)
-            {ehCargo ? `, ${propostas.ativos} ativo(s)` : ''}.
-            {(ehCargo ? propostas.homonimos : propostas.duplicatas) > 0 && (
-              <> <strong style={{ color: 'var(--ambar)' }}>
-                {ehCargo ? propostas.homonimos : propostas.duplicatas} caso(s) ambíguo(s)
-                — revise antes de marcar.</strong></>
-            )}
-          </p>
-          <div style={{ display: 'flex', gap: '.5rem', marginBottom: '.4rem' }}>
-            <button className="btn-link" onClick={() => marcarTodas(true)}>marcar sugeridas</button>
-            <button className="btn-link" onClick={() => marcarTodas(false)}>desmarcar todas</button>
-          </div>
-          <div className="dash-scroll" style={{ maxHeight: 340, overflowY: 'auto' }}>
-            <table className="rh-tabela">
-              <thead><tr>
-                <th></th><th>ID Tirvu</th>
-                <th>{ehCargo ? 'Cargo' : 'Descrição'}</th>
-                {ehCargo ? <th>CBO</th> : <th>Escala</th>}
-                <th>Situação</th>
-              </tr></thead>
-              <tbody>{propostas.propostas.map((p) => {
-                const ambiguo = ehCargo ? p.homonimo : p.duplicata
-                return (
-                  <tr key={p.tirvu_id} className={ambiguo ? 'linha-ambigua' : ''}>
-                    <td><input type="checkbox" checked={!!selecionadas[p.tirvu_id]}
-                               onChange={(e) => setSelecionadas({ ...selecionadas, [p.tirvu_id]: e.target.checked })} /></td>
-                    <td>{p.tirvu_id}</td>
-                    <td>{ehCargo ? p.cargo : p.descricao}</td>
-                    <td>{ehCargo ? p.cbo : p.escala}</td>
-                    <td>
-                      {ambiguo && <span title="Mesmo texto com mais de um ID — decida qual usar">⚠️ ambíguo</span>}
-                      {!ambiguo && p.diverge && <span title="Já existe um ID diferente cadastrado">🔁 substitui {p.tirvu_id_atual}</span>}
-                      {!ambiguo && !p.diverge && ehCargo && p.pessoas_usando > 0 && <span>{p.pessoas_usando} pessoa(s)</span>}
-                      {!ambiguo && !p.diverge && !ehCargo && p.existe_na_base && <span>já cadastrada</span>}
-                      {!ambiguo && !p.diverge && !ehCargo && !p.existe_na_base && <span>nova</span>}
-                    </td>
-                  </tr>
-                )
-              })}</tbody>
-            </table>
-          </div>
-          <div style={{ display: 'flex', gap: '.5rem', marginTop: '.5rem' }}>
-            <button className="btn-principal btn-mini" onClick={confirmar}>
-              ✅ Gravar selecionadas ({Object.values(selecionadas).filter(Boolean).length})</button>
-            <button className="btn-secundario btn-mini" onClick={() => { setPropostas(null); setTexto('') }}>cancelar</button>
-          </div>
-        </>
-      )}
-      {resultado && (
-        <p className="sucesso" style={{ marginTop: '.5rem' }}>
-          {ehCargo
-            ? `${resultado.gravados} de-para(s) de cargo gravado(s).`
-            : `${resultado.criadas} jornada(s) criada(s), ${resultado.atualizadas} atualizada(s).`}</p>
-      )}
-      <Msg msg={msg} />
-    </div>
-  )
-}
 
 function JornadasConfig() {
   const [jornadas, setJornadas] = useState(null)
@@ -1922,6 +1717,27 @@ function JornadasConfig() {
           {visiveis.length === 0 && <li>Nenhuma jornada com esse texto.</li>}
         </ul>
       )}
+    </div>
+  )
+}
+
+// Atalho para a página de Cargos (2026-09-22). Aqui moravam TRÊS cards que
+// eram etapas do mesmo trabalho — importar do Tirvu (colando texto) e conferir
+// o ID de cada cargo —, separados da importação por .txt que vivia em
+// Importações. O Bruno: "não entendi por que ficou separado... seria o próximo
+// passo após importar, que precisa estar próximo".
+//
+// Tudo foi para `CargosRH.jsx`, na ordem em que o trabalho acontece. Fica este
+// atalho porque tela que existe e ninguém acha não está entregue (v2.75): quem
+// vem gerir empresa/jornada é exatamente quem procura cargo.
+function AtalhoCargos() {
+  return (
+    <div className="rh-card">
+      <h3>💼 Cargos × ID do Tirvu</h3>
+      <p className="explica">Os cargos ganharam <strong>página própria</strong>: lá ficam o passo
+        a passo para trazer a lista do Tirvu, a importação do arquivo e a conferência do ID de
+        cada cargo — que antes estavam em três lugares diferentes.</p>
+      <Link className="btn-secundario btn-mini" to="/rh/cargos">💼 Abrir Cargos</Link>
     </div>
   )
 }
