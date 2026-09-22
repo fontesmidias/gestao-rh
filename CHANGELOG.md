@@ -14,6 +14,20 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.22.1] — 2026-09-22 — O teste no bloco errado do CI
+
+`test_email_cadeia_provedores` foi para o bloco **stdlib pura** do `ci.yml` e
+reprovou em 9s com `ModuleNotFoundError: No module named 'sqlalchemy'`.
+
+O teste não importa SQLAlchemy — mas `app/services/email.py` importa
+`SessionLocal`, que importa. É a armadilha que o próprio `ci.yml` documenta duas
+vezes, em comentário: *"Antes de pôr teste no bloco stdlib, confira o que o
+MÓDULO importa, não só o teste"*. Passou na máquina de quem escreve (que tem o
+venv) e falhou lá — exatamente o que o comentário previa.
+
+Movido para o bloco que roda **dentro do container da API**. Desta vez rodado
+com `docker exec` antes de subir, que é a verificação que faltou.
+
 ## [3.22.0] — 2026-09-22 — O e-mail que parou de sair
 
 A caixa que autenticava o Microsoft 365 (`bruno.fontes@…`) foi **extinta**. O

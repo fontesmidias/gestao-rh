@@ -180,7 +180,7 @@ jobs:
                    test_creche_competencia test_papel_assistente_rh \
                    test_mcp_saida test_mcp_permissoes \
                    test_mcp_oauth_papel test_mcp_deploy \
-                   test_imagens_deploy test_email_cadeia_provedores; do
+                   test_imagens_deploy; do
             echo "::group::$t"
             python "tests/$t.py" || exit 1
             echo "::endgroup::"
@@ -329,7 +329,7 @@ jobs:
                    test_creche_requerimento test_export_por_selecao \
                    test_autodeclaracao_ficha \
                    test_matricula test_nome_arquivo \
-                   test_talento_recadastro test_cargo_tirvu_unitario \
+                   test_talento_recadastro test_cargo_tirvu_unitario test_email_cadeia_provedores \
                    test_mcp_oauth_metadata test_mcp_oauth_fluxo \
                    test_mcp_registro_servico \
                    test_mcp_endpoint; do
