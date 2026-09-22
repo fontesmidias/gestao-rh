@@ -116,6 +116,35 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **CREDENCIAL MORTA bloqueia a cadeia de reservas — pior que não ter
+  credencial** (v3.22, incidente de 2026-09-22): a caixa que autenticava o M365
+  foi EXTINTA; o `m365_refresh_token` ficou no banco, inútil, e o
+  `if configurado: … return False` do `_enviar_email` **nunca tentava** Google,
+  webhook nem SMTP — todos configurados. O sistema inteiro ficou sem e-mail, e
+  e-mail aqui é o que entrega **código de acesso**: ninguém entra no
+  creche/portal, nenhum candidato recebe link de admissão. ⚠️ Sem nada
+  configurado o sistema cairia no SMTP; **com o token morto ele parava antes** —
+  o mesmo mecanismo do `docker login` expirado, que faz o registry negar imagem
+  PÚBLICA que qualquer um puxaria anonimamente (v3.21.1, no mesmo dia). Ao
+  escrever cadeia de provedores/reservas, a falha de um NUNCA encerra a cadeia,
+  e a mensagem final NOMEIA o que falhou antes (`smtp_nao_configurado` sozinho
+  manda configurar SMTP quando a causa é a conta extinta — v2.93). A queda para
+  o reserva **avisa na tela** (`.aviso-inline` âmbar, nunca `.alerta`: a carta
+  SAIU — v2.68), senão o sistema parece saudável com o provedor principal morto.
+  Coberto por `test_email_cadeia_provedores.py`, 8 asserções; a mutação que
+  restaura o `return False` derruba 6.
+- **Getter consultado ao montar TODO e-mail não pode levantar NEM abrir
+  conexão** (v3.22, dois defeitos meus na mesma leva): (1) o rodapé abria
+  `SessionLocal()` próprio e **TRAVOU** num teste com banco inacessível — o
+  `try/except` pega exceção, **não espera de conexão**, e numa VPS com banco
+  lento isso seguraria o envio; o valor passou a vir de quem já tem a sessão.
+  ⚠️ A premissa que justificava a conexão ("~40 call-sites sem `db`") era FALSA:
+  `grep -c` mostrou **7**, e o principal já tinha `db`. **Conte os call-sites
+  antes de desenhar em volta deles.** (2) O getter estourava `AttributeError`
+  com sessão-dublê — o `test_email_templates` renderiza os 48 templates assim, e
+  o que parecia incompatibilidade de teste era defeito real: banco degradado
+  pararia o envio por causa de uma linha decorativa do rodapé. Getter de
+  APRESENTAÇÃO nunca levanta; cai no padrão (a regra do `texto()`, v2.90).
 - **Imagem de base do Docker Hub QUEBRA SOZINHA — e o CI morre antes de
   qualquer teste** (v3.21.1, 2026-09-22): `minio/minio` passou a recusar o pull
   anônimo (`pull access denied ... may require 'docker login'`) e o job reprovou

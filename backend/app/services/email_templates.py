@@ -962,11 +962,17 @@ def renderizar(db: Session, chave: str, contexto: dict) -> tuple[str, str, str]:
     paragrafos = [p.strip().replace("\n", "<br>")
                   for p in corpo.split("\n\n") if p.strip()]
     url = ctx.get(m.botao_url_var) if m.botao_url_var else None
+    # O rodapé "não responda" (2026-09-22) vale para TODOS os templates — são
+    # notificações automáticas, e o endereço que as envia não é lido. O contato
+    # vem daqui porque esta função já tem a sessão: `html_moderno` abrindo
+    # conexão própria travava o envio quando o banco estava lento.
+    from app.services.config_dinamica import email_contato
     html = html_moderno(
         aplicar_variaveis(m.rotulo, ctx),
         paragrafos,
         botao_texto=botao_texto if url else None,
         botao_url=url or None,
+        contato=email_contato(db),
     )
     return assunto, corpo, html
 

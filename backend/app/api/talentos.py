@@ -955,6 +955,7 @@ def enviar_teste(talento_id: uuid.UUID, payload: EnviarTesteIn, request: Request
     url = f"{base_url_publica(request)}/t/{link.token}"
     enviado = False
     if t.email:
+        from app.services.config_dinamica import email_contato
         enviado = _envia(
             t.email,
             "Green House — convite para um teste rápido",
@@ -967,7 +968,8 @@ def enviar_teste(talento_id: uuid.UUID, payload: EnviarTesteIn, request: Request
                 [f"Olá, <strong>{t.nome.split()[0].title()}</strong>!",
                  "A Green House gostaria que você fizesse um teste rápido. "
                  "Toque no botão para começar — é rápido e dá para fazer pelo celular."],
-                botao_texto="Fazer o teste", botao_url=url))
+                botao_texto="Fazer o teste", botao_url=url,
+                contato=email_contato(db)))
     return {"ok": True, "token": link.token, "url": url, "email_enviado": enviado}
 
 

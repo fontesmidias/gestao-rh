@@ -118,7 +118,7 @@ def _linha_pessoa(i: int, p: dict) -> str:
 
 
 def _html_grupo(assunto: str, corpo: str, pessoas: list[dict],
-                data_fmt: str, periodo: str) -> str:
+                data_fmt: str, periodo: str, contato: str = "") -> str:
     """Versão HTML do e-mail em grupo: os dados viram TABELA.
 
     Com 2+ pessoas a lista em texto puro fica difícil de conferir; em tabela a
@@ -162,7 +162,8 @@ def _html_grupo(assunto: str, corpo: str, pessoas: list[dict],
     paragrafos.append(tabela)
     paragrafos += [p.strip().replace("\n", "<br>")
                    for p in depois.split("\n\n") if p.strip()]
-    return html_moderno(assunto, paragrafos, rodape="RH — Green House")
+    return html_moderno(assunto, paragrafos, rodape="RH — Green House",
+                        contato=contato)
 
 
 def pendencias_do_dossie(db: Session, registro: RegistroDesenvolvimento) -> list[str]:
@@ -191,6 +192,7 @@ def montar(db: Session, registros: list[RegistroDesenvolvimento],
 
     Não envia nada: devolve rascunhos para o RH conferir na tela.
     """
+    from app.services.config_dinamica import email_contato
     cfg = textos(db)
     data = data_turma or (turma.inicio_em if turma else None)
     per = periodo or (turma.periodo if turma else "noturno")
@@ -219,7 +221,7 @@ def montar(db: Session, registros: list[RegistroDesenvolvimento],
                                           quantidade=len(pessoas))
         return [{"assunto": cfg["assunto"], "corpo": corpo,
                  "corpo_html": _html_grupo(cfg["assunto"], corpo, pessoas,
-                                           data_fmt, per),
+                                           data_fmt, per, email_contato(db)),
                  "destinatarios": _destinos(cfg, turma),
                  "colaboradores": pessoas,
                  "agrupado": True,

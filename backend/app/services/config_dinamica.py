@@ -80,3 +80,38 @@ def email_recrutamento_escolhido(db: Session) -> str:
     """
     return (ler_config(db, (CHAVE_EMAIL_RECRUTAMENTO,))
             .get(CHAVE_EMAIL_RECRUTAMENTO) or "").strip()
+
+
+# Contato para quem RESPONDE a um e-mail automático (2026-09-22). Pedido do
+# Bruno junto com o incidente da caixa extinta: "no corpo de cada template deve
+# conter uma informação explícita, algo como não responda a esse email,
+# respostas ou outras informações devem ser enviadas para rh@...".
+#
+# É CONFIGURÁVEL e não chumbado justamente pelo que aconteceu: o remetente que
+# morreu (`bruno.fontes@`) derrubou o envio inteiro, e endereço escrito no
+# código exigiria deploy para corrigir — com a equipe sem e-mail enquanto isso.
+CHAVE_EMAIL_CONTATO = "email_contato_rh"
+
+
+def email_contato(db: Session) -> str:
+    """O endereço que o rodapé manda procurar. `""` = nenhum, e o rodapé OMITE
+    a frase.
+
+    Vazio não inventa endereço: o rodapé dizer "responda para" apontando para
+    um `smtp_from` que ninguém escolheu manda a pessoa escrever para uma caixa
+    que talvez não seja lida — pior que não dizer nada. É a regra da v2.68: o
+    fallback serve para PREENCHER um campo, nunca para criar uma promessa.
+
+    **NUNCA levanta.** É consultada ao montar TODO e-mail, e um rodapé não pode
+    impedir que a carta saia: banco degradado faria o sistema parar de mandar
+    código de acesso por causa de uma linha decorativa. Mesma regra do `texto()`
+    dos documentos (v2.90) — falha de leitura cai no padrão, que aqui é o
+    silêncio. Pego ao escrever isto: o `test_email_templates` renderiza os 48
+    templates com um dublê de sessão, e a consulta nova estourava `AttributeError`
+    ali — o teste apontou o que produção sentiria num banco fora do ar.
+    """
+    try:
+        return (ler_config(db, (CHAVE_EMAIL_CONTATO,))
+                .get(CHAVE_EMAIL_CONTATO) or "").strip()
+    except Exception:  # noqa: BLE001 — rodapé nunca impede o envio
+        return ""

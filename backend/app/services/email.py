@@ -138,6 +138,23 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
     from app.services.webhook_email import enviar_via_webhook, url_webhook
 
     # Prioridade: Microsoft 365 → Google → Webhook (Power Automate) → SMTP.
+    #
+    # ⚠️ A cadeia NÃO para no primeiro provedor configurado que falha (incidente
+    # de 2026-09-22): a caixa que autenticava o M365 foi EXTINTA, o
+    # `refresh_token` do banco virou inútil, e o `return False` daqui bloqueava
+    # Google, webhook e SMTP — mesmo configurados. Ficou o sistema inteiro sem
+    # e-mail, o que significa candidato sem link de admissão e colaborador sem
+    # código de acesso ao creche/portal.
+    #
+    # **Credencial inválida é pior que credencial nenhuma**: sem nada
+    # configurado o sistema cairia no SMTP; com o token morto ele parava antes.
+    # É o mesmo mecanismo do `docker login` expirado, que faz o registry negar
+    # uma imagem pública que qualquer um puxaria sem credencial.
+    #
+    # `tentativas` guarda por que cada um falhou, para a mensagem final dizer o
+    # que houve em vez de um "não foi possível enviar" que manda procurar no
+    # lugar errado.
+    tentativas: list[str] = []
     with SessionLocal() as db:
         if config_m365(db).get("m365_refresh_token"):
             r = enviar_via_graph(db, destinatario, assunto, corpo_texto, corpo_html,
@@ -146,29 +163,29 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
                 _aviso[0] = r["aviso"]
             if r.get("ok"):
                 return True
-            if levantar_erro:
-                raise RuntimeError("falha_envio_m365: reconecte a conta em Configurações")
-            return False
+            tentativas.append("Microsoft 365 (reconecte a conta em Configurações)")
         if config_gmail(db).get("gmail_refresh_token"):
-            ok = enviar_via_gmail(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
-            if ok:
+            if enviar_via_gmail(db, destinatario, assunto, corpo_texto, corpo_html, anexos):
+                _avisar_queda(_aviso, tentativas, "Google")
                 return True
-            if levantar_erro:
-                raise RuntimeError("falha_envio_google: reconecte a conta em Configurações")
-            return False
+            tentativas.append("Google (reconecte a conta em Configurações)")
         if url_webhook(db):
-            ok = enviar_via_webhook(db, destinatario, assunto, corpo_texto, corpo_html, anexos)
-            if ok:
+            if enviar_via_webhook(db, destinatario, assunto, corpo_texto, corpo_html, anexos):
+                _avisar_queda(_aviso, tentativas, "webhook do Power Automate")
                 return True
-            if levantar_erro:
-                raise RuntimeError("falha_envio_webhook: confira a URL do fluxo no Power Automate")
-            return False
+            tentativas.append("webhook (confira a URL do fluxo no Power Automate)")
         cfg = smtp_config(db)
 
     if not cfg["host"] or "seuprovedor" in cfg["host"]:
-        log.warning("SMTP não configurado; e-mail para %s não enviado.", destinatario)
+        log.warning("SMTP não configurado; e-mail para %s não enviado. %s",
+                    destinatario, _resumo_tentativas(tentativas))
         if levantar_erro:
-            raise RuntimeError("smtp_nao_configurado")
+            # A mensagem NOMEIA o que falhou antes: "smtp_nao_configurado"
+            # sozinho mandaria configurar SMTP quando o defeito real é a conta
+            # do M365 extinta, que é onde está a correção.
+            raise RuntimeError(
+                "sem_provedor_de_email: " + (_resumo_tentativas(tentativas)
+                                             or "nenhum provedor configurado"))
         return False
 
     msg = EmailMessage()
@@ -189,19 +206,61 @@ def _enviar_email(destinatario: str, assunto: str, corpo_texto: str, corpo_html:
                 smtp.login(cfg["user"], cfg["password"])
             smtp.send_message(msg)
         log.info("E-mail enviado para %s: %s", destinatario, assunto)
+        _avisar_queda(_aviso, tentativas, "servidor SMTP")
         return True
     except Exception:
-        log.exception("Falha ao enviar e-mail para %s", destinatario)
+        log.exception("Falha ao enviar e-mail para %s. %s",
+                      destinatario, _resumo_tentativas(tentativas))
         if levantar_erro:
             raise
         return False
 
 
+def _resumo_tentativas(tentativas: list[str]) -> str:
+    """Uma frase com os provedores que falharam antes, na ordem."""
+    if not tentativas:
+        return ""
+    return "Falharam antes: " + "; ".join(tentativas) + "."
+
+
+def _avisar_queda(_aviso: list | None, tentativas: list[str], usado: str) -> None:
+    """Avisa na TELA que o e-mail saiu por um provedor reserva (2026-09-22).
+
+    Sem isto, a queda para o provedor seguinte seria silenciosa — e silêncio
+    aqui é caro de um jeito específico: o sistema continua "funcionando", os
+    e-mails saem, e ninguém descobre que o provedor principal está morto até
+    ele ser a única opção em algum outro fluxo. É o "worker que não roda" da
+    v2.66: a falha não gera erro, gera ausência de sinal.
+
+    ⚠️ É `.aviso-inline` (âmbar) na tela, NUNCA `.alerta` (vermelho): a carta
+    SAIU. Pintar de erro faria o RH reenviar, o que não muda nada (v2.68).
+    """
+    if _aviso is None or not tentativas or _aviso[0]:
+        return  # sem lista, sem queda, ou já há aviso mais específico (Send As)
+    _aviso[0] = (f"O e-mail saiu pelo {usado}. {_resumo_tentativas(tentativas)} "
+                 f"Reconecte o provedor principal em Configurações → E-mail e "
+                 f"integrações.")
+
+
 def html_moderno(titulo: str, paragrafos: list[str], destaque: str | None = None,
                  botao_texto: str | None = None, botao_url: str | None = None,
-                 rodape: str = "RH — Green House") -> str:
+                 rodape: str = "RH — Green House",
+                 contato: str = "", responder: bool = False) -> str:
     """Template HTML padrão dos e-mails: card branco arredondado sobre fundo suave,
-    faixa de gradiente, código em caixa de destaque e botão de ação."""
+    faixa de gradiente, código em caixa de destaque e botão de ação.
+
+    `contato` é o endereço do rodapé "não responda" (2026-09-22). Vem de QUEM
+    CHAMA, que já tem a sessão do banco — a 1ª versão abria uma conexão própria
+    aqui e **travou** num teste com o banco inacessível: o `try/except` pega
+    exceção, não espera de conexão, e o rodapé seguraria o envio numa VPS com
+    banco lento. Rodapé não pode custar conexão.
+
+    `responder=True` OMITE o "não responda" — é para o e-mail em que a resposta
+    é esperada (o RH escrevendo para uma pessoa). O padrão é `False` porque a
+    esmagadora maioria dos 48 templates é notificação automática, e o caso que
+    precisa de resposta é a exceção que alguém declara conscientemente: o
+    inverso faria cada template novo nascer sem o aviso, em silêncio.
+    """
     corpo = "".join(
         f'<p style="margin:0 0 14px;color:#3a4152;font-size:15px;line-height:1.6">{p}</p>'
         for p in paragrafos
@@ -221,6 +280,16 @@ def html_moderno(titulo: str, paragrafos: list[str], destaque: str | None = None
         f'box-shadow:0 4px 14px rgba(79,157,58,.35)">{botao_texto}</a></div>'
         if botao_texto and botao_url else ""
     )
+    # "Não responda" só aparece quando HÁ para onde mandar a pessoa: sem
+    # contato configurado, dizer "não responda" a deixaria sem saída nenhuma —
+    # pior que o silêncio, porque fecha a porta sem abrir outra.
+    alvo = "" if responder else (contato or "").strip()
+    bloco_nao_responda = (
+        f'<br>Este é um e-mail automático — <strong>não responda</strong>. '
+        f'Dúvidas ou outras informações: '
+        f'<a href="mailto:{alvo}" style="color:#4f9d3a">{alvo}</a>'
+        if alvo else ""
+    )
     return f"""
     <div style="background:#eef3ea;padding:32px 12px;font-family:'Segoe UI',system-ui,Roboto,sans-serif">
       <div style="max-width:560px;margin:auto;background:#ffffff;border-radius:18px;
@@ -233,7 +302,7 @@ def html_moderno(titulo: str, paragrafos: list[str], destaque: str | None = None
           {corpo}{bloco_destaque}{bloco_botao}
         </div>
         <div style="background:#f7faf4;padding:14px 34px;color:#8a93a3;font-size:12px">
-          {rodape} · mensagem automática do Portal de Admissão
+          {rodape} · mensagem automática do Portal de Admissão{bloco_nao_responda}
         </div>
       </div>
     </div>"""

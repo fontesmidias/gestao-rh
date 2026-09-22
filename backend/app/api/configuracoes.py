@@ -696,6 +696,40 @@ def salvar_recrutamento(payload: RecrutamentoIn, db: Session = Depends(get_db),
     return ver_recrutamento(db, rh)
 
 
+# ---------- Contato do rodapé "não responda" (2026-09-22) ----------
+
+
+class ContatoIn(BaseModel):
+    # Vazio é VÁLIDO, como no recrutamento: sem contato o rodapé OMITE a frase,
+    # em vez de mandar responder para lugar nenhum.
+    email_contato_rh: str = ""
+
+
+@router.get("/rh/config/contato")
+def ver_contato(db: Session = Depends(get_db),
+                _rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
+    """O endereço que o rodapé de TODO e-mail manda procurar."""
+    from app.services.config_dinamica import email_contato
+    return {"email_contato_rh": email_contato(db)}
+
+
+@router.put("/rh/config/contato")
+def salvar_contato(payload: ContatoIn, db: Session = Depends(get_db),
+                   rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
+    from app.services.config_dinamica import CHAVE_EMAIL_CONTATO
+
+    valor = (payload.email_contato_rh or "").strip()
+    if valor and ("@" not in valor or valor.startswith("@") or valor.endswith("@")):
+        raise HTTPException(status_code=422,
+                            detail="Informe um endereço de e-mail válido "
+                                   "(ou deixe em branco para omitir o aviso).")
+    gravar_config(db, {CHAVE_EMAIL_CONTATO: valor})
+    registrar(db, "email_contato_alterado", ator="rh", ator_detalhe=rh.email,
+              detalhe={"endereco": valor or "(sem aviso no rodapé)"})
+    db.commit()
+    return ver_contato(db, rh)
+
+
 @router.post("/rh/config/smtp/testar")
 def testar_smtp(db: Session = Depends(get_db), rh: UsuarioRH = Depends(exige("config:escrever"))) -> dict:
     try:
@@ -1120,9 +1154,13 @@ def preview_email(chave: str, payload: EmailTemplateIn,
     paragrafos = [p.strip().replace("\n", "<br>")
                   for p in corpo.split("\n\n") if p.strip()]
     url = ctx.get(m.botao_url_var) if m.botao_url_var else None
+    # O preview/teste mostra o MESMO rodapé do e-mail real — sem isto, o RH
+    # aprovaria um texto e o enviado sairia diferente.
+    from app.services.config_dinamica import email_contato
     html = html_moderno(m.rotulo, paragrafos,
                         botao_texto=payload.botao_texto if url else None,
-                        botao_url=url or None)
+                        botao_url=url or None,
+                        contato=email_contato(db))
     return {"assunto": assunto, "corpo": corpo, "html": html,
             "faltando": faltando_obrigatorias(chave, payload.assunto, payload.corpo)}
 
@@ -1202,9 +1240,13 @@ def enviar_teste_email(chave: str, payload: EmailTemplateIn,
     paragrafos = [p.strip().replace("\n", "<br>")
                   for p in corpo.split("\n\n") if p.strip()]
     url = ctx.get(m.botao_url_var) if m.botao_url_var else None
+    # O preview/teste mostra o MESMO rodapé do e-mail real — sem isto, o RH
+    # aprovaria um texto e o enviado sairia diferente.
+    from app.services.config_dinamica import email_contato
     html = html_moderno(m.rotulo, paragrafos,
                         botao_texto=payload.botao_texto if url else None,
-                        botao_url=url or None)
+                        botao_url=url or None,
+                        contato=email_contato(db))
     # marca de teste no assunto: se algum dia vazar, fica evidente que é ensaio
     # (e o RH não confunde com um e-mail de verdade na própria caixa)
     try:

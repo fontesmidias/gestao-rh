@@ -422,7 +422,7 @@ export default function Config({ aoVoltar }) {
       {aba === 'integracoes' && <>
         <div className="rh-grid-2"><M365 /><Gmail /></div>
         <div className="rh-grid-2"><WebhookEmail /><Smtp /></div>
-        <div className="rh-grid-2"><RemetenteRecrutamento /></div>
+        <div className="rh-grid-2"><RemetenteRecrutamento /><ContatoRodape /></div>
         <div className="rh-grid-2"><OcrIA /><GroqIA /></div>
         <div className="rh-grid-2"><TokenDiarizacao /></div>
         <TokensAutomacao />
@@ -1144,6 +1144,68 @@ function RemetenteRecrutamento() {
         }}>Salvar</button>
       </div>
       {/* Mensagem PERTO do botão que a gerou — este card fica no meio da aba. */}
+      <Msg msg={msg} />
+    </div>
+  )
+}
+
+// Contato do rodapé "não responda" (2026-09-22). Nasceu junto com o incidente
+// da caixa extinta: o Bruno pediu que todo e-mail diga explicitamente para onde
+// mandar resposta, porque os automáticos saem de um endereço que ninguém lê.
+//
+// É CONFIGURÁVEL, não chumbado no código, exatamente pela lição do incidente:
+// endereço escrito no código exigiria deploy para corrigir quando a caixa
+// mudasse — com a equipe sem saber para onde as respostas estavam indo.
+function ContatoRodape() {
+  const [valor, setValor] = useState('')
+  const [carregado, setCarregado] = useState(false)
+  const [erroCarga, setErroCarga] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const recarregar = () => api.verContato()
+    .then((c) => { setValor(c.email_contato_rh || ''); setCarregado(true) })
+  useEffect(() => {
+    setErroCarga(null)
+    recarregar().catch((e) => setErroCarga(e.detail || e.message || 'Falha ao carregar.'))
+  }, [])
+  if (erroCarga) return (
+    <div className="rh-card">
+      <h3>Contato para respostas</h3>
+      <p className="alerta">Não foi possível carregar: {erroCarga}</p>
+      <button className="btn-secundario" onClick={() => {
+        setErroCarga(null)
+        recarregar().catch((e) => setErroCarga(e.detail || e.message || 'Falha ao carregar.'))
+      }}>Tentar de novo</button>
+    </div>
+  )
+  if (!carregado) return <div className="rh-card"><h3>Contato para respostas</h3>
+    <p className="explica">Carregando…</p></div>
+  return (
+    <div className="rh-card">
+      <h3>Contato para respostas</h3>
+      <p className="explica">Todo e-mail do sistema termina dizendo que é automático e que
+        a resposta deve ir para este endereço. <strong>Em branco</strong>, o aviso não
+        aparece — dizer &ldquo;não responda&rdquo; sem oferecer um contato fecha a porta sem
+        abrir outra.</p>
+      <input type="email" placeholder="rh@suaempresa.com.br"
+             value={valor} onChange={(e) => setValor(e.target.value)} />
+      {valor.trim() && (
+        <p className="explica">No rodapé aparecerá: <em>&ldquo;Este é um e-mail automático —
+          não responda. Dúvidas ou outras informações: {valor.trim()}&rdquo;</em></p>
+      )}
+      <div className="navegacao">
+        <button className="btn-secundario" onClick={async () => {
+          setMsg(null)
+          try {
+            await api.salvarContato({ email_contato_rh: valor.trim() })
+            await recarregar()
+            setMsg({ tipo: 'ok', texto: valor.trim()
+              ? 'Contato salvo — passa a aparecer no rodapé de todos os e-mails.'
+              : 'Contato limpo — o aviso deixa de aparecer no rodapé.' })
+          } catch (e) {
+            setMsg({ tipo: 'erro', texto: e.detail || e.message || 'Não foi possível salvar.' })
+          }
+        }}>Salvar</button>
+      </div>
       <Msg msg={msg} />
     </div>
   )

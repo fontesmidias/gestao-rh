@@ -896,6 +896,11 @@ export const rh = {
   verRecrutamento: () => req('/rh/config/recrutamento', { headers: authRH() }),
   salvarRecrutamento: (dados) =>
     req('/rh/config/recrutamento', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
+  // Contato do rodapé "não responda" (2026-09-22). NÃO confundir com
+  // `atualizarContato`, que é o telefone/e-mail de UMA pessoa na ficha.
+  verContato: () => req('/rh/config/contato', { headers: authRH() }),
+  salvarContato: (dados) =>
+    req('/rh/config/contato', { method: 'PUT', headers: authRH(), body: JSON.stringify(dados) }),
   // Modelos de documento (CRUD + geração)
   modelos: () => req('/rh/modelos-documento', { headers: authRH() }),
   duplicarModelo: (id) =>

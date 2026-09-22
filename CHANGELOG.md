@@ -14,6 +14,71 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.22.0] — 2026-09-22 — O e-mail que parou de sair
+
+A caixa que autenticava o Microsoft 365 (`bruno.fontes@…`) foi **extinta**. O
+sistema parou de mandar e-mail — e e-mail aqui é o que entrega **código de
+acesso**: sem ele ninguém entra no creche nem no portal, e nenhum candidato
+recebe o link da admissão.
+
+### A cadeia de provedores parava numa credencial morta
+
+O `refresh_token` do M365 continuou no banco, agora inútil, e o `_enviar_email`
+fazia:
+
+```python
+if config_m365(db).get("m365_refresh_token"):
+    ...
+    return False          # ← parava AQUI
+```
+
+Google, webhook e SMTP **nunca eram tentados**, mesmo configurados.
+
+**Credencial inválida é pior que credencial nenhuma**: sem nada configurado o
+sistema cairia no SMTP; com o token morto ele parava antes. É o mesmo mecanismo
+do `docker login` expirado, que faz o registry negar uma imagem pública que
+qualquer um puxaria anonimamente — o defeito vizinho, no mesmo dia (v3.21.1).
+
+Agora a cadeia percorre todos os provedores, **avisa na tela** por onde o
+e-mail saiu e o que falhou antes, e a mensagem de erro **nomeia** a causa:
+`sem_provedor_de_email: Falharam antes: Microsoft 365 (reconecte a conta…)` em
+vez de `smtp_nao_configurado`, que mandaria configurar SMTP quando o defeito é
+a conta extinta (v2.93 — recusa que aponta o lugar errado).
+
+⚠️ O aviso é `.aviso-inline` (âmbar), nunca `.alerta`: a carta SAIU. Pintar de
+erro faria o RH reenviar, o que não muda nada (v2.68). E o aviso de `Send As`
+tem precedência, por ser mais específico.
+
+### "Não responda a este e-mail"
+
+Pedido do Bruno junto com o incidente: os automáticos saem de um endereço que
+ninguém lê, então todo e-mail passa a dizer para onde mandar resposta. Rodapé
+**automático nos 48 templates** (verificado: 48/48 renderizam com ele), com o
+endereço em **configuração dinâmica** — não chumbado, exatamente pela lição do
+incidente: endereço no código exigiria deploy para corrigir quando a caixa
+mudasse.
+
+Vazio **omite** a frase: dizer "não responda" sem oferecer contato fecha a
+porta sem abrir outra. E `responder=True` a omite nos e-mails em que a resposta
+é esperada — `docs/planejamento/emails-espera-resposta.md` lista os 48 para o
+Bruno decidir caso a caso quais mudam de estratégia.
+
+### Dois defeitos meus, pegos antes de subir
+
+- **O rodapé abria conexão própria ao banco** e **travou** num teste com o banco
+  inacessível: `try/except` pega exceção, não espera de conexão — numa VPS com
+  banco lento isso seguraria o envio. O contato passou a vir de quem já tem a
+  sessão. A premissa que justificava a conexão ("~40 call-sites sem `db`") era
+  falsa: são **7**, e o principal já tinha.
+- **`email_contato` estourava com sessão degradada** — apontado pelo
+  `test_email_templates`, que renderiza os 48 com um dublê. Virou defeito real
+  de produção: banco fora do ar pararia o envio por causa de uma linha
+  decorativa. Agora nunca levanta (regra do `texto()`, v2.90).
+
+`test_email_cadeia_provedores.py` (8 asserções, no CI): a mutação que restaura
+o `return False` derruba **6 delas** — e as 2 que sobrevivem são justamente as
+que não deveriam reagir (aviso de `Send As`, envio limpo sem ruído).
+
 ## [3.21.1] — 2026-09-22 — O CI quebrou por uma imagem de terceiro
 
 Reprovou em **todo commit**, no passo "Sobe a stack completa", em 8 segundos:
