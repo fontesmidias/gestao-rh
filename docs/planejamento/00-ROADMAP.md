@@ -39,8 +39,10 @@
 
 | O quê | Por quê | Origem |
 |---|---|---|
-| **24ª leva — Onda 1 (6 itens)** | Exportar respeitando a seleção (hoje marca pessoas e exporta outras — planilha de folha errada em silêncio) · layout novo do Tirvu de 34 colunas · "?" invisível no dark mode · autodeclaração pela ficha · excluir candidato duplicado · voltar pelo link cai na etapa pendente. **Todos já decididos, nenhum espera resposta.** Ver **`19-feedbacks-24a-leva.md`** | 24ª leva |
 | **24ª leva — Ondas 2 a 5** | Módulo de assinaturas (o documento **não é disparado a ninguém** ao concluir — confirmado no código) · conta salário por posto · prazos de VT/VA customizáveis · Banco de Talentos configurável · MCP utilizável · 3 módulos novos (Termo de VT, movimentação funcional, certificados) | 24ª leva |
+| **Detectar remetente que deixou de existir** | O `bruno.fontes@` foi extinto e o sistema só FALHAVA — não tinha como saber. Hoje o SMTP está funcionando e a cadeia não trava mais numa credencial morta (v3.22), mas **se o `nao-responda@` for desativado, o sintoma volta**: falha silenciosa até alguém reclamar. Falta o sistema PERCEBER e avisar | 22/09 |
+| **Stack do Portainer × arquivo do repo** | A stack de produção é uma CÓPIA colada e não se atualiza sozinha — em 22/09 ela estava sem `creche_lembretes` (nunca rodou na VPS) e sem a rede do e-mail. Já cobrou 5 vezes. A defesa real é o Portainer puxar do git (ele suporta), em vez da cópia manual | 22/09 |
+| **Ambiente de homologação para o assistente** | O Bruno ofereceu acesso por `.env` para eu validar telas com dados reais (a v3.21 foi medida com 7 cargos; a base tem 111). Faltam 3 decisões: dados reais ou fictícios · leitura ou escrita · qual papel | 22/09 |
 | **Declaração PF pré-preenchida** | **Decidido pelo Bruno (19/08/2026)**: *"tem que vir pré-preenchida com os dados já mapeados em relação ao filho do colaborador"*. Hoje o sistema gera o modelo EM BRANCO. O que já existe: nome do colaborador, CPF, e nome + data de nascimento da criança. ⚠️ O que **falta** e o modelo do Dr. Lucas pede: nome, CPF, RG e endereço do CUIDADOR, e o valor pago no mês — esses precisam ser coletados (decidir se por criança, uma vez, ou a cada competência) | 23ª leva |
 | **Módulo de Recepção** | Aviso nasce no painel; webhook n8n como eco opcional; "sede" marcável | 22ª leva |
 | **Lote-piloto de 50 currículos** | O MCP já cadastra talento (v3.14). Falta a primeira rodada medida: 50, taxa de acerto, ajuste — antes de pensar nos 14 mil. ⚠️ O intervalo de datas é parâmetro do RH, nunca constante, e vai para a auditoria. **`13-mcp-do-portal.md` § 7** | 22ª leva |
@@ -48,7 +50,7 @@
 | **MCP: as 2 a 5 pessoas conectarem** | Depois do teste na homologação. Só o uso real dirá se as descrições fazem o modelo escolher a ferramenta certa | v3.14 |
 | **MCP: as escritas que faltam** | Convidar candidato, aprovar documento, marcar entrevista — o papel `assistente_rh` já tem a permissão, falta a casca. Uma a uma. **`18-mcp-servidor.md`** | 19/08/2026 |
 | **Transcrição no módulo de Arquivo** | Hoje só aparece no card da entrevista | § 11 do doc 14 |
-| **Dados da empresa vindos do banco** | Tirar contato/telefone/site do código; a tela de Marca já existe | 2026-08-08 |
+| **Dados da empresa vindos do banco** | Tirar contato/telefone/site do código; a tela de Marca já existe. ⚠️ O **contato do rodapé** dos e-mails já saiu do código (v3.22, editável em Config → E-mail) — este item é o que falta nos DOCUMENTOS | 2026-08-08 |
 
 ## 🧊 Descartado (com o motivo — não ressuscitar por engano)
 
@@ -67,6 +69,41 @@ O detalhe de cada versão está no `CHANGELOG.md`. Aqui fica só o mapa.
 **Vigência dos 5 contratos** — o Bruno lançou as datas na tela em 19/08/2026
 (ANEEL, INEP ×2, MAPA, PREPÚBLICA). O ciclo mensal passa a marcar corretamente
 competência anterior à vigência.
+
+### 27ª leva (2026-09-22) — v3.21 → v3.24
+**O dia em que três coisas quebraram por credencial ou referência inválida.**
+Começou com o pedido de juntar a importação de cargos (que estava em três
+telas) e terminou com o portal de produção sem e-mail nenhum.
+
+- **v3.21 — Cargos num lugar só.** Orientação (o passo a passo do Tirvu, que só
+  existia no WhatsApp) → importar em lote → conferir e cadastrar um a um. Com o
+  CRUD unitário que faltava e o `cbo` que o cadastro à mão nunca gravava.
+- **v3.21.1 — MinIO.** O Docker Hub passou a recusar o pull anônimo e o CI
+  morria em 8s, antes de qualquer teste. A instrução certa (`quay.io`) já estava
+  no CLAUDE.md e não alcançava os arquivos de deploy.
+- **v3.22 — A cadeia de e-mail.** A caixa que autenticava o M365 foi extinta; o
+  `refresh_token` morto no banco fazia `return False` e **bloqueava** Google,
+  webhook e SMTP. Credencial inválida é pior que credencial nenhuma. Junto,
+  o rodapé "não responda" nos 48 templates.
+- **v3.23 — O cargo invisível e a porta do SMTP.** Defeito meu da v3.21: o
+  seletor lia outra fonte, então cargo recém-cadastrado não aparecia em
+  Admissões. E a cifra do SMTP passou a depender da porta (465 → `SMTP_SSL`),
+  que é o que destravou o timeout de 30s.
+- **v3.24 — O formulário que brigava com quem digitava.** Uma candidata levou
+  **12 recusas 422 em 4 minutos**: o autosave mandava meia linha e o CPF era
+  acusado a cada tecla.
+
+Fica a regra que liga as três: **credencial ou referência inválida bloqueia o
+caminho que funcionaria sem ela** — e o erro nunca fala disso.
+
+### 26ª leva (2026-09-02) — v3.17 → v3.20 — Onda 1 da 24ª leva
+Os 6 itens decididos da Onda 1, todos entregues:
+**exportar respeitando a seleção** (a planilha ia para a folha de pagamento com
+gente que ninguém marcou, sem nada denunciando) · **as 34 colunas do Tirvu**
+(modelo novo do fornecedor; as 6 novas são opcionais e já eram coletadas) ·
+**o "?" invisível no tema escuro** (1,13:1 de contraste, medido) ·
+**autodeclaração de residência pela ficha** · e os dois itens de tela do
+Épico 2.
 
 ### 25ª leva (2026-08-27) — v3.16 → v3.16.1
 **O requerimento de creche que não chegava a quem tinha de assinar.** Relato do
