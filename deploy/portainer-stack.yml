@@ -233,7 +233,12 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    # quay.io, não Docker Hub (2026-09-22) — ver o comentário em
+    # `docker-compose.base.yml`. Os DOIS arquivos de deploy mudam juntos: este é
+    # o que sobe na VPS, e deixar um para trás é a armadilha da v2.66/v3.15.1.
+    # ⚠️ Em produção a imagem só é puxada de novo num `docker compose pull` /
+    # recriação do serviço — o MinIO que já está rodando lá não cai por isto.
+    image: quay.io/minio/minio:latest
     # --console-address habilita o console web (a base só rodava "server /data").
     command: server /data --console-address ":9001"
     environment:

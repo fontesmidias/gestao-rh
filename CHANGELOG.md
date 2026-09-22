@@ -14,6 +14,38 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.21.1] — 2026-09-22 — O CI quebrou por uma imagem de terceiro
+
+Reprovou em **todo commit**, no passo "Sobe a stack completa", em 8 segundos:
+
+```
+pull access denied for minio/minio, repository does not exist
+or may require 'docker login'
+```
+
+O Docker Hub passou a recusar o pull anônimo de `minio/minio`. Não é código
+nosso — mas o efeito é nosso, e engana duas vezes: a falha acontece **antes de
+qualquer teste rodar**, então a mensagem não fala nada sobre o que se estava
+mexendo, e a leitura óbvia é "quebrei alguma coisa".
+
+O mais caro é que **a instrução certa já existia e não alcançava o lugar que
+quebrou**: o `CLAUDE.md` manda usar `quay.io/minio/minio` (o registry oficial
+do MinIO) nos containers efêmeros de teste desde sempre — os arquivos de deploy
+é que tinham ficado para trás. Corrigido nos **dois** (`docker-compose.base.yml`
+e `portainer-stack.yml`, o que sobe na VPS): consertar um só é a armadilha da
+v2.66/v3.15.1, que já cobrou quatro vezes.
+
+Em produção nada cai por isto — a imagem só é puxada de novo num `pull` ou
+recriação do serviço, e o MinIO que já roda na VPS continua no ar.
+
+**`test_imagens_deploy.py`** (stdlib, no CI, validado por mutação) tranca a
+classe do defeito, não só este caso: nenhuma imagem de registry que exige login,
+e os dois composes usando a MESMA imagem por serviço (divergir faria local e
+produção rodarem versões diferentes, e a diferença só apareceria na VPS). Ele
+afirma sobre a declaração `image:`, nunca sobre o texto cru — `minio/minio`
+aparece também no comentário que explica o conserto, e teste que casa com
+comentário reprova a documentação do próprio conserto (v2.71/v3.15).
+
 ## [3.21.0] — 2026-09-22 — Cargos num lugar só
 
 Feedback do Bruno: *"a parte de importar os cargos... precisa ter as orientações

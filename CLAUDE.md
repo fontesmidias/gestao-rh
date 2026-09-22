@@ -116,6 +116,24 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **Imagem de base do Docker Hub QUEBRA SOZINHA — e o CI morre antes de
+  qualquer teste** (v3.21.1, 2026-09-22): `minio/minio` passou a recusar o pull
+  anônimo (`pull access denied ... may require 'docker login'`) e o job reprovou
+  em **8 segundos**, no passo *"Sobe a stack completa"*. O sintoma engana duas
+  vezes: falha antes de rodar teste nenhum, então a mensagem não fala do que se
+  estava mexendo, e a leitura óbvia é *"quebrei alguma coisa"* — custou um CI
+  inteiro para concluir que era infraestrutura de terceiro. Pior: **o CLAUDE.md
+  já mandava usar `quay.io/minio/minio`** nos containers efêmeros, e os
+  ARQUIVOS DE DEPLOY é que tinham ficado para trás — a instrução certa existia e
+  não alcançava o lugar que quebrou. ⚠️ São os DOIS composes (v2.66/v3.15.1) e a
+  stack colada no Portainer não se atualiza sozinha; em produção a imagem só é
+  puxada de novo num `pull`/recriação, então o MinIO que já roda lá não cai por
+  isto. Coberto por `test_imagens_deploy.py` (stdlib, no CI), que afirma sobre a
+  DECLARAÇÃO `image:` e não sobre o texto cru — `minio/minio` também aparece no
+  comentário que explica o conserto, e teste que casa com comentário reprova a
+  documentação do próprio conserto (v2.71/v3.15). Ele ainda exige que os dois
+  composes usem a MESMA imagem por serviço (ignorando `ghcr.io`, que diverge de
+  propósito). Validado por mutação.
 - **Duas PORTAS para o mesmo trabalho envelhecem em capacidades DIFERENTES**
   (v3.21, ao juntar a importação de cargos): havia `previewCargosTirvuTxt`
   (colar texto, v1.96) e `previewCargosArquivo` (subir .txt, v2.38) gravando

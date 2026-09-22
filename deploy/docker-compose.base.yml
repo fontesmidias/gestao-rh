@@ -173,7 +173,14 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    # quay.io, não Docker Hub (2026-09-22): `minio/minio` passou a recusar o
+    # pull anônimo ("pull access denied ... may require 'docker login'"), e o CI
+    # quebrou em TODO commit — no passo "Sobe a stack completa", antes de
+    # qualquer teste, então a mensagem não fala do que se estava mexendo.
+    # quay.io é o registry oficial do MinIO e é o que o CLAUDE.md já mandava
+    # usar nos containers efêmeros de teste; os arquivos de deploy é que
+    # tinham ficado para trás.
+    image: quay.io/minio/minio:latest
     command: server /data
     env_file: ../.env
     volumes:
