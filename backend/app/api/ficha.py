@@ -172,6 +172,16 @@ def _validar_cpf(v):
     if v is None or v == "":
         return v
     numeros = "".join(c for c in str(v) if c.isdigit())
+    # CPF com MENOS de 11 dígitos é CPF sendo DIGITADO, não CPF errado
+    # (2026-09-22, caso de campo): o wizard salva a cada 900ms, então cada tecla
+    # dispara um PUT — e uma candidata viu "Este CPF não existe" quatro vezes
+    # seguidas enquanto digitava (`116` → `1164` → `116414` → `11641493`).
+    # Acusar antes de a pessoa terminar transforma o aviso em ruído, e ruído
+    # ensina a ignorar a mensagem — justamente a que importa quando o CPF está
+    # mesmo errado (v2.88). O incompleto passa aqui e é barrado na CONCLUSÃO,
+    # onde o campo é obrigatório de verdade.
+    if len(numeros) < 11:
+        return numeros
     if not cpf_valido(numeros):
         raise ValueError("Este CPF não existe: os dígitos verificadores não conferem. "
                          "Confira os números digitados.")
@@ -539,6 +549,15 @@ def pendencias_da_ficha(db: Session, candidato: Candidato) -> list[str]:
     for campo in _OBRIGATORIOS_DOCS:
         if docs is None or getattr(docs, campo) is None:
             pendencias.append(f"documentos.{campo}")
+    # ⚠️ CPF INCOMPLETO é pendência, não campo preenchido (2026-09-22): o
+    # `_validar_cpf` passou a aceitar menos de 11 dígitos (o autosave de 900ms
+    # fazia a tela acusar "este CPF não existe" a cada tecla), e o laço acima só
+    # checa `is None` — "116" não é None e passaria como pronto. A trava que
+    # existia por ACIDENTE na validação por tecla precisa existir DE PROPÓSITO
+    # aqui, senão CPF pela metade entra na ficha que a pessoa assina.
+    if docs is not None and docs.cpf and len(
+            "".join(c for c in docs.cpf if c.isdigit())) < 11:
+        pendencias.append("documentos.cpf")
 
     banco = db.get(DadosProfissionaisBancarios, candidato.id)
     for campo in ("tamanho_calca", "tamanho_camisa", "tamanho_calcado", "banco",

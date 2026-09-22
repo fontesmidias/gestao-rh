@@ -263,6 +263,30 @@ function Select({ valor, onChange, opcoes, vazio = 'Selecione…' }) {
   )
 }
 
+// Quais linhas de LISTA o autosave pode mandar (2026-09-22, caso de campo).
+//
+// O wizard salva a cada 900ms e o backend valida o estado FINAL: todo campo de
+// dependente e de contato é obrigatório. O filtro antigo era
+// `(d) => d.nome_completo` — bastava o NOME para a linha inteira ir, ainda sem
+// data nem CPF, e o PUT voltava 422. Medido no log de produção: uma candidata
+// levou **12 recusas em 4 minutos**, com a mensagem do Pydantic EM INGLÊS
+// ("Input should be a valid date") aparecendo na tela a cada tecla.
+//
+// O defeito não é a validação do backend — ela protege a ficha que vira
+// documento assinado. É o autosave mandar meia linha. A linha em digitação
+// fica no estado local e entra assim que estiver completa.
+//
+// ⚠️ O critério tem que casar com o schema do backend (`DependenteIn` e
+// `ContatoEmergenciaIn` em `api/ficha.py`): campo obrigatório que não entre
+// aqui volta a produzir o 422 silencioso. `telefone_fixo_endereco` fica de
+// fora de propósito — é o único opcional.
+const linhaCompleta = {
+  dependente: (d) => Boolean(d?.nome_completo?.trim() && d?.data_nascimento
+                             && d?.cpf?.trim() && d?.parentesco),
+  contato: (c) => Boolean(c?.nome_completo?.trim() && c?.parentesco?.trim()
+                          && c?.telefone_celular?.trim()),
+}
+
 export default function Wizard({ token, estado, recarregar, aoConcluir }) {
   const [etapa, setEtapa] = useState(0)
   // Nasce ligado para quem JÁ tem nome social gravado: o padrão "Não" é para
@@ -341,7 +365,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
       if (etapa === 2) await api.salvarSecao(token, 'documentos', dados.documentos)
       if (etapa === 3) await api.salvarSecao(token, 'trabalho-banco', dados.trabalho_banco)
       if (etapa === 4) await api.salvarSecao(token, 'dependentes',
-        dados.dependentes.filter((d) => d.nome_completo))
+        dados.dependentes.filter(linhaCompleta.dependente))
       if (etapa === 5) {
         const { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao,
                 vt_ciencia_cartao_go, ...emergencia } = dados.vt_emergencia
@@ -349,7 +373,7 @@ export default function Wizard({ token, estado, recarregar, aoConcluir }) {
           { vt_optante, vt_cartao_dftrans, vt_trajeto_descricao,
             vt_ciencia_cartao_go, ...emergencia })
         await api.salvarSecao(token, 'contatos-emergencia',
-          dados.contatos.filter((c) => c.nome_completo))
+          dados.contatos.filter(linhaCompleta.contato))
       }
     } finally { setSalvando(false) }
   }

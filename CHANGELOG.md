@@ -14,6 +14,66 @@ destruir dados; faça `pg_dump` antes de qualquer downgrade.
 > apagar coluna destruiria histórico. Eles ficam órfãos (não se escreve mais),
 > com o motivo registrado abaixo e no `CLAUDE.md`. NÃO usar em código novo.
 
+## [3.24.0] — 2026-09-22 — O formulário que brigava com quem digitava
+
+Lido no log de produção: uma candidata levou **12 recusas 422 em 4 minutos**
+para cadastrar UM dependente e UM contato de emergência. Ela conseguiu no fim —
+lutando contra o formulário.
+
+### O autosave mandava meia linha
+
+O wizard salva a cada 900ms; o backend valida o estado FINAL, onde todo campo de
+dependente é obrigatório. O filtro do autosave era `(d) => d.nome_completo`:
+bastava o NOME para a linha inteira ser enviada, ainda sem data nem CPF.
+
+E o erro **não ficava mudo** — ela via, a cada tecla, a mensagem crua do
+Pydantic **em inglês**: *"Não foi possível salvar automaticamente — Data de
+nascimento: Input should be a valid date"*.
+
+Agora o filtro confere todos os campos obrigatórios. A linha em digitação fica
+no estado local e entra assim que estiver completa. O backend **não foi
+afrouxado** — ele protege a ficha que vira documento assinado.
+
+### "Este CPF não existe" a cada dígito
+
+```
+cpf:"116"       → Este CPF não existe
+cpf:"1164"      → Este CPF não existe
+cpf:"116414"    → Este CPF não existe
+cpf:"11641493"  → Este CPF não existe
+```
+
+CPF com menos de 11 dígitos **é CPF sendo digitado, não CPF errado**. Acusar
+antes de a pessoa terminar transforma o aviso em ruído — e ruído ensina a
+ignorar a mensagem, justamente a que importa quando o CPF está mesmo errado
+(v2.88). A validação agora só age com 11 dígitos.
+
+### ⚠️ O buraco que essa correção abriu — e que fechei junto
+
+A conclusão da ficha só checava `is None`, e `"116"` **não é None**: CPF pela
+metade passaria como preenchido, na ficha que a pessoa assina. A trava que
+existia por ACIDENTE na validação por tecla precisou existir **de propósito** na
+conclusão.
+
+Foi o tipo de efeito colateral que só aparece quando se pergunta *"quem mais
+dependia disso?"* — e aqui dependia por acidente.
+
+### Medido com os dados reais dela
+
+Das 3 linhas que o autosave antigo enviava, **2 davam 422**. Com o filtro novo,
+**nenhuma é enviada** até estar completa, e a completa passa normalmente.
+
+`test_autosave_linha_incompleta.py` (15 asserções, no CI): a mutação que reverte
+as duas correções derruba **6**. O bloco que compara o filtro do JSX com o
+schema do backend **anuncia** quando não pode rodar (o container da API não tem
+`frontend/`), em vez de ficar verde sem ter verificado nada.
+
+### Sobre o `marca/favicon` 404 do log
+
+Não é defeito: é `sem_favicon` — não há favicon configurado, e o
+`index.html` o pede em todo carregamento. Some ao subir um em Configurações →
+Identidade visual.
+
 ## [3.23.0] — 2026-09-22 — O cargo invisível e a porta do e-mail
 
 ### O cargo cadastrado não aparecia em lugar nenhum

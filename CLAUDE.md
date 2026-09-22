@@ -116,6 +116,30 @@ docker run -d --name minio-teste -p 59000:9000 -e MINIO_ROOT_USER=minio \
 
 ## Armadilhas conhecidas (já morderam)
 
+- **AUTOSAVE manda estado PARCIAL; validação cobra estado FINAL — e a briga
+  aparece na cara de quem digita** (v3.24, caso de campo lido no log): o wizard
+  salva a cada 900ms e `DependenteIn`/`ContatoEmergenciaIn` exigem todo campo.
+  O filtro era `(d) => d.nome_completo` — bastava o NOME para a linha inteira ir
+  sem data nem CPF. Medido: **12 recusas 422 em 4 minutos** para uma candidata
+  cadastrar UM dependente, com a mensagem crua do Pydantic **em inglês**
+  aparecendo a cada tecla. ⚠️ A correção é o FRONT só mandar linha COMPLETA, não
+  afrouxar o backend: ele protege a ficha que vira documento assinado. E o
+  critério do filtro tem que casar campo a campo com o schema — obrigatório que
+  fique de fora recria o 422 silencioso. ⚠️ **Validação por TECLA em campo com
+  formato fechado é ruído**: CPF com menos de 11 dígitos é CPF sendo DIGITADO,
+  não CPF errado; acusar antes do fim ensina a ignorar a mensagem (v2.88).
+  ⚠️ **Corolário que quase escapou**: afrouxar a validação por tecla ABRIU um
+  buraco — a conclusão só checava `is None`, e `"116"` não é None, então CPF
+  pela metade passaria como preenchido. A trava que existia por ACIDENTE
+  precisou existir DE PROPÓSITO na conclusão. Ao relaxar uma validação,
+  pergunte **o que dependia dela sem saber**. Coberto por
+  `test_autosave_linha_incompleta.py`, 15 asserções; a mutação derruba 6.
+- **Teste que lê arquivo do REPO não roda no container da API** (v3.24): lá só
+  existe `backend/` — não há `frontend/`. Resolver a raiz com `parents[2]`
+  funciona na máquina de quem escreve e estoura `FileNotFoundError` no CI, que
+  é onde ele roda. Procure o diretório pela EXISTÊNCIA (`next(p for p in
+  parents if (p / "frontend").is_dir())`) e faça o bloco **anunciar** que pulou
+  — pular em silêncio dá teste verde sem ter verificado nada (v2.72).
 - **Cadastro que ALIMENTA um seletor precisa entrar na FONTE que o seletor lê**
   (v3.23, defeito visto pelo Bruno um dia depois da v3.21 — e causado por ela):
   `GET /rh/cargos` (o seletor do convite de Admissões e de mais duas telas) lia
